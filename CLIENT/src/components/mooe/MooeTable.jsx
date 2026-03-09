@@ -1006,6 +1006,13 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     const queryKey = ["mooeData", activeRegion?.name];
     const currentData = queryClient.getQueryData(queryKey);
     
+    const hasMeaningfulAmount = (entry) => {
+      const income = parseFloat(entry?.income || 0);
+      const subsidy = parseFloat(entry?.subsidy || 0);
+      const amount = parseFloat(entry?.amount || 0);
+      return income > 0 || subsidy > 0 || amount > 0;
+    };
+
     // If income inputs are disabled, preserve the original income values
     let entries;
     if (disableIncomeInputs && currentData?.formattedData) {
@@ -1055,12 +1062,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             };
           })
         )
-        .filter(entry => {
-          // Keep rows with values OR existing records (so we can update to 0 when user clears)
-          const hasValues = parseFloat(entry.income || 0) !== 0 || parseFloat(entry.subsidy || 0) !== 0;
-          const hasExistingId = entry.id && entry.id !== "undefined" && entry.id !== "";
-          return hasValues || hasExistingId;
-        });
+        .filter(hasMeaningfulAmount);
     } else {
       // Normal processing if income inputs are not disabled
       // Build from the latest cache (currentData) so we include all edits
@@ -1101,12 +1103,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             };
           })
         )
-        .filter(entry => {
-          // Keep rows with values OR existing records (so we can update to 0 when user clears)
-          const hasValues = parseFloat(entry.income || 0) !== 0 || parseFloat(entry.subsidy || 0) !== 0;
-          const hasExistingId = entry.id && entry.id !== "undefined" && entry.id !== "";
-          return hasValues || hasExistingId;
-        });
+        .filter(hasMeaningfulAmount);
     }
 
     // Merge any in-progress draft values into entries so save uses what user sees
@@ -1139,21 +1136,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
     // Check if we have any entries to save
     if (payload.entries.length === 0) {
-      console.warn("No entries to save - this might cause a server error");
-
-      // If no entries, create a minimal entry to prevent server error
-      // This can happen when all values are zero but we still want to save the state
-      payload.entries = [{
-        sublineItem: "System Entry",
-        accountingTitle: "Placeholder Entry",
-        uacsCode: "SYSTEM",
-        income: 0,
-        subsidy: 0,
-        amount: 0,
-        status: data?.status || "Draft",
-        isSystemEntry: true // Flag to identify this as a system-generated entry
-      }];
-
+      if (!isAutoSave) {
+        toast.warning("No MOOE values to save yet. Enter income or subsidy first.");
+      }
+      return;
     }
 
     // Save all MOOE data including IAs O&M Cost entries

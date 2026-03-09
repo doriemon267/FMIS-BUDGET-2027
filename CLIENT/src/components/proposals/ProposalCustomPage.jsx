@@ -325,6 +325,30 @@ const ProposalCustomPage = ({
   });
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const allowedFiscalYears = useMemo(() => {
+    const list = currentUser?.hierarchicalAccess?.restrictions?.allowedFiscalYears;
+    return Array.isArray(list) ? list.map((year) => String(year)) : [];
+  }, [currentUser]);
+
+  const allowedBudgetTypes = useMemo(() => {
+    const list = currentUser?.hierarchicalAccess?.restrictions?.allowedBudgetTypes;
+    return Array.isArray(list) ? list : [];
+  }, [currentUser]);
+
+  const resolvedFiscalYear = useMemo(() => {
+    const candidate = String(selectedFiscalYear || activeFiscalYear || "");
+    if (allowedFiscalYears.length === 0) return candidate;
+    if (candidate && allowedFiscalYears.includes(candidate)) return candidate;
+    return allowedFiscalYears[0];
+  }, [selectedFiscalYear, activeFiscalYear, allowedFiscalYears]);
+
+  const resolvedBudgetType = useMemo(() => {
+    const candidate = activeBudgetType || "Initial";
+    if (allowedBudgetTypes.length === 0) return candidate;
+    if (candidate && allowedBudgetTypes.includes(candidate)) return candidate;
+    return allowedBudgetTypes[0] || candidate;
+  }, [activeBudgetType, allowedBudgetTypes]);
   const [privacyNoticeAccepted, setPrivacyNoticeAccepted] = useState(false);
 
   // Helper functions for role checking
@@ -3029,7 +3053,8 @@ const ProposalCustomPage = ({
                   (dataListName !== "tests" ? dataListName : undefined)
                 }
                 region={activeRegion}
-                fiscalYear={selectedFiscalYear}
+                fiscalYear={resolvedFiscalYear}
+                budgetType={resolvedBudgetType}
                 onGrandTotalUpdate={(grandTotal) => {
                   setIncomeGrandTotal(grandTotal || 0);
                 }}

@@ -1050,7 +1050,17 @@ exports.bulkSaveMOOE = async (req, res) => {
     };
 
     const recordOriginalLevel = resolveLevel(workflowData.originalLevel ?? meta?.originalLevel ?? req.body.originalLevel, derivedOriginalLevel);
-    const recordWorkflowLevel = resolveLevel(workflowData.workflowLevel ?? meta?.workflowLevel ?? req.body.workflowLevel, recordOriginalLevel);
+    const sourceWorkflowLevel = resolveLevel(workflowData.workflowLevel ?? meta?.workflowLevel ?? req.body.workflowLevel, recordOriginalLevel);
+    const normalizedRoles = (req.user?.Roles || req.user?.roles || []).map((role) => String(role).toUpperCase());
+    const isBudgetPreparer = normalizedRoles.some((role) =>
+      role === 'BUDGET PREPARER' || role === 'BUDGET_PREPARER' || role === 'PREPARER'
+    );
+    const assignmentLevels = new Set(['DIVISION', 'DEPARTMENT', 'REGION', 'OFFICE', 'RESPONSIBILITY_CENTER']);
+    const normalizedSourceWorkflowLevel = sourceWorkflowLevel ? String(sourceWorkflowLevel).toUpperCase() : null;
+    const recordWorkflowLevel =
+      isBudgetPreparer && (!normalizedSourceWorkflowLevel || assignmentLevels.has(normalizedSourceWorkflowLevel))
+        ? 'BUDGET PREPARER'
+        : sourceWorkflowLevel;
     let processedEntries = [];
     if (entries && Array.isArray(entries)) {
       processedEntries = entries
@@ -1085,7 +1095,7 @@ exports.bulkSaveMOOE = async (req, res) => {
             status: nextStatus,
             draftStage: nextDraftStage,
             originalLevel: item.originalLevel || recordOriginalLevel,
-            workflowLevel: item.workflowLevel || recordWorkflowLevel,
+            workflowLevel: isBudgetPreparer ? recordWorkflowLevel : (item.workflowLevel || recordWorkflowLevel),
             taggedByWorkflow: Boolean(recordOriginalLevel || recordWorkflowLevel)
           };
         })

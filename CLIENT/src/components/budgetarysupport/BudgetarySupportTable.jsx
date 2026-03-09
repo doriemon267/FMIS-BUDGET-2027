@@ -350,30 +350,25 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
   // Fetch MOOE data to get actual income amounts
   const { data: mooeData, isLoading: isLoadingMOOE, error: errorMOOE } = useQuery({
-    queryKey: ['mooe-list', fiscalYear, budgetType], // Removed regionName from queryKey
+    queryKey: ['mooe-by-params', fiscalYear, budgetType, proposalId || 'all'],
     queryFn: async () => {
       if (!hasValidParams) return [];
       
       try {
-        // Build query string parameters - let backend handle hierarchical filtering
-        const queryParams = [];
-        if (fiscalYear) {
-          queryParams.push(`fiscalYear=${encodeURIComponent(fiscalYear)}`);
-        }
-        if (budgetType) {
-          queryParams.push(`budgetType=${encodeURIComponent(budgetType)}`);
-        }
-        // Don't send region manually - let hierarchical access control handle it
-        
-        const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-        const response = await api.get(`/mooe-list${queryString}`);
-        
+        const params = {
+          fiscalYear,
+          budgetType,
+          ...(proposalId ? { proposalId } : {})
+        };
+
+        const response = await api.get('/mooe/getByParams', { params });
+
         // Response is directly an array like in ProposalCustomPage
         const data = response.data || [];
         
         return data;
       } catch (error) {
-        console.error('❌ /mooe-list failed:', {
+        console.error('❌ /mooe/getByParams failed:', {
           message: error.message,
           status: error.response?.status,
           statusText: error.response?.statusText,

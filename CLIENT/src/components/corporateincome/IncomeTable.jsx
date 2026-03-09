@@ -67,7 +67,15 @@ const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, r
   );
 });
 
-const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false, proposalId }) => {
+const IncomeTable = ({
+  onGrandTotalUpdate,
+  onGroupedItemsUpdate,
+  locked = false,
+  proposalId,
+  fiscalYear: providedFiscalYear = "",
+  budgetType: providedBudgetType = "",
+  region: providedRegion = null
+}) => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
@@ -80,8 +88,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
   const [discountValue, setDiscountValue] = useState(10);
   const [applyDiscount, setApplyDiscount] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [fiscalYear, setFiscalYear] = useState("");
-  const [budgetType, setBudgetType] = useState("");
+  const [fiscalYear, setFiscalYear] = useState(providedFiscalYear || "");
+  const [budgetType, setBudgetType] = useState(providedBudgetType || "");
   const [regionFilter, setRegionFilter] = useState("");
   const [userModifiedFields, setUserModifiedFields] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -95,6 +103,52 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
   const [expandedCategories, setExpandedCategories] = useState({});
   const [autoSaveTimer, setAutoSaveTimer] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const allowedFiscalYears = useMemo(() => {
+    const fromHierarchy = currentUser?.hierarchicalAccess?.restrictions?.allowedFiscalYears;
+    const fromRoot = currentUser?.restrictions?.allowedFiscalYears;
+    const years = Array.isArray(fromHierarchy) && fromHierarchy.length > 0
+      ? fromHierarchy
+      : (Array.isArray(fromRoot) ? fromRoot : []);
+    return years.map((year) => String(year));
+  }, [currentUser]);
+
+  const allowedBudgetTypes = useMemo(() => {
+    const fromHierarchy = currentUser?.hierarchicalAccess?.restrictions?.allowedBudgetTypes;
+    const fromRoot = currentUser?.restrictions?.allowedBudgetTypes;
+    const types = Array.isArray(fromHierarchy) && fromHierarchy.length > 0
+      ? fromHierarchy
+      : (Array.isArray(fromRoot) ? fromRoot : []);
+    return types;
+  }, [currentUser]);
+
+  const effectiveFiscalYear = useMemo(() => {
+    const candidate = String(fiscalYear || providedFiscalYear || "");
+    if (allowedFiscalYears.length === 0) return candidate;
+    if (candidate && allowedFiscalYears.includes(candidate)) return candidate;
+    return allowedFiscalYears[0];
+  }, [fiscalYear, providedFiscalYear, allowedFiscalYears]);
+
+  const effectiveBudgetType = useMemo(() => {
+    const candidate = budgetType || providedBudgetType || "";
+    if (allowedBudgetTypes.length === 0) return candidate;
+    if (candidate && allowedBudgetTypes.includes(candidate)) return candidate;
+    return allowedBudgetTypes[0] || candidate;
+  }, [budgetType, providedBudgetType, allowedBudgetTypes]);
+
+  const isSameProposalContext = useCallback((item) => {
+    if (!proposalId) return true;
+    const normalizedProposalId = String(proposalId);
+    const candidateIds = [
+      item?.workflowRef,
+      item?.workflowRef?._id,
+      item?.proposalId,
+      item?.proposalId?._id,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value));
+    return candidateIds.includes(normalizedProposalId);
+  }, [proposalId]);
 
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries(["income-items", fiscalYear, budgetType, regionFilter]);
@@ -112,34 +166,66 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       if (!response.data) {
         throw new Error("No active settings found");
       }
-      setFiscalYear(response.data.fiscalYear);
-      setBudgetType(response.data.budgetType);
+      if (!providedFiscalYear) {
+        setFiscalYear(response.data.fiscalYear);
+      }
+      if (!providedBudgetType) {
+        setBudgetType(response.data.budgetType);
+      }
     } catch (error) {
       console.error("Error fetching active settings:", error);
       toast.error(`Failed to fetch active settings: ${error.message}`);
     }
-  }, []);
+  }, [providedFiscalYear, providedBudgetType]);
 
   useEffect(() => {
-    fetchActiveSettings();
-  }, [fetchActiveSettings]);
+    if (!providedFiscalYear || !providedBudgetType) {
+      fetchActiveSettings();
+    }
+  }, [fetchActiveSettings, providedFiscalYear, providedBudgetType]);
+
+  useEffect(() => {
+    if (providedFiscalYear && providedFiscalYear !== fiscalYear) {
+      setFiscalYear(providedFiscalYear);
+    }
+  }, [providedFiscalYear, fiscalYear]);
+
+  useEffect(() => {
+    if (providedBudgetType && providedBudgetType !== budgetType) {
+      setBudgetType(providedBudgetType);
+    }
+  }, [providedBudgetType, budgetType]);
 
   useEffect(() => {
     
-    if (!fiscalYear) {
+    if (!fiscalYear && !providedFiscalYear) {
       const newFiscalYear = currentUser?.fiscalYear || new Date().getFullYear().toString();
       setFiscalYear(newFiscalYear);
     }
-    if (!budgetType) {
+    if (!budgetType && !providedBudgetType) {
       const newBudgetType = currentUser?.budgetType || "Initial";
       setBudgetType(newBudgetType);
     }
-  }, [currentUser, fiscalYear, budgetType]);
+  }, [currentUser, fiscalYear, budgetType, providedFiscalYear, providedBudgetType]);
+
+  useEffect(() => {
+    if (effectiveFiscalYear && effectiveFiscalYear !== fiscalYear) {
+      setFiscalYear(effectiveFiscalYear);
+    }
+  }, [effectiveFiscalYear, fiscalYear]);
+
+  useEffect(() => {
+    if (effectiveBudgetType && effectiveBudgetType !== budgetType) {
+      setBudgetType(effectiveBudgetType);
+    }
+  }, [effectiveBudgetType, budgetType]);
 
   const activeRegionKey = useMemo(() => {
-    if (!activeRegion) return "";
-    return activeRegion.name || activeRegion.regionName || activeRegion.Region || "";
-  }, [activeRegion]);
+    const sourceRegion = providedRegion || activeRegion;
+    if (!sourceRegion) return "";
+    if (typeof sourceRegion === "string") return sourceRegion;
+    return sourceRegion.name || sourceRegion.regionName || sourceRegion.Region || "";
+  }, [providedRegion, activeRegion]);
 
   useEffect(() => {
     const nextRegion = activeRegionKey || REGIONS.DEFAULT_REGION;
@@ -445,7 +531,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     const existingItem = incomeItems.find(item =>
       (item.incomecategory === category._id || item.incomecategory?._id === category._id) &&
       item.subcategory === subcategoryName &&
-      doesItemBelongToRegion(item, regionFilter)
+      isSameProposalContext(item)
     );
     const categoryName = category.incomeCategoryName?.trim() || "Unknown Category";
     const incomeData = {
@@ -455,8 +541,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       subcategory: subcategoryName,
       category: categoryName,
       amount: Number(amount),
-      fiscalYear,
-      budgetType,
+      fiscalYear: effectiveFiscalYear,
+      budgetType: effectiveBudgetType,
       region: getDefaultRegionForSave(regionFilter),
       processBy: currentUser ? `${currentUser.FirstName} ${currentUser.LastName}` : "User",
       processDate: new Date(),
@@ -738,6 +824,10 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       toast.warning("Create a proposal first before saving income entries. No proposalId found.");
       return; // Prevent orphan income records without linkage
     }
+    if (!effectiveFiscalYear || !effectiveBudgetType || !regionFilter) {
+      toast.warning("Income context is incomplete. Please ensure fiscal year, budget type, and region are selected.");
+      return;
+    }
     if (bulkSaving) return;
     setBulkSaving(true);
     const savePromises = modifiedKeys.map(key => {
@@ -748,7 +838,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       const existingItem = incomeItems.find(item =>
         (item.incomecategory === categoryId || item.incomecategory?._id === categoryId) &&
         item.subcategory === subcategoryName &&
-        doesItemBelongToRegion(item, regionFilter)
+        isSameProposalContext(item)
       );
       const categoryName = category.incomeCategoryName?.trim() || "Unknown Category";
       const incomeData = {
@@ -758,8 +848,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
         subcategory: subcategoryName,
         category: categoryName,
         amount: Number(amount),
-        fiscalYear,
-        budgetType,
+        fiscalYear: effectiveFiscalYear,
+        budgetType: effectiveBudgetType,
         region: getDefaultRegionForSave(regionFilter),
         processBy: currentUser ? `${currentUser.FirstName} ${currentUser.LastName}` : "User",
         processDate: new Date(),
@@ -773,13 +863,13 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       .then(() => {
         toast.success("All changes saved successfully");
         setUserModifiedFields({});
-        queryClient.invalidateQueries(["income-items", fiscalYear, budgetType, regionFilter]);
+        queryClient.invalidateQueries(["income-items", effectiveFiscalYear, effectiveBudgetType, regionFilter]);
         setHasUnsavedChanges(false);
         setLastSaved(new Date());
       })
       .catch(error => {
         console.error("Error saving changes:", error);
-        toast.error(`Error saving changes: ${error.message}`);
+        toast.error(getErrorMessage(error));
       })
       .finally(() => setBulkSaving(false));
   };

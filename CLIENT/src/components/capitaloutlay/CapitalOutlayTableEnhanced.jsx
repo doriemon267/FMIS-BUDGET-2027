@@ -44,13 +44,12 @@ import {
   TrendingUp,
   AccountBalance,
   Save,
-  Add,
-  Close,
   Edit,
   Delete,
   Search,
   Clear,
   FilterList,
+  Keyboard,
 } from "@mui/icons-material";
 import PesoIcon from "../icons/PesoIcon";
 import { useUser } from "../../context/UserContext";
@@ -234,13 +233,13 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
 
   // Other state
   const [newOutlays, setNewOutlays] = useState({});
-  const [addingCategoryId, setAddingCategoryId] = useState(null);
   const [errors, setErrors] = useState({});
   const [sublineItems, setSublineItems] = useState({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const tableContainerRef = useRef(null);
   const scrollPositionRef = useRef(0);
+  const accountingTitleSelectRefs = useRef({});
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Enhanced state management
@@ -257,6 +256,33 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedCapitalOutlay, setSelectedCapitalOutlay] = useState(null);
   const [newlyAddedItemId, setNewlyAddedItemId] = useState(null);
+  const [openSublineCategoryId, setOpenSublineCategoryId] = useState(null);
+  const [openAccountingTitleCategoryId, setOpenAccountingTitleCategoryId] = useState(null);
+  const shortcutToastShownRef = useRef(false);
+  const shortcutPreferenceKey = useMemo(
+    () => `capitalOutlayQuickAddShortcuts:${currentUser?._id || currentUser?.id || "anonymous"}`,
+    [currentUser]
+  );
+  const [keyboardShortcutsEnabled, setKeyboardShortcutsEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem("capitalOutlayQuickAddShortcuts:anonymous");
+    if (stored === null) return true;
+    return stored === "1";
+  });
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      const stored = window.localStorage.getItem(shortcutPreferenceKey);
+      if (stored === null) {
+        setKeyboardShortcutsEnabled(true);
+        return;
+      }
+      setKeyboardShortcutsEnabled(stored === "1");
+    }, [shortcutPreferenceKey]);
+
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      window.localStorage.setItem(shortcutPreferenceKey, keyboardShortcutsEnabled ? "1" : "0");
+    }, [shortcutPreferenceKey, keyboardShortcutsEnabled]);
   
   // Actions menu state
   const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
@@ -736,6 +762,40 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
     });
   }, [disableIncomeInputs]);
 
+  const resetQuickAddDraft = useCallback((categoryId) => {
+    setNewOutlays((prev) => ({
+      ...prev,
+      [categoryId]: {
+        category: categoryId,
+      },
+    }));
+    setErrors({});
+    setOpenAccountingTitleCategoryId((current) => (current === categoryId ? null : current));
+  }, []);
+
+  const setAccountingTitleSelectRef = useCallback((categoryId, node) => {
+    if (!categoryId) return;
+    if (node) {
+      accountingTitleSelectRefs.current[categoryId] = node;
+    } else {
+      delete accountingTitleSelectRefs.current[categoryId];
+    }
+  }, []);
+
+  const focusAccountingTitleField = useCallback((categoryId) => {
+    const target = accountingTitleSelectRefs.current[categoryId];
+    if (target && typeof target.focus === "function") {
+      target.focus();
+    }
+  }, []);
+
+  const isSubmitShortcut = useCallback((event, allowPlainEnter = false) => {
+    const isEnterKey = event.key === "Enter" || event.code === "Enter" || event.keyCode === 13;
+    if (!isEnterKey) return false;
+    if (event.ctrlKey || event.metaKey) return true;
+    return allowPlainEnter && !event.shiftKey && !event.altKey;
+  }, []);
+
   const normalizeTotals = useCallback((data = {}) => {
     const income = parseFloat(data.income ?? data.totalIncome ?? 0) || 0;
     const subsidy = parseFloat(data.subsidy ?? data.totalSubsidy ?? 0) || 0;
@@ -786,8 +846,16 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
       }));
       
       if (selectedCapitalOutlay?.tempCategoryId) {
-        setNewOutlays((prev) => ({ ...prev, [selectedCapitalOutlay.tempCategoryId]: {} }));
-        setAddingCategoryId(null);
+        const nextCategoryDraft = {
+          category: selectedCapitalOutlay.tempCategoryId,
+          sublineItem: selectedCapitalOutlay.sublineItem || "",
+          accountingTitle: selectedCapitalOutlay.accountingTitle || "",
+          uacsCode: selectedCapitalOutlay.uacsCode || "",
+        };
+        setNewOutlays((prev) => ({
+          ...prev,
+          [selectedCapitalOutlay.tempCategoryId]: nextCategoryDraft,
+        }));
       }
       
       setErrors({});
@@ -968,6 +1036,16 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 >
                   <FilterList />
                 </Badge>
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title={keyboardShortcutsEnabled ? "Disable keyboard shortcuts" : "Enable keyboard shortcuts"}>
+              <IconButton
+                color={keyboardShortcutsEnabled ? "secondary" : "default"}
+                onClick={() => setKeyboardShortcutsEnabled((prev) => !prev)}
+                size="small"
+              >
+                <Keyboard />
               </IconButton>
             </Tooltip>
           </Box>
@@ -1300,7 +1378,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
               {paginatedGroups.map((group) => {
                 const groupItems = group.items;
                 const hasItems = groupItems.length > 0;
-                const pendingOutlay = newOutlays[group.categoryId] || {};
+                const pendingOutlay = newOutlays[group.categoryId] || { category: group.categoryId };
                 const continueDisabled =
                   !fiscalYear ||
                   !pendingOutlay?.sublineItem ||
@@ -1312,12 +1390,12 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                     ? "⏳ Loading fiscal year settings..."
                     : !pendingOutlay?.sublineItem || !pendingOutlay?.accountingTitle
                       ? "Please complete all required fields first"
-                      : "Click to proceed and enter breakdown details";
+                      : "Open breakdown details and save the new item";
                 
                 return (
                   <React.Fragment key={group.categoryId}>
                     {/* Show category header if no items yet */}
-                    {!hasItems && addingCategoryId !== group.categoryId && (
+                    {!hasItems && (
                       <TableRow>
                         <TableCell 
                           sx={{ 
@@ -1465,15 +1543,29 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                       );
                     })}
                     
-                    {/* Add New Item Row (Form) */}
-                    {modificationsAllowed && addingCategoryId === group.categoryId && (
-                      <TableRow sx={{
-                        backgroundColor: '#f0f8f0',
-                        borderTop: '2px dashed #4caf50',
-                        '& .MuiTableCell-root': {
-                          padding: compactView ? '8px' : '12px',
-                        }
-                      }}>
+                    {/* Quick Add New Item Row (Always Visible) */}
+                    {modificationsAllowed && (
+                      <TableRow
+                        onKeyDownCapture={(event) => {
+                          if (!keyboardShortcutsEnabled) return;
+                          const allowPlainEnter = !openSublineCategoryId && !openAccountingTitleCategoryId;
+                          if (!isSubmitShortcut(event, allowPlainEnter)) return;
+                          if (continueDisabled) return;
+                          event.preventDefault();
+                          handleAddOutlay(group.categoryId, group.categoryName);
+                          if (!shortcutToastShownRef.current) {
+                            shortcutToastShownRef.current = true;
+                            toast.info("Shortcut used: Add Breakdown", { autoClose: 1200 });
+                          }
+                        }}
+                        sx={{
+                          backgroundColor: '#f0f8f0',
+                          borderTop: '2px dashed #4caf50',
+                          '& .MuiTableCell-root': {
+                            padding: compactView ? '8px' : '12px',
+                          }
+                        }}
+                      >
                         {/* TITLE Column - Show Category Name */}
                         <TableCell 
                           sx={{ 
@@ -1488,7 +1580,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                         >
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Chip 
-                              label="NEW" 
+                              label="QUICK ADD" 
                               color="success" 
                               size="small" 
                               sx={{ fontWeight: 'bold', height: '20px' }}
@@ -1499,29 +1591,9 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                           </Box>
                         </TableCell>
 
-                        {/* Actions Column - Cancel and Status */}
+                        {/* Actions Column - Status */}
                         <TableCell sx={{ textAlign: 'center', backgroundColor: '#f0f8f0' }}>
                           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                            <Tooltip title="Cancel">
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => {
-                                  setAddingCategoryId(null);
-                                  setNewOutlays((prev) => ({ ...prev, [group.categoryId]: {} }));
-                                  setErrors({});
-                                }}
-                                sx={{
-                                  '&:hover': {
-                                    backgroundColor: 'error.lighter',
-                                    transform: 'scale(1.1)'
-                                  },
-                                  transition: 'all 0.2s'
-                                }}
-                              >
-                                <Close fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
                             <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', fontWeight: 'medium', textAlign: 'center' }}>
                               {!newOutlays[group.categoryId]?.sublineItem 
                                 ? "⚠️ Select subline"
@@ -1540,11 +1612,32 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                             </Typography>
                             <Select
                               value={newOutlays[group.categoryId]?.sublineItem || ""}
+                              onOpen={() => {
+                                setOpenSublineCategoryId(group.categoryId);
+                                if (!sublineItems[group.categoryName]?.length) {
+                                  fetchSublineItems(group.categoryName, true, group.categoryId);
+                                }
+                              }}
+                              onClose={() => {
+                                setOpenSublineCategoryId((current) => (current === group.categoryId ? null : current));
+                              }}
+                              onKeyDown={(event) => {
+                                if (!keyboardShortcutsEnabled) return;
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  resetQuickAddDraft(group.categoryId);
+                                  return;
+                                }
+                              }}
                               onChange={(e) => {
                                 const selectedSublineItem = e.target.value;
                                 handleOutlayChange(group.categoryId, "sublineItem", selectedSublineItem);
                                 if (selectedSublineItem) {
                                   fetchAccountingTitles(selectedSublineItem);
+                                  setTimeout(() => {
+                                    focusAccountingTitleField(group.categoryId);
+                                    setOpenAccountingTitleCategoryId(group.categoryId);
+                                  }, 0);
                                 }
                               }}
                               fullWidth
@@ -1580,7 +1673,29 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                               Accounting Title *
                             </Typography>
                             <Select
+                              inputRef={(node) => setAccountingTitleSelectRef(group.categoryId, node)}
+                              open={openAccountingTitleCategoryId === group.categoryId}
                               value={newOutlays[group.categoryId]?.accountingTitle || ""}
+                              onOpen={() => {
+                                const selectedSubline = newOutlays[group.categoryId]?.sublineItem;
+                                if (selectedSubline && !(accountingTitles[selectedSubline] || []).length) {
+                                  fetchAccountingTitles(selectedSubline);
+                                }
+                                if (selectedSubline) {
+                                  setOpenAccountingTitleCategoryId(group.categoryId);
+                                }
+                              }}
+                              onClose={() => {
+                                setOpenAccountingTitleCategoryId((current) => (current === group.categoryId ? null : current));
+                              }}
+                              onKeyDown={(event) => {
+                                if (!keyboardShortcutsEnabled) return;
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  resetQuickAddDraft(group.categoryId);
+                                  return;
+                                }
+                              }}
                               onChange={(e) => {
                                 const selectedTitle = e.target.value;
                                 const selectedTitleObj = accountingTitles[newOutlays[group.categoryId]?.sublineItem]?.find(
@@ -1591,6 +1706,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                 if (selectedTitleObj?.uacsCode) {
                                   handleOutlayChange(group.categoryId, "uacsCode", selectedTitleObj.uacsCode);
                                 }
+                                setOpenAccountingTitleCategoryId((current) => (current === group.categoryId ? null : current));
                               }}
                               fullWidth
                               size="small"
@@ -1660,6 +1776,9 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                               <Typography variant="body2" color="primary" sx={{ fontWeight: 'bold', mb: 0.5 }}>
                                 💡 Breakdown details will be entered in the next step
                               </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Shortcuts: Enter/Ctrl + Enter to continue, Esc to clear fields
+                              </Typography>
                               {/* {fiscalYear && (
                                 <Typography variant="caption" color="success.main">
                                   ✓ Fiscal Year: {fiscalYear}
@@ -1683,66 +1802,11 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                     whiteSpace: 'nowrap'
                                   }}
                                 >
-                                  {!fiscalYear ? 'Loading...' : 'Continue'}
+                                  {!fiscalYear ? 'Loading...' : 'Add Breakdown'}
                                 </Button>
                               </span>
                             </Tooltip>
                           </Box>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    
-                    {/* Add New Item Button - Compact Icon Style */}
-                    {!locked && addingCategoryId !== group.categoryId && (
-                      <TableRow>
-                        <TableCell 
-                          colSpan={9} 
-                          sx={{ 
-                            textAlign: 'center',
-                            py: 0.75,
-                            borderTop: '1px solid rgba(224, 224, 224, 0.4)',
-                            backgroundColor: '#fafafa',
-                            position: 'relative'
-                          }}
-                        >
-                          <Tooltip
-                            title={modificationsAllowed ? `Add new ${group.categoryName} item` : (modificationBlockedReason || "Capital outlay editing is currently locked.")}
-                            placement="top"
-                          >
-                            <IconButton
-                              color="success"
-                              size="small"
-                              onClick={() => {
-                                if (!modificationsAllowed) {
-                                  toast.error(modificationBlockedReason || "Capital outlay editing is currently locked.");
-                                  return;
-                                }
-                                setAddingCategoryId(group.categoryId);
-                                setNewOutlays((prev) => ({
-                                  ...prev,
-                                  [group.categoryId]: {
-                                    category: group.categoryId
-                                  },
-                                }));
-                                setErrors({});
-                                // Fetch subline items for this category
-                                fetchSublineItems(group.categoryName, true, group.categoryId);
-                              }}
-                              disabled={!modificationsAllowed}
-                              sx={{
-                                backgroundColor: 'success.main',
-                                color: 'white',
-                                '&:hover': {
-                                  backgroundColor: 'success.dark',
-                                  transform: 'scale(1.1)'
-                                },
-                                transition: 'all 0.2s ease-in-out',
-                                boxShadow: 1
-                              }}
-                            >
-                              <Add />
-                            </IconButton>
-                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     )}
