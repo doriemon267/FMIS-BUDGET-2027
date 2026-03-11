@@ -2063,10 +2063,14 @@ const HierarchicalUserAssignmentPage = () => {
                                     try {
                                       const res = await api.get(`/api/hierarchical-rbac/user-lookup/${assignment.userId}`);
                                       const fmisData = res.data?.data || res.data;
-                                      if (fmisData && fmisData.budgetRoles && fmisData.budgetRoles.length > 0) {
-                                        handleFormChange('userRoles', fmisData.budgetRoles);
-                                        handleFormChange('userRole', fmisData.budgetRole || fmisData.budgetRoles[0]);
-                                        setSnackbar({ open: true, message: 'Roles refreshed from FMIS-Main', severity: 'info' });
+                                      if (fmisData) {
+                                        if (fmisData.userName) handleFormChange('userName', fmisData.userName);
+                                        if (fmisData.email) handleFormChange('email', fmisData.email);
+                                        if (fmisData.budgetRoles && fmisData.budgetRoles.length > 0) {
+                                          handleFormChange('userRoles', fmisData.budgetRoles);
+                                          handleFormChange('userRole', fmisData.budgetRole || fmisData.budgetRoles[0]);
+                                        }
+                                        setSnackbar({ open: true, message: 'User data refreshed from FMIS-Main', severity: 'info' });
                                       }
                                     } catch (err) {
                                       console.warn('FMIS-Main lookup on edit failed:', err?.message);

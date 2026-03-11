@@ -71,7 +71,8 @@ const enhancedSchema = yup.object().shape({
       if (!p.startDate || !p.dueDate) return false;
       return new Date(p.startDate) < new Date(p.dueDate);
     }),
-  isActive: yup.boolean()
+  isActive: yup.boolean(),
+  eSignatureRequired: yup.boolean()
 });
 
 const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
@@ -126,11 +127,13 @@ const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
               isActive: true
             }
           ],
-      isActive: row?.isActive ?? true
+      isActive: row?.isActive ?? true,
+      eSignatureRequired: row?.eSignatureRequired ?? true
     }
   });
 
   const watchIsActive = watch("isActive");
+  const watchESignatureRequired = watch("eSignatureRequired");
 
   const mutation = useMutation({
     mutationFn: async (data) => {
@@ -146,7 +149,8 @@ const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
           budgetType: data.budgetType,
           applicableRegions: data.applicableRegions,
           budgetPeriods: data.budgetPeriods,
-          isActive: data.isActive
+          isActive: data.isActive,
+          eSignatureRequired: data.eSignatureRequired
         };
 
         const response = await methodFn(url, formattedData);
@@ -392,6 +396,38 @@ const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               Active fiscal years are used for budget submissions
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    )}
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Controller
+                    name="eSignatureRequired"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            {...field}
+                            checked={watchESignatureRequired}
+                            sx={{
+                              "& .MuiSwitch-switchBase.Mui-checked": {
+                                color: theme.palette.primary.main
+                              }
+                            }}
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="body2">
+                              {watchESignatureRequired ? "✓ E-signature Required" : "◯ E-signature Optional"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Controls whether workflow submit/forward actions require e-signature.
                             </Typography>
                           </Box>
                         }

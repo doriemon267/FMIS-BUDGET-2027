@@ -131,7 +131,19 @@ settingsRouter.get("/settings", getAllSettings);
 settingsRouter.post("/settings", logUserActivity({ action: 'CREATE', resource: 'Settings' }), createSettings);
 
 // Update an existing settings entry
-settingsRouter.put("/settings/:id", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id }), updateSettings);
+settingsRouter.put(
+  "/settings/:id",
+  logUserActivity({
+    action: 'UPDATE',
+    resource: 'Settings',
+    getResourceId: (req) => req.params.id,
+    getDetails: (req) => ({
+      subAction: 'update-settings',
+      ...(req?._settingsAuditDetails || {}),
+    }),
+  }),
+  updateSettings
+);
 
 // Delete a settings entry
 settingsRouter.delete("/settings/:id", logUserActivity({ action: 'DELETE', resource: 'Settings', getResourceId: (req) => req.params.id }), deleteSettings);

@@ -67,6 +67,7 @@ import ErrorAlert from '../components/common/ErrorAlert';
 import { preventNegativeNumericKey, toNonNegativeNumber } from '../utils/preventNegativeInput';
 import ProposalVersionHistoryDialog from '../components/myproposal/ProposalVersionHistoryDialog';
 import { createWorkflowDigitalSignature, actionRequiresDigitalSignature } from '../utils/digitalSignature';
+import SignaturePad from 'signature_pad';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -164,6 +165,9 @@ const BASE_TABS = [
   { label: "My Proposals", value: "my-proposals" },
   { label: "Pending Review", value: "pending-review" },
 ];
+
+const SIGNATURE_MIN_STROKE_LENGTH = 70;
+const SIGNATURE_MIN_POINT_COUNT = 10;
 
 // Centralize the workflow API base path to avoid mismatched endpoints
 const WORKFLOW_API_BASE = "/api/allproposal/proposals";
@@ -290,6 +294,11 @@ const NewProposalWorkflowPage = () => {
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [actionType, setActionType] = useState("");
   const [actionComment, setActionComment] = useState("");
+  const [actionESignatureDataUrl, setActionESignatureDataUrl] = useState("");
+  const [hasSignatureStroke, setHasSignatureStroke] = useState(false);
+  const [isSignatureQualityValid, setIsSignatureQualityValid] = useState(false);
+  const signatureCanvasRef = useRef(null);
+  const signaturePadRef = useRef(null);
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [availableActionsForMenu, setAvailableActionsForMenu] = useState([]);
   const [proposalDetails, setProposalDetails] = useState(null);
@@ -309,6 +318,7 @@ const NewProposalWorkflowPage = () => {
   const [chargedPersonnelPage, setChargedPersonnelPage] = useState(0);
   const [chargedPersonnelRowsPerPage, setChargedPersonnelRowsPerPage] = useState(10);
   const [actionLoading, setActionLoading] = useState(false);
+  const [workflowESignatureRequired, setWorkflowESignatureRequired] = useState(true);
   const [showAllRegions, setShowAllRegions] = useState(false);
   const [analystsForProposal, setAnalystsForProposal] = useState([]);
   const [targetAnalystId, setTargetAnalystId] = useState(null);
@@ -389,6 +399,24 @@ const NewProposalWorkflowPage = () => {
     proposalDetails?.region,
     proposalDetails?.income
   ]);
+
+  useEffect(() => {
+    const fetchWorkflowControls = async () => {
+      try {
+        const response = await api.get('/settings/active');
+        const configured = response?.data?.eSignatureRequired;
+        if (typeof configured === 'boolean') {
+          setWorkflowESignatureRequired(configured);
+          return;
+        }
+      } catch (error) {
+        logger.warn('Unable to load workflow e-signature setting; defaulting to required', error);
+      }
+      setWorkflowESignatureRequired(true);
+    };
+
+    fetchWorkflowControls();
+  }, []);
 
   // Fetch analysts when action menu opens for a proposal at Approver/Reviewer step (for dynamic "Send to" label)
   useEffect(() => {
@@ -957,6 +985,209 @@ const NewProposalWorkflowPage = () => {
     return actionMapping[frontendAction] || frontendAction;
   };
 
+  const actionRequiresESignature = (workflowAction) =>
+    workflowESignatureRequired && [
+      "submit-to-reviewer",
+      "submit-to-approver",
+      "submit-to-analyst",
+      "forward-to-officer",
+      "forward-to-manager",
+      "finalize",
+    ].includes(workflowAction);
+
+  const getSignatureVerificationState = (entry) => {
+    if (entry?.digitalSignature) {
+      const hasFingerprint = Boolean(entry.digitalSignature.certificateFingerprint256);
+      const trustBundleConfigured = entry.digitalSignature.trustBundleConfigured !== false;
+
+      if (hasFingerprint && trustBundleConfigured) {
+        return {
+          label: "Valid (PNPKI)",
+          color: "success",
+          reason: "Cryptographic signature verified with trusted certificate chain.",
+        };
+      }
+
+      if (hasFingerprint && !trustBundleConfigured) {
+        return {
+          label: "Unverifiable", 
+          color: "warning",
+          reason: "Signature cryptographically valid, but trust bundle is not configured.",
+        };
+      }
+
+      return {
+        label: "Unverifiable",
+        color: "warning",
+        reason: "Digital signature metadata is incomplete for strict trust verification.",
+      };
+    }
+
+    if (entry?.eSignature) {
+      return {
+        label: "Image only",
+        color: "info",
+        reason: "Captured e-signature is visual proof only and not cryptographically verifiable.",
+      };
+    }
+
+    return {
+      label: "No signature",
+      color: "default",
+      reason: "No signature data recorded for this action.",
+    };
+  };
+
+  const getSignatureStrokeMetrics = useCallback((signatureData) => {
+    const groups = Array.isArray(signatureData) ? signatureData : [];
+    let totalLength = 0;
+    let totalPoints = 0;
+
+    groups.forEach((group) => {
+      const points = Array.isArray(group?.points) ? group.points : [];
+      totalPoints += points.length;
+      for (let index = 1; index < points.length; index += 1) {
+        const prev = points[index - 1];
+        const current = points[index];
+        const dx = Number(current?.x || 0) - Number(prev?.x || 0);
+        const dy = Number(current?.y || 0) - Number(prev?.y || 0);
+        totalLength += Math.hypot(dx, dy);
+      }
+    });
+
+    return { totalLength, totalPoints };
+  }, []);
+
+  const getSignatureSnapshotFromPad = useCallback((pad) => {
+    if (!pad || pad.isEmpty()) {
+      return {
+        hasStroke: false,
+        qualityValid: false,
+        dataUrl: "",
+      };
+    }
+
+    const metrics = getSignatureStrokeMetrics(pad.toData());
+    const qualityValid =
+      metrics.totalLength >= SIGNATURE_MIN_STROKE_LENGTH &&
+      metrics.totalPoints >= SIGNATURE_MIN_POINT_COUNT;
+
+    return {
+      hasStroke: true,
+      qualityValid,
+      dataUrl: qualityValid ? pad.toDataURL("image/png") : "",
+    };
+  }, [getSignatureStrokeMetrics]);
+
+  const applySignatureStateFromPad = useCallback((pad) => {
+    const snapshot = getSignatureSnapshotFromPad(pad);
+    setHasSignatureStroke(snapshot.hasStroke);
+    setIsSignatureQualityValid(snapshot.qualityValid);
+    setActionESignatureDataUrl(snapshot.dataUrl);
+  }, [getSignatureSnapshotFromPad]);
+
+  const createActionSignaturePad = useCallback((existingData = null) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+
+    if (signaturePadRef.current) {
+      signaturePadRef.current.off();
+      signaturePadRef.current = null;
+    }
+
+    const displayWidth = canvas.offsetWidth || 520;
+    const displayHeight = canvas.offsetHeight || 130;
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
+    canvas.width = Math.floor(displayWidth * ratio);
+    canvas.height = Math.floor(displayHeight * ratio);
+
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(ratio, ratio);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, displayWidth, displayHeight);
+    }
+
+    const pad = new SignaturePad(canvas, {
+      penColor: "#111111",
+      backgroundColor: "rgb(255,255,255)",
+      minWidth: 1,
+      maxWidth: 2.5,
+      throttle: 16,
+      velocityFilterWeight: 0.7,
+    });
+
+    pad.onEnd = () => {
+      applySignatureStateFromPad(pad);
+    };
+
+    if (Array.isArray(existingData) && existingData.length > 0) {
+      pad.fromData(existingData);
+      applySignatureStateFromPad(pad);
+    } else {
+      setActionESignatureDataUrl("");
+      setHasSignatureStroke(false);
+      setIsSignatureQualityValid(false);
+    }
+
+    signaturePadRef.current = pad;
+  }, [applySignatureStateFromPad]);
+
+  const initActionSignaturePad = useCallback(() => {
+    createActionSignaturePad();
+  }, [createActionSignaturePad]);
+
+  const resizeActionSignaturePad = useCallback(() => {
+    const currentPad = signaturePadRef.current;
+    const existingData = currentPad && !currentPad.isEmpty() ? currentPad.toData() : null;
+    createActionSignaturePad(existingData);
+  }, [createActionSignaturePad]);
+
+  const clearActionSignatureCanvas = () => {
+    if (signaturePadRef.current) {
+      signaturePadRef.current.clear();
+    }
+    setActionESignatureDataUrl("");
+    setHasSignatureStroke(false);
+    setIsSignatureQualityValid(false);
+  };
+
+  useEffect(() => {
+    if (!actionDialogOpen || !actionType) return;
+    const backendAction = mapActionToBackend(actionType);
+    if (!actionRequiresESignature(backendAction)) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      initActionSignaturePad();
+    });
+
+    let resizeTimer = null;
+    const onResize = () => {
+      if (resizeTimer) {
+        window.clearTimeout(resizeTimer);
+      }
+      resizeTimer = window.setTimeout(() => {
+        resizeActionSignaturePad();
+      }, 120);
+    };
+
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onResize);
+      if (resizeTimer) {
+        window.clearTimeout(resizeTimer);
+      }
+      if (signaturePadRef.current) {
+        signaturePadRef.current.off();
+        signaturePadRef.current = null;
+      }
+    };
+  }, [actionDialogOpen, actionType, initActionSignaturePad, resizeActionSignaturePad]);
+
   // Helper function to calculate displayed amounts for any proposal in the table
   const getDisplayAmounts = (proposal) => {
     // CRITICAL: Always use backend-calculated projectedSubsidy and proposedBudget
@@ -1063,16 +1294,47 @@ const NewProposalWorkflowPage = () => {
   const handleProposalAction = async () => {
     if (!selectedProposal || !actionType) return;
 
+    const backendAction = mapActionToBackend(actionType);
+    const requiresESignature = actionRequiresESignature(backendAction);
+
     // Validate comment for return actions
     if (actionType?.includes("return") && !actionComment.trim()) {
       toast.error("Comment is required when returning a proposal");
       return;
     }
 
+    const signatureSnapshot = requiresESignature
+      ? getSignatureSnapshotFromPad(signaturePadRef.current)
+      : null;
+
+    if (requiresESignature && signatureSnapshot) {
+      setHasSignatureStroke(signatureSnapshot.hasStroke);
+      setIsSignatureQualityValid(signatureSnapshot.qualityValid);
+      setActionESignatureDataUrl(signatureSnapshot.dataUrl);
+    }
+
+    if (requiresESignature && !signatureSnapshot?.dataUrl) {
+      if (signatureSnapshot?.hasStroke && !signatureSnapshot?.qualityValid) {
+        toast.error("E-signature is too short. Please provide a fuller signature stroke.", {
+          toastId: "workflow-esign-short",
+        });
+      } else {
+        toast.error("E-signature is required for this submission action", {
+          toastId: "workflow-esign-required",
+        });
+      }
+      return;
+    }
+
+    if (requiresESignature && !signatureSnapshot?.qualityValid) {
+      toast.error("E-signature is required for this submission action", {
+        toastId: "workflow-esign-required",
+      });
+      return;
+    }
+
     setActionLoading(true);
     try {
-      const backendAction = mapActionToBackend(actionType);
-      
       // Use backend-authoritative subsidy value when available
       const projectedSubsidy = getAuthoritativeProjectedSubsidy();
       
@@ -1081,6 +1343,16 @@ const NewProposalWorkflowPage = () => {
         comment: actionComment,
         projectedSubsidy, // Include calculated subsidy
       };
+      if (requiresESignature) {
+        payload.eSignature = {
+          imageDataUrl: signatureSnapshot?.dataUrl || actionESignatureDataUrl,
+          signedAt: new Date().toISOString(),
+          signerName:
+            currentUser?.name ||
+            `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`.trim() ||
+            "",
+        };
+      }
       if (backendAction === "submit-to-analyst" && targetAnalystId) {
         payload.targetAnalystId = targetAnalystId;
       }
@@ -1104,6 +1376,7 @@ const NewProposalWorkflowPage = () => {
       setSelectedProposal(null);
       setActionType("");
       setActionComment("");
+      clearActionSignatureCanvas();
       setAnalystsForProposal([]);
       setTargetAnalystId(null);
       
@@ -1111,7 +1384,16 @@ const NewProposalWorkflowPage = () => {
       
       queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
     } catch (error) {
-      handleApiError(error, toast, 'Performing workflow action');
+      const backendMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        '';
+
+      if (backendMessage) {
+        toast.error(String(backendMessage));
+      } else {
+        handleApiError(error, toast, 'Performing workflow action');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -2832,6 +3114,8 @@ const NewProposalWorkflowPage = () => {
                                           key={action.value}
                                           onClick={async () => {
                                             setActionType(action.value);
+                                            setActionESignatureDataUrl("");
+                                            setHasSignatureStroke(false);
                                             setActionMenuAnchor(null);
                                             if (
                                               action.value === "view-details"
@@ -2977,6 +3261,7 @@ const NewProposalWorkflowPage = () => {
         open={actionDialogOpen}
         onClose={() => {
           setActionDialogOpen(false);
+          clearActionSignatureCanvas();
           setAnalystsForProposal([]);
           setTargetAnalystId(null);
         }}
@@ -3070,6 +3355,41 @@ const NewProposalWorkflowPage = () => {
             }}
           />
 
+          {actionType && actionRequiresESignature(mapActionToBackend(actionType)) && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" sx={{ mb: 1, color: "#2d5016", fontWeight: 600 }}>
+                E-signature (Required)
+              </Typography>
+              <Box
+                sx={{
+                  border: "1px solid #4a7c2c",
+                  borderRadius: 1,
+                  overflow: "hidden",
+                  bgcolor: "#fff",
+                }}
+              >
+                <canvas
+                  ref={signatureCanvasRef}
+                  width={520}
+                  height={130}
+                  style={{ width: "100%", height: 130, display: "block", touchAction: "none", cursor: "crosshair" }}
+                />
+              </Box>
+              <Box sx={{ mt: 1, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Typography variant="caption" color={actionESignatureDataUrl ? "success.main" : "text.secondary"}>
+                  {actionESignatureDataUrl
+                    ? "Signature captured"
+                    : hasSignatureStroke
+                      ? "Signature is too short. Please sign fully."
+                      : "Draw your signature above before submitting"}
+                </Typography>
+                <Button size="small" onClick={clearActionSignatureCanvas}>
+                  Clear Signature
+                </Button>
+              </Box>
+            </Box>
+          )}
+
           {actionType && actionRequiresDigitalSignature(mapActionToBackend(actionType)) && (
             <Alert severity="warning" sx={{ mt: 2 }}>
               This action requires a digital signature. Signer mode: <strong>{signerMode}</strong>.
@@ -3078,7 +3398,10 @@ const NewProposalWorkflowPage = () => {
         </DialogContent>
         <DialogActions sx={{ p: 3, gap: 1 }}>
           <Button
-            onClick={() => setActionDialogOpen(false)}
+            onClick={() => {
+              setActionDialogOpen(false);
+              clearActionSignatureCanvas();
+            }}
             sx={{
               color: "#666",
               textTransform: "none",
@@ -3094,7 +3417,10 @@ const NewProposalWorkflowPage = () => {
           <Button
             onClick={handleProposalAction}
             variant="contained"
-            disabled={actionLoading || (actionType?.includes("return") && !actionComment.trim())}
+            disabled={
+              actionLoading ||
+              (actionType?.includes("return") && !actionComment.trim())
+            }
             sx={{
               bgcolor: "#2d5016",
               color: "white",
@@ -5894,6 +6220,19 @@ const NewProposalWorkflowPage = () => {
                           <TableCell sx={{ py: 1.5, fontSize: "0.8rem", color: "#333" }}>
                             {entry.digitalSignature ? (
                               <Box>
+                                {(() => {
+                                  const verification = getSignatureVerificationState(entry);
+                                  return (
+                                    <Tooltip title={verification.reason}>
+                                      <Chip
+                                        size="small"
+                                        color={verification.color}
+                                        label={verification.label}
+                                        sx={{ mb: 0.75, mr: 0.75, fontWeight: 600 }}
+                                      />
+                                    </Tooltip>
+                                  );
+                                })()}
                                 <Chip
                                   size="small"
                                   color="success"
@@ -5913,8 +6252,42 @@ const NewProposalWorkflowPage = () => {
                                   </Tooltip>
                                 )}
                               </Box>
+                            ) : entry.eSignature ? (
+                              <Box>
+                                {(() => {
+                                  const verification = getSignatureVerificationState(entry);
+                                  return (
+                                    <Tooltip title={verification.reason}>
+                                      <Chip
+                                        size="small"
+                                        color={verification.color}
+                                        label={verification.label}
+                                        sx={{ mb: 0.75, mr: 0.75, fontWeight: 600 }}
+                                      />
+                                    </Tooltip>
+                                  );
+                                })()}
+                                <Chip
+                                  size="small"
+                                  color="primary"
+                                  label="E-signature"
+                                  sx={{ mb: 0.75, fontWeight: 600 }}
+                                />
+                                <Typography variant="caption" display="block" sx={{ color: "#555" }}>
+                                  {entry.eSignature.signedAt
+                                    ? `Signed: ${new Date(entry.eSignature.signedAt).toLocaleString("en-US")}`
+                                    : "Signed"}
+                                </Typography>
+                                {entry.eSignature.signerName && (
+                                  <Typography variant="caption" display="block" sx={{ color: "#777" }}>
+                                    By: {entry.eSignature.signerName}
+                                  </Typography>
+                                )}
+                              </Box>
                             ) : (
-                              <Chip size="small" variant="outlined" label="Not signed" />
+                              <Tooltip title={getSignatureVerificationState(entry).reason}>
+                                <Chip size="small" variant="outlined" label="Not signed" />
+                              </Tooltip>
                             )}
                           </TableCell>
                         </TableRow>

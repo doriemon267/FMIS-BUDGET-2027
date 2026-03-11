@@ -4,6 +4,16 @@ const { mainConnection } = require('../config/mongo_db');
 const AuditLog = require("../models/AuditLog"); // Added Logging
 const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 const { requireBudgetRole } = require('./requireBudgetRole');
+const { syncUserEmailFromRequest } = require('../utils/syncUserEmailFromRequest');
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+const pickEmailFromUsernameArray = (value) => {
+  if (!Array.isArray(value)) return null;
+  const fromIndexOne = String(value?.[1] || '').trim();
+  if (fromIndexOne && isValidEmail(fromIndexOne)) return fromIndexOne;
+  const anyEmail = value.map((item) => String(item || '').trim()).find((item) => isValidEmail(item));
+  return anyEmail || null;
+};
 
 /**
  * Authentication & Authorization Middleware (Production Grade with Whitelist & Logging)
@@ -101,8 +111,22 @@ module.exports = async (req, res, next) => {
       particular: particular,
       particularID: userId,
       userName: particular, // mapped to your AuditLog schema
-      email: payload.email || payload.Email || payload.userEmail || null
+      email:
+        payload.email ||
+        payload.Email ||
+        payload.userEmail ||
+        payload.UserEmail ||
+        payload.mail ||
+        pickEmailFromUsernameArray(payload.Username) ||
+        pickEmailFromUsernameArray(payload.username) ||
+        null
     };
+
+    try {
+      await syncUserEmailFromRequest(req);
+    } catch (_syncError) {
+      // silent sync only
+    }
 
     // 9. [NEW] STRICT PRODUCTION WHITELIST FOR SUPER ADMINS (allow if user has another valid budget role)
     // In DEVELOPMENT mode: Skip SUPER_ADMIN_IDS check if user has any valid budget role

@@ -12,6 +12,9 @@ const Settings = require('../models/Settings');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const Proposal = require('../models/Proposal');
+const User = require('../models/User');
+const { decryptESignatureDataUrl } = require('../utils/eSignatureCrypto');
+const formatFullName = require('../utils/formatFullName');
 let MuhammaraRecipe;
 try {
   // Lazy-load muhammara so the rest of the app still works even if it's not installed yet
@@ -140,9 +143,31 @@ const getRoleBasedProposalFilterFromRequest = async (req, regionsParam, fiscalYe
     userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET REVIEWER');
   if ((!isApprover && !isReviewer) || !fiscalYear || !budgetType) return null;
 
-  const statuses = isApprover
-    ? ['FORWARDED_TO_APPROVER', 'RETURNED_TO_APPROVER']
-    : ['FORWARDED_TO_REVIEWER', 'RETURNED_TO_REVIEWER'];
+  const reviewerVisibleStatuses = [
+    'FORWARDED_TO_REVIEWER',
+    'RETURNED_TO_REVIEWER',
+    'FORWARDED_TO_APPROVER',
+    'RETURNED_TO_APPROVER',
+    'FORWARDED_TO_BRD_ANALYST',
+    'FORWARDED_TO_BRD_OFFICER',
+    'FORWARDED_TO_BRD_MANAGER',
+    'FINALIZED',
+    'RETURNED_TO_PLANNING_ANALYST',
+    'RETURNED_TO_OFFICER'
+  ];
+
+  const approverVisibleStatuses = [
+    'FORWARDED_TO_APPROVER',
+    'RETURNED_TO_APPROVER',
+    'FORWARDED_TO_BRD_ANALYST',
+    'FORWARDED_TO_BRD_OFFICER',
+    'FORWARDED_TO_BRD_MANAGER',
+    'FINALIZED',
+    'RETURNED_TO_PLANNING_ANALYST',
+    'RETURNED_TO_OFFICER'
+  ];
+
+  const statuses = isApprover ? approverVisibleStatuses : reviewerVisibleStatuses;
 
   const modelTypeMap = { NEP: 'NEP', GAA: 'GAA' };
   const modelType = modelTypeMap[String(budgetType).toUpperCase()] || 'Initial';
@@ -180,6 +205,361 @@ const applyApproverProposalFilter = (baseQuery, approverProposalFilter) => {
     orConditions.push({ proposalId: { $in: approverProposalFilter.proposalIds } });
   }
   return orConditions.length ? { $and: [{ ...baseQuery }, { $or: orConditions }] } : baseQuery;
+};
+
+const REPORT_RELEASE_WORKFLOW_STATUSES = [
+  'FORWARDED_TO_REVIEWER',
+  'FORWARDED_TO_APPROVER',
+  'FORWARDED_TO_BRD_ANALYST',
+  'FORWARDED_TO_BRD_OFFICER',
+  'FORWARDED_TO_BRD_MANAGER',
+  'FINALIZED',
+  'RETURNED_TO_PREPARER',
+  'RETURNED_TO_REVIEWER',
+  'RETURNED_TO_APPROVER',
+  'RETURNED_TO_PLANNING_ANALYST',
+  'RETURNED_TO_OFFICER'
+];
+
+const roleToPositionLabel = (role) => {
+  const normalized = String(role || '').replace(/\s+/g, '_').toUpperCase();
+  const map = {
+    BUDGET_PREPARER: 'Budget Preparer',
+    BUDGET_REVIEWER: 'Budget Reviewer',
+    BUDGET_APPROVER: 'Budget Approver',
+    BUDGET_PLANNING_ANALYST: 'Budget Planning Analyst',
+    BUDGET_OFFICER: 'Budget Officer',
+    BUDGET_MANAGER: 'Budget Manager',
+    OVERALL_BUDGET_APPROVER: 'Budget Manager',
+    SUPER_ADMIN: 'Super Admin'
+  };
+  return map[normalized] || String(role || '').replace(/_/g, ' ') || 'Workflow Signatory';
+};
+
+const getSignatureVerificationInfo = ({ hasDigitalSignature, hasESignature, certificateFingerprint256, trustBundleConfigured }) => {
+  if (hasDigitalSignature) {
+    const hasFingerprint = Boolean(certificateFingerprint256);
+    const trustConfigured = trustBundleConfigured !== false;
+
+    if (hasFingerprint && trustConfigured) {
+      return {
+        statusLabel: 'Valid (PNPKI)',
+        reason: 'Cryptographic signature verified with trusted certificate chain.'
+      };
+    }
+
+    return {
+      statusLabel: 'Unverifiable',
+      reason: 'Digital signature present but trust-chain requirements are incomplete.'
+    };
+  }
+
+  if (hasESignature) {
+    return {
+      statusLabel: 'Image only',
+      reason: 'Captured e-signature is visual proof only and not cryptographically verifiable.'
+    };
+  }
+
+  return {
+    statusLabel: 'No signature',
+    reason: 'No signature data recorded for this action.'
+  };
+};
+
+const resolveDisplayName = ({ workflowName, eSignatureSignerName, assignmentName, userDoc }) => {
+  const userDocFormatted = formatFullName(userDoc || {});
+  const candidates = [
+    eSignatureSignerName,
+    assignmentName,
+    userDocFormatted,
+    userDoc?.name,
+    userDoc?.particular,
+    workflowName,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim();
+    if (!value) continue;
+    if (value.toLowerCase() === 'dev user') continue;
+    return value;
+  }
+
+  const fallback = String(workflowName || '').trim();
+  return fallback || 'Unknown Signatory';
+};
+
+const buildUserProfileMaps = async (userIds) => {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map((v) => String(v || '').trim()).filter(Boolean))];
+  if (ids.length === 0) {
+    return { assignmentMap: new Map(), userMap: new Map() };
+  }
+
+  const [assignmentDocs, userDocs] = await Promise.all([
+    HierarchicalUserAssignment.find({ userId: { $in: ids } })
+      .select('userId userName userRole')
+      .lean(),
+    User.find({ userId: { $in: ids } })
+      .select('userId name FirstName MiddleName LastName Suffix particular')
+      .lean(),
+  ]);
+
+  return {
+    assignmentMap: new Map((assignmentDocs || []).map((doc) => [String(doc.userId), doc])),
+    userMap: new Map((userDocs || []).map((doc) => [String(doc.userId), doc])),
+  };
+};
+
+const resolveRoleFromWorkflowAction = (entry) => {
+  const action = String(entry?.action || '');
+  const fromStatus = String(entry?.fromStatus || '').toUpperCase();
+
+  if (action === 'submit-to-reviewer') return 'BUDGET PREPARER';
+  if (action === 'submit-to-approver') {
+    if (fromStatus === 'FORWARDED_TO_REVIEWER' || fromStatus === 'RETURNED_TO_REVIEWER') return 'BUDGET REVIEWER';
+    return 'BUDGET PREPARER';
+  }
+  if (action === 'submit-to-analyst') {
+    if (fromStatus === 'FORWARDED_TO_REVIEWER' || fromStatus === 'RETURNED_TO_REVIEWER') return 'BUDGET REVIEWER';
+    return 'BUDGET APPROVER';
+  }
+  if (action === 'forward-to-officer') return 'BUDGET PLANNING ANALYST';
+  if (action === 'forward-to-manager') return 'BUDGET OFFICER';
+  if (action === 'finalize') return 'BUDGET MANAGER';
+  return null;
+};
+
+const mapBudgetTypeToModelType = (budgetType) => {
+  const modelTypeMap = { NEP: 'NEP', GAA: 'GAA' };
+  return modelTypeMap[String(budgetType || '').toUpperCase()] || 'Initial';
+};
+
+const applyWorkflowScopeFilter = (baseQuery, scopeFilter) => {
+  if (!scopeFilter || (!scopeFilter.workflowIds?.length && !scopeFilter.proposalIds?.length)) {
+    return null;
+  }
+
+  const orConditions = [];
+  if (scopeFilter.workflowIds?.length) {
+    orConditions.push({ workflowRef: { $in: scopeFilter.workflowIds } });
+  }
+  if (scopeFilter.proposalIds?.length) {
+    orConditions.push({ proposalId: { $in: scopeFilter.proposalIds } });
+  }
+  return orConditions.length ? { $and: [{ ...baseQuery }, { $or: orConditions }] } : baseQuery;
+};
+
+const resolvePreparedByInfo = async (workflowDocs) => {
+  if (!Array.isArray(workflowDocs) || workflowDocs.length === 0) {
+    return null;
+  }
+
+  const candidates = [];
+  workflowDocs.forEach((doc) => {
+    const history = Array.isArray(doc.workflowHistory) ? doc.workflowHistory : [];
+    history.forEach((entry) => {
+      const isSubmitAction = ['submit-to-reviewer', 'submit-to-approver'].includes(String(entry?.action || ''));
+      const isCreatorStep = String(entry?.performedBy || '') === String(doc?.createdBy || '');
+      if (!isSubmitAction || !isCreatorStep) return;
+
+      candidates.push({
+        name: entry?.performedByName || doc?.createdByName || 'Budget Preparer',
+        userId: String(entry?.performedBy || doc?.createdBy || ''),
+        signedAt: entry?.digitalSignature?.signedAt || entry?.timestamp || null,
+        hasDigitalSignature: Boolean(entry?.digitalSignature?.signedPayloadHash || entry?.digitalSignature?.signatureAlgorithm),
+        signatureAlgorithm: entry?.digitalSignature?.signatureAlgorithm || null,
+        eSignatureImageDataUrl: entry?.eSignature?.imageDataUrl || null,
+        eSignatureSignedAt: entry?.eSignature?.signedAt || null,
+        eSignatureSignerName: entry?.eSignature?.signerName || null
+      });
+    });
+  });
+
+  if (candidates.length === 0) {
+    const firstWorkflow = workflowDocs[0];
+    const { assignmentMap, userMap } = await buildUserProfileMaps([String(firstWorkflow?.createdBy || '')]);
+    const assignment = assignmentMap.get(String(firstWorkflow?.createdBy || ''));
+    const userDoc = userMap.get(String(firstWorkflow?.createdBy || ''));
+    const resolvedName = resolveDisplayName({
+      workflowName: firstWorkflow?.createdByName || 'Budget Preparer',
+      eSignatureSignerName: null,
+      assignmentName: assignment?.userName,
+      userDoc,
+    });
+
+    return {
+      name: resolvedName,
+      userId: String(firstWorkflow?.createdBy || ''),
+      position: roleToPositionLabel(assignment?.userRole || 'BUDGET_PREPARER'),
+      hasDigitalSignature: false,
+      signatureAlgorithm: null,
+      signedAt: null,
+      eSignatureImageDataUrl: null,
+      eSignatureSignedAt: null,
+      eSignatureSignerName: null
+    };
+  }
+
+  candidates.sort((a, b) => new Date(b.signedAt || 0).getTime() - new Date(a.signedAt || 0).getTime());
+  const distinctNames = new Set(candidates.map((c) => c.name));
+  const topCandidate = candidates[0];
+  const { assignmentMap, userMap } = await buildUserProfileMaps(candidates.map((c) => c.userId));
+  const assignment = assignmentMap.get(String(topCandidate.userId || ''));
+  const userDoc = userMap.get(String(topCandidate.userId || ''));
+  const resolvedName = resolveDisplayName({
+    workflowName: topCandidate.name,
+    eSignatureSignerName: topCandidate.eSignatureSignerName,
+    assignmentName: assignment?.userName,
+    userDoc,
+  });
+
+  return {
+    ...topCandidate,
+    name: distinctNames.size > 1 ? 'Multiple Budget Preparers' : resolvedName,
+    position: distinctNames.size > 1 ? 'Multiple Signatories' : roleToPositionLabel(assignment?.userRole || 'BUDGET_PREPARER')
+  };
+};
+
+const resolveWorkflowSignatories = async (workflowDocs) => {
+  if (!Array.isArray(workflowDocs) || workflowDocs.length === 0) {
+    return [];
+  }
+
+  const rawEntries = [];
+  workflowDocs.forEach((doc) => {
+    const history = Array.isArray(doc.workflowHistory) ? doc.workflowHistory : [];
+    history.forEach((entry) => {
+      const workflowRole = resolveRoleFromWorkflowAction(entry);
+      const hasDigitalSignature = Boolean(entry?.digitalSignature?.signedPayloadHash || entry?.digitalSignature?.signatureAlgorithm);
+      const hasESignature = Boolean(entry?.eSignature?.imageDataUrl);
+      if (!workflowRole || (!hasDigitalSignature && !hasESignature)) return;
+
+      rawEntries.push({
+        workflowRole,
+        userId: String(entry?.performedBy || ''),
+        fullName: String(entry?.performedByName || doc?.createdByName || '').trim() || 'Unknown Signatory',
+        eSignatureSignerName: String(entry?.eSignature?.signerName || '').trim(),
+        eSignatureImageDataUrl: entry?.eSignature?.imageDataUrl || null,
+        signedAt: entry?.digitalSignature?.signedAt || entry?.eSignature?.signedAt || entry?.timestamp || null,
+        hasDigitalSignature,
+        signatureAlgorithm: entry?.digitalSignature?.signatureAlgorithm || null,
+        certificateFingerprint256: entry?.digitalSignature?.certificateFingerprint256 || null,
+        trustBundleConfigured: entry?.digitalSignature?.trustBundleConfigured,
+        hasESignature
+      });
+    });
+  });
+
+  if (rawEntries.length === 0) return [];
+
+  const userIds = [...new Set(rawEntries.map((item) => item.userId).filter(Boolean))];
+  const { assignmentMap, userMap } = await buildUserProfileMaps(userIds);
+
+  const dedupMap = new Map();
+  rawEntries.forEach((item) => {
+    const key = `${item.workflowRole}:${item.userId || item.fullName}`;
+    const existing = dedupMap.get(key);
+    const itemTime = new Date(item.signedAt || 0).getTime();
+    const existingTime = new Date(existing?.signedAt || 0).getTime();
+    if (!existing || itemTime >= existingTime) {
+      dedupMap.set(key, item);
+    }
+  });
+
+  const roleOrder = {
+    'BUDGET PREPARER': 1,
+    'BUDGET REVIEWER': 2,
+    'BUDGET APPROVER': 3,
+    'BUDGET PLANNING ANALYST': 4,
+    'BUDGET OFFICER': 5,
+    'BUDGET MANAGER': 6
+  };
+
+  return [...dedupMap.values()]
+    .map((item) => {
+      const assignment = assignmentMap.get(String(item.userId || ''));
+      const userDoc = userMap.get(String(item.userId || ''));
+      const assignmentRole = assignment?.userRole || item.workflowRole;
+      const position = roleToPositionLabel(assignmentRole);
+      const fullName = resolveDisplayName({
+        workflowName: item.fullName,
+        eSignatureSignerName: item.eSignatureSignerName,
+        assignmentName: assignment?.userName,
+        userDoc,
+      });
+      const verification = getSignatureVerificationInfo({
+        hasDigitalSignature: item.hasDigitalSignature,
+        hasESignature: item.hasESignature,
+        certificateFingerprint256: item.certificateFingerprint256,
+        trustBundleConfigured: item.trustBundleConfigured,
+      });
+      return {
+        ...item,
+        fullName,
+        position,
+        signatureType: item.hasDigitalSignature ? 'Cryptographic digital signature' : 'Captured e-signature',
+        verificationStatus: verification.statusLabel,
+        verificationReason: verification.reason,
+      };
+    })
+    .sort((a, b) => {
+      const roleDiff = (roleOrder[a.workflowRole] || 999) - (roleOrder[b.workflowRole] || 999);
+      if (roleDiff !== 0) return roleDiff;
+      return new Date(a.signedAt || 0).getTime() - new Date(b.signedAt || 0).getTime();
+    });
+};
+
+const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters, preparerScope }) => {
+  const npwQuery = {
+    status: { $in: REPORT_RELEASE_WORKFLOW_STATUSES }
+  };
+
+  if (fiscalYear) {
+    const fyNum = Number(fiscalYear) || parseInt(fiscalYear, 10);
+    npwQuery.fiscalYear = Number.isFinite(fyNum) ? fyNum : parseInt(String(fiscalYear), 10);
+  }
+
+  if (budgetType) {
+    npwQuery.modelType = mapBudgetTypeToModelType(budgetType);
+  }
+
+  if (regions && regions !== 'all') {
+    const regionList = Array.isArray(regions) ? regions : [regions];
+    const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
+    const regionIds = regionDocs.map((r) => r._id);
+    npwQuery.region = regionIds.length > 0 ? { $in: regionIds } : null;
+  }
+
+  if (groupBy === 'office' && Array.isArray(offices) && offices.length > 0) {
+    npwQuery.department = { $in: offices };
+  }
+
+  if (groupBy === 'responsibilityCenter' && Array.isArray(responsibilityCenters) && responsibilityCenters.length > 0) {
+    npwQuery.division = { $in: responsibilityCenters };
+  }
+
+  if (preparerScope) {
+    const level = String(preparerScope.assignmentLevel || '').toUpperCase();
+    if (level === 'DIVISION' && preparerScope.division) {
+      npwQuery.division = preparerScope.division;
+    } else if ((level === 'DEPARTMENT' || level === 'OFFICE') && preparerScope.department) {
+      npwQuery.department = preparerScope.department;
+    }
+  }
+
+  if (npwQuery.region === null) {
+    return { workflowIds: [], proposalIds: [], workflowDocs: [] };
+  }
+
+  const workflowDocs = await NewProposalWorkflow.find(npwQuery)
+    .select('_id createdBy createdByName workflowHistory')
+    .lean();
+
+  const workflowIds = workflowDocs.map((d) => d._id);
+  const proposalDocs = await Proposal.find({ proposalId: { $in: workflowIds } }).select('_id').lean();
+  const proposalIds = proposalDocs.map((d) => d._id);
+
+  return { workflowIds, proposalIds, workflowDocs };
 };
 
 const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope, groupBy, offices, responsibilityCenters, approverProposalFilter }) => {
@@ -221,11 +601,47 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
         totalSubsidy: 0,
         department: summaryDepartment,
         division: summaryDivision,
-        approverNoProposals: true // Budget Approver: no proposals passed to them yet
+        approverNoProposals: true, // Budget Approver: no proposals passed to them yet
+        eligibleForGeneration: false
       },
       sections: []
     };
   }
+
+  const releasedProposalScope = await getReleasedProposalScopeFilter({
+    regions,
+    fiscalYear,
+    budgetType,
+    groupBy,
+    offices: selectedOffices,
+    responsibilityCenters: selectedResponsibilityCenters,
+    preparerScope
+  });
+
+  const noReleasedProposalScope = !releasedProposalScope.workflowIds?.length && !releasedProposalScope.proposalIds?.length;
+  if (noReleasedProposalScope) {
+    return {
+      summary: {
+        reportTitle: 'BUDGET SUMMARY REPORT',
+        fiscalYear: fiscalYear || 'All Years',
+        budgetType: budgetType || 'All Types',
+        regions: regions ? (Array.isArray(regions) ? regions : [regions]) : ['All Regions'],
+        generatedDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        totalRegions: 0,
+        totalEmployees: 0,
+        grandTotal: 0,
+        totalIncome: 0,
+        totalSubsidy: 0,
+        department: summaryDepartment,
+        division: summaryDivision,
+        reportLockedUntilSubmission: true,
+        eligibleForGeneration: false
+      },
+      sections: []
+    };
+  }
+
+  const workflowSignatories = await resolveWorkflowSignatories(releasedProposalScope.workflowDocs);
 
   // Build base query
   const query = {};
@@ -277,10 +693,15 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     coQuery.budgetType = budgetType;
   }
 
-  const incomeQuery = applyApproverProposalFilter(query, approverProposalFilter) || query;
-  const psQuery = applyApproverProposalFilter(query, approverProposalFilter) || query;
-  const mooeQueryFinal = applyApproverProposalFilter(mooeQuery, approverProposalFilter) || mooeQuery;
-  const coQueryFinal = applyApproverProposalFilter(coQuery, approverProposalFilter) || coQuery;
+  const scopeFilter = {
+    workflowIds: releasedProposalScope.workflowIds,
+    proposalIds: releasedProposalScope.proposalIds
+  };
+
+  const incomeQuery = applyApproverProposalFilter(applyWorkflowScopeFilter(query, scopeFilter) || query, approverProposalFilter) || (applyWorkflowScopeFilter(query, scopeFilter) || query);
+  const psQuery = applyApproverProposalFilter(applyWorkflowScopeFilter(query, scopeFilter) || query, approverProposalFilter) || (applyWorkflowScopeFilter(query, scopeFilter) || query);
+  const mooeQueryFinal = applyApproverProposalFilter(applyWorkflowScopeFilter(mooeQuery, scopeFilter) || mooeQuery, approverProposalFilter) || (applyWorkflowScopeFilter(mooeQuery, scopeFilter) || mooeQuery);
+  const coQueryFinal = applyApproverProposalFilter(applyWorkflowScopeFilter(coQuery, scopeFilter) || coQuery, approverProposalFilter) || (applyWorkflowScopeFilter(coQuery, scopeFilter) || coQuery);
 
   // Fetch data from all sources concurrently
   const [incomeData, psData, mooeData, coData] = await Promise.all([
@@ -310,7 +731,10 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
       totalIncome: 0,
       totalSubsidy: 0,
       department: summaryDepartment,
-      division: summaryDivision
+      division: summaryDivision,
+      eligibleForGeneration: true,
+      preparedBy: await resolvePreparedByInfo(releasedProposalScope.workflowDocs),
+      signatories: workflowSignatories
     },
     sections: []
   };
@@ -1035,6 +1459,15 @@ const getComprehensiveReportPdf = async (req, res) => {
     }
 
     const { regions, region, fiscalYear, budgetType, groupBy, offices, responsibilityCenters } = req.query;
+    const requesterId = String(req.user?.id || '').trim();
+
+    if (!requesterId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication is required to generate PDF reports.'
+      });
+    }
+
     const regionsParam = regions ?? region;
     const officesParam = offices ? (Array.isArray(offices) ? offices : [offices]) : [];
     const responsibilityCentersParam = responsibilityCenters ? (Array.isArray(responsibilityCenters) ? responsibilityCenters : [responsibilityCenters]) : [];
@@ -1067,6 +1500,16 @@ const getComprehensiveReportPdf = async (req, res) => {
       approverProposalFilter
     });
 
+    if (reportData?.summary?.eligibleForGeneration === false || reportData?.summary?.reportLockedUntilSubmission) {
+      const blockedMessage = reportData?.summary?.approverNoProposals
+        ? 'No proposals are currently in your accessible workflow scope for the selected filters.'
+        : 'Reports can only be generated after the proposal is submitted at least one workflow step beyond Draft.';
+      return res.status(403).json({
+        success: false,
+        message: blockedMessage
+      });
+    }
+
     if (!reportData || !reportData.summary) {
       return res.status(500).json({
         success: false,
@@ -1080,14 +1523,28 @@ const getComprehensiveReportPdf = async (req, res) => {
       os.tmpdir(),
       `comprehensive_report_${Date.now()}.pdf`
     );
+    const tempSignatureImagePaths = [];
 
-    // Create PDF using Muhammara Recipe — A4 portrait (Annex A format)
-    const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
+    const pdfSecurityEnabled = String(process.env.COMPREHENSIVE_PDF_SECURITY_ENABLED || 'true').toLowerCase() !== 'false';
+    const pdfOwnerPassword = process.env.COMPREHENSIVE_PDF_OWNER_PASSWORD || `FMIS-COMP-${String(fiscalYear || 'ALL')}`;
+    const pdfUserPassword = process.env.COMPREHENSIVE_PDF_USER_PASSWORD || '';
+    const userProtectionFlag = Number(process.env.COMPREHENSIVE_PDF_USER_PROTECTION_FLAG || '0');
+
+    const recipeOptions = {
       version: 1.6,
       author: 'FMIS-BUDGET',
       title: 'Corporate Operating Budget',
       subject: 'Corporate Operating Budget - Annex A',
-    });
+    };
+
+    if (pdfSecurityEnabled) {
+      recipeOptions.userPassword = pdfUserPassword;
+      recipeOptions.ownerPassword = pdfOwnerPassword;
+      recipeOptions.userProtectionFlag = Number.isFinite(userProtectionFlag) ? userProtectionFlag : 0;
+    }
+
+    // Create PDF using Muhammara Recipe — A4 portrait (Annex A format)
+    const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
     // A4 portrait dimensions in points (1/72 inch)
     const PAGE_WIDTH = 595.28;
@@ -1124,6 +1581,24 @@ const getComprehensiveReportPdf = async (req, res) => {
     };
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
+    const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.FirstName || req.user?.id || 'Authorized User');
+    const watermarkText = process.env.COMPREHENSIVE_PDF_WATERMARK_TEXT || `FMIS CONFIDENTIAL • ${requesterLabel}`;
+    const drawWatermark = () => {
+      const centerX = PAGE_WIDTH / 2;
+      const centerY = PAGE_HEIGHT / 2;
+
+      pdfDoc.text(watermarkText, centerX, centerY - 20, textOpt({
+        fontSize: 34,
+        color: '#d9d9d9',
+        align: 'center'
+      }));
+
+      pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, centerX, centerY + 18, textOpt({
+        fontSize: 14,
+        color: '#dddddd',
+        align: 'center'
+      }));
+    };
     const regionsStr = reportData.summary.regions != null
       ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))
       : '';
@@ -1253,6 +1728,7 @@ const getComprehensiveReportPdf = async (req, res) => {
       currentPage++;
       currentY = MARGIN_TOP + 20; // Start content a bit below the top
       drawBorder();
+      drawWatermark();
       // No header on continuation pages - header only on first page
     };
 
@@ -1266,6 +1742,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     // First page — A4 portrait with Annex A format
     pdfDoc.createPage('A4');
     drawBorder();
+    drawWatermark();
     drawHeader(true); // true = include title section on first page
 
     // Personnel statistics section - Get actual counts from PersonnelServices
@@ -1472,6 +1949,7 @@ const getComprehensiveReportPdf = async (req, res) => {
       currentPage++;
       currentY = MARGIN_TOP + 20;
       drawBorder();
+      drawWatermark();
     }
 
     // NET INCOME FROM OPERATION
@@ -1499,33 +1977,123 @@ const getComprehensiveReportPdf = async (req, res) => {
       currentPage++;
       currentY = MARGIN_TOP + 40;
       drawBorder();
+      drawWatermark();
     }
 
     // Signature blocks
     const sigY = currentY + 50;
+    const preparedByInfo = reportData?.summary?.preparedBy || null;
+    const preparedByName = preparedByInfo?.name || 'Budget Preparer';
+    const preparedByDesignation = preparedByInfo?.position || 'Budget Preparer';
+    const preparedByUserId = preparedByInfo?.userId || '';
+    let preparedByESignatureImage = preparedByInfo?.eSignatureImageDataUrl || null;
+    if (preparedByESignatureImage) {
+      try {
+        preparedByESignatureImage = decryptESignatureDataUrl(preparedByESignatureImage);
+      } catch (decryptErr) {
+        console.warn('Prepared-by e-signature decrypt failed:', decryptErr.message);
+        preparedByESignatureImage = null;
+      }
+    }
+    const preparedBySignatureLine = preparedByInfo?.hasDigitalSignature
+      ? `E-signature: ${preparedByInfo.signatureAlgorithm || 'Digitally Signed'}${preparedByInfo?.signedAt ? ` • ${new Date(preparedByInfo.signedAt).toLocaleString('en-US')}` : ''}`
+      : (preparedByESignatureImage ? 'E-signature: Captured in workflow submission' : 'E-signature: Not available');
+    const preparedByAuthLine = preparedByUserId
+      ? `Authentication: Verified User ID ${preparedByUserId}`
+      : 'Authentication: Verified Budget Preparer account';
     
     // Prepared by
     pdfDoc.text('Prepared by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
     pdfDoc.text('_____________________________', CONTENT_LEFT + 20, sigY, textOpt({ fontSize: 10 }));
-    pdfDoc.text('Budget Officer', CONTENT_LEFT + 20, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
-    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+
+    if (preparedByESignatureImage && /^data:image\/(png|jpeg|jpg);base64,/.test(preparedByESignatureImage)) {
+      try {
+        const base64Payload = preparedByESignatureImage.split(',')[1] || '';
+        const fileExt = preparedByESignatureImage.includes('image/jpeg') || preparedByESignatureImage.includes('image/jpg') ? 'jpg' : 'png';
+        const preparedSignatureImagePath = path.join(os.tmpdir(), `prepared_by_esign_${Date.now()}.${fileExt}`);
+        fs.writeFileSync(preparedSignatureImagePath, Buffer.from(base64Payload, 'base64'));
+        tempSignatureImagePaths.push(preparedSignatureImagePath);
+        pdfDoc.image(preparedSignatureImagePath, CONTENT_LEFT + 22, sigY - 30, { width: 180, height: 40, keepAspectRatio: true });
+      } catch (sigRenderErr) {
+        console.warn('Prepared-by e-signature render failed:', sigRenderErr.message);
+      }
+    }
+
+    pdfDoc.text(preparedByName, CONTENT_LEFT + 20, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text(`Designation: ${preparedByDesignation}`, CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+    pdfDoc.text(preparedBySignatureLine, CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 3, textOpt({ fontSize: 8 }));
+    pdfDoc.text(preparedByAuthLine, CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 4, textOpt({ fontSize: 8 }));
     
     currentY += LINE_HEIGHT * 9;
 
-    // Reviewed by
-    pdfDoc.text('Reviewed by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
-    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 10 }));
-    pdfDoc.text('Manager, Management Information Division', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 9, bold: true }));
-    pdfDoc.text('Budget and Statistics Center', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 8 }));
-    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 82, textOpt({ fontSize: 8 }));
-    
-    currentY += LINE_HEIGHT * 12;
+    const signatories = Array.isArray(reportData?.summary?.signatories) ? reportData.summary.signatories : [];
+    const normalizeRoleKey = (value) => String(value || '').replace(/\s+/g, '_').toUpperCase();
+    const reviewerSignatory = signatories.find((item) => normalizeRoleKey(item?.workflowRole) === 'BUDGET_REVIEWER');
 
-    // Noted by
-    pdfDoc.text('Noted by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
-    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 10 }));
-    pdfDoc.text('Manager, Corporate Planning Services', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 9, bold: true }));
-    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 8 }));
+    if (reviewerSignatory) {
+      const reviewerName = reviewerSignatory?.fullName || 'Budget Reviewer';
+      const reviewerDesignation = reviewerSignatory?.position || 'Budget Reviewer';
+      const reviewerSignedDate = reviewerSignatory?.signedAt
+        ? new Date(reviewerSignatory.signedAt).toLocaleString('en-US')
+        : 'N/A';
+      const reviewerSignatureLine = `Signature: ${reviewerSignatory?.signatureType || 'N/A'} • Date: ${reviewerSignedDate}`;
+      const reviewerVerificationLine = `Verification: ${reviewerSignatory?.verificationStatus || 'Unverifiable'}`;
+
+      let reviewerESignatureImage = reviewerSignatory?.eSignatureImageDataUrl || null;
+      if (reviewerESignatureImage) {
+        try {
+          reviewerESignatureImage = decryptESignatureDataUrl(reviewerESignatureImage);
+        } catch (decryptErr) {
+          console.warn('Reviewer e-signature decrypt failed:', decryptErr.message);
+          reviewerESignatureImage = null;
+        }
+      }
+
+      const reviewSigY = currentY + 45;
+      pdfDoc.text('Reviewed by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
+      pdfDoc.text('_____________________________', CONTENT_LEFT + 20, reviewSigY, textOpt({ fontSize: 10 }));
+
+      if (reviewerESignatureImage && /^data:image\/(png|jpeg|jpg);base64,/.test(reviewerESignatureImage)) {
+        try {
+          const reviewerPayload = reviewerESignatureImage.split(',')[1] || '';
+          const reviewerExt = reviewerESignatureImage.includes('image/jpeg') || reviewerESignatureImage.includes('image/jpg') ? 'jpg' : 'png';
+          const reviewerSignatureImagePath = path.join(os.tmpdir(), `reviewed_by_esign_${Date.now()}.${reviewerExt}`);
+          fs.writeFileSync(reviewerSignatureImagePath, Buffer.from(reviewerPayload, 'base64'));
+          tempSignatureImagePaths.push(reviewerSignatureImagePath);
+          pdfDoc.image(reviewerSignatureImagePath, CONTENT_LEFT + 22, reviewSigY - 30, { width: 180, height: 40, keepAspectRatio: true });
+        } catch (renderErr) {
+          console.warn('Reviewed-by e-signature render failed:', renderErr.message);
+        }
+      }
+
+      pdfDoc.text(reviewerName, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
+      pdfDoc.text(`Designation: ${reviewerDesignation}`, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+      pdfDoc.text(reviewerSignatureLine, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT * 3, textOpt({ fontSize: 8 }));
+      pdfDoc.text(reviewerVerificationLine, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT * 4, textOpt({ fontSize: 8 }));
+
+      currentY += LINE_HEIGHT * 8;
+    }
+
+    if (signatories.length > 0) {
+      currentY += LINE_HEIGHT * 2;
+      pdfDoc.text('Workflow Signatories:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10, bold: true }));
+      currentY += LINE_HEIGHT * 1.1;
+
+      signatories.forEach((signatory, index) => {
+        if (currentY + (LINE_HEIGHT * 3.8) > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+          startNewPage();
+        }
+        const roleLabel = roleToPositionLabel(signatory.workflowRole || '');
+        const signedDate = signatory?.signedAt ? new Date(signatory.signedAt).toLocaleString('en-US') : 'N/A';
+        const verificationStatus = signatory?.verificationStatus || 'Unverifiable';
+        const verificationReason = signatory?.verificationReason || 'Verification details unavailable.';
+        pdfDoc.text(`${index + 1}. ${signatory.fullName || 'Unknown Signatory'}`, CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9, bold: true }));
+        pdfDoc.text(`Position: ${signatory.position || roleLabel}`, CONTENT_LEFT + 28, currentY + LINE_HEIGHT * 0.85, textOpt({ fontSize: 8 }));
+        pdfDoc.text(`Role: ${roleLabel} • Signature: ${signatory.signatureType || 'N/A'} • Date: ${signedDate}`, CONTENT_LEFT + 28, currentY + LINE_HEIGHT * 1.7, textOpt({ fontSize: 8 }));
+        pdfDoc.text(`Verification: ${verificationStatus} • ${verificationReason}`, CONTENT_LEFT + 28, currentY + LINE_HEIGHT * 2.55, textOpt({ fontSize: 8 }));
+        currentY += LINE_HEIGHT * 3.8;
+      });
+    }
     
     // Final page footer
     drawFooter();
@@ -1561,6 +2129,7 @@ const getComprehensiveReportPdf = async (req, res) => {
 
       res.on('finish', () => {
         fs.unlink(tmpFilePath, () => {});
+        tempSignatureImagePaths.forEach((filePath) => fs.unlink(filePath, () => {}));
       });
 
       readStream.pipe(res);

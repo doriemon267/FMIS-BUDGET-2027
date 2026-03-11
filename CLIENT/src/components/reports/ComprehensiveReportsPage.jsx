@@ -46,6 +46,7 @@ import {
 import PesoIcon from "../icons/PesoIcon";
 import api from "../../config/api";
 import ReportPageLayout from "./ReportPageLayout";
+import { toast } from "react-toastify";
 
 
 // Custom hook for user restrictions
@@ -348,6 +349,13 @@ const ComprehensiveReportsPage = () => {
     return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded);
   };
 
+  const formatSignedDate = (value) => {
+    if (!value) return "N/A";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "N/A";
+    return date.toLocaleString("en-US");
+  };
+
   const getSectionIcon = (sectionCode) => {
     switch (sectionCode) {
       case "A.1": return <AccountBalance />;
@@ -365,6 +373,37 @@ const ComprehensiveReportsPage = () => {
     budgetType: selectedBudgetType,
   });
 
+  const getApiErrorMessage = async (err, fallbackMessage) => {
+    const directMessage = err?.response?.data?.message;
+    if (typeof directMessage === "string" && directMessage.trim()) {
+      return directMessage;
+    }
+
+    const responseData = err?.response?.data;
+    if (responseData instanceof Blob) {
+      try {
+        const text = await responseData.text();
+        if (text) {
+          try {
+            const parsed = JSON.parse(text);
+            const parsedMessage = parsed?.message;
+            if (typeof parsedMessage === "string" && parsedMessage.trim()) {
+              return parsedMessage;
+            }
+          } catch (_parseErr) {
+          }
+
+          if (text.trim()) {
+            return text.trim();
+          }
+        }
+      } catch (_blobErr) {
+      }
+    }
+
+    return fallbackMessage;
+  };
+
   const handlePreviewPdf = async () => {
     setPdfLoading(true);
     setError(null);
@@ -381,7 +420,9 @@ const ComprehensiveReportsPage = () => {
 
       const response = await api.get(
         `/api/comprehensive-reports/comprehensive-pdf?${params.toString()}`,
-        { responseType: "blob" }
+        {
+          responseType: "blob",
+        }
       );
 
       const blob = new Blob([response.data], { type: "application/pdf" });
@@ -393,10 +434,12 @@ const ComprehensiveReportsPage = () => {
       setPdfDialogOpen(true);
     } catch (err) {
       console.error("Error generating PDF preview:", err);
-      setError(
-        err?.response?.data?.message ||
-          "Failed to generate PDF preview. Please try again."
+      const message = await getApiErrorMessage(
+        err,
+        "Failed to generate PDF preview. Please try again."
       );
+      setError(message);
+      toast.error(message, { toastId: "comprehensive-pdf-preview-error" });
     } finally {
       setPdfLoading(false);
     }
@@ -723,6 +766,44 @@ const ComprehensiveReportsPage = () => {
                   <Typography variant="body1" fontWeight="bold">Proposed Budget</Typography>
                   <Typography variant="h5" fontWeight="bold">{formatCurrency(reportData.summary.grandTotal)}</Typography>
                 </Stack>
+              </Stack>
+            </Paper>
+          )}
+
+          {Array.isArray(reportData?.summary?.signatories) && reportData.summary.signatories.length > 0 && (
+            <Paper elevation={2} sx={{ p: 3, mt: 3, borderRadius: '16px' }}>
+              <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
+                Workflow Signatories
+              </Typography>
+              <Stack spacing={1.5}>
+                {reportData.summary.signatories.map((signatory, index) => (
+                  <Box
+                    key={`${signatory.userId || signatory.fullName || 'signatory'}-${index}`}
+                    sx={{
+                      p: 1.5,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1.5,
+                      bgcolor: alpha(theme.palette.primary.main, 0.03),
+                    }}
+                  >
+                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={1}>
+                      <Box>
+                        <Typography variant="subtitle2" fontWeight="bold">
+                          {signatory.fullName || 'Unknown Signatory'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {signatory.position || 'Workflow Signatory'}
+                        </Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip size="small" label={signatory.signatureType || 'Signature'} color="primary" variant="outlined" />
+                        <Chip size="small" label={signatory.workflowRole || 'Role'} variant="outlined" />
+                        <Chip size="small" label={`Signed: ${formatSignedDate(signatory.signedAt)}`} variant="outlined" />
+                      </Stack>
+                    </Stack>
+                  </Box>
+                ))}
               </Stack>
             </Paper>
           )}

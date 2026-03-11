@@ -17,6 +17,43 @@ const { mainConnection } = require('../config/mongo_db');
 const { WORKFLOW_ROLES } = require('../constants/workflowConstants');
 const DEBUG = process.env.DEBUG_LOGS === 'true';
 
+const getNormalizedAuthenticatedUserIds = (user = {}) => {
+  return [
+    String(user?.Id || ''),
+    String(user?.id || ''),
+    String(user?.userId || ''),
+    String(user?.UserId || ''),
+    ...(Array.isArray(user?.Username) ? user.Username.map((value) => String(value || '')) : [String(user?.Username || '')]),
+    ...(Array.isArray(user?.username) ? user.username.map((value) => String(value || '')) : [String(user?.username || '')]),
+  ]
+    .map((value) => value.trim())
+    .filter((value) => value !== '');
+};
+
+const getCanonicalEmailFromRequestUser = (req = {}) => {
+  const user = req?.user || {};
+  const fromUser =
+    user?.email ||
+    user?.Email ||
+    user?.userEmail ||
+    user?.UserEmail ||
+    user?.mail ||
+    null;
+
+  if (fromUser && String(fromUser).trim() !== '') {
+    return String(fromUser).trim();
+  }
+
+  const fromHeaders =
+    req?.headers?.['x-dev-email'] ||
+    req?.headers?.['X-Dev-Email'] ||
+    null;
+
+  return fromHeaders && String(fromHeaders).trim() !== ''
+    ? String(fromHeaders).trim()
+    : null;
+};
+
 /**
  * Lookup user from fmis_main.assigned_roles table
  * Restricted based on current user's role permissions
@@ -626,14 +663,8 @@ const getHierarchicalAssignment = async (req, res) => {
     
     // Check if user can view this assignment
     // Allow access if user has full access OR if the requested userId matches any of the authenticated user's IDs
-    const authenticatedUserIds = [
-      String(req.user.Id || ''),  // Check uppercase Id first (from dev headers)
-      String(req.user.id || ''),
-      String(req.user.userId || ''),
-      String(req.user.UserId || ''),
-      ...(Array.isArray(req.user.Username) ? req.user.Username.map(u => String(u || '')) : [String(req.user.Username || '')]),
-      ...(Array.isArray(req.user.username) ? req.user.username.map(u => String(u || '')) : [String(req.user.username || '')])
-    ].filter(id => id && id !== '');
+    const authenticatedUserIds = getNormalizedAuthenticatedUserIds(req.user);
+    const requestUserEmail = getCanonicalEmailFromRequestUser(req);
     
     const isOwnAssignment = authenticatedUserIds.includes(String(userId));
     
@@ -677,25 +708,31 @@ const getHierarchicalAssignment = async (req, res) => {
     const assignmentDoc = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
     const consolidationInfo = assignmentDoc.getConsolidationTarget();
     
-    // Ensure assignment email stays in sync with the latest NIA user email.
-    // This is a second safety net in case auth_controller sync didn't catch
-    // some legacy userId formats.
+    // Ensure assignment email stays in sync with the latest canonical email.
+    // Priority 1: authenticated request user's email when accessing own assignment.
+    // Priority 2: latest User collection email.
     try {
-      const userDoc = await User.findOne({
-        userId: {
-          $in: [
-            String(userId),
-            Number(userId),
-          ].filter(v => v !== undefined && v !== null && String(v).trim() !== '' && !Number.isNaN(v))
-        }
-      }).lean();
+      let latestEmail = null;
 
-      const latestEmail =
-        userDoc?.email ||
-        userDoc?.Email ||
-        userDoc?.userEmail ||
-        userDoc?.UserEmail ||
-        null;
+      if (isOwnAssignment && requestUserEmail) {
+        latestEmail = requestUserEmail;
+      } else {
+        const userDoc = await User.findOne({
+          userId: {
+            $in: [
+              String(userId),
+              Number(userId),
+            ].filter(v => v !== undefined && v !== null && String(v).trim() !== '' && !Number.isNaN(v))
+          }
+        }).lean();
+
+        latestEmail =
+          userDoc?.email ||
+          userDoc?.Email ||
+          userDoc?.userEmail ||
+          userDoc?.UserEmail ||
+          null;
+      }
 
       if (latestEmail && latestEmail !== assignment.email) {
         // Update in-memory assignment (for current response)
@@ -823,12 +860,83 @@ const getAllHierarchicalAssignments = async (req, res) => {
       .populate('departmentId', 'Department departmentName DepartmentName _id')
       .sort({ assignmentLevel: 1, userName: 1 })
       .lean();
+
+    const authenticatedUserIds = new Set(getNormalizedAuthenticatedUserIds(req.user));
+    const requestUserEmail = getCanonicalEmailFromRequestUser(req);
+
+    // Build canonical email lookup map from User collection (synced from auth/get-user)
+    const canonicalEmailsByUserId = new Map();
+    try {
+      const stringIds = Array.from(
+        new Set(
+          assignments
+            .map((assignment) => String(assignment?.userId || '').trim())
+            .filter((id) => id.length > 0)
+        )
+      );
+      const numericIds = Array.from(
+        new Set(
+          stringIds
+            .map((id) => {
+              const parsed = Number(id);
+              return Number.isNaN(parsed) ? null : parsed;
+            })
+            .filter((id) => id !== null)
+        )
+      );
+      const allIds = [...stringIds, ...numericIds];
+
+      if (allIds.length > 0) {
+        const users = await User.find(
+          { userId: { $in: allIds } },
+          { userId: 1, email: 1, Email: 1, userEmail: 1, UserEmail: 1 }
+        ).lean();
+
+        users.forEach((userDoc) => {
+          const canonicalEmail =
+            userDoc?.email ||
+            userDoc?.Email ||
+            userDoc?.userEmail ||
+            userDoc?.UserEmail ||
+            null;
+
+          const normalizedUserId = String(userDoc?.userId || '').trim();
+          if (!canonicalEmail || !normalizedUserId) return;
+
+          canonicalEmailsByUserId.set(normalizedUserId, canonicalEmail);
+
+          const numericVariant = Number(normalizedUserId);
+          if (!Number.isNaN(numericVariant)) {
+            canonicalEmailsByUserId.set(String(numericVariant), canonicalEmail);
+          }
+        });
+      }
+    } catch (emailLookupErr) {
+      console.warn('Canonical email lookup failed in getAllHierarchicalAssignments:', emailLookupErr?.message);
+    }
+
+    const pendingEmailSyncWrites = [];
     // Add consolidation info to each assignment
     const assignmentsWithConsolidation = await Promise.all(
       assignments.map(async (assignment) => {
         try {
           const assignmentDoc = await HierarchicalUserAssignment.findById(assignment._id);
           const consolidationInfo = assignmentDoc ? assignmentDoc.getConsolidationTarget() : null;
+          const normalizedAssignmentUserId = String(assignment?.userId || '').trim();
+          const canonicalEmail = normalizedAssignmentUserId
+            ? canonicalEmailsByUserId.get(normalizedAssignmentUserId)
+            : null;
+          const isOwnAssignment = authenticatedUserIds.has(normalizedAssignmentUserId);
+          const resolvedEmail = (isOwnAssignment && requestUserEmail) || canonicalEmail || assignment.email;
+
+          if (resolvedEmail && resolvedEmail !== assignment.email) {
+            pendingEmailSyncWrites.push({
+              updateOne: {
+                filter: { _id: assignment._id },
+                update: { $set: { email: resolvedEmail } }
+              }
+            });
+          }
           
           // If userName is missing, try to look it up
           let userName = assignment.userName;
@@ -861,6 +969,7 @@ const getAllHierarchicalAssignments = async (req, res) => {
               : '';
           return {
             ...assignment,
+            email: resolvedEmail,
             userName: userName || assignment.userId, // Fallback to userId if name not found
             accessScope: assignment.assignmentLevel,
             officeId: officeId,
@@ -879,6 +988,7 @@ const getAllHierarchicalAssignments = async (req, res) => {
               : '';
           return {
             ...assignment,
+            email: (authenticatedUserIds.has(String(assignment?.userId || '').trim()) && requestUserEmail) || canonicalEmailsByUserId.get(String(assignment?.userId || '').trim()) || assignment.email,
             accessScope: assignment.assignmentLevel,
             officeId: officeId,
             regions: assignment.regionId ? [{ _id: assignment.regionId._id, Region: assignment.regionId.Region || assignment.regionId.regionName || assignment.regionId.RegionName }] : [],
@@ -889,6 +999,12 @@ const getAllHierarchicalAssignments = async (req, res) => {
         }
       })
     );
+
+    if (pendingEmailSyncWrites.length > 0) {
+      HierarchicalUserAssignment.bulkWrite(pendingEmailSyncWrites, { ordered: false }).catch((syncErr) => {
+        console.warn('Failed to persist canonical email sync for assignments list:', syncErr?.message);
+      });
+    }
     // Group by access scope for better organization
     const groupedAssignments = assignmentsWithConsolidation.reduce((groups, assignment) => {
       const scope = assignment.accessScope;

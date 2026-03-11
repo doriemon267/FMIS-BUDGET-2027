@@ -115,6 +115,10 @@ api.interceptors.request.use(
             const rolesArr = Array.isArray(currentUser.Roles) ? currentUser.Roles : [currentUser.Roles];
             config.headers['X-Dev-Roles'] = rolesArr.join(',');
           }
+          const devEmail = currentUser?.email || currentUser?.Email || currentUser?.userEmail || currentUser?.UserEmail || currentUser?.mail;
+          if (devEmail) {
+            config.headers['X-Dev-Email'] = String(devEmail);
+          }
         }
       } catch (_error) {
         // ignore
@@ -156,6 +160,11 @@ const isUnauthorizedSuperAdminResponse = (res) => {
   );
 };
 
+const isExpectedReauthFailure = (response) => {
+  const message = String(response?.data?.message || response?.data?.error || '');
+  return /account password|reauth|verification failed/i.test(message);
+};
+
 // Handle auth-related 401/403 by attempting a silent session/user refresh
 api.interceptors.response.use(undefined, async (error) => {
   const { config, response } = error || {};
@@ -174,6 +183,11 @@ api.interceptors.response.use(undefined, async (error) => {
   if (config.__isRetryRequest) return Promise.reject(error);
 
   if (response.status === 401 || response.status === 403) {
+    // Re-auth endpoints intentionally return 401 on wrong password; do not force login redirect.
+    if (response.status === 401 && isExpectedReauthFailure(response)) {
+      return Promise.reject(error);
+    }
+
     try {
       config.__isRetryRequest = true;
       // Attempt to refresh user session by calling auth server's get-user endpoint

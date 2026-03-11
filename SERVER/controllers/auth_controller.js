@@ -83,6 +83,15 @@ exports.getUser = async (req, res) => {
   try {
     const user = req.user;
 
+    const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+    const pickEmailFromUsernameArray = (value) => {
+      if (!Array.isArray(value)) return null;
+      const fromIndexOne = String(value?.[1] || '').trim();
+      if (fromIndexOne && isValidEmail(fromIndexOne)) return fromIndexOne;
+      const anyEmail = value.map((item) => String(item || '').trim()).find((item) => isValidEmail(item));
+      return anyEmail || null;
+    };
+
     console.log("[AUTH][GET-USER] Incoming user from token middleware:", {
       id: user?.particularID ?? user?.id ?? user?._id ?? null,
       username: user?.username ?? user?.UserName ?? null,
@@ -112,6 +121,9 @@ exports.getUser = async (req, res) => {
       user.userEmail ??
       user.Email ??
       user.UserEmail ??
+      user.mail ??
+      pickEmailFromUsernameArray(user.Username) ??
+      pickEmailFromUsernameArray(user.username) ??
       user.mail ??
       null;
 

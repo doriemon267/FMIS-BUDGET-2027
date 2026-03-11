@@ -332,6 +332,22 @@ if (
     "[Server] ⚠️ No MongoDB URI found in .env (MONGODB_URI or MONGODB_BUDGET_URL or MONGODB_MAIN_URL). The server will likely fail to connect."
   );
 }
+
+const isProductionRuntime =
+  String(process.env.NODE_ENV || '').toLowerCase() === 'production' ||
+  String(process.env.PRODUCTION_MODE || '').trim().length > 0;
+const hasESignatureEncryptionKey =
+  !!process.env.ESIGNATURE_IMAGE_ENCRYPTION_KEY &&
+  String(process.env.ESIGNATURE_IMAGE_ENCRYPTION_KEY).trim().length > 0;
+
+if (!hasESignatureEncryptionKey) {
+  const eSignatureKeyMessage =
+    '[Server] ESIGNATURE_IMAGE_ENCRYPTION_KEY is required to protect workflow e-signature images at rest.';
+  if (isProductionRuntime) {
+    throw new Error(eSignatureKeyMessage);
+  }
+  console.warn(`${eSignatureKeyMessage} Running without key in non-production will store e-signatures unencrypted.`);
+}
 // Attach workflowRef middleware early so body gets populated before routers
 const attachWorkflowRef = require("./middleware/attachWorkflowRef");
 const server = http.createServer(app);
@@ -651,6 +667,8 @@ app.use(
       "X-Dev-Roles",
       "X-Requested-With",
       "X-User-Object",
+      "X-Reauth-Password",
+      "X-Reauth-User",
     ],
     optionsSuccessStatus: 204,
   }),

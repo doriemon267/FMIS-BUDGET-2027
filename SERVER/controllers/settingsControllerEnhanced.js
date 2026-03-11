@@ -12,6 +12,21 @@ const {
   booleanFilter,
 } = require("../utils/controller_get_process");
 
+const normalizeRoles = (roles = []) => {
+  if (!Array.isArray(roles)) return [];
+  return roles.map((role) => String(role || '').replace(/\s+/g, '_').toUpperCase());
+};
+
+const canManageESignatureToggle = (user = {}) => {
+  const normalizedRoles = normalizeRoles(user?.Roles || user?.roles || []);
+  return normalizedRoles.some((role) => [
+    'SUPER_ADMIN',
+    'BUDGET_MANAGER',
+    'BUDGET_OFFICER',
+    'BUDGET_PLANNING_ANALYST',
+  ].includes(role));
+};
+
 // ==================== ENHANCED FUNCTIONS ====================
 
 /**
@@ -32,7 +47,14 @@ exports.createSettingsWithRegions = async (req, res) => {
       budgetPeriods = [],
       regionDueDateExtensions = [],
       isActive = true,
+      eSignatureRequired = true,
     } = req.body;
+
+    if (req.body?.eSignatureRequired !== undefined && !canManageESignatureToggle(req.user)) {
+      return res.status(403).json({
+        message: "You are not authorized to change the e-signature requirement setting.",
+      });
+    }
 
     // ⚠️ STRICT SEPARATION: Explicitly reject ANY compensation data sent with fiscal year creation
     // Compensation MUST be linked separately via Compensation Management page
@@ -133,6 +155,7 @@ exports.createSettingsWithRegions = async (req, res) => {
       regionDueDateExtensions: processedExtensions,
       compensationSettingsId, // Always null - by design - NO compensation auto-creation
       isActive,
+      eSignatureRequired,
       // For backward compatibility, set first period dates
       startDate: processedPeriods[0].startDate,
       dueDate: processedPeriods[0].dueDate,
@@ -562,8 +585,15 @@ exports.updateSettings = async (req, res) => {
       applicableRegions,
       regionDueDateExtensions,
       isActive,
+      eSignatureRequired,
       ...otherSettings
     } = req.body;
+
+    if (req.body?.eSignatureRequired !== undefined && !canManageESignatureToggle(req.user)) {
+      return res.status(403).json({
+        message: "You are not authorized to change the e-signature requirement setting.",
+      });
+    }
 
     // ⚠️ STRICT: Reject compensation-related fields during fiscal year settings update
     // These fields belong to CompensationSettings and must be managed separately
@@ -614,6 +644,7 @@ exports.updateSettings = async (req, res) => {
     if (budgetType !== undefined) toUpdate.budgetType = budgetType;
     if (applicableRegions !== undefined) toUpdate.applicableRegions = applicableRegions;
     if (isActive !== undefined) toUpdate.isActive = isActive;
+    if (eSignatureRequired !== undefined) toUpdate.eSignatureRequired = Boolean(eSignatureRequired);
 
     // Handle region due date extensions (same FY + budget type, extended due date per region)
     if (regionDueDateExtensions !== undefined && Array.isArray(regionDueDateExtensions)) {
@@ -660,6 +691,22 @@ exports.updateSettings = async (req, res) => {
       new: true,
       runValidators: true,
     }).populate("compensationSettingsId");
+
+    if (eSignatureRequired !== undefined) {
+      const previousValue = existing?.eSignatureRequired !== false;
+      const currentValue = updatedSettings?.eSignatureRequired !== false;
+
+      req._settingsAuditDetails = {
+        ...req._settingsAuditDetails,
+        eSignatureRequired: {
+          changed: previousValue !== currentValue,
+          previous: previousValue,
+          current: currentValue,
+          previousLabel: previousValue ? 'Required' : 'Optional',
+          currentLabel: currentValue ? 'Required' : 'Optional',
+        },
+      };
+    }
 
     // User activity log snapshot (before/after) for audit
     try {

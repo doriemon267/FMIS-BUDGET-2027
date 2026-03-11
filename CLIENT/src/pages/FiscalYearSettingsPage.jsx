@@ -278,6 +278,20 @@ const FiscalYearSettingsPage = () => {
         />
       )
     },
+    eSignatureRequired: {
+      type: "boolean",
+      label: "E-signature",
+      default: true,
+      show: true,
+      customRender: (row) => (
+        <Chip
+          label={row.eSignatureRequired !== false ? "Required" : "Optional"}
+          color={row.eSignatureRequired !== false ? "warning" : "default"}
+          variant={row.eSignatureRequired !== false ? "filled" : "outlined"}
+          size="small"
+        />
+      )
+    },
     // Window column removed per latest design; keep schema key hidden for backward compatibility
     budgetPeriods: {
       type: "custom",
@@ -399,6 +413,7 @@ const FiscalYearSettingsPage = () => {
     const activeSettings = settingsData?.settings?.find(s => s.isActive);
     const totalSettings = settingsData?.settings?.length || 0;
     const activeBudgetType = activeSettings?.budgetType || "None";
+    const activeESignature = activeSettings?.eSignatureRequired !== false ? "Required" : "Optional";
 
     // Calculate days remaining until due date
     const daysRemaining = activeSettings?.dueDate
@@ -435,6 +450,13 @@ const FiscalYearSettingsPage = () => {
         icon: <MdSettings />,
         color: theme.palette.secondary.main,
         bgColor: alpha(theme.palette.secondary.main, 0.1)
+      },
+      {
+        title: "Workflow E-signature",
+        value: activeESignature,
+        icon: <MdDateRange />,
+        color: activeSettings?.eSignatureRequired !== false ? theme.palette.warning.main : theme.palette.success.main,
+        bgColor: alpha(activeSettings?.eSignatureRequired !== false ? theme.palette.warning.main : theme.palette.success.main, 0.1)
       }
     ];
 

@@ -15,8 +15,10 @@ const consolidationService = require('../utils/consolidationService');
 const { sendNotificationEmail } = require('../utils/emailNotification');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { verifyWorkflowDigitalSignature } = require('../utils/digitalSignatureService');
+const { encryptESignatureDataUrl } = require('../utils/eSignatureCrypto');
 
 const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
   'submit-to-reviewer',
@@ -26,8 +28,34 @@ const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
   'finalize'
 ]);
 
+const WORKFLOW_ACTIONS_REQUIRING_ESIGNATURE = new Set([
+  'submit-to-reviewer',
+  'submit-to-approver',
+  'submit-to-analyst',
+  'forward-to-officer',
+  'forward-to-manager',
+  'finalize'
+]);
+
 const isCryptographicSignatureEnforced = () =>
   String(process.env.PNPKI_ENFORCE_SIGNATURE || '').toLowerCase() === 'true';
+
+const isWorkflowESignatureRequired = async () => {
+  try {
+    const activeSettings = await Settings.findOne({ isActive: true })
+      .select('eSignatureRequired')
+      .lean();
+
+    if (typeof activeSettings?.eSignatureRequired === 'boolean') {
+      return activeSettings.eSignatureRequired;
+    }
+
+    return true;
+  } catch (error) {
+    console.warn('[WORKFLOW] Failed to resolve eSignatureRequired from active settings, defaulting to required:', error.message);
+    return true;
+  }
+};
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
@@ -1605,6 +1633,24 @@ exports.getProposals = async (req, res) => {
           
           console.log('[ORG_FILTER] User:', userIdString, 'Role:', userRole, 'Level:', userAssignment.assignmentLevel);
           console.log('[ORG_FILTER] Assigned - Dept:', assignedDepartment, 'Div:', assignedDivision, 'Region:', assignedRegion);
+
+          const normalizeOrgValue = (value) =>
+            String(value || '')
+              .trim()
+              .toLowerCase()
+              .replace(/\s+/g, ' ');
+
+          const assignmentLevelRaw = String(userAssignment.assignmentLevel || '').toUpperCase();
+          const assignmentLevel = ({
+            DIVISION_LEVEL: 'DIVISION',
+            DEPARTMENT_LEVEL: 'DEPARTMENT',
+            OFFICE_LEVEL: 'OFFICE',
+            REGION_LEVEL: 'REGION',
+            FULL_ACCESS: 'FULL'
+          })[assignmentLevelRaw] || assignmentLevelRaw;
+          const assignedDepartmentNorm = normalizeOrgValue(assignedDepartment);
+          const assignedDivisionNorm = normalizeOrgValue(assignedDivision);
+          const assignedRegionNorm = normalizeOrgValue(assignedRegion);
           
           const filteredProposals = newProposals.filter(p => {
             const isOwnProposal =
@@ -1617,36 +1663,67 @@ exports.getProposals = async (req, res) => {
             }
 
             const legacy = legacyMap.get(String(p._id));
-            if (!legacy) return false;
+            const proposalDivision = normalizeOrgValue(
+              legacy?.division ||
+              legacy?.originalDivision ||
+              p?.division ||
+              p?.responsibilityCenter ||
+              ''
+            );
+            const proposalDepartment = normalizeOrgValue(
+              legacy?.department ||
+              legacy?.originalDepartment ||
+              p?.department ||
+              ''
+            );
+            const proposalRegion = normalizeOrgValue(
+              legacy?.region ||
+              p?.region?.Region ||
+              p?.region?.regionName ||
+              p?.region?.RegionName ||
+              ''
+            );
+
+            if (!legacy) {
+              console.log('[ORG_FILTER] Legacy org row missing, using workflow-level fallback fields');
+            }
             
-            console.log(`[ORG_FILTER] Checking proposal: Div=${legacy.division} Dept=${legacy.department} Region=${legacy.region}`);
+            console.log(`[ORG_FILTER] Checking proposal: Div=${proposalDivision} Dept=${proposalDepartment} Region=${proposalRegion}`);
+
+            const hasAnyOrgValue = Boolean(proposalDivision || proposalDepartment || proposalRegion);
+            if (!hasAnyOrgValue) {
+              // Avoid false-negative hiding when historical records have incomplete org metadata.
+              // Role/status checks already ran earlier in query.
+              console.log('[ORG_FILTER] ✓ ALLOWED (missing org metadata fallback)');
+              return true;
+            }
             
             // CASE 1: User assigned at DIVISION level - only show proposals from that division
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
-              if (legacy.division === assignedDivision) {
+            if (assignedDivisionNorm && assignmentLevel === 'DIVISION') {
+              if (proposalDivision === assignedDivisionNorm) {
                 console.log('[ORG_FILTER] ✓ ALLOWED (division match)');
                 return true;
               }
             }
             
             // CASE 2: User assigned at DEPARTMENT level - only show proposals from that department
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
-              if (legacy.department === assignedDepartment) {
+            if (assignedDepartmentNorm && (assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'OFFICE')) {
+              if (proposalDepartment === assignedDepartmentNorm) {
                 console.log('[ORG_FILTER] ✓ ALLOWED (department match)');
                 return true;
               }
             }
             
             // CASE 3: User assigned at REGION level - only show proposals from that region
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
-              if (legacy.region === assignedRegion) {
+            if (assignedRegionNorm && assignmentLevel === 'REGION') {
+              if (proposalRegion === assignedRegionNorm) {
                 console.log('[ORG_FILTER] ✓ ALLOWED (region match)');
                 return true;
               }
             }
             
             // CASE 4: Full access (no restrictions)
-            if (userAssignment.assignmentLevel === 'FULL') {
+            if (assignmentLevel === 'FULL') {
               console.log('[ORG_FILTER] ✓ ALLOWED (full access)');
               return true;
             }
@@ -1971,6 +2048,7 @@ exports.performAction = async (req, res) => {
     const { id } = req.params;
     let { action } = req.body;
     const { comment } = req.body;
+    const eSignature = req.body?.eSignature || null;
     const userRole = getUserRole(req);
     const userId = req.user.id;
     const userIdString = String(userId);
@@ -2076,6 +2154,32 @@ exports.performAction = async (req, res) => {
     }
 
     const newWorkflowStatus = transitions[workflowStatus][action];
+
+    const eSignatureRequiredInSettings = await isWorkflowESignatureRequired();
+    const requiresESignature = WORKFLOW_ACTIONS_REQUIRING_ESIGNATURE.has(action) && eSignatureRequiredInSettings;
+
+    if (requiresESignature) {
+      const eSignatureImage = String(eSignature?.imageDataUrl || '').trim();
+      const eSignatureSignedAt = eSignature?.signedAt;
+      if (!eSignatureImage || !eSignatureImage.startsWith('data:image/')) {
+        return res.status(400).json({
+          success: false,
+          message: 'A valid e-signature image is required for this submission action'
+        });
+      }
+      if (eSignatureImage.length > 3000000) {
+        return res.status(400).json({
+          success: false,
+          message: 'E-signature image is too large'
+        });
+      }
+      if (!eSignatureSignedAt || Number.isNaN(new Date(eSignatureSignedAt).getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: 'A valid e-signature timestamp is required for this submission action'
+        });
+      }
+    }
 
     let signatureVerification = null;
     const requiresDigitalSignature =
@@ -2186,6 +2290,12 @@ exports.performAction = async (req, res) => {
       performedBy: userId,
       performedByName: userName,
       comment: comment || '',
+      eSignature: requiresESignature ? {
+        imageDataUrl: encryptESignatureDataUrl(String(eSignature?.imageDataUrl || '')),
+        signedAt: eSignature?.signedAt ? new Date(eSignature.signedAt) : new Date(),
+        signedBy: userIdString,
+        signerName: String(eSignature?.signerName || userName || '')
+      } : undefined,
       digitalSignature: signatureVerification ? {
         signatureAlgorithm: req.body?.digitalSignature?.algorithm || 'RSA-SHA256',
         signedAt: req.body?.digitalSignature?.signedAt ? new Date(req.body.digitalSignature.signedAt) : new Date(),

@@ -4,6 +4,16 @@ const AuditLog = require("../models/AuditLog");
 const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 const { mainConnection } = require('../config/mongo_db');
 const { requireBudgetRole } = require('./requireBudgetRole');
+const { syncUserEmailFromRequest } = require('../utils/syncUserEmailFromRequest');
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+const pickEmailFromUsernameArray = (value) => {
+  if (!Array.isArray(value)) return null;
+  const fromIndexOne = String(value?.[1] || '').trim();
+  if (fromIndexOne && isValidEmail(fromIndexOne)) return fromIndexOne;
+  const anyEmail = value.map((item) => String(item || '').trim()).find((item) => isValidEmail(item));
+  return anyEmail || null;
+};
 
 /**
  * Development Middleware: Allows Mock Auth and Auto-SuperAdmin
@@ -23,6 +33,7 @@ module.exports = async (req, res, next) => {
     if (allowMockAuth && devUserId) {
       const uid = String(devUserId).trim();
       const devRolesHeader = req.headers['x-dev-roles'] || req.headers['X-Dev-Roles'];
+      const devEmailHeader = req.headers['x-dev-email'] || req.headers['X-Dev-Email'];
       let rolesArr = [];
       if (typeof devRolesHeader === 'string' && devRolesHeader.trim()) {
         rolesArr = devRolesHeader
@@ -43,8 +54,15 @@ module.exports = async (req, res, next) => {
         particular: devName,
         userName: devName, // tugma sa AuditLog schema
         particularID: uid,
+        email: devEmailHeader ? String(devEmailHeader).trim() : null,
         isDev: true
       };
+
+      try {
+        await syncUserEmailFromRequest(req);
+      } catch (_syncError) {
+        // silent sync only
+      }
       
       if (resolveUserIdentity) req.identity = await resolveUserIdentity({ req });
 
@@ -127,8 +145,23 @@ module.exports = async (req, res, next) => {
       Roles: roles,
       particular: userName,
       userName: userName,
-      particularID: userId
+      particularID: userId,
+      email:
+        payload.email ||
+        payload.Email ||
+        payload.userEmail ||
+        payload.UserEmail ||
+        payload.mail ||
+        pickEmailFromUsernameArray(payload.Username) ||
+        pickEmailFromUsernameArray(payload.username) ||
+        null
     };
+
+    try {
+      await syncUserEmailFromRequest(req);
+    } catch (_syncError) {
+      // silent sync only
+    }
 
     if (resolveUserIdentity) req.identity = await resolveUserIdentity({ req });
 

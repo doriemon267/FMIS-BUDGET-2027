@@ -34,6 +34,13 @@ const performActionSchema = Joi.object({
     'return-to-analyst', 'return-to-officer'
   ),
   comment: Joi.string().trim().max(2000).allow('', null),
+  authPassword: Joi.string().trim().min(1).max(256).allow('', null),
+  stepPassword: Joi.string().trim().min(6).max(128).allow('', null),
+  eSignature: Joi.object({
+    imageDataUrl: Joi.string().trim().required(),
+    signedAt: Joi.date().iso().required(),
+    signerName: Joi.string().trim().max(200).allow('', null)
+  }).allow(null),
   targetAnalystId: Joi.string().trim().allow('', null), // For submit-to-analyst: route to specific BPA (Central Office vs Other Region)
   digitalSignature: Joi.object({
     signature: Joi.string().trim().required(),

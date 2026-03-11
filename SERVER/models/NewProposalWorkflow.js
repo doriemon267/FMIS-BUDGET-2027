@@ -112,6 +112,34 @@ const newProposalWorkflowSchema = new mongoose.Schema({
     comment: {
       type: String
     },
+    stepSubmissionPassword: {
+      hash: {
+        type: String
+      },
+      setAt: {
+        type: Date
+      },
+      setBy: {
+        type: String
+      },
+      setByName: {
+        type: String
+      }
+    },
+    eSignature: {
+      imageDataUrl: {
+        type: String
+      },
+      signedAt: {
+        type: Date
+      },
+      signedBy: {
+        type: String
+      },
+      signerName: {
+        type: String
+      }
+    },
     digitalSignature: {
       signatureAlgorithm: {
         type: String

@@ -49,6 +49,9 @@ const settingsSchema = new mongoose.Schema(
     
     // Overall activation status
     isActive: { type: Boolean, default: true },
+
+    // Workflow control: require e-signature for submission/forward actions
+    eSignatureRequired: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

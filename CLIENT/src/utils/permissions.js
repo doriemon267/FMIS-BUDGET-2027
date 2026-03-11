@@ -13,10 +13,14 @@ export function hasPermission(currentUser, permissionKey) {
     return false; // Already checked SUPER ADMIN above
   }
 
-  // ✅ Settings access: allow only BUDGET MANAGER (admins already allowed above);
-  // explicitly deny for other budget staff (analyst/reviewer/officer)
+  // ✅ Settings access: allow BRD-level roles + super admin
   if (permissionKey === 'ManageSettings') {
-    return userRoles.includes('BUDGET MANAGER');
+    const normalizedRoles = userRoles.map((role) => String(role || '').replace(/\s+/g, '_').toUpperCase());
+    return normalizedRoles.some((role) => [
+      'BUDGET_MANAGER',
+      'BUDGET_OFFICER',
+      'BUDGET_PLANNING_ANALYST',
+    ].includes(role));
   }
 
   // 🔥 BUDGET_PLANNING_ANALYST, BUDGET MANAGER, BUDGET OFFICER
