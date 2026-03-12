@@ -54,6 +54,8 @@ const DatabaseBackupSettingsDialog = ({ open, onClose }) => {
   const [recentBackups, setRecentBackups] = useState([]);
   const [activeBackups, setActiveBackups] = useState([]);
   const [manualBackupDescription, setManualBackupDescription] = useState('');
+  const [customSchedule, setCustomSchedule] = useState('');
+  const [scheduledBackupId, setScheduledBackupId] = useState(null);
 
   const scheduleOptions = [
     { label: 'Daily at 2:00 AM', value: '0 2 * * *' },
@@ -61,7 +63,8 @@ const DatabaseBackupSettingsDialog = ({ open, onClose }) => {
     { label: 'Every 12 hours', value: '0 */12 * * *' },
     { label: 'Weekly (Sunday 2:00 AM)', value: '0 2 * * 0' },
     { label: 'Weekly (Friday 6:00 PM)', value: '0 18 * * 5' },
-    { label: 'Monthly (1st day 2:00 AM)', value: '0 2 1 * *' }
+    { label: 'Monthly (1st day 2:00 AM)', value: '0 2 1 * *' },
+    { label: 'Custom', value: 'custom' }
   ];
 
   useEffect(() => {
@@ -87,11 +90,19 @@ const DatabaseBackupSettingsDialog = ({ open, onClose }) => {
       const settings = settingsResponse.data.data;
       if (settings.scheduledBackups && settings.scheduledBackups.length > 0) {
         const firstScheduled = settings.scheduledBackups[0];
+        const existingSchedule = firstScheduled.schedule || '';
+        const isPresetSchedule = scheduleOptions.some((option) => option.value === existingSchedule);
+
+        setScheduledBackupId(firstScheduled._id || null);
+        setCustomSchedule(isPresetSchedule ? '' : existingSchedule);
+
         setBackupSettings(prev => ({
           ...prev,
           autoBackupEnabled: firstScheduled.enabled,
-          backupSchedule: firstScheduled.schedule || prev.backupSchedule
+          backupSchedule: isPresetSchedule ? existingSchedule : 'custom'
         }));
+      } else {
+        setScheduledBackupId(null);
       }
     } catch (err) {
       console.error('Error fetching backup data:', err);
@@ -131,12 +142,26 @@ const DatabaseBackupSettingsDialog = ({ open, onClose }) => {
   const handleUpdateScheduleSettings = async () => {
     try {
       setLoading(true);
+      const resolvedSchedule = backupSettings.backupSchedule === 'custom'
+        ? customSchedule.trim()
+        : backupSettings.backupSchedule;
+
+      if (backupSettings.autoBackupEnabled && !resolvedSchedule) {
+        setError('Please provide a valid cron schedule');
+        return;
+      }
       
-      if (backupSettings.autoBackupEnabled) {
-        // Create or update scheduled backup
+      if (scheduledBackupId) {
+        await api.put('/api/database-backup/backup/settings', {
+          id: scheduledBackupId,
+          description: 'Automated backup schedule',
+          ...(backupSettings.autoBackupEnabled ? { schedule: resolvedSchedule } : {}),
+          enabled: backupSettings.autoBackupEnabled
+        });
+      } else if (backupSettings.autoBackupEnabled) {
         await api.post('/api/database-backup/backup/schedule', {
           description: 'Automated backup schedule',
-          schedule: backupSettings.backupSchedule,
+          schedule: resolvedSchedule,
           enabled: true
         });
       }
@@ -144,7 +169,7 @@ const DatabaseBackupSettingsDialog = ({ open, onClose }) => {
       setSuccess('Backup schedule updated successfully');
       fetchBackupData();
     } catch (err) {
-      setError('Failed to update backup schedule');
+      setError(err.response?.data?.message || 'Failed to update backup schedule');
     } finally {
       setLoading(false);
     }
@@ -296,10 +321,16 @@ const DatabaseBackupSettingsDialog = ({ open, onClose }) => {
                       <InputLabel>Backup Schedule</InputLabel>
                       <Select
                         value={backupSettings.backupSchedule}
-                        onChange={(e) => setBackupSettings(prev => ({
-                          ...prev,
-                          backupSchedule: e.target.value
-                        }))}
+                        onChange={(e) => {
+                          const nextValue = e.target.value;
+                          setBackupSettings(prev => ({
+                            ...prev,
+                            backupSchedule: nextValue
+                          }));
+                          if (nextValue !== 'custom') {
+                            setCustomSchedule('');
+                          }
+                        }}
                       >
                         {scheduleOptions.map((option) => (
                           <MenuItem key={option.value} value={option.value}>
@@ -308,11 +339,23 @@ const DatabaseBackupSettingsDialog = ({ open, onClose }) => {
                         ))}
                       </Select>
                     </FormControl>
+
+                    {backupSettings.backupSchedule === 'custom' && (
+                      <TextField
+                        fullWidth
+                        label="Custom Cron Expression"
+                        value={customSchedule}
+                        onChange={(e) => setCustomSchedule(e.target.value)}
+                        placeholder="0 2 * * *"
+                        helperText="Enter a valid cron expression (e.g., '0 2 * * *' for daily at 2 AM)"
+                        sx={{ mb: 2 }}
+                      />
+                    )}
                     
                     <Button
                       variant="outlined"
                       onClick={handleUpdateScheduleSettings}
-                      disabled={loading}
+                      disabled={loading || (backupSettings.autoBackupEnabled && backupSettings.backupSchedule === 'custom' && !customSchedule.trim())}
                       fullWidth
                     >
                       Update Schedule

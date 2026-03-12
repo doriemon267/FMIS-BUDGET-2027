@@ -283,31 +283,50 @@ const getBackupSettings = async (req, res) => {
 // Update backup settings
 const updateBackupSettings = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params?.id || req.body?.id;
     const { schedule, description, enabled } = req.body;
-    const backup = await DatabaseBackup.findById(id);
+
+    let backup = null;
+    if (id) {
+      backup = await DatabaseBackup.findById(id);
+    } else {
+      backup = await DatabaseBackup.findOne({ type: 'scheduled' }).sort({ createdAt: -1 });
+    }
+
     if (!backup) {
       return res.status(404).json({
         success: false,
         message: 'Backup configuration not found'
       });
     }
+
+    if (schedule && !cron.validate(schedule)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid cron schedule format'
+      });
+    }
+
     // Update backup settings
     if (schedule) backup.schedule = schedule;
     if (description) backup.description = description;
     if (enabled !== undefined) backup.enabled = enabled;
     await backup.save();
+
+    const jobKey = backup._id.toString();
+
     // Update cron job
-    if (scheduledJobs.has(id)) {
-      const existingJob = scheduledJobs.get(id);
+    if (scheduledJobs.has(jobKey)) {
+      const existingJob = scheduledJobs.get(jobKey);
       existingJob.stop();
-      scheduledJobs.delete(id);
+      scheduledJobs.delete(jobKey);
     }
+
     if (backup.enabled && backup.schedule) {
       const task = cron.schedule(backup.schedule, async () => {
         await createScheduledBackup(backup._id);
       }, { scheduled: false });
-      scheduledJobs.set(id, task);
+      scheduledJobs.set(jobKey, task);
       task.start();
     }
     res.status(200).json({

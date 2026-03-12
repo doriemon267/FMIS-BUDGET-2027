@@ -93,6 +93,7 @@ const DatabaseBackupPage = () => {
     schedule: '',
     enabled: true
   });
+  const [customCronExpression, setCustomCronExpression] = useState('');
   
   // Pagination
   const [page, setPage] = useState(0);
@@ -223,17 +224,36 @@ const DatabaseBackupPage = () => {
   const handleScheduleBackup = async () => {
     try {
       setLoading(true);
-      await api.post('/api/database-backup/backup/schedule', scheduleData);
+      const resolvedSchedule = scheduleData.schedule === 'custom'
+        ? customCronExpression.trim()
+        : scheduleData.schedule;
+
+      if (!resolvedSchedule) {
+        setError('Please provide a valid cron schedule');
+        return;
+      }
+
+      await api.post('/api/database-backup/backup/schedule', {
+        ...scheduleData,
+        schedule: resolvedSchedule
+      });
       
       setSuccess('Backup scheduled successfully');
       setScheduleBackupDialog(false);
       setScheduleData({ description: '', schedule: '', enabled: true });
+      setCustomCronExpression('');
       fetchBackupData();
     } catch (err) {
-      setError('Failed to schedule backup');
+      setError(err.response?.data?.message || 'Failed to schedule backup');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCloseScheduleDialog = () => {
+    setScheduleBackupDialog(false);
+    setScheduleData({ description: '', schedule: '', enabled: true });
+    setCustomCronExpression('');
   };
 
   const handleDeleteBackup = async (backupId) => {
@@ -831,7 +851,7 @@ const DatabaseBackupPage = () => {
       </Dialog>
 
       {/* Schedule Backup Dialog */}
-      <Dialog open={scheduleBackupDialog} onClose={() => setScheduleBackupDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog open={scheduleBackupDialog} onClose={handleCloseScheduleDialog} maxWidth="sm" fullWidth>
         <DialogTitle>Schedule Backup</DialogTitle>
         <DialogContent>
           <TextField
@@ -845,7 +865,13 @@ const DatabaseBackupPage = () => {
             <InputLabel>Schedule</InputLabel>
             <Select
               value={scheduleData.schedule}
-              onChange={(e) => setScheduleData({...scheduleData, schedule: e.target.value})}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setScheduleData({ ...scheduleData, schedule: nextValue });
+                if (nextValue !== 'custom') {
+                  setCustomCronExpression('');
+                }
+              }}
             >
               {scheduleOptions.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
@@ -858,6 +884,8 @@ const DatabaseBackupPage = () => {
             <TextField
               fullWidth
               label="Custom Cron Expression"
+              value={customCronExpression}
+              onChange={(e) => setCustomCronExpression(e.target.value)}
               placeholder="0 2 * * *"
               helperText="Enter a valid cron expression (e.g., '0 2 * * *' for daily at 2 AM)"
               sx={{ mb: 2 }}
@@ -874,8 +902,12 @@ const DatabaseBackupPage = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setScheduleBackupDialog(false)}>Cancel</Button>
-          <Button onClick={handleScheduleBackup} variant="contained" disabled={loading}>
+          <Button onClick={handleCloseScheduleDialog}>Cancel</Button>
+          <Button
+            onClick={handleScheduleBackup}
+            variant="contained"
+            disabled={loading || (scheduleData.schedule === 'custom' && !customCronExpression.trim())}
+          >
             Schedule Backup
           </Button>
         </DialogActions>
