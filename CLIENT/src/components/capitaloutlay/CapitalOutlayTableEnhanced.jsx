@@ -288,6 +288,23 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
   const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
   const [actionsMenuRow, setActionsMenuRow] = useState(null);
 
+  const isSelectedItemIntangibleAssets = useMemo(() => {
+    const normalizedText = [
+      selectedCapitalOutlay?.accountingTitle,
+      selectedCapitalOutlay?.sublineItem,
+      selectedCapitalOutlay?.category?.categoryName,
+      typeof selectedCapitalOutlay?.category === "string" ? selectedCapitalOutlay?.category : "",
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      normalizedText.includes("intangible") ||
+      normalizedText.includes("intagible")
+    );
+  }, [selectedCapitalOutlay]);
+
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedFilters.categories.length) count += selectedFilters.categories.length;
@@ -1961,6 +1978,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
         onClose={handleCloseDetailsModal}
         capitalOutlayId={selectedCapitalOutlay?._id}
         accountingTitle={selectedCapitalOutlay?.accountingTitle}
+        isIntangibleAssets={isSelectedItemIntangibleAssets}
         onSave={handleDetailsModalSave}
         temporaryItem={selectedCapitalOutlay?.isTemporary ? {
           ...selectedCapitalOutlay,

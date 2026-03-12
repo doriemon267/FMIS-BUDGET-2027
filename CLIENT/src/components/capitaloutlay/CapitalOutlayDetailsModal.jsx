@@ -74,6 +74,7 @@ const CapitalOutlayDetailsModal = ({
   temporaryItem = null, // New prop for temporary items that aren't saved yet
   editingDisabled = false,
   editingDisabledReason = "",
+  isIntangibleAssets = false,
 }) => {
   const [details, setDetails] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -82,6 +83,22 @@ const CapitalOutlayDetailsModal = ({
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const { workflowRef, headerConfig } = useWorkflowRef();
+  const isIntangibleAssetsItem = isIntangibleAssets || (() => {
+    const normalizedText = [
+      accountingTitle,
+      temporaryItem?.accountingTitle,
+      temporaryItem?.sublineItem,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      normalizedText.includes("intangible") ||
+      normalizedText.includes("intagible")
+    );
+  })();
+
   const ensureWorkflowRef = useCallback(() => {
     if (!workflowRef) {
       toast.error("Create a proposal first to modify capital outlay entries.");
@@ -209,15 +226,17 @@ const CapitalOutlayDetailsModal = ({
         isValid = false;
       }
 
-      // Validate minimum amount requirement (₱50,000)
-      if (incomeAmount > 0 && incomeAmount < MINIMUM_AMOUNT) {
-        newErrors[`income_amount_${index}`] = `Income amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
-        isValid = false;
-      }
+      // Validate minimum amount requirement (₱50,000), except for Intangible Assets
+      if (!isIntangibleAssetsItem) {
+        if (incomeAmount > 0 && incomeAmount < MINIMUM_AMOUNT) {
+          newErrors[`income_amount_${index}`] = `Income amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
+          isValid = false;
+        }
 
-      if (subsidyAmount > 0 && subsidyAmount < MINIMUM_AMOUNT) {
-        newErrors[`subsidy_amount_${index}`] = `Subsidy amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
-        isValid = false;
+        if (subsidyAmount > 0 && subsidyAmount < MINIMUM_AMOUNT) {
+          newErrors[`subsidy_amount_${index}`] = `Subsidy amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
+          isValid = false;
+        }
       }
     });
 
@@ -530,7 +549,10 @@ const CapitalOutlayDetailsModal = ({
 
             <Alert severity="info" sx={{ mb: 2 }}>
               <Typography variant="body2">
-                <strong>Important:</strong> Each amount must be at least ₱50,000. Values below this amount are not acceptable.
+                <strong>Important:</strong>{" "}
+                {isIntangibleAssetsItem
+                  ? "Intangible Assets items may use values below ₱50,000."
+                  : "Each amount must be at least ₱50,000. Values below this amount are not acceptable."}
               </Typography>
             </Alert>
 
@@ -741,6 +763,7 @@ CapitalOutlayDetailsModal.propTypes = {
   }),
   editingDisabled: PropTypes.bool,
   editingDisabledReason: PropTypes.string,
+  isIntangibleAssets: PropTypes.bool,
 };
 
 export default CapitalOutlayDetailsModal;
