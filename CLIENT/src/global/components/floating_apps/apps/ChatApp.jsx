@@ -28,7 +28,7 @@ import { useTheme } from '@mui/material/styles';
 import { IoSend } from "react-icons/io5";
 import { FiSearch, FiRefreshCw, FiSettings, FiCheck, FiBell, FiBellOff, FiChevronLeft, FiChevronRight, FiMapPin, FiTrash2, FiX } from "react-icons/fi";
 import io from 'socket.io-client';
-import api from '../../../../config/api';
+import api, { getAuthToken } from '../../../../config/api';
 import env from '../../../../utils/env';
 import IS_PRODUCTION from '../../../../utils/IS_PRODUCTION';
 import { useUser } from '../../../../context/UserContext';
@@ -38,6 +38,95 @@ import toast from 'react-hot-toast';
 const DEFAULT_CONVERSATIONS = [];
 
 const initialMessages = [];
+
+const stripApiSuffix = (value) => {
+  if (!value || typeof value !== 'string') return '';
+  return value.trim().replace(/\/$/, '').replace(/\/api$/, '');
+};
+
+const resolveSocketServerUrl = () => {
+  const explicitSocketUrl = stripApiSuffix(env('CHAT_SOCKET_URL'));
+  if (explicitSocketUrl) return explicitSocketUrl;
+
+  if (IS_PRODUCTION) {
+    const productionBase =
+      stripApiSuffix(env('BUDGET_SERVER_URL_PROD')) ||
+      stripApiSuffix(env('SERVER_URL'));
+    return productionBase || '/';
+  }
+
+  const devBase =
+    stripApiSuffix(env('SERVER_URL_DEV')) ||
+    stripApiSuffix(env('SERVER_URL'));
+  if (devBase) return devBase;
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return '/';
+};
+
+const normalizeIdValue = (value) => {
+  if (value === undefined || value === null) return '';
+  return String(value).trim();
+};
+
+const idsEqual = (left, right) => {
+  const a = normalizeIdValue(left);
+  const b = normalizeIdValue(right);
+  return a !== '' && b !== '' && a === b;
+};
+
+const getCurrentUserId = (user) => {
+  if (!user) return '';
+  const candidates = [
+    Array.isArray(user?.Username) ? user.Username[0] : user?.Username,
+    Array.isArray(user?.UserName) ? user.UserName[0] : user?.UserName,
+    user?.userId,
+    user?.userid,
+    user?.Id,
+    user?.id,
+    user?.particularID,
+    user?.particularId,
+    user?.nameid,
+    user?.NameIdentifier,
+    user?.employeeId,
+    user?.employeeID,
+    user?.employeeNo,
+    user?.username,
+  ];
+  const picked = candidates.find((value) => normalizeIdValue(value) !== '');
+  return normalizeIdValue(picked);
+};
+
+const resolveSocketOptions = () => {
+  const transportMode = String(env('CHAT_SOCKET_TRANSPORT') || '').trim().toLowerCase();
+  if (transportMode === 'websocket') {
+    return {
+      transports: ['websocket', 'polling'],
+      upgrade: true,
+    };
+  }
+  if (transportMode === 'polling') {
+    return {
+      transports: ['polling'],
+      upgrade: false,
+    };
+  }
+
+  if (IS_PRODUCTION) {
+    return {
+      transports: ['polling'],
+      upgrade: false,
+    };
+  }
+
+  return {
+    transports: ['websocket', 'polling'],
+    upgrade: true,
+  };
+};
 
 export default function ChatApp() {
   const [conversations, setConversations] = useState(DEFAULT_CONVERSATIONS);
@@ -528,34 +617,38 @@ export default function ChatApp() {
   }
   useEffect(() => {
     // Use dev UID derived from in-memory `currentUser` only (do not read from localStorage)
-    const devUid = currentUser ? ((Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.Id || currentUser?.id || currentUser?.userId) : null;
+    const primaryUserId = getCurrentUserId(currentUser);
+    const devUid = !IS_PRODUCTION ? primaryUserId : null;
     // If we have neither a dev UID (dev mode) nor a logged-in user (session via cookie), defer
     if (!devUid && !currentUser) {
       console.debug('[ChatApp] no devUserId or currentUser available yet; deferring socket/connect and loadConversations until user data available.');
       return;
     }
     loadConversations();
-    // Socket.IO via IIS proxy in production; direct dev server in development
-    const serverUrl = "/";
+    const serverUrl = resolveSocketServerUrl();
     // Additional debug: dev user id derived from `currentUser` only
     const devUserId = devUid;
     // Determine whether to attempt a socket connection. Use devUserId in dev mode; otherwise server will authenticate via httpOnly cookie.
     const authObj = {};
     if (devUserId) authObj.devUserId = String(devUserId);
-    if (currentUser) {
-      const cuid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
-      if (cuid) authObj.userId = String(cuid);
+    if (primaryUserId) {
+      authObj.userId = String(primaryUserId);
+      authObj.userid = String(primaryUserId);
     }
+    const socketToken = getAuthToken();
+    if (socketToken) authObj.token = socketToken;
+    const socketOptions = resolveSocketOptions();
     const conn = io(serverUrl, {
       path: "/socket.io",
-      transports: ["websocket", "polling"],
+      transports: socketOptions.transports,
+      upgrade: socketOptions.upgrade,
       withCredentials: true,
       auth: authObj,
       reconnectionAttempts: 3
     });
     if (devUserId) console.debug('[ChatApp] Passing devUserId to socket auth (if ALLOW_MOCK_AUTH enabled)');
     conn.on('connect', () => {
-      const uid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || null);
+      const uid = primaryUserId || null;
       console.debug('[ChatApp] socket connected', conn.id, 'uid=', uid);
       setSocketConnected(true);
       setSocketErrorMsg(null);
@@ -702,9 +795,9 @@ export default function ChatApp() {
       });
       // If this message is for another conversation, update unread counts
       const activePeerId = selected?.id;
-      const shouldIncrease = !isMine && (payload.from !== activePeerId);
+      const shouldIncrease = !isMine && !idsEqual(payload.from, activePeerId);
       // If this message is from currently selected peer and it's not mine, mark as read
-      if (!isMine && payload.from === activePeerId) {
+      if (!isMine && idsEqual(payload.from, activePeerId)) {
         // Mark as read via API (fire-and-forget)
         try { api.post(`/api/chat/messages/${activePeerId}/read`); } catch (_e) {}
       }
@@ -713,13 +806,17 @@ export default function ChatApp() {
         const peerId = isMine ? payload.to : payload.from;
         const peerIdStr = String(peerId);
         const found = prev.findIndex(c => String(c.id) === peerIdStr);
-        const updated = prev.map(c => String(c.id) === peerIdStr ? { ...c, lastMsg: payload.text, lastAt: payload.createdAt, unread: (!isMine && String(c.id) === peerIdStr) ? (c.unread || 0) + 1 : (isMine ? c.unread : c.unread) } : c);
+        const updated = prev.map(c => {
+          if (!idsEqual(c.id, peerIdStr)) return c;
+          const nextUnread = isMine ? (c.unread || 0) : (shouldIncrease ? (c.unread || 0) + 1 : 0);
+          return { ...c, lastMsg: payload.text, lastAt: payload.createdAt, unread: nextUnread };
+        });
         if (found !== -1) {
           const [p] = updated.splice(found,1);
           return [p, ...updated];
         }
         // unknown peer -- add to top
-        const newCon = { id: peerId, name: peerId, avatar: getAvatarInitial(null, peerId), avatarUrl: payload.metadata?.avatarUrl || null, muted: (chatMutedMap && chatMutedMap[peerId]) || false, lastMsg: payload.text, lastAt: payload.createdAt, unread: (!isMine ? 1 : 0) };
+        const newCon = { id: peerId, name: peerId, avatar: getAvatarInitial(null, peerId), avatarUrl: payload.metadata?.avatarUrl || null, muted: (chatMutedMap && chatMutedMap[String(peerId)]) || false, lastMsg: payload.text, lastAt: payload.createdAt, unread: (!isMine ? 1 : 0) };
         return [newCon, ...prev];
       });
     });
@@ -891,7 +988,7 @@ export default function ChatApp() {
     setChatMutedMap(next);
     try { localStorage.setItem('chatMuted', JSON.stringify(next)); } catch (e) {}
     // Update conversations to reflect change
-    updateConversations(prev => prev.map(c => (c.id === id ? { ...c, muted: next[id] } : c)));
+    updateConversations(prev => prev.map(c => (idsEqual(c.id, id) ? { ...c, muted: next[id] } : c)));
   };
   const toggleMute = (id) => {
     if (!id) return;
@@ -908,9 +1005,9 @@ export default function ChatApp() {
     socket.on('message-read', ({ from, to, count }) => {
       // If I'm the sender, mark my messages as read
       const myId = currentUser && (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
-      if (myId && myId === to) {
+      if (myId && idsEqual(myId, to)) {
         setMessages((prev) => prev.map(m => ({ ...m, read: m.sender === 'me' ? true : m.read })));
-        updateConversations((prev) => prev.map(c => c.id === from ? { ...c, unread: 0 } : c));
+        updateConversations((prev) => prev.map(c => idsEqual(c.id, from) ? { ...c, unread: 0 } : c));
       }
     });
     socket.on('presence-update', ({ userId, status }) => {
@@ -1128,7 +1225,7 @@ export default function ChatApp() {
         await api.post(`/api/chat/messages/${selected.id}/read`);
         // Update UI state
         setMessages((prev) => prev.map(m => ({ ...m, read: true })));
-        updateConversations((prev) => prev.map(c => c.id === selected.id ? { ...c, unread: 0 } : c));
+        updateConversations((prev) => prev.map(c => idsEqual(c.id, selected.id) ? { ...c, unread: 0 } : c));
       } catch (e) { }
     }
     markRead();

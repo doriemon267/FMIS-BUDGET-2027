@@ -73,7 +73,7 @@ export const RegionProvider = ({ children }) => {
           return; // Exit early, no need to call API
         }
 
-        // If the user has FULL access, BRD-level access, Budget Manager, or is Super Admin, fetch all available regions
+        // Only super-admins, budget managers/overall approvers, or FULL-scope users should get the full regions list
         const isSuperAdmin = currentUser.Roles?.some((r) => String(r).toUpperCase().replace(/\s/g, '') === 'SUPERADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
         const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
         const isBudgetManager = (currentUser.Roles || []).some((r) => {
@@ -84,9 +84,7 @@ export const RegionProvider = ({ children }) => {
         if (
           isSuperAdmin ||
           isBudgetManager ||
-          userScope === 'FULL' ||
-          userScope === 'BUDGET_AND_REVENUE_DIVISION' ||
-          currentUser.Roles?.some((r) => String(r).toUpperCase().includes('BRD'))
+          userScope === 'FULL'
         ) {
           try {
             const res = await api.get('/api/regions');
@@ -145,10 +143,11 @@ export const RegionProvider = ({ children }) => {
   // Function to switch between assigned regions (if user has multiple)
   const changeActiveRegion = (region) => {
     if (!region) {
-      // Prevent clearing region for normal users but allow BRD/FULL/Budget Manager
+      // Prevent clearing region for normal users but allow FULL-scope, Budget Manager, or Super Admin
       const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
       const isBM = (currentUser?.Roles || []).some((r) => { const n = String(r).toUpperCase().replace(/\s+/g, '_'); return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER'; });
-      if (userScope === 'FULL' || userScope === 'BUDGET_AND_REVENUE_DIVISION' || isBM || currentUser?.Roles?.some(r => String(r).toUpperCase().includes('BRD'))) {
+      const isSuperAdmin = (currentUser?.Roles || []).some(r => String(r).toUpperCase().replace(/\s/g, '') === 'SUPERADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
+      if (userScope === 'FULL' || isBM || isSuperAdmin) {
         setActiveRegion(null);
         localStorage.removeItem('activeRegion');
         toast.info('Active region cleared');
@@ -188,7 +187,8 @@ export const RegionProvider = ({ children }) => {
   const clearActiveRegion = () => {
     const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
     const isBM = (currentUser?.Roles || []).some((r) => { const n = String(r).toUpperCase().replace(/\s+/g, '_'); return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER'; });
-    if (userScope === 'FULL' || userScope === 'BUDGET_AND_REVENUE_DIVISION' || isBM || currentUser?.Roles?.some(r => String(r).toUpperCase().includes('BRD'))) {
+    const isSuperAdmin = (currentUser?.Roles || []).some(r => String(r).toUpperCase().replace(/\s/g, '') === 'SUPERADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
+    if (userScope === 'FULL' || isBM || isSuperAdmin) {
       setActiveRegion(null);
       localStorage.removeItem('activeRegion');
       toast.info('Active region cleared');

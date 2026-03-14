@@ -377,6 +377,25 @@ const Message = require("./models/Message");
 // Socket authentication middleware
 io.use(async (socket, next) => {
   try {
+    const normalizeSocketId = (value) => {
+      if (value === undefined || value === null) return "";
+      return String(value).trim();
+    };
+    const pickSocketUserId = (...values) => {
+      for (const value of values) {
+        if (Array.isArray(value)) {
+          for (const nested of value) {
+            const normalizedNested = normalizeSocketId(nested);
+            if (normalizedNested) return normalizedNested;
+          }
+          continue;
+        }
+        const normalized = normalizeSocketId(value);
+        if (normalized) return normalized;
+      }
+      return "";
+    };
+
     // DEVELOPMENT: allow dev-only mock auth using X-Dev-User-Id header
     const allowMockAuth =
       process.env.ALLOW_MOCK_AUTH === "true" ||
@@ -392,9 +411,30 @@ io.use(async (socket, next) => {
       (socket.handshake.auth.devUserId || socket.handshake.auth.xDevUserId);
     const userIdAuth =
       socket.handshake.auth &&
-      (socket.handshake.auth.userId || socket.handshake.auth.userid);
+      pickSocketUserId(
+        socket.handshake.auth.userId,
+        socket.handshake.auth.userid,
+        socket.handshake.auth.Id,
+        socket.handshake.auth.id,
+        socket.handshake.auth.particularID,
+        socket.handshake.auth.particularId,
+        socket.handshake.auth.Username,
+        socket.handshake.auth.UserName,
+        socket.handshake.auth.username,
+        socket.handshake.auth.nameid,
+        socket.handshake.auth.NameIdentifier,
+        socket.handshake.auth.employeeId,
+        socket.handshake.auth.employeeID,
+        socket.handshake.auth.employeeNo,
+        socket.handshake.auth?.user?.userId,
+        socket.handshake.auth?.user?.id,
+        socket.handshake.auth?.user?.Id,
+        socket.handshake.auth?.user?.Username,
+        socket.handshake.auth?.user?.UserName,
+        socket.handshake.auth?.user?.username
+      );
     if (allowMockAuth && (devUserIdHeader || devUserIdAuth || userIdAuth)) {
-      const uid = String(devUserIdHeader || devUserIdAuth).trim();
+      const uid = pickSocketUserId(devUserIdHeader, devUserIdAuth, userIdAuth);
       const user = {
         Id: uid,
         id: uid,
@@ -497,22 +537,26 @@ io.use(async (socket, next) => {
     }
 
     // Build a minimal user object similar to checkToken middleware
-    let userId = null;
-    if (
-      payload.Username &&
-      Array.isArray(payload.Username) &&
-      payload.Username[0]
-    )
-      userId = payload.Username[0];
-    else if (payload.Username) userId = payload.Username;
-    else if (payload.userId) userId = payload.userId;
-    else if (payload.particularID) userId = payload.particularID;
-    else if (payload.particularId) userId = payload.particularId;
-    else if (payload.Id) userId = payload.Id;
-    else if (payload.id) userId = payload.id;
-    else if (payload.sub) userId = payload.sub;
-    else if (payload.user_id) userId = payload.user_id;
-    else if (payload.username) userId = payload.username;
+    let userId = pickSocketUserId(
+      payload.Username,
+      payload.UserName,
+      payload.userId,
+      payload.userid,
+      payload.particularID,
+      payload.particularId,
+      payload.Id,
+      payload.id,
+      payload.sub,
+      payload.user_id,
+      payload.username,
+      payload.preferred_username,
+      payload.nameid,
+      payload.NameIdentifier,
+      payload.uid,
+      payload.employeeId,
+      payload.employeeID,
+      payload.employeeNo
+    );
 
     if (!userId && payload.accessToken && process.env.ACCOUNT_USER_API_URL) {
       // In production, we might fetch user details from account API. Keep this async call optional and guarded.
@@ -522,7 +566,22 @@ io.use(async (socket, next) => {
         });
         if (res.ok) {
           const u = await res.json();
-          userId = u.userId || u.id || u.Username?.[0] || u.username;
+          userId = pickSocketUserId(
+            u.userId,
+            u.userid,
+            u.id,
+            u.Id,
+            u.Username,
+            u.UserName,
+            u.username,
+            u.particularID,
+            u.particularId,
+            u.nameid,
+            u.NameIdentifier,
+            u.employeeId,
+            u.employeeID,
+            u.employeeNo
+          );
         }
       } catch (err) {
         // ignore; proceed to fail if userId still not found
@@ -532,23 +591,27 @@ io.use(async (socket, next) => {
     if (!userId && payload.accessToken) {
       try {
         const decoded = jwt.decode(payload.accessToken) || {};
-        if (decoded.Username && Array.isArray(decoded.Username) && decoded.Username[0]) {
-          userId = decoded.Username[0];
-        } else if (decoded.Username) {
-          userId = decoded.Username;
-        } else {
-          userId =
-            decoded.userId ||
-            decoded.particularID ||
-            decoded.particularId ||
-            decoded.id ||
-            decoded.sub ||
-            decoded.user_id ||
-            decoded.username ||
-            decoded.preferred_username ||
-            decoded.email ||
-            null;
-        }
+        userId = pickSocketUserId(
+          decoded.Username,
+          decoded.UserName,
+          decoded.userId,
+          decoded.userid,
+          decoded.particularID,
+          decoded.particularId,
+          decoded.id,
+          decoded.Id,
+          decoded.sub,
+          decoded.user_id,
+          decoded.username,
+          decoded.preferred_username,
+          decoded.nameid,
+          decoded.NameIdentifier,
+          decoded.uid,
+          decoded.employeeId,
+          decoded.employeeID,
+          decoded.employeeNo,
+          decoded.email
+        );
       } catch (err) {
         // ignore decode errors
       }

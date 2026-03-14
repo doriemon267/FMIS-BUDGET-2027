@@ -79,6 +79,10 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
   const isBudgetManager = (currentUser?.Roles || []).some(
     (r) => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER'
   );
+  const isPlanningAnalyst = (currentUser?.Roles || []).some((r) => {
+    const n = normRole(r);
+    return n === 'BUDGET_PLANNING_ANALYST' || String(r).toUpperCase().replace(/\s+/g, '_') === 'BUDGET_PLANNING_ANALYST';
+  });
   const showAllRegions = isFullScope || (isBudgetManager && availableRegions?.length > 1);
   const displayRegionLabel = showAllRegions ? 'All Regions' : (regionName || 'Not assigned');
 
@@ -120,7 +124,9 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
       );
     }
 
-    // No assignments found at all — Budget Manager gets "All Regions", others get "No Region Assigned"
+    // No assignments found at all — Budget Manager gets "All Regions".
+    // For Budget Planning Analyst, hide the 'No Region Assigned' notice in header UI.
+    if (isPlanningAnalyst) return null;
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {(isFullScope || isBudgetManager) && (
@@ -152,12 +158,12 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
 
   // Compact variant (for headers, etc.)
   // Hide region selector completely for Full Access users
-  if (variant === 'compact') {
+    if (variant === 'compact') {
     if (isFullScope) {
       return null; // Hide completely for BRD Level users
     }
 
-    const primaryLabel = divisionLabel || departmentLabel || displayRegionLabel;
+    const primaryLabel = divisionLabel || departmentLabel || (isPlanningAnalyst && displayRegionLabel === 'Not assigned' ? null : displayRegionLabel);
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {primaryLabel && (
@@ -216,7 +222,7 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
 
   // Default variant with more information
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       {isFullScope && (
         <Chip
           icon={<AccountTreeIcon />}
@@ -252,22 +258,24 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
           }}
         />
       )}
-      <Chip
-        icon={<LocationIcon />}
-        label={`Region: ${displayRegionLabel}`}
-        color="primary"
-        size="small"
-        onClick={hasMultipleRegions() ? handleRegionMenuClick : undefined}
-        sx={{ 
-          fontWeight: 600,
-          backgroundColor: '#375e38',
-          color: 'white',
-          cursor: hasMultipleRegions() ? 'pointer' : 'default',
-          '&:hover': hasMultipleRegions() ? {
-            backgroundColor: '#2e4e2e'
-          } : {}
-        }}
-      />
+      {!(isPlanningAnalyst && displayRegionLabel === 'Not assigned') && (
+        <Chip
+          icon={<LocationIcon />}
+          label={`Region: ${displayRegionLabel}`}
+          color="primary"
+          size="small"
+          onClick={hasMultipleRegions() ? handleRegionMenuClick : undefined}
+          sx={{ 
+            fontWeight: 600,
+            backgroundColor: '#375e38',
+            color: 'white',
+            cursor: hasMultipleRegions() ? 'pointer' : 'default',
+            '&:hover': hasMultipleRegions() ? {
+              backgroundColor: '#2e4e2e'
+            } : {}
+          }}
+        />
+      )}
       {hasMultipleRegions() && (
         <Tooltip title="Switch region">
           <IconButton

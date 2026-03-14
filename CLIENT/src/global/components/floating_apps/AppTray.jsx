@@ -56,24 +56,31 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
   // Compute visible apps — prefer explicit allowed list, fallback to disabled list
   const visibleApps = useMemo(() => {
     try {
+      const ensureChatVisible = (list) => {
+        const withChat = Array.isArray(list) ? [...list] : [];
+        if (!withChat.includes('chat')) withChat.push('chat');
+        return apps.filter(a => withChat.includes(a.id));
+      };
+
       // Highest priority: allowed list (exactly what to show)
       const allowedRaw = localStorage.getItem('appTrayAllowed');
       const allowed = Array.isArray(JSON.parse(allowedRaw || '[]')) ? JSON.parse(allowedRaw || '[]') : [];
       if (allowed && allowed.length > 0) {
-        return apps.filter(a => allowed.includes(a.id));
+        return ensureChatVisible(allowed);
       }
       // Fallback: disabled list (what to hide)
       const disabledRaw = localStorage.getItem('appTrayDisabled');
       const disabled = Array.isArray(JSON.parse(disabledRaw || '[]')) ? JSON.parse(disabledRaw || '[]') : [];
       if (disabled && disabled.length > 0) {
-        return apps.filter(a => !disabled.includes(a.id));
+        const enabled = apps.map(a => a.id).filter((id) => id === 'chat' ? true : !disabled.includes(id));
+        return ensureChatVisible(enabled);
       }
-      // Default: show apps (chat hidden for now - add 'chat' for future use)
-      const defaultFive = ['calc','todo','clock','calendar'];
-      return apps.filter(a => defaultFive.includes(a.id));
+      // Default: show core apps including chat
+      const defaultApps = ['calc','todo','clock','calendar','chat'];
+      return apps.filter(a => defaultApps.includes(a.id));
     } catch (e) {
-      const fallbackFive = ['calc','todo','clock','calendar'];
-      return apps.filter(a => fallbackFive.includes(a.id));
+      const fallbackApps = ['calc','todo','clock','calendar','chat'];
+      return apps.filter(a => fallbackApps.includes(a.id));
     }
   }, [apps]);
 

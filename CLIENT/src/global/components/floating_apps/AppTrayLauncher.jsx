@@ -45,8 +45,7 @@ const AppTrayLauncher = () => {
       const list = Array.isArray(parsed)
         ? parsed.map((p) => ({ id: p.id, defaultPosition: p.defaultPosition, minimized: !!p.minimized, key: p.key, title: appConfig[p.id]?.title, component: appConfig[p.id]?.component }))
         : [];
-      // Filter out chat (hidden for now)
-      return list.filter((p) => p.id !== 'chat');
+      return list;
     } catch (e) {
       console.warn("[AppTrayLauncher] failed to read persisted open apps", e);
       return [];
@@ -60,15 +59,18 @@ const AppTrayLauncher = () => {
   });
 
   // Declare open/close handler before effects that depend on it to avoid TDZ/ReferenceError.
-  const handleAppOpen = useCallback((id) => {
+  const handleAppOpen = useCallback((id, options = {}) => {
+    const { toggleIfActive = true } = options;
     console.debug('[AppTrayLauncher] handleAppOpen called for id:', id);
     const isOpen = openApps.some((a) => a.id === id);
     const isActive = openApps.length && openApps[openApps.length - 1].id === id;
     if (!isOpen) {
       // proceed to open
     } else if (isOpen && isActive) {
-      // toggle close
-      setOpenApps((prev) => prev.filter((a) => a.id !== id));
+      // toggle close (manual actions), but keep visible for programmatic auto-open events
+      if (toggleIfActive) {
+        setOpenApps((prev) => prev.filter((a) => a.id !== id));
+      }
       return;
     } else if (isOpen && !isActive) {
       // if minimized restore; else bring to top
@@ -148,7 +150,8 @@ const AppTrayLauncher = () => {
             e.preventDefault(); handleAppOpen('clock'); break;
           case 'a':
             e.preventDefault(); handleAppOpen('calendar'); break;
-          // case 'm': handleAppOpen('chat'); break; // Chat hidden for now
+          case 'm':
+            e.preventDefault(); handleAppOpen('chat'); break;
           default:
             break;
         }
@@ -164,7 +167,7 @@ const AppTrayLauncher = () => {
       const appId = e?.detail?.appId;
       if (appId) {
         console.debug('[AppTrayLauncher] open-app event received for:', appId);
-        handleAppOpen(appId);
+        handleAppOpen(appId, { toggleIfActive: false });
       }
     };
     window.addEventListener('open-app', handler);

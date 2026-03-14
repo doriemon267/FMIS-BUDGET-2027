@@ -46,7 +46,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 const TierPage = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
+  const { activeRegion, availableRegions } = useRegion();
   const [searchParams, setSearchParams] = useSearchParams();
   const appliedUrlParamsRef = useRef(false);
   const pendingDepartmentParamRef = useRef(null);
@@ -154,8 +154,33 @@ const TierPage = () => {
 
     const fetchRegions = async () => {
       try {
-        const response = await api.get("/api/regions");
-        setRegions(response.data);
+        // Prefer regions provided by RegionContext (user's assigned regions)
+        if (availableRegions && availableRegions.length > 0) {
+          // RegionContext provides normalized region objects
+          setRegions(availableRegions.map(r => ({ _id: r._id || r.id, Region: r.regionName || r.Region || r.name })));
+          return;
+        }
+
+        // If user has FULL scope or is Budget Manager / Super Admin, fetch all regions
+        const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel || '';
+        const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_');
+        const isBM = (currentUser?.Roles || []).some((r) => {
+          const n = normRole(r);
+          return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER';
+        });
+        const isSuperAdmin = (currentUser?.Roles || []).some((r) => ['SUPER_ADMIN', 'SUPER ADMIN', 'SUPERADMIN'].includes(String(r || '').toUpperCase().replace(/\s+/g, '_')));
+        if (userScope === 'FULL' || isBM || isSuperAdmin) {
+          const response = await api.get("/api/regions");
+          setRegions(response.data);
+          return;
+        }
+
+        // Otherwise don't expose all regions — try to show nothing or only activeRegion
+        if (activeRegion) {
+          setRegions([{ _id: activeRegion._id || activeRegion.id, Region: activeRegion.regionName || activeRegion.Region || activeRegion.name }]);
+        } else {
+          setRegions([]);
+        }
       } catch (error) {
         console.error("Error fetching regions:", error);
       }
@@ -199,6 +224,20 @@ const TierPage = () => {
     next.delete("division");
     if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
   }, [regions, searchParams, setSearchParams]);
+
+  // If the user only has a single region available, default the selector to that region
+  useEffect(() => {
+    if (selectedRegion) return; // respect existing selection (from URL or user action)
+    if (regions && regions.length === 1) {
+      const only = regions[0];
+      const id = only._id != null ? String(only._id) : (only.Region || "");
+      if (id) setSelectedRegion(id);
+    } else if (activeRegion && (!regions || regions.length === 0)) {
+      // If RegionContext provided activeRegion but regions not populated, select activeRegion
+      const id = activeRegion._id != null ? String(activeRegion._id) : (activeRegion.Region || "");
+      if (id) setSelectedRegion(id);
+    }
+  }, [regions, activeRegion, selectedRegion]);
 
   useEffect(() => {
     if (departments.length === 0) return;

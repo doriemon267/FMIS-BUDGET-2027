@@ -467,12 +467,16 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         if (needsSave) {
           assignmentDoc.save().catch(err => console.warn('Failed to save hierarchical assignment updates:', err.message));
         }
+        // Only treat as full-access if the assignment level is FULL or the user is SUPER_ADMIN
+        const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
+        const isAssignmentFull = assignmentDoc.assignmentLevel === 'FULL';
+        const effectiveFull = isSuperAdminRole || isAssignmentFull;
         req.hierarchicalAccessInfo = {
           scope: assignmentDoc.assignmentLevel,
-          hasFullAccess: true, // indicate elevated capability
-          canAccessAllRegions: true,
-          canAccessAllDepartments: true,
-          canAccessAllDivisions: true,
+          hasFullAccess: !!effectiveFull,
+          canAccessAllRegions: !!effectiveFull,
+          canAccessAllDepartments: !!effectiveFull,
+          canAccessAllDivisions: !!effectiveFull,
           accessibleRegions,
           accessibleDepartments,
           accessibleDivisions,
@@ -579,12 +583,15 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         defaultWorkflowRoles = ['officeFinalVerifier'];
       }
       
+      // Only SUPER_ADMIN (or explicit FULL scope) should have full access flags
+      const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
+      const hasFull = defaultScope === 'FULL' || isSuperAdminRole;
       req.hierarchicalAccessInfo = {
         scope: defaultScope,
-        hasFullAccess: true,
-        canAccessAllRegions: defaultScope === 'FULL',
-        canAccessAllDepartments: defaultScope === 'FULL',
-        canAccessAllDivisions: defaultScope === 'FULL',
+        hasFullAccess: !!hasFull,
+        canAccessAllRegions: hasFull,
+        canAccessAllDepartments: hasFull,
+        canAccessAllDivisions: hasFull,
         accessibleRegions: [],
         accessibleDepartments: [],
         accessibleDivisions: [],
