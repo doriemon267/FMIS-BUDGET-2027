@@ -424,21 +424,21 @@ const FiscalYearSettingsPage = () => {
       {
         title: "Active Fiscal Year",
         value: activeSettings?.fiscalYear || "None",
-        icon: <MdCalendarToday />,
+        icon: <MdCalendarToday />, 
         color: theme.palette.primary.main,
         bgColor: alpha(theme.palette.primary.main, 0.1)
       },
       {
         title: "Budget Type",
         value: activeBudgetType,
-        icon: <MdAccountBalance />,
+        icon: <MdAccountBalance />, 
         color: theme.palette.success.main,
         bgColor: alpha(theme.palette.success.main, 0.1)
       },
       {
         title: "Days Remaining",
         value: daysRemaining > 0 ? `${daysRemaining} days` : "Expired",
-        icon: <MdTimer />,
+        icon: <MdTimer />, 
         color: daysRemaining > 30 ? theme.palette.info.main :
                daysRemaining > 0 ? theme.palette.warning.main : theme.palette.error.main,
         bgColor: alpha(daysRemaining > 30 ? theme.palette.info.main :
@@ -447,66 +447,81 @@ const FiscalYearSettingsPage = () => {
       {
         title: "Total Settings",
         value: totalSettings,
-        icon: <MdSettings />,
+        icon: <MdSettings />, 
         color: theme.palette.secondary.main,
         bgColor: alpha(theme.palette.secondary.main, 0.1)
       },
       {
         title: "Workflow E-signature",
         value: activeESignature,
-        icon: <MdDateRange />,
+        icon: <MdDateRange />, 
         color: activeSettings?.eSignatureRequired !== false ? theme.palette.warning.main : theme.palette.success.main,
         bgColor: alpha(activeSettings?.eSignatureRequired !== false ? theme.palette.warning.main : theme.palette.success.main, 0.1)
       }
     ];
 
+    // Fixed width, centered, responsive (stack on mobile)
     return (
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 3,
+          mb: 3,
+        }}
+      >
         {summaryData.map((item, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <Card
-              sx={{
-                height: '100%',
-                background: `linear-gradient(135deg, ${item.bgColor} 0%, ${alpha(item.color, 0.05)} 100%)`,
-                border: `1px solid ${alpha(item.color, 0.2)}`,
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: `0 8px 25px ${alpha(item.color, 0.3)}`,
-                  border: `1px solid ${alpha(item.color, 0.4)}`
-                }
-              }}
-            >
-              <CardContent sx={{ p: 2 }}>
-                <Stack direction="row" alignItems="center" spacing={2}>
-                  <Box
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 2,
-                      backgroundColor: item.color,
-                      color: 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '1.5rem'
-                    }}
-                  >
-                    {item.icon}
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                      {item.title}
-                    </Typography>
-                    <Typography variant="h6" fontWeight="bold" color={item.color}>
-                      {item.value}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
+          <Card
+            key={index}
+            sx={{
+              width: { xs: '100%', sm: 280 },
+              minWidth: 220,
+              maxWidth: 320,
+              flex: { xs: 'unset', sm: '0 0 280px' },
+              margin: { xs: '0 auto', sm: 0 },
+              mb: { xs: 2, sm: 0 },
+              background: `linear-gradient(135deg, ${item.bgColor} 0%, ${alpha(item.color, 0.05)} 100%)`,
+              border: `1px solid ${alpha(item.color, 0.2)}`,
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              '&:hover': {
+                transform: 'translateY(-4px)',
+                boxShadow: `0 8px 25px ${alpha(item.color, 0.3)}`,
+                border: `1px solid ${alpha(item.color, 0.4)}`
+              }
+            }}
+          >
+            <CardContent sx={{ p: 2 }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    backgroundColor: item.color,
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.5rem'
+                  }}
+                >
+                  {item.icon}
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                    {item.title}
+                  </Typography>
+                  <Typography variant="h6" fontWeight="bold" color={item.color}>
+                    {item.value}
+                  </Typography>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
         ))}
-      </Grid>
+      </Box>
     );
   };
 

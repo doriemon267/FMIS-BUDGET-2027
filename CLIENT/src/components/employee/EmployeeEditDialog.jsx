@@ -879,7 +879,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                   Settings before editing employees.
                 </Alert>
               )}
-              {activeSettings?.fiscalYear && (
+              {/* {activeSettings?.fiscalYear && (
                 <Box
                   sx={{
                     p: 2,
@@ -895,7 +895,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                     <strong>Fiscal Year {activeSettings.fiscalYear}</strong>
                   </Typography>
                 </Box>
-              )}
+              )} */}
 
               {activeStep === 0 && (
                 <Box>

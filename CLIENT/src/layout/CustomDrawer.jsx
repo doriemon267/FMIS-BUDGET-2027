@@ -44,6 +44,9 @@ import { useUser } from "../context/UserContext";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import api from "../config/api";
 import logger from "../utils/logger";
+import { LuContact } from "react-icons/lu";
+
+
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
   const [hasFinalizedProposals, setHasFinalizedProposals] = useState(false);
@@ -75,7 +78,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   const fmisUrl =
     process.env.NODE_ENV === "production"
       ? "https://fmis.nia.gov.ph/dashboard"
-      : "https://budget.fmis.local/dashboard";
+      : "http://localhost:3005/dashboard";
 
   // Show NEP Ceiling menu only when there are FINALIZED proposals (for active fiscal year)
   useEffect(() => {
@@ -508,9 +511,21 @@ const CustomDrawer = ({ collapsed = false }) => {
           link={
             IS_PRODUCTION
               ? "https://fmis.nia.gov.ph/dashboard"
-              : "https://main.fmis.local/dashboard"
+              : "http://localhost:3000/dashboard"
           }
         />
+
+        <LinkTo
+            icon={<LuContact size={22} />}
+            name="Contact Support"
+            collapsed={collapsed}
+            link={
+              IS_PRODUCTION
+                ? "https://fmis.nia.gov.ph/contacts"
+                : "http://localhost:3000/contacts"
+            }
+            isAllow
+          />
 
 
           {/* <LinkTo icon={<FiUsers />} name="Uploader" link="/uploader" isAllow /> */}

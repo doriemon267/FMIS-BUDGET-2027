@@ -55,6 +55,8 @@ exports.login = async (req, res) => {
       secure: true,
       sameSite: "None",
       maxAge: cookieExpiration,
+       domain: process.env.COOKIE_DOMAIN || ".fmis.local", 
+      path: "/"
     };
     if (process.env.COOKIE_DOMAIN) cookieOpts.domain = process.env.COOKIE_DOMAIN;
     res.cookie("jwtToken", jwtToken, cookieOpts);

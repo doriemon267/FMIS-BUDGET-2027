@@ -19,7 +19,7 @@ import IS_PRODUCTION from '../../utils/IS_PRODUCTION';
 /** Main FMIS dashboard URL - for users who accidentally land on Budget without a budget role */
 const mainFmisDashboardUrl = IS_PRODUCTION
   ? 'https://fmis.nia.gov.ph/dashboard'
-  : 'https://main.fmis.local/dashboard';
+  : 'http://localhost:3000/dashboard';
 
 /** Page shown when user has no budget role or is unauthorized SUPER_ADMIN - redirect back to main FMIS */
 const NoBudgetRolePage = ({ onLogout, message }) => {
