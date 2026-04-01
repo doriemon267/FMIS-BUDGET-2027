@@ -7,14 +7,35 @@
   <link rel="icon" type="image/svg+xml" href="/2020-nia-logo.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FMIS - OSBPIS</title>
-  <script type="module" crossorigin src="/assets/index-DsNj2rZT.js"></script>
+  <script type="module" crossorigin src="/assets/index-kGph09Yu.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/vendor-Bo6z-jrV.js">
   <link rel="stylesheet" crossorigin href="/assets/vendor-BcoXO65d.css">
   <link rel="stylesheet" crossorigin href="/assets/index-ldhkmPtv.css">
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root"></div>
+
+  <!-- SELF-XSS PROTECTION: Must run before silenceConsole overrides console methods -->
+  <script>
+    (function selfXSSWarning() {
+      console.log(
+        '%c STOP! ',
+        'background:#e00;color:#fff;font-size:48px;font-weight:bold;padding:4px 8px;border-radius:4px;'
+      );
+      console.log(
+        '%cIto ay feature ng browser para sa mga developer.',
+        'color:#000;font-size:14px;'
+      );
+      console.warn(
+        '%cKung may nagsabi sa iyo na mag-paste ng kahit anong code dito\n' +
+        'para ma-enable ang isang feature ng FMIS o ma-"hack" ang isang account —\n' +
+        'SCAM iyon. Mabibigyan nila ng access ang iyong FMIS account.',
+        'color:#c00;font-size:13px;'
+      );
+    })();
+  </script>
+
 </body>
 
 </html>

@@ -748,6 +748,14 @@ app.use(mongoSanitize());
 const { securityHeaders } = require('./middleware/security');
 app.use(securityHeaders);
 
+// Gzip compression (optional — graceful fallback if package not installed)
+try {
+  const compression = require('compression');
+  app.use(compression({ threshold: 1024 })); // Only compress responses > 1KB
+} catch (e) {
+  // compression not installed; serving uncompressed (run: npm install compression --save)
+}
+
 // Rate limiting
 const { apiLimiter, authLimiter, uploadLimiter, proposalLimiter } = require('./middleware/rateLimiter');
 app.use(`${apiPrefix}/`, apiLimiter); // Apply to all API routes
@@ -756,7 +764,17 @@ app.use(`${apiPrefix}/`, apiLimiter); // Apply to all API routes
 const { logWorkflowAction } = require('./middleware/auditLogger');
 
 // ── Serve built frontend from /public (same pattern as FMIS-MAIN) ──────────
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  maxAge: '7d',        // Cache hashed assets (JS/CSS) for 7 days
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    // index.html must never be cached — it references hashed assets
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  },
+}));
 
 // SPA navigation intercept: browser requests for frontend routes (e.g. /dashboard)
 // must NOT be rewritten to /api/dashboard. Detect them early and serve index.html.

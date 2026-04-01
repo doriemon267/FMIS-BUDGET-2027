@@ -95,7 +95,10 @@ const UserProvider = ({ children }) => {
   // --- REDIRECT LOGIC HELPER ---
   const redirectToLogin = () => {
     // Return URL: after login, come back to budget (dashboard)
-    const returnUrl = (env("CLIENT_URL_DEV") || window.location.origin) + "/dashboard";
+    const clientOrigin = IS_PRODUCTION
+      ? (env("BUDGET_CLIENT_URL_PROD") || window.location.origin)
+      : (env("CLIENT_URL_DEV") || window.location.origin);
+    const returnUrl = clientOrigin + "/dashboard";
     const loginUrl = IS_PRODUCTION
       ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(returnUrl)}`
       : `${env("AUTH_CLIENT_URL_DEV") || env("CLIENT_URL_DEV")}/login?redirect=${encodeURIComponent(returnUrl)}`;

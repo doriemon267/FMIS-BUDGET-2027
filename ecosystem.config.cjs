@@ -18,6 +18,9 @@ module.exports = {
       cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
+      max_memory_restart: "512M",     // Auto-restart if memory exceeds 512MB
+      restart_delay: 3000,            // Wait 3s before restarting after crash
+      node_args: "--max-old-space-size=512",
       env: { NODE_ENV: "development" },
       env_production: { NODE_ENV: "production" },
       // Kung naka-.env sa root, automatic mababasa; kung nasa SERVER, ilagay dotenv path

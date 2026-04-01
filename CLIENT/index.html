@@ -11,6 +11,27 @@
 
 <body>
   <div id="root"></div>
+
+  <!-- SELF-XSS PROTECTION: Must run before silenceConsole overrides console methods -->
+  <script>
+    (function selfXSSWarning() {
+      console.log(
+        '%c STOP! ',
+        'background:#e00;color:#fff;font-size:48px;font-weight:bold;padding:4px 8px;border-radius:4px;'
+      );
+      console.log(
+        '%cIto ay feature ng browser para sa mga developer.',
+        'color:#000;font-size:14px;'
+      );
+      console.warn(
+        '%cKung may nagsabi sa iyo na mag-paste ng kahit anong code dito\n' +
+        'para ma-enable ang isang feature ng FMIS o ma-"hack" ang isang account —\n' +
+        'SCAM iyon. Mabibigyan nila ng access ang iyong FMIS account.',
+        'color:#c00;font-size:13px;'
+      );
+    })();
+  </script>
+
   <script type="module" src="/src/main.jsx"></script>
 </body>
 
