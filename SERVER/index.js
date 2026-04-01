@@ -745,8 +745,9 @@ app.use(cookieParser());
 // NoSQL injection prevention: strip $ and . from req.body, req.query, req.params
 app.use(mongoSanitize());
 // Security headers (use configured securityHeaders from security.js, not bare helmet())
-const { securityHeaders } = require('./middleware/security');
+const { securityHeaders, permissionsPolicy } = require('./middleware/security');
 app.use(securityHeaders);
+app.use(permissionsPolicy);
 
 // Gzip compression (optional — graceful fallback if package not installed)
 try {

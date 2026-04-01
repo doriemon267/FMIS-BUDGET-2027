@@ -3,8 +3,55 @@ const assignedRole = require("../models/assigned_role");
 const User = require("../models/User");
 const { createUserActivityLog } = require("../middleware/userLogs");
 
+// Per-username brute force lockout (in-memory)
+// Tracks failed login attempts per username; lockout after 5 failures within 15 minutes.
+const _loginAttempts = new Map(); // username -> { count, firstAttempt, lockedUntil }
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;  // 15 minutes
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes lockout
+
+function _recordFailedAttempt(username) {
+  const now = Date.now();
+  const entry = _loginAttempts.get(username) || { count: 0, firstAttempt: now, lockedUntil: 0 };
+  // Reset window if it's past the window period
+  if (now - entry.firstAttempt > LOGIN_WINDOW_MS) {
+    entry.count = 0;
+    entry.firstAttempt = now;
+    entry.lockedUntil = 0;
+  }
+  entry.count += 1;
+  if (entry.count >= LOGIN_MAX_ATTEMPTS) {
+    entry.lockedUntil = now + LOGIN_LOCKOUT_MS;
+  }
+  _loginAttempts.set(username, entry);
+}
+
+function _isLockedOut(username) {
+  const entry = _loginAttempts.get(username);
+  if (!entry) return false;
+  if (entry.lockedUntil && Date.now() < entry.lockedUntil) return true;
+  return false;
+}
+
+function _clearAttempts(username) {
+  _loginAttempts.delete(username);
+}
+
 exports.login = async (req, res) => {
   const { username, password, rememberMe } = req.body;
+
+  // Per-username lockout check
+  if (username && _isLockedOut(String(username).toLowerCase())) {
+    await createUserActivityLog(req, {
+      action: "LOGIN_BLOCKED_LOCKOUT",
+      resource: "Auth",
+      userId: username,
+      details: { reason: "Too many failed attempts" },
+    }).catch(() => {});
+    return res.status(429).json({
+      error: "Account temporarily locked. Too many failed login attempts. Please try again in 15 minutes.",
+    });
+  }
 
   try {
     const tokenApi = process.env.ACCOUNT_TOKEN_API_URL;
@@ -31,10 +78,11 @@ exports.login = async (req, res) => {
     ).json();
 
     if (!credentials.access_token) {
+      if (username) _recordFailedAttempt(String(username).toLowerCase());
       await createUserActivityLog(req, {
         action: "LOGIN_FAILED",
         resource: "Auth",
-        userId: "anonymous",
+        userId: username || "anonymous",
         details: { reason: "Invalid credentials" },
       }).catch(() => {});
       return res.status(401).json({ error: "Invalid credentials" });
@@ -60,6 +108,9 @@ exports.login = async (req, res) => {
     };
     if (process.env.COOKIE_DOMAIN) cookieOpts.domain = process.env.COOKIE_DOMAIN;
     res.cookie("jwtToken", jwtToken, cookieOpts);
+
+    // Clear failed attempts on successful login
+    if (username) _clearAttempts(String(username).toLowerCase());
 
     await createUserActivityLog(req, {
       action: "LOGIN_SUCCESS",

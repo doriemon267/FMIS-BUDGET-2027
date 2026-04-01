@@ -91,7 +91,7 @@ const securityHeaders = helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:", "https://accounts.nia.gov.ph"],
       connectSrc: ["'self'", "https:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
@@ -125,6 +125,15 @@ const securityHeaders = helmet({
   // Permissions Policy (formerly Feature Policy)
   permittedCrossDomainPolicies: false
 });
+
+// Permissions-Policy: block browser features not needed by FMIS
+const permissionsPolicy = (req, res, next) => {
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), fullscreen=(self)'
+  );
+  next();
+};
 // Create user-specific rate limiter
 const createUserLimiter = (maxRequests = 200, windowMs = 15 * 60 * 1000) => {
   const userLimiters = new Map();
@@ -201,6 +210,7 @@ module.exports = {
   apiLimiter,
   speedLimiter,
   securityHeaders,
+  permissionsPolicy,
   createUserLimiter,
   bruteForceLimiter,
   securityLogger,
