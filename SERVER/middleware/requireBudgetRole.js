@@ -46,8 +46,9 @@ function hasValidBudgetRole(userRoles) {
 
 function isExemptPath(req) {
   const url = (req.originalUrl || req.url || '').split('?')[0];
-  // Mas secured na check: Dapat ang simula ng path ay isa sa EXEMPT_PATHS
-  return EXEMPT_PATHS.some((p) => url === p || url.startsWith(`${p}/`));
+  // Strip /api prefix since routes are mounted under /api (req.originalUrl = /api/get-user)
+  const cleanUrl = url.replace(/^\/api/, '') || '/';
+  return EXEMPT_PATHS.some((p) => cleanUrl === p || cleanUrl.startsWith(`${p}/`));
 }
 
 /**

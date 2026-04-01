@@ -172,7 +172,9 @@ api.interceptors.response.use(undefined, async (error) => {
 
   // 403/483 Role or ID not authorized for this environment -> show AccessGuard (no broken dashboard in production)
   const isAccessDeniedForEnvironment = (response.status === 403 || response.status === 483) && isUnauthorizedSuperAdminResponse(response);
-  if (isAccessDeniedForEnvironment) {
+  // 403 BUDGET_ROLE_REQUIRED -> user has no budget role, show AccessGuard (don't retry/redirect to SSO loop)
+  const isBudgetRoleRequired = response.status === 403 && response.data?.code === 'BUDGET_ROLE_REQUIRED';
+  if (isAccessDeniedForEnvironment || isBudgetRoleRequired) {
     if (typeof window.__onUnauthorizedSuperAdmin === 'function') {
       window.__onUnauthorizedSuperAdmin();
     }
@@ -255,6 +257,8 @@ api.interceptors.response.use(
 export default api;
 
 export const authApi = axios.create({
-  baseURL: IS_PRODUCTION ? env("AUTH_SERVER_URL_PROD") : env("AUTH_SERVER_URL_DEV"),
+  baseURL: IS_PRODUCTION
+    ? `${env("AUTH_SERVER_URL_PROD")}/api/auth`
+    : env("AUTH_SERVER_URL_DEV"),
   withCredentials: true,
 });

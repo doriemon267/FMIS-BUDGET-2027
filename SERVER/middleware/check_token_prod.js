@@ -100,6 +100,15 @@ module.exports = async (req, res, next) => {
       }
     }
 
+    // If user is explicitly whitelisted in SUPER_ADMIN_IDS but has no DB role assignment,
+    // inject SUPER_ADMIN role so they are not blocked by requireBudgetRole.
+    const allowedSuperIds = process.env.SUPER_ADMIN_IDS
+      ? process.env.SUPER_ADMIN_IDS.split(',').map((id) => id.trim())
+      : [];
+    if (allowedSuperIds.includes(userId) && !roles.some(r => /super.?admin/i.test(String(r)))) {
+      roles = ['SUPER_ADMIN', ...roles];
+    }
+
     const normalizedRoles = roles.map(r => String(r).replace(/\s+/g, '_').toUpperCase());
 
     // 8. Attach Cleaned User Object

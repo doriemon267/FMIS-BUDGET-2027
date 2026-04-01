@@ -744,8 +744,9 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
 // NoSQL injection prevention: strip $ and . from req.body, req.query, req.params
 app.use(mongoSanitize());
-// Security headers
-app.use(helmet());
+// Security headers (use configured securityHeaders from security.js, not bare helmet())
+const { securityHeaders } = require('./middleware/security');
+app.use(securityHeaders);
 
 // Rate limiting
 const { apiLimiter, authLimiter, uploadLimiter, proposalLimiter } = require('./middleware/rateLimiter');
@@ -753,6 +754,26 @@ app.use(`${apiPrefix}/`, apiLimiter); // Apply to all API routes
 
 // Audit logging middleware
 const { logWorkflowAction } = require('./middleware/auditLogger');
+
+// ── Serve built frontend from /public (same pattern as FMIS-MAIN) ──────────
+app.use(express.static(path.join(__dirname, "public")));
+
+// SPA navigation intercept: browser requests for frontend routes (e.g. /dashboard)
+// must NOT be rewritten to /api/dashboard. Detect them early and serve index.html.
+app.use((req, res, next) => {
+  // Only intercept GET requests that accept HTML, have no file extension, and aren't API/socket/upload paths
+  if (
+    req.method === "GET" &&
+    req.accepts("html") &&
+    !req.path.startsWith(apiPrefix) &&
+    !req.path.startsWith("/uploads") &&
+    !req.path.startsWith("/socket.io") &&
+    !path.extname(req.path)
+  ) {
+    return res.sendFile(path.join(__dirname, "public", "index.html"));
+  }
+  return next();
+});
 
 // Legacy URL compatibility: rewrite non-/api requests to /api
 // Exclusions include static uploads, socket.io, and root path.

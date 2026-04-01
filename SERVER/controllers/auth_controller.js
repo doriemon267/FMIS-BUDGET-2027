@@ -116,6 +116,12 @@ exports.getUser = async (req, res) => {
       roles = assignedRoles.roles.map((role) => role.name);
     }
 
+    // Fallback: if DB returned no roles, use roles injected by check_token_prod
+    // (e.g. SUPER_ADMIN injected for SUPER_ADMIN_IDS whitelisted users)
+    if (roles.length === 0 && Array.isArray(req.user?.Roles) && req.user.Roles.length > 0) {
+      roles = req.user.Roles;
+    }
+
     console.log("[AUTH][GET-USER] Resolved roles for user:", roles);
 
     const niaEmail =

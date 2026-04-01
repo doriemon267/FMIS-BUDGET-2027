@@ -1,5 +1,7 @@
 const rateLimit = require('express-rate-limit');
-const slowDown = require('express-slow-down');
+// express-slow-down is optional — gracefully degrade if not installed
+let slowDown;
+try { slowDown = require('express-slow-down'); } catch { slowDown = null; }
 const helmet = require('helmet');
 // General rate limiting for all requests (more permissive for development)
 const generalLimiter = rateLimit({
@@ -72,15 +74,16 @@ const apiLimiter = rateLimit({
     });
   }
 });
-// Speed limiting for heavy operations (progressive delay)
-const speedLimiter = slowDown({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  delayAfter: 10, // Allow 10 requests per 15 minutes at full speed
-  delayMs: () => 500, // Add 500ms delay per request after delayAfter (new API format)
-  maxDelayMs: 5000, // Maximum delay of 5 seconds
-  // onLimitReached is deprecated and removed
-  validate: { delayMs: false } // Disable validation warning
-});
+// Speed limiting for heavy operations (progressive delay) — only if express-slow-down is installed
+const speedLimiter = slowDown
+  ? slowDown({
+      windowMs: 15 * 60 * 1000,
+      delayAfter: 10,
+      delayMs: () => 500,
+      maxDelayMs: 5000,
+      validate: { delayMs: false }
+    })
+  : (req, res, next) => next(); // no-op fallback
 // Security headers using helmet
 const securityHeaders = helmet({
   // Content Security Policy
@@ -89,7 +92,7 @@ const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "https://accounts.nia.gov.ph"],
       connectSrc: ["'self'", "https:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],

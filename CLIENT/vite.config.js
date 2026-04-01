@@ -4,18 +4,16 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load env (VITE_PRODUCTION_MODE) from .env, .env.local, .env.[mode], etc.
+  // Load env from .env, .env.local, .env.[mode], etc.
   const env = loadEnv(mode, process.cwd(), "");
-  const isProductionMode = env.VITE_PRODUCTION_MODE === "true";
 
-  // Kapag hindi true ang VITE_PRODUCTION_MODE → build sa IIS path (dev/staging).
-  // Kapag true → build sa default 'dist' (production).
-  const outDir = isProductionMode
-    ? "dist"
-    : path.resolve("C:\\inetpub\\wwwroot\\fmis-budget-client");
-
-  // Sa IIS path huwag i-empty ang folder: may aspnet_client at system files na locked.
-  const emptyOutDir = isProductionMode;
+  // Build output: always goes to ../SERVER/public (same pattern as FMIS-MAIN)
+  // For IIS deployment, set VITE_IIS_BUILD=true in .env to build to IIS path instead.
+  const isIISBuild = env.VITE_IIS_BUILD === "true";
+  const outDir = isIISBuild
+    ? path.resolve("C:\\inetpub\\wwwroot\\fmis-budget-client")
+    : path.resolve(__dirname, "../SERVER/public");
+  const emptyOutDir = !isIISBuild; // IIS has locked system files
 
   return {
   plugins: [react()],

@@ -105,7 +105,7 @@ const UserProvider = ({ children }) => {
   // --- LOGIN HANDLER ---
   const handleSetUserInitialization = async () => {
     setUnauthorizedSuperAdmin(false);
-    const res = await authApi.get("/get-user");
+    const res = await api.get("/api/get-user");
     if (res.data?.token) setAuthToken(res.data.token);
     try {
       const fullUser = await enrichUserWithRoles(res.data.user);
@@ -186,7 +186,7 @@ const UserProvider = ({ children }) => {
     const fetchUser = async () => {
       try {
         setUnauthorizedSuperAdmin(false);
-        const res = await authApi.get("/get-user");
+        const res = await api.get("/api/get-user");
         if (res.data.user) {
           if (res.data.token) setAuthToken(res.data.token);
           try {
@@ -209,7 +209,8 @@ const UserProvider = ({ children }) => {
       } catch (error) {
         const d = error?.response?.data || {};
         const isEnvUnauthorized = d.code === 'UNAUTHORIZED_SUPER_ADMIN' || /not authorized for this environment/i.test(String(d.error || d.message || ''));
-        if (isEnvUnauthorized) {
+        const isBudgetRoleRequired = d.code === 'BUDGET_ROLE_REQUIRED';
+        if (isEnvUnauthorized || isBudgetRoleRequired) {
           setCurrentUser(null);
           setUnauthorizedSuperAdmin(true);
         } else {

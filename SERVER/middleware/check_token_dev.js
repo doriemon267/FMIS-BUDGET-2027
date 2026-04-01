@@ -122,18 +122,91 @@ module.exports = async (req, res, next) => {
     }
 
     // Identity Extraction
-    let userId = String(payload.userId || payload.id || (payload.Username && payload.Username[0]));
+    // payload.Username (capital U, array) = NIA API via budget login
+    // payload.username (lowercase, string) = FMIS-MAIN login JWT format
+    let userId = String(
+      payload.userId ||
+      payload.id ||
+      (Array.isArray(payload.Username) && payload.Username[0]) ||
+      payload.username ||
+      ''
+    );
     let roles = payload.roles || payload.Roles || [];
     if (!Array.isArray(roles)) roles = [roles];
     roles = roles.map(r => typeof r === 'string' ? r.replace(/\s+/g, '_').toUpperCase() : r);
 
-    // Fallback DB Role Lookup
-    if (roles.length === 0 && mainConnection?.readyState) {
+    // FMIS-MAIN JWT: has accessToken, no embedded roles → resolve full user from NIA API
+    if (payload.accessToken) {
+      let resolvedUser = null;
       try {
-        const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
-        const assigned = await AssignedRole.findOne({ user: userId }).lean();
-        if (assigned?.roles) roles = assigned.roles.map(r => String(r).toUpperCase());
-      } catch (e) {}
+        const niaApiUrl = process.env.ACCOUNT_USER_API_URL;
+        if (niaApiUrl) {
+          const niaRes = await fetch(niaApiUrl, {
+            headers: { Authorization: `Bearer ${payload.accessToken}` },
+          });
+          if (niaRes.ok) {
+            const niaUser = await niaRes.json();
+            const middleInitial = niaUser.MiddleName ? `${niaUser.MiddleName.charAt(0)}.` : '';
+            const particular = `${niaUser.FirstName ?? ''} ${middleInitial} ${niaUser.LastName ?? ''} ${niaUser.Suffix ?? ''}`.replace(/\s+/g, ' ').trim();
+            const particularID = (niaUser.Username?.[0] ?? userId).toUpperCase();
+
+            // Look up roles from fmis_main DB using raw collection (no model registration needed)
+            let dbRoles = [];
+            if (mainConnection?.readyState === 1) {
+              try {
+                const arDoc = await mainConnection.db.collection('assigned_roles').findOne({ user: particularID });
+                if (arDoc?.roles?.length > 0) {
+                  const roleDocs = await mainConnection.db.collection('roles').find({ _id: { $in: arDoc.roles } }).toArray();
+                  dbRoles = roleDocs.map(r => String(r.name || '').replace(/\s+/g, '_').toUpperCase());
+                }
+              } catch (dbErr) {
+                console.warn('[check_token_dev] fmis_main role lookup failed:', dbErr.message);
+              }
+            }
+
+            resolvedUser = {
+              ...niaUser,
+              id: particularID,
+              userId: particularID,
+              particular,
+              particularID,
+              Roles: dbRoles,
+              userName: particular,
+            };
+          }
+        }
+      } catch (niaErr) {
+        console.warn('[check_token_dev] NIA API fetch failed:', niaErr.message);
+      }
+
+      // Fallback: minimal user from payload (dev only — avoids 401 if NIA API is down)
+      if (!resolvedUser) {
+        const particularID = String(payload.username || userId).toUpperCase();
+        resolvedUser = {
+          id: particularID,
+          userId: particularID,
+          particularID,
+          particular: particularID,
+          userName: particularID,
+          Roles: ['SUPER_ADMIN'],
+        };
+      }
+
+      req.user = resolvedUser;
+      try { await syncUserEmailFromRequest(req); } catch (_) {}
+      if (resolveUserIdentity) req.identity = await resolveUserIdentity({ req });
+      return requireBudgetRole(req, res, next);
+    }
+
+    // Non-FMIS-MAIN JWT: fallback DB role lookup for budget-native tokens
+    if (roles.length === 0 && mainConnection?.readyState === 1) {
+      try {
+        const arDoc = await mainConnection.db.collection('assigned_roles').findOne({ user: userId });
+        if (arDoc?.roles?.length > 0) {
+          const roleDocs = await mainConnection.db.collection('roles').find({ _id: { $in: arDoc.roles } }).toArray();
+          roles = roleDocs.map(r => String(r.name || '').replace(/\s+/g, '_').toUpperCase());
+        }
+      } catch (e) { /* silent */ }
     }
 
     const userName = `${payload.FirstName || ''} ${payload.LastName || ''}`.trim() || userId;
