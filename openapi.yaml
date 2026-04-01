@@ -1,24 +1,96 @@
 openapi: 3.0.3
 info:
   title: FMIS Budget Module API
-  description: NIA FMIS Budget Module - Budget proposals, workflow, reports
+  description: >
+    NIA FMIS - Online Submission of Budget Proposals and Integrated System (OSBPIS).
+    All endpoints require authentication via httpOnly JWT cookie unless noted otherwise.
+    Base URL: https://budget.nia.gov.ph
   version: 1.0.0
+  contact:
+    name: FMIS Development Team
+    email: fmis@nia.gov.ph
 
 servers:
-  - url: /api
-    description: API base path (prefixed by deployment URL)
+  - url: https://budget.nia.gov.ph/api
+    description: Production
+  - url: http://budget.fmis.local/api
+    description: Local development
 
 tags:
   - name: Auth
-  - name: Proposals
+    description: Authentication and user session
   - name: Health
+    description: Server health monitoring
+  - name: Employees
+    description: Employee master list management
+  - name: Personnel Services
+    description: PS budget entries (permanent, casual, COS)
+  - name: MOOE
+    description: Maintenance and Other Operating Expenses
+  - name: Capital Outlay
+    description: Capital outlay budget entries
+  - name: Income
+    description: Corporate income entries
+  - name: Proposals
+    description: Budget proposal workflow
+  - name: Salary
+    description: Salary grade references
+  - name: Allowances
+    description: Various allowances (meal, medical, subsistence, loyalty, children, RATA)
+  - name: Reports
+    description: Consolidated reports and exports
+  - name: Settings
+    description: Fiscal year and compensation settings
+  - name: Notifications
+    description: In-app notifications
+  - name: Roles
+    description: Role and access management
+  - name: Regions
+    description: Region management
+  - name: Departments
+    description: Department and office structure
+  - name: Chat
+    description: Internal messaging
+  - name: Backup
+    description: Database backup management
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: jwtToken
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    PaginatedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: {}
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+security:
+  - cookieAuth: []
 
 paths:
+
+  # ─── HEALTH ────────────────────────────────────────────────────────────────
   /health:
     get:
       tags: [Health]
       summary: Health check
-      description: Returns server and MongoDB status for load balancers/monitoring
+      security: []
+      description: Returns server and MongoDB status. Used by load balancers and PM2.
       responses:
         '200':
           description: Healthy
@@ -27,28 +99,26 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    enum: [healthy]
-                  timestamp:
-                    type: string
-                    format: date-time
-                  version:
-                    type: string
+                  status: { type: string, enum: [healthy] }
+                  timestamp: { type: string, format: date-time }
+                  version: { type: string }
                   mongo:
                     type: object
                     properties:
-                      connected:
-                        type: boolean
-                      readyState:
-                        type: integer
+                      connected: { type: boolean }
+                      readyState: { type: integer }
         '503':
-          description: Degraded (e.g. MongoDB disconnected)
+          description: Degraded (MongoDB disconnected)
 
+  # ─── AUTH ──────────────────────────────────────────────────────────────────
   /login:
     post:
       tags: [Auth]
-      summary: Login
+      summary: Login with NIA credentials
+      security: []
+      description: >
+        Authenticates via NIA Account API. On success sets httpOnly jwtToken cookie.
+        Locked for 15 minutes after 5 failed attempts per username.
       requestBody:
         required: true
         content:
@@ -57,146 +127,748 @@ paths:
               type: object
               required: [username, password]
               properties:
-                username:
-                  type: string
-                password:
-                  type: string
-                rememberMe:
-                  type: boolean
+                username: { type: string, example: "juan.delacruz" }
+                password: { type: string, format: password }
+                rememberMe: { type: boolean, default: false }
       responses:
-        '200':
-          description: Login successful
-        '401':
-          description: Invalid credentials
+        '200': { description: Login successful — jwtToken cookie set }
+        '401': { description: Invalid credentials }
+        '429': { description: Account locked — too many failed attempts }
 
   /get-user:
     get:
       tags: [Auth]
-      summary: Get current user
-      security:
-        - cookieAuth: []
+      summary: Get current authenticated user
+      description: Returns user profile, roles, and hierarchical RBAC access info.
       responses:
         '200':
-          description: Current user with roles and hierarchical access
-        '401':
-          description: Not authenticated
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      particular: { type: string }
+                      Roles: { type: array, items: { type: string } }
+                      hierarchicalAccess: { type: object }
+        '401': { description: Not authenticated }
 
   /logout:
     get:
       tags: [Auth]
-      summary: Logout
+      summary: Logout — clears jwtToken cookie
+      responses:
+        '200': { description: Logged out successfully }
 
-  /allproposal/proposals:
+  /csrf-token:
     get:
-      tags: [Proposals]
-      summary: List proposals
-      parameters:
-        - name: fiscalYear
-          in: query
-          schema:
-            type: integer
-        - name: status
-          in: query
-          schema:
-            type: string
-            enum: [DRAFT, FORWARDED_TO_REVIEWER, FORWARDED_TO_APPROVER, FORWARDED_TO_BRD_ANALYST, FORWARDED_TO_BRD_OFFICER, FORWARDED_TO_BRD_MANAGER, FINALIZED, RETURNED_TO_PREPARER, RETURNED_TO_REVIEWER, RETURNED_TO_APPROVER]
-      security:
-        - cookieAuth: []
+      tags: [Auth]
+      summary: Get CSRF token for state-changing requests
+      security: []
       responses:
         '200':
-          description: List of proposals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csrfToken: { type: string }
+          description: CSRF token
 
+  # ─── EMPLOYEES ─────────────────────────────────────────────────────────────
+  /employees:
+    get:
+      tags: [Employees]
+      summary: List employees
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: department, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: List of employees }
     post:
-      tags: [Proposals]
-      summary: Create proposal
+      tags: [Employees]
+      summary: Add employee
       requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '201': { description: Employee created }
+
+  /employees/{id}:
+    get:
+      tags: [Employees]
+      summary: Get employee by ID
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Employee record }
+        '404': { $ref: '#/components/schemas/Error' }
+    put:
+      tags: [Employees]
+      summary: Update employee
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Employees]
+      summary: Delete employee
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Deleted }
+
+  /employees/stats:
+    get:
+      tags: [Employees]
+      summary: Employee statistics summary
+      responses:
+        '200': { description: Stats }
+
+  /eligible-for-retirement:
+    get:
+      tags: [Employees]
+      summary: List employees eligible for retirement
+      responses:
+        '200': { description: Eligible employees }
+
+  # ─── PERSONNEL SERVICES ────────────────────────────────────────────────────
+  /getpersonnels/byParams:
+    get:
+      tags: [Personnel Services]
+      summary: Get personnel filtered by params
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: department, in: query, schema: { type: string } }
+        - { name: fiscalYear, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Filtered personnel list }
+
+  /personnel/bulk-update:
+    put:
+      tags: [Personnel Services]
+      summary: Bulk update personnel salary/details
+      requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
               properties:
-                title:
-                  type: string
-                fiscalYear:
-                  type: integer
-                modelType:
-                  type: string
-                  enum: [Initial, NEP, GAA]
-                amount:
-                  type: number
-      security:
-        - cookieAuth: []
+                updates: { type: array, items: { type: object } }
       responses:
-        '201':
-          description: Proposal created
+        '200': { description: Updated }
 
-  /allproposal/proposals/{id}:
+  /personnels:
+    get:
+      tags: [Personnel Services]
+      summary: List all personnel
+      responses:
+        '200': { description: Personnel list }
+
+  /cos-personnel/bulk-add:
+    post:
+      tags: [Personnel Services]
+      summary: Bulk add COS personnel
+      responses:
+        '200': { description: Added }
+
+  /cosPersonnels:
+    get:
+      tags: [Personnel Services]
+      summary: List COS personnel
+      responses:
+        '200': { description: COS personnel list }
+
+  /ps_annexes:
+    get:
+      tags: [Personnel Services]
+      summary: List PS annexes
+      responses:
+        '200': { description: PS annexes }
+    post:
+      tags: [Personnel Services]
+      summary: Create PS annex
+      responses:
+        '201': { description: Created }
+
+  # ─── MOOE ──────────────────────────────────────────────────────────────────
+  /mooe-data:
+    get:
+      tags: [MOOE]
+      summary: Get MOOE data entries
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: fiscalYear, in: query, schema: { type: string } }
+      responses:
+        '200': { description: MOOE entries }
+    post:
+      tags: [MOOE]
+      summary: Save MOOE data
+      responses:
+        '200': { description: Saved }
+
+  /mooe-save:
+    post:
+      tags: [MOOE]
+      summary: Save MOOE entry
+      responses:
+        '200': { description: Saved }
+
+  /mooe/upload:
+    post:
+      tags: [MOOE]
+      summary: Upload MOOE data from Excel
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { description: Uploaded }
+
+  /mooe/template:
+    get:
+      tags: [MOOE]
+      summary: Download MOOE Excel template
+      responses:
+        '200': { description: Excel file }
+
+  # ─── CAPITAL OUTLAY ────────────────────────────────────────────────────────
+  /capital-outlays:
+    get:
+      tags: [Capital Outlay]
+      summary: List capital outlay entries
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: fiscalYear, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Capital outlay list }
+    post:
+      tags: [Capital Outlay]
+      summary: Create capital outlay entry
+      responses:
+        '201': { description: Created }
+
+  /capital-outlays/{id}:
+    put:
+      tags: [Capital Outlay]
+      summary: Update capital outlay
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Capital Outlay]
+      summary: Delete capital outlay
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Deleted }
+
+  /capital-outlay/{capitalOutlayId}/details:
+    get:
+      tags: [Capital Outlay]
+      summary: Get capital outlay line item details
+      parameters:
+        - { name: capitalOutlayId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Details }
+    post:
+      tags: [Capital Outlay]
+      summary: Add capital outlay detail
+      parameters:
+        - { name: capitalOutlayId, in: path, required: true, schema: { type: string } }
+      responses:
+        '201': { description: Created }
+
+  # ─── INCOME ────────────────────────────────────────────────────────────────
+  /income:
+    get:
+      tags: [Income]
+      summary: List income entries
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: fiscalYear, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Income entries }
+    post:
+      tags: [Income]
+      summary: Create income entry
+      responses:
+        '201': { description: Created }
+
+  /income/{id}:
+    put:
+      tags: [Income]
+      summary: Update income entry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Updated }
+    delete:
+      tags: [Income]
+      summary: Delete income entry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Deleted }
+
+  /income/getByParams:
+    get:
+      tags: [Income]
+      summary: Get income filtered by params
+      responses:
+        '200': { description: Filtered income }
+
+  /income-categories:
+    get:
+      tags: [Income]
+      summary: List income categories
+      responses:
+        '200': { description: Categories }
+
+  /income-subcategories:
+    get:
+      tags: [Income]
+      summary: List income subcategories
+      responses:
+        '200': { description: Subcategories }
+
+  # ─── PROPOSALS ─────────────────────────────────────────────────────────────
+  /proposals:
+    get:
+      tags: [Proposals]
+      summary: List all proposals (admin/manager view)
+      parameters:
+        - { name: fiscalYear, in: query, schema: { type: string } }
+        - { name: region, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Proposals list }
+    post:
+      tags: [Proposals]
+      summary: Create new proposal
+      responses:
+        '201': { description: Created }
+
+  /proposals/{id}:
     get:
       tags: [Proposals]
       summary: Get proposal by ID
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      security:
-        - cookieAuth: []
+        - { name: id, in: path, required: true, schema: { type: string } }
       responses:
-        '200':
-          description: Proposal details
-        '404':
-          description: Not found
+        '200': { description: Proposal }
 
-    put:
+  /myproposals:
+    get:
       tags: [Proposals]
-      summary: Update proposal
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      security:
-        - cookieAuth: []
+      summary: Get current user's proposals
       responses:
-        '200':
-          description: Updated
+        '200': { description: My proposals }
 
-  /allproposal/proposals/{id}/action:
+  /proposals/{id}/action:
     post:
       tags: [Proposals]
-      summary: Perform workflow action
+      summary: Perform workflow action (approve/reject/return)
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
+        - { name: id, in: path, required: true, schema: { type: string } }
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
               required: [action]
               properties:
-                action:
-                  type: string
-                  description: Workflow action (e.g. submit-to-reviewer, forward-to-approver, return-to-preparer, finalize)
-                comment:
-                  type: string
-      security:
-        - cookieAuth: []
+                action: { type: string, enum: [approve, reject, return, forward] }
+                remarks: { type: string }
+      responses:
+        '200': { description: Action performed }
+
+  /proposals/{id}/audit-trail:
+    get:
+      tags: [Proposals]
+      summary: Get proposal audit trail / history
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Audit trail }
+
+  /draft/save:
+    post:
+      tags: [Proposals]
+      summary: Save proposal draft
+      responses:
+        '200': { description: Draft saved }
+
+  /submit:
+    post:
+      tags: [Proposals]
+      summary: Submit proposal for review
+      responses:
+        '200': { description: Submitted }
+
+  # ─── SALARY ─────────────────────────────────────────────────────────────────
+  /salary-grades:
+    get:
+      tags: [Salary]
+      summary: List all salary grades
+      responses:
+        '200': { description: Salary grade list }
+
+  /rate/{job_grade}/{step}:
+    get:
+      tags: [Salary]
+      summary: Get salary rate by job grade and step
+      parameters:
+        - { name: job_grade, in: path, required: true, schema: { type: string } }
+        - { name: step, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Salary rate }
+
+  /cpcs-salary/table:
+    get:
+      tags: [Salary]
+      summary: Get CPCS salary table
+      responses:
+        '200': { description: CPCS table }
+
+  /cos-salary/table:
+    get:
+      tags: [Salary]
+      summary: Get COS salary table
+      responses:
+        '200': { description: COS table }
+
+  # ─── ALLOWANCES ─────────────────────────────────────────────────────────────
+  /meal-allowance:
+    get:
+      tags: [Allowances]
+      summary: List meal allowance entries
+      responses:
+        '200': { description: Meal allowance list }
+    post:
+      tags: [Allowances]
+      summary: Add meal allowance
+      responses:
+        '201': { description: Created }
+
+  /medical-allowance:
+    get:
+      tags: [Allowances]
+      summary: List medical allowance entries
+      responses:
+        '200': { description: Medical allowance list }
+
+  /subsistence-allowance:
+    get:
+      tags: [Allowances]
+      summary: List subsistence allowance entries
+      responses:
+        '200': { description: Subsistence allowance list }
+
+  /loyalty-pay:
+    get:
+      tags: [Allowances]
+      summary: List loyalty pay entries
+      responses:
+        '200': { description: Loyalty pay list }
+
+  /children-allowance:
+    get:
+      tags: [Allowances]
+      summary: List children allowance entries
+      responses:
+        '200': { description: Children allowance list }
+
+  /overtime-pay:
+    get:
+      tags: [Allowances]
+      summary: List overtime pay entries
+      responses:
+        '200': { description: Overtime pay list }
+    post:
+      tags: [Allowances]
+      summary: Add overtime pay entry
+      responses:
+        '201': { description: Created }
+
+  /ratas:
+    get:
+      tags: [Allowances]
+      summary: List RATA entries
+      responses:
+        '200': { description: RATA list }
+    post:
+      tags: [Allowances]
+      summary: Create RATA entry
+      responses:
+        '201': { description: Created }
+
+  # ─── REPORTS ────────────────────────────────────────────────────────────────
+  /consolidated-data:
+    get:
+      tags: [Reports]
+      summary: Get consolidated budget report data
+      parameters:
+        - { name: fiscalYear, in: query, schema: { type: string } }
+        - { name: region, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Consolidated data }
+
+  /comprehensive-data:
+    get:
+      tags: [Reports]
+      summary: Get comprehensive report data (all budget types)
+      responses:
+        '200': { description: Comprehensive report data }
+
+  /comprehensive-pdf:
+    get:
+      tags: [Reports]
+      summary: Export comprehensive report as PDF
       responses:
         '200':
-          description: Action performed
-        '400':
-          description: Invalid action or state
+          description: PDF file
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
 
-components:
-  securitySchemes:
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: authToken
-      description: JWT in httpOnly cookie
+  /budget-summary-pdf:
+    post:
+      tags: [Reports]
+      summary: Export budget summary as PDF
+      responses:
+        '200': { description: PDF }
+
+  /budget-summary-excel:
+    post:
+      tags: [Reports]
+      summary: Export budget summary as Excel
+      responses:
+        '200': { description: Excel file }
+
+  # ─── SETTINGS ───────────────────────────────────────────────────────────────
+  /getfy:
+    get:
+      tags: [Settings]
+      summary: Get all fiscal years
+      responses:
+        '200': { description: Fiscal year list }
+
+  /create:
+    post:
+      tags: [Settings]
+      summary: Create fiscal year
+      responses:
+        '201': { description: Created }
+
+  /compensation:
+    get:
+      tags: [Settings]
+      summary: Get compensation settings
+      responses:
+        '200': { description: Compensation settings }
+    post:
+      tags: [Settings]
+      summary: Create compensation setting
+      responses:
+        '201': { description: Created }
+
+  /settings/active:
+    get:
+      tags: [Settings]
+      summary: Get active fiscal year settings
+      responses:
+        '200': { description: Active settings }
+
+  # ─── NOTIFICATIONS ──────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Get user notifications
+      responses:
+        '200': { description: Notifications list }
+
+  /notifications/mark-read:
+    post:
+      tags: [Notifications]
+      summary: Mark notification as read
+      responses:
+        '200': { description: Marked }
+
+  /notifications/mark-all-read:
+    post:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      responses:
+        '200': { description: All marked }
+
+  /notifications/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Delete notification
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Deleted }
+
+  # ─── ROLES ──────────────────────────────────────────────────────────────────
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List roles
+      responses:
+        '200': { description: Roles }
+    post:
+      tags: [Roles]
+      summary: Create role
+      responses:
+        '201': { description: Created }
+
+  /assign-role:
+    get:
+      tags: [Roles]
+      summary: List role assignments
+      responses:
+        '200': { description: Assignments }
+    post:
+      tags: [Roles]
+      summary: Assign role to user
+      responses:
+        '200': { description: Assigned }
+
+  # ─── DEPARTMENTS ────────────────────────────────────────────────────────────
+  /departments:
+    get:
+      tags: [Departments]
+      summary: List departments
+      responses:
+        '200': { description: Department list }
+
+  /positions:
+    get:
+      tags: [Departments]
+      summary: List position titles
+      responses:
+        '200': { description: Position titles }
+
+  /categories:
+    get:
+      tags: [Departments]
+      summary: List budget categories
+      responses:
+        '200': { description: Categories }
+
+  # ─── BACKUP ─────────────────────────────────────────────────────────────────
+  /backup/create:
+    post:
+      tags: [Backup]
+      summary: Create a database backup now
+      responses:
+        '200': { description: Backup created }
+
+  /backup/history:
+    get:
+      tags: [Backup]
+      summary: List backup history
+      responses:
+        '200': { description: Backup history }
+
+  /backup/restore/{id}:
+    post:
+      tags: [Backup]
+      summary: Restore from a backup
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Restored }
+
+  /backup/download/{id}:
+    get:
+      tags: [Backup]
+      summary: Download backup file
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Backup file }
+
+  # ─── CHAT ───────────────────────────────────────────────────────────────────
+  /conversations:
+    get:
+      tags: [Chat]
+      summary: List user conversations
+      responses:
+        '200': { description: Conversations }
+
+  /messages:
+    post:
+      tags: [Chat]
+      summary: Send message
+      responses:
+        '201': { description: Message sent }
+
+  /messages/{userId}:
+    get:
+      tags: [Chat]
+      summary: Get messages with a user
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Messages }
+
+  /contacts:
+    get:
+      tags: [Chat]
+      summary: List chat contacts
+      responses:
+        '200': { description: Contacts }
+
+  # ─── HIERARCHY / RBAC ───────────────────────────────────────────────────────
+  /hierarchical-rbac/my-access:
+    get:
+      tags: [Roles]
+      summary: Get current user hierarchical access info
+      description: Returns scope, accessible regions, offices, and workflow roles.
+      responses:
+        '200':
+          description: Access info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessInfo:
+                    type: object
+                    properties:
+                      scope: { type: string, enum: [FULL, REGION, OFFICE, SECTION] }
+                      accessibleRegions: { type: array, items: { type: object } }
+                      workflowRoles: { type: array, items: { type: string } }
+
+  /hierarchical-rbac/assignments/{userId}:
+    get:
+      tags: [Roles]
+      summary: Get role assignment for a user
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Assignment }
+
+
