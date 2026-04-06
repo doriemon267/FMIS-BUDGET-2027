@@ -510,7 +510,7 @@ const NewProposalWorkflowPage = () => {
   // Determine user's workflow role
   const userWorkflowRole =
     currentUser?.hierarchicalAssignment?.userRole ||
-    (currentUser?.Roles?.includes("BUDGET PREPARER")
+    (currentUser?.Roles?.includes("BUDGET_PREPARER")
       ? "BUDGET PREPARER"
       : null);
 

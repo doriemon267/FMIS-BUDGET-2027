@@ -25,7 +25,7 @@ export function hasPermission(currentUser, permissionKey) {
 
   // 🔥 BUDGET_PLANNING_ANALYST, BUDGET MANAGER, BUDGET OFFICER
   // Access ALL menus EXCEPT Settings
-  const budgetStaffRoles = ['BUDGET_PLANNING_ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  const budgetStaffRoles = ['BUDGET_PLANNING_ANALYST', 'BUDGET_MANAGER', 'BUDGET_OFFICER'];
   if (budgetStaffRoles.some(role => userRoles.includes(role))) {
     return true; // All permissions except ManageSettings (already filtered above)
   }

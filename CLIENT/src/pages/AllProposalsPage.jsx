@@ -698,7 +698,7 @@ const AllProposalsPage = () => {
       </Box>
 
       {/* Bulk Actions Section - Only for Budget Officers */}
-      {currentUser?.Roles?.includes('BUDGET OFFICER') && (
+      {currentUser?.Roles?.includes('BUDGET_OFFICER') && (
         <Box sx={{ mb: 3, mx: 3 }}>
           <Card sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
