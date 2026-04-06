@@ -109,6 +109,11 @@ module.exports = async (req, res, next) => {
       } catch (err) { /* silent try */ }
     }
 
+    if (payload) {
+      // Expose token to auth_controller.getUser so client can use it for socket auth
+      req.authToken = jwtToken;
+    }
+
     if (!payload) {
       AuditLog.create({
         userId: "ANONYMOUS_DEV",
