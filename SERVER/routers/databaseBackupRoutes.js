@@ -23,6 +23,23 @@ const {
 } = require('../controllers/databaseBackupController');
 // Apply authentication to all database backup routes
 router.use(tokenMiddleware);
+
+// Super Admin only — all backup operations are restricted to Super Admins
+const superAdminOnly = (req, res, next) => {
+  const roles = (req.user?.Roles || []).map(r =>
+    String(r || '').trim().replace(/\s+/g, '_').toUpperCase()
+  );
+  const isSuperAdmin = roles.includes('SUPER_ADMIN') || roles.includes('SUPERADMIN');
+  if (!isSuperAdmin) {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Super Admin role required for database backup operations.'
+    });
+  }
+  return next();
+};
+router.use(superAdminOnly);
+
 // Create manual backup
 router.post('/backup/create', createBackup);
 // Schedule backup
