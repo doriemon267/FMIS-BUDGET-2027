@@ -65,8 +65,9 @@ const AuditLogsPage = () => {
       } else if (viewMode === 'user' && selectedUserId) {
         return await getUserActivityLogs(selectedUserId, options);
       } else {
-        // Default to current user's activity
-        return await getMyActivityLogs(options);
+        // Default to current user's activity — pass userId directly to avoid a redundant /get-user call
+        const currentUserId = currentUser?.particularID || currentUser?.Id || currentUser?.id || currentUser?.userId || undefined;
+        return await getMyActivityLogs({ ...options, userId: currentUserId });
       }
     },
     enabled: viewMode !== 'proposal' || !!selectedProposalId,

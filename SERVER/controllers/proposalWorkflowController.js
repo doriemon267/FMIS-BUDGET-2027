@@ -5346,19 +5346,23 @@ const getUserActivityLogs = async (req, res) => {
       entityType
     } = req.query;
 
-    // Validate userId
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
+    // Validate userId — stored as String (particularID/LDAP), not MongoDB ObjectId
+    if (!userId || !String(userId).trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid user ID format'
+        message: 'User ID is required'
       });
     }
 
     // Check if requesting user has permission to view activity logs
     // Only admins or the user themselves should be able to view activity logs
-    const requestingUserId = req.user._id.toString();
-    const isAdmin = req.user.Roles?.includes('ADMIN') || req.user.Roles?.includes('SYSTEM_ADMIN');
-    const isSelf = requestingUserId === userId;
+    const requestingUserId = String(
+      req.user?.particularID || req.user?.id || req.user?.userId || ''
+    );
+    const isAdmin = (req.user?.Roles || []).some(r =>
+      ['ADMIN', 'SYSTEM_ADMIN', 'SUPER_ADMIN', 'SUPERADMIN'].includes(String(r).toUpperCase().replace(/\s+/g, '_'))
+    );
+    const isSelf = requestingUserId && requestingUserId.toUpperCase() === String(userId).toUpperCase();
 
     if (!isAdmin && !isSelf) {
       return res.status(403).json({

@@ -53,7 +53,7 @@ export const getMyActivityLogs = async (options = {}) => {
     const { authApi } = await import('../config/api');
     const res = await authApi.get('/get-user');
     const user = res?.data?.user;
-    const userId = user?.id || user?.userId || user?.Id || null;
+    const userId = user?.particularID || user?.Id || user?.id || user?.userId || null;
     if (!userId) throw new Error('Authenticated user not available');
     return getUserActivityLogs(userId, { signal, ...queryParams });
   } catch (err) {
