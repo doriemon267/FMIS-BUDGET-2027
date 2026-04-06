@@ -47,7 +47,8 @@ const createBackup = async (req, res) => {
       const userPart = url.username ? `--username ${url.username}` : '';
       const passwordPart = url.password ? `--password ${url.password}` : '';
       const authDbPart = url.searchParams.get('authSource') ? `--authenticationDatabase ${url.searchParams.get('authSource')}` : '';
-      dumpCommand = `mongodump --db ${dbName} ${hostPart} ${portPart} ${userPart} ${passwordPart} ${authDbPart} --archive=${backupPath} --gzip`.replace(/\s+/g, ' ').trim();
+      const quotedPassword = passwordPart ? `--password "${url.password.replace(/"/g, '\\"')}"` : '';
+      dumpCommand = `mongodump --db ${dbName} ${hostPart} ${portPart} ${userPart} ${quotedPassword} ${authDbPart} --archive=${backupPath} --gzip`.replace(/\s+/g, ' ').trim();
     } catch (uriError) {
       // Fallback for simple connection strings
       dumpCommand = `mongodump --db ${dbName} --archive=${backupPath} --gzip`;
@@ -184,7 +185,8 @@ const createScheduledBackup = async (scheduledBackupId) => {
       const userPart = url.username ? `--username ${url.username}` : '';
       const passwordPart = url.password ? `--password ${url.password}` : '';
       const authDbPart = url.searchParams.get('authSource') ? `--authenticationDatabase ${url.searchParams.get('authSource')}` : '';
-      dumpCommand = `mongodump --db ${dbName} ${hostPart} ${portPart} ${userPart} ${passwordPart} ${authDbPart} --archive=${backupPath} --gzip`.replace(/\s+/g, ' ').trim();
+      const quotedPassword = passwordPart ? `--password "${url.password.replace(/"/g, '\\"')}"` : '';
+      dumpCommand = `mongodump --db ${dbName} ${hostPart} ${portPart} ${userPart} ${quotedPassword} ${authDbPart} --archive=${backupPath} --gzip`.replace(/\s+/g, ' ').trim();
     } catch (uriError) {
       // Fallback for simple connection strings
       dumpCommand = `mongodump --db ${dbName} --archive=${backupPath} --gzip`;
@@ -402,60 +404,88 @@ const restoreBackup = async (req, res) => {
         message: 'Backup file not found'
       });
     }
-    // Create a backup of current state before restore
-    const preRestoreBackup = new DatabaseBackup({
-      name: `pre_restore_backup_${Date.now()}`,
-      description: `Backup created before restore operation on ${new Date().toLocaleString()}`,
-      type: 'pre_restore',
-      status: 'in_progress',
-      createdBy: req.user?.id || 'system'
-    });
-    await preRestoreBackup.save();
-    // Get MongoDB connection details from environment or mongoose connection
+    // Get MongoDB connection details
     const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
     const dbName = mongoose.connection.db.databaseName;
-    // Parse MongoDB URI to extract connection details for mongorestore
-    let restoreCommand;
+
+    // Build shared connection flags (used for both pre-restore dump and the actual restore)
+    let connFlags = '';
     try {
       const url = new URL(mongoUri);
-      // Build mongorestore command with proper connection details
       const hostPart = url.hostname !== 'localhost' ? `--host ${url.hostname}` : '';
       const portPart = url.port ? `--port ${url.port}` : '';
       const userPart = url.username ? `--username ${url.username}` : '';
-      const passwordPart = url.password ? `--password ${url.password}` : '';
+      const quotedPassword = url.password ? `--password "${url.password.replace(/"/g, '\\"')}"` : '';
       const authDbPart = url.searchParams.get('authSource') ? `--authenticationDatabase ${url.searchParams.get('authSource')}` : '';
-      restoreCommand = `mongorestore --db ${dbName} ${hostPart} ${portPart} ${userPart} ${passwordPart} ${authDbPart} --archive=${backup.filePath} --gzip --drop`.replace(/\s+/g, ' ').trim();
-    } catch (uriError) {
-      // Fallback for simple connection strings
-      restoreCommand = `mongorestore --db ${dbName} --archive=${backup.filePath} --gzip --drop`;
-    }
-    exec(restoreCommand, async (error, stdout, stderr) => {
+      connFlags = `${hostPart} ${portPart} ${userPart} ${quotedPassword} ${authDbPart}`.replace(/\s+/g, ' ').trim();
+    } catch { /* fallback: connFlags stays empty — mongodump uses localhost defaults */ }
+
+    const restoreCommand = `mongorestore --db ${dbName} ${connFlags} --archive=${backup.filePath} --gzip --drop`.replace(/\s+/g, ' ').trim();
+
+    // Create a real pre-restore backup of the current database state
+    const preRestoreTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const preRestoreName = `pre_restore_${preRestoreTimestamp}`;
+    const preRestorePath = getBackupFilePath(`${preRestoreName}.gz`);
+    ensureBackupDirectory();
+
+    const preRestoreBackup = new DatabaseBackup({
+      name: preRestoreName,
+      description: `Auto-backup before restore on ${new Date().toLocaleString()}`,
+      type: 'pre_restore',
+      status: 'in_progress',
+      filePath: preRestorePath,
+      createdBy: req.user?.id || 'system'
+    });
+    await preRestoreBackup.save();
+
+    const preRestoreDumpCommand = `mongodump --db ${dbName} ${connFlags} --archive=${preRestorePath} --gzip`.replace(/\s+/g, ' ').trim();
+
+    // Step 1: dump current state before restore
+    exec(preRestoreDumpCommand, async (dumpError) => {
       try {
-        if (error) {
-          console.error('Restore error:', error);
-          return res.status(500).json({
+        if (dumpError) {
+          console.error('Pre-restore dump error:', dumpError);
+          preRestoreBackup.status = 'failed';
+          preRestoreBackup.error = dumpError.message;
+        } else {
+          const dumpStats = fs.statSync(preRestorePath);
+          preRestoreBackup.size = dumpStats.size;
+          preRestoreBackup.status = 'completed';
+          preRestoreBackup.completedAt = new Date();
+        }
+        await preRestoreBackup.save();
+      } catch (e) {
+        console.error('Error updating pre-restore record:', e);
+      }
+
+      // Step 2: run the actual restore regardless of pre-restore dump result
+      exec(restoreCommand, async (error) => {
+        try {
+          if (error) {
+            console.error('Restore error:', error);
+            return res.status(500).json({
+              success: false,
+              message: 'Failed to restore backup',
+              error: error.message
+            });
+          }
+          backup.lastRestored = new Date();
+          backup.restoredBy = req.user?.id || 'system';
+          await backup.save();
+          res.status(200).json({
+            success: true,
+            message: 'Database restored successfully',
+            data: backup
+          });
+        } catch (saveError) {
+          console.error('Error updating restore record:', saveError);
+          res.status(500).json({
             success: false,
-            message: 'Failed to restore backup',
-            error: error.message
+            message: 'Restore completed but failed to update record',
+            error: saveError.message
           });
         }
-        // Update restore record
-        backup.lastRestored = new Date();
-        backup.restoredBy = req.user?.id || 'system';
-        await backup.save();
-        res.status(200).json({
-          success: true,
-          message: 'Database restored successfully',
-          data: backup
-        });
-      } catch (saveError) {
-        console.error('Error updating restore record:', saveError);
-        res.status(500).json({
-          success: false,
-          message: 'Restore completed but failed to update record',
-          error: saveError.message
-        });
-      }
+      });
     });
   } catch (error) {
     console.error('Error restoring backup:', error);
