@@ -97,7 +97,7 @@ const securityHeaders = helmet({
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
+      frameSrc: ["blob:"],
       baseUri: ["'self'"],
       formAction: ["'self'"]
     },

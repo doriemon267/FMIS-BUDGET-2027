@@ -2001,7 +2001,7 @@ const NewProposalWorkflowPage = () => {
 
     // BUDGET REVIEWER actions (IMO path: Forward to Analyst; RIO/CO path: Forward to Approver)
     if (
-      userRoles.includes("BUDGET REVIEWER") &&
+      (userRoles.includes("BUDGET REVIEWER") || userRoles.includes("BUDGET_REVIEWER")) &&
       (currentStatus === "Forwarded to Reviewer" ||
         currentStatus === "Returned to Reviewer" ||
         currentStatus === "FORWARDED_TO_REVIEWER" ||
@@ -2033,7 +2033,7 @@ const NewProposalWorkflowPage = () => {
 
     // BUDGET APPROVER actions
     if (
-      userRoles.includes("BUDGET APPROVER") &&
+      (userRoles.includes("BUDGET APPROVER") || userRoles.includes("BUDGET_APPROVER")) &&
       (currentStatus === "Forwarded to Approver" ||
         currentStatus === "Returned to Approver" ||
         currentStatus === "FORWARDED_TO_APPROVER" ||
@@ -2061,7 +2061,8 @@ const NewProposalWorkflowPage = () => {
 
     // BUDGET PLANNING ANALYST actions (BRD: return to Preparer only)
     if (
-      userRoles.includes("BUDGET PLANNING ANALYST") &&
+      (userRoles.includes("BUDGET PLANNING ANALYST") ||
+        userRoles.includes("BUDGET_PLANNING_ANALYST")) &&
       (currentStatus === "Forwarded to Budget/Planning Analyst" ||
         currentStatus === "Returned to Budget/Planning Analyst" ||
         currentStatus === "Returned" ||
@@ -2086,7 +2087,7 @@ const NewProposalWorkflowPage = () => {
 
     // BUDGET OFFICER actions (BRD: return to Preparer only)
     if (
-      userRoles.includes("BUDGET OFFICER") &&
+      (userRoles.includes("BUDGET OFFICER") || userRoles.includes("BUDGET_OFFICER")) &&
       (currentStatus === "Forwarded to Budget Officer" ||
         currentStatus === "Returned to Budget Officer" ||
         currentStatus === "Returned" ||
@@ -2111,7 +2112,7 @@ const NewProposalWorkflowPage = () => {
 
     // BUDGET MANAGER actions (BRD: return to Preparer only)
     if (
-      userRoles.includes("BUDGET MANAGER") &&
+      (userRoles.includes("BUDGET MANAGER") || userRoles.includes("BUDGET_MANAGER") || userRoles.includes("OVERALL_BUDGET_APPROVER") || userRoles.includes("OVERALL BUDGET APPROVER")) &&
       (
         // Allow manager actions when it's forwarded to manager/overall approver
         [

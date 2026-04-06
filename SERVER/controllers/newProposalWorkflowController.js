@@ -1613,7 +1613,8 @@ exports.getProposals = async (req, res) => {
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's organizational assignment
     // Apply to all views EXCEPT 'monitoring' (which is for Budget Manager who sees all)
     // and SUPER ADMIN (who sees everything)
-    if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring' && view !== 'my-proposals') {
+    // Budget Planning Analyst uses separate region filter below (isNIAWide / assignedRegions)
+    if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && userRole !== 'BUDGET PLANNING ANALYST' && view !== 'monitoring' && view !== 'my-proposals') {
       try {
         // Get user's hierarchical assignment
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
@@ -1643,7 +1644,10 @@ exports.getProposals = async (req, res) => {
           const assignmentLevelRaw = String(userAssignment.assignmentLevel || '').toUpperCase();
           const assignmentLevel = ({
             DIVISION_LEVEL: 'DIVISION',
+            BUDGET_AND_REVENUE_DIVISION: 'DIVISION',
             DEPARTMENT_LEVEL: 'DEPARTMENT',
+            DEPARTMENT_REGIONAL_LEVEL: 'REGION', // Budget Planning Analyst regional assignment
+            RESPONSIBILITY_CENTER: 'DEPARTMENT',
             OFFICE_LEVEL: 'OFFICE',
             REGION_LEVEL: 'REGION',
             FULL_ACCESS: 'FULL'
@@ -1715,10 +1719,23 @@ exports.getProposals = async (req, res) => {
             }
             
             // CASE 3: User assigned at REGION level - only show proposals from that region
-            if (assignedRegionNorm && assignmentLevel === 'REGION') {
-              if (proposalRegion === assignedRegionNorm) {
+            if (assignmentLevel === 'REGION') {
+              // isNIAWide: Budget Planning Analyst covers all regions
+              if (userAssignment.isNIAWide) {
+                console.log('[ORG_FILTER] ✓ ALLOWED (NIA-Wide analyst)');
+                return true;
+              }
+              if (assignedRegionNorm && proposalRegion === assignedRegionNorm) {
                 console.log('[ORG_FILTER] ✓ ALLOWED (region match)');
                 return true;
+              }
+              // Fallback: check assignedRegions array (region codes/names)
+              if (Array.isArray(userAssignment.assignedRegions) && userAssignment.assignedRegions.length > 0) {
+                const regionNorms = userAssignment.assignedRegions.map(r => normalizeOrgValue(r));
+                if (regionNorms.includes(proposalRegion)) {
+                  console.log('[ORG_FILTER] ✓ ALLOWED (assignedRegions match)');
+                  return true;
+                }
               }
             }
             
@@ -1745,7 +1762,63 @@ exports.getProposals = async (req, res) => {
       }
     }
 
-    // Map NewProposalWorkflow status to legacy format for consistency
+    // BUDGET PLANNING ANALYST REGION FILTER
+    // BPAs are excluded from the generic ORG_FILTER above.
+    // Their visibility is controlled by isNIAWide and assignedRegions on their assignment.
+    if (userRole === 'BUDGET PLANNING ANALYST' && view !== 'monitoring' && view !== 'my-proposals') {
+      try {
+        const bpaAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('regionId', 'Region RegionName regionName region')
+          .lean();
+
+        if (bpaAssignment) {
+          // isNIAWide → no regional restriction
+          if (!bpaAssignment.isNIAWide) {
+            const normalizeOrgValue = (v) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+            // Build set of allowed region values from assignment
+            const allowedRegions = new Set();
+            // Primary regionId reference
+            const primaryRegion = bpaAssignment.regionId?.Region || bpaAssignment.regionId?.RegionName || bpaAssignment.regionId?.regionName || bpaAssignment.regionId?.region;
+            if (primaryRegion) allowedRegions.add(normalizeOrgValue(primaryRegion));
+            // assignedRegions array (region codes)
+            if (Array.isArray(bpaAssignment.assignedRegions)) {
+              bpaAssignment.assignedRegions.forEach(r => { if (r) allowedRegions.add(normalizeOrgValue(r)); });
+            }
+
+            console.log('[BPA_FILTER] User:', userIdString, '| Allowed regions:', [...allowedRegions]);
+
+            // Only filter if at least one region is configured; otherwise show all (misconfigured assignment)
+            if (allowedRegions.size > 0) {
+              newProposals = newProposals.filter(p => {
+                const legacy = legacyMap.get(String(p._id));
+                const proposalRegion = normalizeOrgValue(
+                  legacy?.region ||
+                  p?.region?.Region ||
+                  p?.region?.regionName ||
+                  p?.region?.RegionName ||
+                  ''
+                );
+                if (!proposalRegion) return true; // no region metadata → show
+                return allowedRegions.has(proposalRegion);
+              });
+              console.log(`[BPA_FILTER] Filtered to ${newProposals.length} proposals`);
+            } else {
+              console.log('[BPA_FILTER] No regions configured on assignment → showing all proposals');
+            }
+          } else {
+            console.log('[BPA_FILTER] isNIAWide=true → showing all proposals');
+          }
+        } else {
+          console.log('[BPA_FILTER] No assignment found → showing all proposals');
+        }
+      } catch (err) {
+        console.error('[BPA_FILTER] Error:', err.message);
+        // On error keep original (don't hide data)
+      }
+    }
+
+
     const mappedNewProposals = newProposals.map(p => {
       const legacy = legacyMap.get(String(p._id));
       const orgFallback = orgFallbackMap.get(String(p._id)) || {};
