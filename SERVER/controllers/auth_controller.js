@@ -163,7 +163,7 @@ exports.getUser = async (req, res) => {
     }
 
     if (assignedRoles) {
-      roles = assignedRoles.roles.map((role) => role.name);
+      roles = assignedRoles.roles.map((role) => String(role.name || '').replace(/\s+/g, '_').toUpperCase()).filter(Boolean);
     }
 
     // Fallback: if DB returned no roles, use roles injected by check_token_prod

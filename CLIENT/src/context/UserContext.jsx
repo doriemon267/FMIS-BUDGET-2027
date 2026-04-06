@@ -35,6 +35,11 @@ const UserProvider = ({ children }) => {
     try {
       if (!user) return null;
 
+      // Normalize Roles to underscore format (e.g. "BUDGET PLANNING ANALYST" → "BUDGET_PLANNING_ANALYST")
+      if (Array.isArray(user.Roles)) {
+        user = { ...user, Roles: user.Roles.map(r => String(r || '').replace(/\s+/g, '_').toUpperCase()).filter(Boolean) };
+      }
+
       const devHeaders = {};
       const devUserId = (Array.isArray(user?.Username) ? user.Username[0] : user?.Username) || user?.Id || user?.id || user?.userId;
       if (devUserId) devHeaders['X-Dev-User-Id'] = String(devUserId);
