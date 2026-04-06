@@ -351,11 +351,14 @@ const CustomDrawer = ({ collapsed = false }) => {
             name="Employee Benefits"
             link="/employeeBenefits"
             isAllow={
-              hasPermission(currentUser, "EditAllProposals") &&
-              !isOverallApprover &&
-              !isBudgetOfficer &&
-              !isBudgetPlanningAnalystOrApprover &&
-              !isReviewer
+              isSuperAdmin(currentUser) ||
+              (
+                hasPermission(currentUser, "EditAllProposals") &&
+                !isOverallApprover &&
+                !isBudgetOfficer &&
+                !isBudgetPlanningAnalystOrApprover &&
+                !isReviewer
+              )
             }
             collapsed={collapsed}
           />
@@ -365,7 +368,9 @@ const CustomDrawer = ({ collapsed = false }) => {
             icon={<IoSettingsOutline />}
             name="Settings"
             isAllow={
-              hasPermission(currentUser, "ManageSettings") || isOverallApprover
+              isSuperAdmin(currentUser) ||
+              hasPermission(currentUser, "ManageSettings") ||
+              isOverallApprover
             }
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
@@ -386,14 +391,15 @@ const CustomDrawer = ({ collapsed = false }) => {
                   isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
-              // {
-              //   link: "/audit-logs",
-              //   name: "Audit Logs",
-              //   isAllow:
-              //     hasPermission(currentUser, "ManageSettings") ||
-              //     isOverallApprover,
-              //   icon: <MdHistory />,
-              // },
+              {
+                link: "/audit-logs",
+                name: "Audit Logs",
+                isAllow:
+                  isSuperAdmin(currentUser) ||
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isOverallApprover,
+                icon: <MdHistory />,
+              },
 
               // {
               //   link: "/settings",
