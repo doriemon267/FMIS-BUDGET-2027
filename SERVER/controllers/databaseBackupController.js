@@ -37,22 +37,8 @@ const createBackup = async (req, res) => {
     // Get MongoDB connection details from environment or mongoose connection
     const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
     const dbName = mongoose.connection.db.databaseName;
-    // Parse MongoDB URI to extract connection details for mongodump
-    let dumpCommand;
-    try {
-      const url = new URL(mongoUri);
-      // Build mongodump command with proper connection details
-      const hostPart = url.hostname !== 'localhost' ? `--host ${url.hostname}` : '';
-      const portPart = url.port ? `--port ${url.port}` : '';
-      const userPart = url.username ? `--username ${url.username}` : '';
-      const passwordPart = url.password ? `--password ${url.password}` : '';
-      const authDbPart = url.searchParams.get('authSource') ? `--authenticationDatabase ${url.searchParams.get('authSource')}` : '';
-      const quotedPassword = passwordPart ? `--password "${url.password.replace(/"/g, '\\"')}"` : '';
-      dumpCommand = `mongodump --db ${dbName} ${hostPart} ${portPart} ${userPart} ${quotedPassword} ${authDbPart} --archive=${backupPath} --gzip`.replace(/\s+/g, ' ').trim();
-    } catch (uriError) {
-      // Fallback for simple connection strings
-      dumpCommand = `mongodump --db ${dbName} --archive=${backupPath} --gzip`;
-    }
+    // Use --uri so mongodump handles authentication and URL encoding natively
+    const dumpCommand = `mongodump --uri="${mongoUri}" --archive=${backupPath} --gzip`;
     // Execute backup
     const childProcess = exec(dumpCommand, async (error, stdout, stderr) => {
       try {
@@ -175,22 +161,8 @@ const createScheduledBackup = async (scheduledBackupId) => {
     // Get MongoDB connection details from environment or mongoose connection
     const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
     const dbName = mongoose.connection.db.databaseName;
-    // Parse MongoDB URI to extract connection details for mongodump
-    let dumpCommand;
-    try {
-      const url = new URL(mongoUri);
-      // Build mongodump command with proper connection details
-      const hostPart = url.hostname !== 'localhost' ? `--host ${url.hostname}` : '';
-      const portPart = url.port ? `--port ${url.port}` : '';
-      const userPart = url.username ? `--username ${url.username}` : '';
-      const passwordPart = url.password ? `--password ${url.password}` : '';
-      const authDbPart = url.searchParams.get('authSource') ? `--authenticationDatabase ${url.searchParams.get('authSource')}` : '';
-      const quotedPassword = passwordPart ? `--password "${url.password.replace(/"/g, '\\"')}"` : '';
-      dumpCommand = `mongodump --db ${dbName} ${hostPart} ${portPart} ${userPart} ${quotedPassword} ${authDbPart} --archive=${backupPath} --gzip`.replace(/\s+/g, ' ').trim();
-    } catch (uriError) {
-      // Fallback for simple connection strings
-      dumpCommand = `mongodump --db ${dbName} --archive=${backupPath} --gzip`;
-    }
+    // Use --uri so mongodump handles authentication and URL encoding natively
+    const dumpCommand = `mongodump --uri="${mongoUri}" --archive=${backupPath} --gzip`;
     exec(dumpCommand, async (error, stdout, stderr) => {
       try {
         if (error) {
@@ -404,23 +376,9 @@ const restoreBackup = async (req, res) => {
         message: 'Backup file not found'
       });
     }
-    // Get MongoDB connection details
+    // Use --uri so mongorestore handles authentication and URL encoding natively
     const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
-    const dbName = mongoose.connection.db.databaseName;
-
-    // Build shared connection flags (used for both pre-restore dump and the actual restore)
-    let connFlags = '';
-    try {
-      const url = new URL(mongoUri);
-      const hostPart = url.hostname !== 'localhost' ? `--host ${url.hostname}` : '';
-      const portPart = url.port ? `--port ${url.port}` : '';
-      const userPart = url.username ? `--username ${url.username}` : '';
-      const quotedPassword = url.password ? `--password "${url.password.replace(/"/g, '\\"')}"` : '';
-      const authDbPart = url.searchParams.get('authSource') ? `--authenticationDatabase ${url.searchParams.get('authSource')}` : '';
-      connFlags = `${hostPart} ${portPart} ${userPart} ${quotedPassword} ${authDbPart}`.replace(/\s+/g, ' ').trim();
-    } catch { /* fallback: connFlags stays empty — mongodump uses localhost defaults */ }
-
-    const restoreCommand = `mongorestore --db ${dbName} ${connFlags} --archive=${backup.filePath} --gzip --drop`.replace(/\s+/g, ' ').trim();
+    const restoreCommand = `mongorestore --uri="${mongoUri}" --archive=${backup.filePath} --gzip --drop`;
 
     // Create a real pre-restore backup of the current database state
     const preRestoreTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -438,7 +396,7 @@ const restoreBackup = async (req, res) => {
     });
     await preRestoreBackup.save();
 
-    const preRestoreDumpCommand = `mongodump --db ${dbName} ${connFlags} --archive=${preRestorePath} --gzip`.replace(/\s+/g, ' ').trim();
+    const preRestoreDumpCommand = `mongodump --uri="${mongoUri}" --archive=${preRestorePath} --gzip`;
 
     // Step 1: dump current state before restore
     exec(preRestoreDumpCommand, async (dumpError) => {
