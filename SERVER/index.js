@@ -171,8 +171,6 @@ const cosPersonnelRouter = require("./routers/cosPersonnelRoutes");
 const proposalSummaryRoutes = require("./routers/proposalSummary");
 // New Proposal Workflow Routes
 const newProposalWorkflowRoutes = require("./routes/newProposalWorkflowRoutes");
-const mssqlRoutes = require("./routers/mssqlRoutes");
-const mssqlSalaryTableRoutes = require("./routers/mssqlSalaryTableRoutes");
 const debugRoutes = require("./routers/debugRoutes");
 const todoRouter = require("./routers/todo_router");
 const eventsRouter = require("./routers/eventsRouter");
@@ -1073,11 +1071,6 @@ app.use(`${apiPrefix}/allproposal`, logWorkflowAction, newProposalWorkflowRoutes
 // Comment/Annotation routes
 const commentRoutes = require('./routers/commentRoutes');
 app.use(`${apiPrefix}`, commentRoutes);
-// MSSQL routes (optional): mount when MSSQL is configured
-// Dedicated route for SalaryTable MSSQL table (mount before generic mssql routes)
-app.use(`${apiPrefix}/mssql/salarytable`, mssqlSalaryTableRoutes);
-// MSSQL routes (optional): mount when MSSQL is configured
-app.use(`${apiPrefix}/mssql`, mssqlRoutes);
 // Only register debug routes in development / when explicitly allowed
 if (
   process.env.DEBUG_MODE === "true" ||
