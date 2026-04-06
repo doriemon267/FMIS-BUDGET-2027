@@ -240,7 +240,7 @@ const HomePage = () => {
   };
 
   const userRoles = Array.isArray(currentUser?.Roles) ? currentUser.Roles : currentUser?.Roles ? [currentUser.Roles] : [];
-  const isPreparer = userRoles.includes('BUDGET PREPARER');
+  const isPreparer = userRoles.includes('BUDGET_PREPARER');
 
   let userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
   let userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];

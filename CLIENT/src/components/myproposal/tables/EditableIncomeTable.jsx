@@ -73,7 +73,7 @@ const EditableIncomeTable = ({ data = [], onChange, discountSettings = null, reg
     });
 
     const hasRolePermission = normalizedRoles.some((role) =>
-      role.includes('BUDGET OFFICER') || role.includes('BUDGET MANAGER') || role.includes('BUDGET COORDINATOR')
+      role.includes('BUDGET_OFFICER') || role.includes('BUDGET_MANAGER') || role.includes('BUDGET_COORDINATOR')
     );
 
     // Also check workflow roles for Budget Coordinators (divisionapprover) and Preparers (divisioncreator)

@@ -275,7 +275,7 @@ const AllProposalsPage = () => {
 
     // Check if user is Budget Officer
     const userRoles = currentUser?.Roles || [];
-    if (!userRoles.includes('BUDGET OFFICER')) {
+    if (!userRoles.includes('BUDGET_OFFICER')) {
       toast.error('Only Budget Officers can perform bulk approvals.');
       return;
     }

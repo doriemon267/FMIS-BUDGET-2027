@@ -409,7 +409,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         if (!workflowRoles || workflowRoles.length === 0) {
           // Determine workflow roles based on user's main roles
           const userMainRoles = userRoles || [];
-          if (userMainRoles.includes('BUDGET PREPARER')) {
+          if (userMainRoles.includes('BUDGET_PREPARER') || userMainRoles.includes('BUDGET PREPARER')) {
             // BUDGET PREPARER: Division or Office creator based on assignment level
             if (assignmentDoc.assignmentLevel === 'DIVISION' || assignmentDoc.assignmentLevel === 'RESPONSIBILITY_CENTER') {
               workflowRoles = ['divisionCreator'];
@@ -418,7 +418,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
             } else {
               workflowRoles = ['divisionCreator']; // Default to division creator
             }
-          } else if (userMainRoles.includes('BUDGET REVIEWER')) {
+          } else if (userMainRoles.includes('BUDGET_REVIEWER') || userMainRoles.includes('BUDGET REVIEWER')) {
             workflowRoles = ['divisionReviewer'];
           } else if (userMainRoles.includes('APPROVER')) {
             if (assignmentDoc.assignmentLevel === 'DIVISION' || assignmentDoc.assignmentLevel === 'RESPONSIBILITY_CENTER') {
@@ -508,7 +508,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         defaultWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator','superAdmin', 'regionFinalVerifier'];
       }
       // Special handling for BUDGET PREPARER - give them DIVISION scope and creator permissions
-      else if (userRoles.includes('BUDGET PREPARER')) {
+      else if (userRoles.includes('BUDGET_PREPARER') || userRoles.includes('BUDGET PREPARER')) {
         defaultScope = 'DIVISION';
         defaultRolePermissions = {
           CreateProposals: true,
@@ -523,7 +523,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         defaultWorkflowRoles = ['divisionCreator'];
       }
       // Special handling for BUDGET REVIEWER - give them DIVISION scope and reviewer permissions
-      else if (userRoles.includes('BUDGET REVIEWER')) {
+      else if (userRoles.includes('BUDGET_REVIEWER') || userRoles.includes('BUDGET REVIEWER')) {
         defaultScope = 'DIVISION';
         defaultRolePermissions = {
           CreateProposals: false,
