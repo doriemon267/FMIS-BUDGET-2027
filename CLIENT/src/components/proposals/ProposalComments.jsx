@@ -119,7 +119,7 @@ const ProposalComments = ({ proposalId, onCommentAdded }) => {
   const canEdit = (comment) => {
     return (
       currentUser?.Id === comment.userId ||
-      currentUser?.Roles?.includes('SUPER ADMIN')
+      currentUser?.Roles?.includes('SUPER_ADMIN')
     );
   };
 

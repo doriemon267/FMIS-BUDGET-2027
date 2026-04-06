@@ -16,7 +16,7 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
 
   // ✅ Allow users without hierarchical access if they have specific job roles
   const userJobRoles = currentUser.Roles || [];
-  const staffRolesWithoutAssignment = ['BUDGET PLANNING ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  const staffRolesWithoutAssignment = ['BUDGET_PLANNING_ANALYST', 'BUDGET_MANAGER', 'BUDGET_OFFICER'];
   const hasStaffRole = userJobRoles.some(role => staffRolesWithoutAssignment.includes(role));
   
   // If no hierarchical access and not a staff role, deny access
@@ -69,8 +69,8 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   }
 
   // ✅ Check job position Roles for budget staff
-  const budgetAdminRoles = ['SUPER ADMIN'];
-  const budgetStaffRoles = ['BUDGET PLANNING ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  const budgetAdminRoles = ['SUPER_ADMIN'];
+  const budgetStaffRoles = ['BUDGET_PLANNING_ANALYST', 'BUDGET_MANAGER', 'BUDGET_OFFICER'];
   
   const isBudgetAdmin = userJobRoles.some(role => budgetAdminRoles.includes(role));
   const isBudgetStaff = userJobRoles.some(role => budgetStaffRoles.includes(role));
@@ -90,10 +90,10 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   
   // Also check for workflow roles from Roles array
   const workflowRolesFromJobRoles = {
-    'BUDGET PREPARER': 'preparer',
-    'BUDGET REVIEWER': 'reviewer',
-    'BUDGET APPROVER': 'approver',
-    'OVERALL BUDGET APPROVER': 'overallBudgetApprover'
+    'BUDGET_PREPARER': 'preparer',
+    'BUDGET_REVIEWER': 'reviewer',
+    'BUDGET_APPROVER': 'approver',
+    'OVERALL_BUDGET_APPROVER': 'overallBudgetApprover'
   };
   
   userJobRoles.forEach(jobRole => {
@@ -104,7 +104,7 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   });
   
   // If user is OVERALL BUDGET APPROVER, also add superAdmin role for access to reports, settings, etc.
-  if (userJobRoles.includes('OVERALL BUDGET APPROVER') && !effectiveWorkflowRoles.includes('superAdmin')) {
+  if (userJobRoles.includes('OVERALL_BUDGET_APPROVER') && !effectiveWorkflowRoles.includes('superAdmin')) {
     effectiveWorkflowRoles.push('superAdmin');
   }
 

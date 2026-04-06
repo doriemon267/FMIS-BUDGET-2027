@@ -71,9 +71,9 @@ const ComprehensiveReportsPage = () => {
     currentUser?.hierarchicalAccess?.scope === "BUDGET_AND_REVENUE_DIVISION" ||
     currentUser?.hierarchicalAccess?.assignmentLevel === "BUDGET_AND_REVENUE_DIVISION" ||
     roles.some((r) => String(r).toUpperCase().includes("BRD")) ||
-    roles.includes("BUDGET OFFICER") ||
-    roles.includes("BUDGET MANAGER") ||
-    roles.includes("BUDGET PLANNING ANALYST");
+    roles.includes("BUDGET_OFFICER") ||
+    roles.includes("BUDGET_MANAGER") ||
+    roles.includes("BUDGET_PLANNING_ANALYST");
   
   // Get user's assigned office/department or responsibility center/division
   const userDepartmentObj = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0];
