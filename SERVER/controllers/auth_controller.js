@@ -185,8 +185,33 @@ exports.getUser = async (req, res) => {
       user.mail ??
       null;
 
+    // Whitelist only the fields the client needs — never spread the full decoded
+    // token object, as it contains sensitive fields (BirthDate, Gender,
+    // ProfilePicture base64, raw Username array with embedded email, etc.)
+    // that must not be exposed in the browser Network tab.
+    const resolvedId = user.particularID ?? user.Id ?? user.id ?? user.userId ?? null;
+    // Username[0] is the employee/user code; Username[1] is the email — only expose [0]
+    const primaryUsername = Array.isArray(user.Username) ? user.Username[0] : (user.Username ?? user.UserName ?? user.userName ?? null);
     const userResponse = {
-      ...user,
+      id: resolvedId,
+      Id: resolvedId,
+      userId: resolvedId,
+      particularID: resolvedId,
+      particularId: resolvedId,
+      particular: resolvedId,
+      // Single username string (employee code only, no email)
+      Username: primaryUsername ? [primaryUsername] : [],
+      userName: primaryUsername,
+      firstName: user.FirstName ?? null,
+      lastName: user.LastName ?? null,
+      middleName: user.MiddleName ?? null,
+      // Keep PascalCase variants the UI components already reference
+      FirstName: user.FirstName ?? null,
+      LastName: user.LastName ?? null,
+      MiddleName: user.MiddleName ?? null,
+      Suffix: user.Suffix ?? null,
+      region: user.region ?? user.Region ?? null,
+      Region: user.region ?? user.Region ?? null,
       Roles: roles,
       email: niaEmail,
     };
@@ -264,10 +289,13 @@ exports.getUser = async (req, res) => {
 
     console.log("[AUTH][GET-USER] Sending user response payload (safe fields only).");
 
-    // Include token so client can send it to budget API when auth and budget are different origins
-    const out = { user: userResponse };
-    if (req.authToken) out.token = req.authToken;
-    res.json(out);
+    // Deliver token via response header instead of body so it does not appear
+    // in the Network > Preview panel (JSON body). The client reads it from
+    // the X-Auth-Token header for cross-origin budget API calls.
+    if (req.authToken) {
+      res.setHeader("X-Auth-Token", req.authToken);
+    }
+    res.json({ user: userResponse });
   } catch (e) {
     console.error("[AUTH][GET-USER] Error while resolving user:", e);
     res.status(500).json({ error: "Server error" });

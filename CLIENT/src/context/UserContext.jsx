@@ -114,7 +114,9 @@ const UserProvider = ({ children }) => {
   const handleSetUserInitialization = async () => {
     setUnauthorizedSuperAdmin(false);
     const res = await api.get("/api/get-user");
-    if (res.data?.token) setAuthToken(res.data.token);
+    // Token is delivered via X-Auth-Token header (not body) to avoid exposure in Network preview
+    const headerToken = res.headers?.["x-auth-token"] || res.headers?.["X-Auth-Token"];
+    if (headerToken) setAuthToken(headerToken);
     try {
       const fullUser = await enrichUserWithRoles(res.data.user);
       setDevUser(fullUser);
@@ -196,7 +198,8 @@ const UserProvider = ({ children }) => {
         setUnauthorizedSuperAdmin(false);
         const res = await api.get("/api/get-user");
         if (res.data.user) {
-          if (res.data.token) setAuthToken(res.data.token);
+          const headerToken = res.headers?.["x-auth-token"] || res.headers?.["X-Auth-Token"];
+          if (headerToken) setAuthToken(headerToken);
           try {
             const fullUser = await enrichUserWithRoles(res.data.user);
             setDevUser(fullUser);
@@ -246,7 +249,7 @@ const UserProvider = ({ children }) => {
   // Close warning modal when hook resets due to activity
   closeWarningRef.current = () => setShowInactivityWarning(false);
 
-  // Auto-logout kapag walang activity sa loob ng 5 minuto (may warning 1 min bago)
+  // Auto-logout kapag walang activity sa loob ng 15 minuto (may warning 1 min bago)
   useInactivityLogout({
     onLogout: handleLogout,
     onWarning: (reset) => {

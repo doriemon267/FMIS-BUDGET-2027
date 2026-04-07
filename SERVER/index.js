@@ -732,6 +732,8 @@ app.use(
       "X-Reauth-User",
     ],
     optionsSuccessStatus: 204,
+    // Expose custom headers so browser JS can read them cross-origin
+    exposedHeaders: ["X-Auth-Token"],
   }),
 );
 

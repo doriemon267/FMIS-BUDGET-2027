@@ -196,7 +196,8 @@ api.interceptors.response.use(undefined, async (error) => {
       const refreshRes = await authApi.get('/get-user');
       const refreshedUser = refreshRes?.data?.user || null;
       if (refreshedUser) {
-        if (refreshRes?.data?.token) setAuthToken(refreshRes.data.token);
+        const headerToken = refreshRes?.headers?.["x-auth-token"] || refreshRes?.headers?.["X-Auth-Token"];
+        if (headerToken) setAuthToken(headerToken);
         try {
           setDevUser(refreshedUser);
         } catch (e) {
