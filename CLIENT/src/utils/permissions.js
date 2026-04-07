@@ -30,6 +30,15 @@ export function hasPermission(currentUser, permissionKey) {
     return true; // All permissions except ManageSettings (already filtered above)
   }
 
+  // ✅ BUDGET_PREPARER always has CreateProposals and EditOwnProposals regardless of HUA record
+  const preparerRoles = ['BUDGET_PREPARER', 'BUDGET PREPARER'];
+  if (
+    (permissionKey === 'CreateProposals' || permissionKey === 'EditOwnProposals') &&
+    preparerRoles.some(r => userRoles.includes(r))
+  ) {
+    return true;
+  }
+
   // Fallback to hierarchical permissions for backward compatibility
   // Prefer hierarchicalFlags populated by middleware
   const flags = currentUser.hierarchicalFlags || {};
