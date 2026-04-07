@@ -12,6 +12,7 @@ const DisplayRoles = ({ collapsed = false }) => {
   const allRoles = currentUser?.Roles ?? [];
   const roles = budgetRolesOnly(allRoles);
   const displayList = roles.length > 0 ? roles : ["User"];
+  const toDisplay = (r) => String(r).replace(/_/g, " ");
 
   const handleClick = () => {
     setOpen(!open);
@@ -20,7 +21,7 @@ const DisplayRoles = ({ collapsed = false }) => {
   const isOneRole = displayList.length === 1;
   const displayRole = displayList[0]?.toLowerCase()?.includes("super")
     ? "ADMIN"
-    : displayList[0] || "User";
+    : toDisplay(displayList[0]) || "User";
 
   const renderContent = () => (
     <Box
@@ -94,7 +95,7 @@ const DisplayRoles = ({ collapsed = false }) => {
             >
               {displayList.map((role, index) => (
                 <ListItem key={index} sx={{ fontWeight: 600 }}>
-                  {role.toLowerCase().includes("super") ? "Admin" : role}
+                  {role.toLowerCase().includes("super") ? "Admin" : toDisplay(role)}
                 </ListItem>
               ))}
             </List>
