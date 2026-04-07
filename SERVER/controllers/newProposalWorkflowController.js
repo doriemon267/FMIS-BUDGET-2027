@@ -759,7 +759,20 @@ const normalizePreparerAccessStatus = (status) => {
 
 const isPreparerEditableStatus = (status) => {
   const normalizedStatus = normalizePreparerAccessStatus(status);
-  if (!normalizedStatus) return false;
+  // Treat empty/unknown status as non-blocking (no actionable in-process state)
+  if (!normalizedStatus) return true;
+
+  // Terminal completed states — proposal is done, preparer is free to create a new one
+  if (
+    normalizedStatus === 'FINALIZED' ||
+    normalizedStatus === 'APPROVED' ||
+    normalizedStatus === 'COMPLETED' ||
+    normalizedStatus === 'REJECTED' ||
+    normalizedStatus === 'CANCELLED' ||
+    normalizedStatus === 'CLOSED'
+  ) {
+    return true;
+  }
 
   if (
     normalizedStatus === 'DRAFT' ||
