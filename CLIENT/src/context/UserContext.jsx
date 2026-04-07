@@ -134,10 +134,18 @@ const UserProvider = ({ children }) => {
   };
 
   const handleLogout = async () => {
+    // Always clear the budget server's own cookie first (same origin)
+    try {
+      await api.get("/api/logout");
+    } catch (e) {
+      console.warn("Budget server logout error:", e);
+    }
+    // Also call auth server logout when it is a different origin (production or separate auth server)
     try {
       await authApi.get("/logout");
     } catch (e) {
-      console.warn("Backend logout error:", e);
+      // Auth server may not be running in dev — not fatal
+      console.warn("Auth server logout error (non-fatal in dev):", e?.message);
     }
     setAuthToken(null);
     setCurrentUser(null);
@@ -154,7 +162,8 @@ const UserProvider = ({ children }) => {
       const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
       window.location.href = logoffUrl;
     } else {
-      window.location.href = (env("AUTH_CLIENT_URL_DEV") || env("CLIENT_URL_DEV")) + "/login";
+      // Redirect to current server's login page — avoids broken redirect to auth server port
+      window.location.href = window.location.origin + "/login";
     }
   };
 

@@ -214,6 +214,8 @@ exports.getUser = async (req, res) => {
       Region: user.region ?? user.Region ?? null,
       Roles: roles,
       email: niaEmail,
+      // Profile picture is needed for the avatar UI — kept but not logged
+      ProfilePicture: user.ProfilePicture ?? null,
     };
 
     // Sync NIA Email to User collection so workflow notifications use user.Email (NIA) instead of HUA email
@@ -312,7 +314,11 @@ exports.logout = async (req, res) => {
     details: { success: true },
   }).catch(() => {});
 
-  const clearOpts = { httpOnly: true, secure: true, sameSite: "None" };
+  // In dev (HTTP) the browser rejects Secure+SameSite=None — use Lax instead
+  const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+  const clearOpts = IS_PRODUCTION
+    ? { httpOnly: true, secure: true, sameSite: "None" }
+    : { httpOnly: true, secure: false, sameSite: "Lax" };
   if (process.env.COOKIE_DOMAIN) clearOpts.domain = process.env.COOKIE_DOMAIN;
   res.clearCookie("jwtToken", clearOpts);
 
