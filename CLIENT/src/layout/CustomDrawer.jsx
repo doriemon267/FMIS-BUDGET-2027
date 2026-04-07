@@ -517,7 +517,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           link={
             IS_PRODUCTION
               ? "https://fmis.nia.gov.ph/dashboard"
-              : "http://localhost:3000/dashboard"
+              : "http://localhost:5000/dashboard"
           }
         />
 
@@ -528,7 +528,7 @@ const CustomDrawer = ({ collapsed = false }) => {
             link={
               IS_PRODUCTION
                 ? "https://fmis.nia.gov.ph/contacts"
-                : "http://localhost:3000/contacts"
+                : "http://localhost:5000/contacts"
             }
             isAllow
           />
