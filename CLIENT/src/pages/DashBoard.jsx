@@ -298,7 +298,13 @@ const HomePage = () => {
     const isSuperAdminUser = userRolesUpper.some(r => ['SUPER ADMIN', 'SUPER_ADMIN', 'SUPERADMIN'].includes(r));
     if (isSuperAdminUser) return true;
     const hasCreatePermission = hasPermission(currentUser, 'CreateProposals') || hasPermission(currentUser, 'EditOwnProposals');
-    const hasBlockedRole = userRolesUpper.some(r => ['BUDGET MANAGER', 'BUDGET OFFICER', 'BUDGET APPROVER'].includes(r));
+    const hasBlockedRole = userRolesUpper.some(r => [
+      'BUDGET MANAGER', 'BUDGET_MANAGER',
+      'BUDGET OFFICER', 'BUDGET_OFFICER',
+      'BUDGET APPROVER', 'BUDGET_APPROVER',
+      'BUDGET REVIEWER', 'BUDGET_REVIEWER',
+      'BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST',
+    ].includes(r));
     return hasCreatePermission && !hasBlockedRole;
   }, [currentUser, userRolesUpper]);
 
