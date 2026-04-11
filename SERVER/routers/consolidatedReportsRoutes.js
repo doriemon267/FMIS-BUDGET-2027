@@ -17,6 +17,8 @@ router.get('/consolidated-data', hierarchicalAccessControl('read', { allowedFiel
 router.get('/consolidated-summary', hierarchicalAccessControl('read', { allowedFields: ['region'] }), consolidatedReportsController.getConsolidatedSummary);
 // Get available regions for consolidation
 router.get('/available-regions', hierarchicalAccessControl('read', { allowedFields: ['region'] }), consolidatedReportsController.getAvailableRegions);
+// Generate consolidated MOOE PDF report (inline preview)
+router.get('/consolidated-data-pdf', hierarchicalAccessControl('read', { allowedFields: ['region'] }), consolidatedReportsController.getConsolidatedMooePdf);
 // Export consolidated data
 router.get('/export', hierarchicalAccessControl('read', { allowedFields: ['region'] }), consolidatedReportsController.exportConsolidatedData);
 module.exports = router;

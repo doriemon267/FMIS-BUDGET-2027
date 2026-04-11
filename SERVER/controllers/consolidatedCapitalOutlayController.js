@@ -395,7 +395,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const drawTableHeader = () => {
       ensureSpace(2);
       const cellStyle = { fontSize: 8, bold: true, color: '#000000' };
-      pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { fill: '#e0e0e0', stroke: '#4d4c4c', lineWidth: 0.5 });
+      pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.5 });
       pdfDoc.text('REGION',      colX.region  + 3, curY, textOpt(cellStyle));
       pdfDoc.text('UACS CODE',   colX.uacs    + 3, curY, textOpt(cellStyle));
       pdfDoc.text('PROJECT / PARTICULARS', colX.title + 3, curY, textOpt(cellStyle));
@@ -417,7 +417,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       for (const [catName, rows] of Object.entries(categories)) {
         // Category header row
         ensureSpace(2);
-        pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 2, { fill: '#e8f0e8', stroke: '#c0d0c0', lineWidth: 0.3 });
+        pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 2, { stroke: '#c0d0c0', lineWidth: 0.3 });
         pdfDoc.text(regionFirstRow ? regionName : '', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
         pdfDoc.text(catName, colX.uacs + 3, curY, textOpt({ fontSize: 8, bold: true }), { columnWidth: COL_TITLE + COL_UACS - 6, overflow: 'truncate' });
         curY += LINE_H + 2;
@@ -432,9 +432,6 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
           pdfDoc.text(formatPhp(row.income),   colX.income  + COL_INCOME  - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
           pdfDoc.text(formatPhp(row.subsidy),  colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
           pdfDoc.text(formatPhp(row.cost),     colX.cost    + COL_COST    - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
-
-          // Light row divider
-          pdfDoc.rectangle(colX.region, curY + LINE_H - 2, CONTENT_RIGHT - CONTENT_LEFT, 0.3, { fill: '#e0e0e0', stroke: '#e0e0e0' });
           curY += LINE_H;
           catIncome += row.income; catSubsidy += row.subsidy; catCost += row.cost;
         }
@@ -454,11 +451,11 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
     // Grand Total row
     ensureSpace(2);
-    pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { fill: '#375e38', stroke: '#375e38' });
-    pdfDoc.text('GRAND TOTAL', colX.region + 3, curY, textOpt({ fontSize: 9, bold: true, color: '#ffffff' }));
-    pdfDoc.text(formatPhp(grandIncome),  colX.income  + COL_INCOME  - 5, curY, textOpt({ fontSize: 9, bold: true, color: '#ffffff', align: 'right' }));
-    pdfDoc.text(formatPhp(grandSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 9, bold: true, color: '#ffffff', align: 'right' }));
-    pdfDoc.text(formatPhp(grandCost),    colX.cost    + COL_COST    - 5, curY, textOpt({ fontSize: 9, bold: true, color: '#ffffff', align: 'right' }));
+    pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.6 });
+    pdfDoc.text('GRAND TOTAL', colX.region + 3, curY, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text(formatPhp(grandIncome),  colX.income  + COL_INCOME  - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+    pdfDoc.text(formatPhp(grandSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+    pdfDoc.text(formatPhp(grandCost),    colX.cost    + COL_COST    - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
     curY += LINE_H + 6;
 
     // Prepared by / Noted by / Approved by — 3-column signature block

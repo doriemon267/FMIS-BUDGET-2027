@@ -1,10 +1,21 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const MooeProposal = require('../models/mooeProposals');
 const Region = require('../models/Region');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+
+let MuhammaraRecipe;
+try {
+  MuhammaraRecipe = require('muhammara').Recipe;
+} catch (e) {
+  MuhammaraRecipe = null;
+}
 const consolidatedReportsController = {
   // Get consolidated MOOE data for all or specific regions
   getConsolidatedData: async (req, res) => {
     try {
-      const { regions, fiscalYear, budgetType } = req.query;
+      const { regions, fiscalYear, budgetType, department, division } = req.query;
       let regionFilter = {};
       if (regions) {
         const regionList = Array.isArray(regions) ? regions : [regions];
@@ -60,6 +71,12 @@ const consolidatedReportsController = {
       const mooeQuery = { ...regionFilter };
       if (fiscalYear) mooeQuery.fiscalYear = fiscalYear;
       if (budgetType) mooeQuery.budgetType = budgetType;
+      if (department && !mooeQuery.department && !mooeQuery.$and) {
+        mooeQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      }
+      if (division && !mooeQuery.division && !mooeQuery.$and) {
+        mooeQuery.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      }
       // Fetch all MOOE proposals matching the query
       const mooeData = await MooeProposal.find(mooeQuery).lean();
       if (!Array.isArray(mooeData) || mooeData.length === 0) {
@@ -251,6 +268,286 @@ const consolidatedReportsController = {
         message: 'Failed to fetch available regions',
         error: error.message
       });
+    }
+  },
+  // Generate consolidated MOOE PDF report (inline preview)
+  getConsolidatedMooePdf: async (req, res) => {
+    if (!MuhammaraRecipe) {
+      return res.status(500).json({ message: 'PDF generation library (muhammara) is not installed on the server.' });
+    }
+
+    const requesterId = String(req.user?.id || '').trim();
+    if (!requesterId) {
+      return res.status(401).json({ message: 'Authentication is required to generate PDF reports.' });
+    }
+
+    try {
+      const { regions, fiscalYear, budgetType, department, division } = req.query;
+      const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
+
+      let regionFilter = {};
+      if (regionList && regionList.length) {
+        regionFilter.region = { $in: regionList };
+      }
+
+      const accessScope = req.hierarchicalAccess?.scope;
+      const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+      if (accessScope && accessScope !== 'FULL' && accessibleRegionName && !regionFilter.region) {
+        regionFilter.region = accessibleRegionName;
+      }
+      if (accessScope === 'DIVISION') {
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+        if (deptName && !regionFilter.department) regionFilter.department = deptName;
+        if (divName && !regionFilter.division) regionFilter.division = divName;
+      } else if (accessScope === 'DEPARTMENT') {
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        if (deptName && !regionFilter.department) regionFilter.department = deptName;
+      }
+
+      const mooeQuery = { ...regionFilter };
+      if (fiscalYear) mooeQuery.fiscalYear = fiscalYear;
+      if (budgetType) mooeQuery.budgetType = budgetType;
+      if (department && !mooeQuery.department && !mooeQuery.$and) {
+        mooeQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      }
+      if (division && !mooeQuery.division && !mooeQuery.$and) {
+        mooeQuery.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      }
+
+      const mooeData = await MooeProposal.find(mooeQuery).lean();
+
+      let preparedByName = '';
+      let notedByName = '';
+      let approvedByName = '';
+      const workflowRefId = mooeData.map((m) => m.workflowRef).filter(Boolean)[0];
+      if (workflowRefId) {
+        const workflow = await NewProposalWorkflow.findById(workflowRefId)
+          .select('createdByName workflowHistory')
+          .lean();
+        if (workflow) {
+          preparedByName = workflow.createdByName || '';
+          const notedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FORWARDED_TO_APPROVER');
+          if (notedEntry) notedByName = notedEntry.performedByName || '';
+          const approvedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FINALIZED');
+          if (approvedEntry) approvedByName = approvedEntry.performedByName || '';
+        }
+      }
+
+      const grouped = {};
+      mooeData.forEach((item) => {
+        const regionName = item.region || 'Unknown Region';
+        const categoryName = item.sublineItem || 'Uncategorized';
+        if (!grouped[regionName]) grouped[regionName] = {};
+        if (!grouped[regionName][categoryName]) grouped[regionName][categoryName] = [];
+        grouped[regionName][categoryName].push({
+          uacsCode: item.uacsCode || '',
+          accountingTitle: item.accountingTitle || '',
+          income: Number(item.income || 0),
+          subsidy: Number(item.subsidy || 0),
+          amount: Number(item.amount || 0),
+        });
+      });
+
+      const tmpFilePath = path.join(os.tmpdir(), `mooe_report_${Date.now()}.pdf`);
+      const recipeOptions = {
+        version: 1.6,
+        author: 'FMIS-BUDGET',
+        title: 'Consolidated MOOE Report',
+        subject: `MOOE - FY ${fiscalYear || 'All Years'}`,
+      };
+
+      const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
+      const PAGE_WIDTH = 595.28;
+      const PAGE_HEIGHT = 841.89;
+      const MARGIN = 36;
+      const CONTENT_LEFT = MARGIN;
+      const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
+      const LINE_H = 13;
+      let curY = MARGIN;
+      let pageNo = 1;
+
+      const textOpt = (o = {}) => ({ color: '#000000', ...o });
+      const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
+      const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.id || 'Authorized User');
+      const watermarkText = `FMIS CONFIDENTIAL • ${requesterLabel}`;
+      const formatPhp = (n) => Number(n || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
+      const resolveExisting = (...candidates) => {
+        for (const c of candidates) { if (c && fs.existsSync(c)) return c; }
+        return null;
+      };
+      const sealPath = resolveExisting(path.join(__dirname, '../assets/Seal.png'), path.join(process.cwd(), 'SERVER/assets/Seal.png'), path.join(process.cwd(), 'CLIENT/public/Seal.png'));
+      const nialogoPath = resolveExisting(path.join(__dirname, '../assets/logo.png'), path.join(process.cwd(), 'SERVER/assets/logo.png'), path.join(process.cwd(), 'CLIENT/public/logo.png'));
+      const bagongPath = resolveExisting(path.join(__dirname, '../assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png'));
+
+      const drawPage = (isFirst) => {
+        const cx = PAGE_WIDTH / 2;
+        const cy = PAGE_HEIGHT / 2;
+        pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, { stroke: '#4d4c4c', lineWidth: 1.5 });
+        pdfDoc.text(watermarkText, cx, cy - 18, textOpt({ fontSize: 30, color: '#d9d9d9', align: 'center' }));
+        pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, cx, cy + 15, textOpt({ fontSize: 12, color: '#dddddd', align: 'center' }));
+        pdfDoc.text('Annex C (MOOE)', CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
+        pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
+        if (!isFirst) return;
+
+        const logoW = 44, logoH = 44, logoY = MARGIN + 2;
+        if (sealPath) { try { pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoW, height: logoH }); } catch (e) {} }
+        if (nialogoPath) { try { pdfDoc.image(nialogoPath, CONTENT_LEFT + logoW + 5, logoY, { width: logoW, height: logoH }); } catch (e) {} }
+        if (bagongPath) { try { pdfDoc.image(bagongPath, CONTENT_RIGHT - logoW, logoY, { width: logoW, height: logoH }); } catch (e) {} }
+
+        let hy = logoY + 6;
+        pdfDoc.text('Republic of the Philippines', cx, hy, textOpt({ fontSize: 10, align: 'center' }));
+        hy += LINE_H;
+        pdfDoc.text('OFFICE OF THE PRESIDENT', cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+        hy += LINE_H;
+        pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+        hy += LINE_H;
+        let regionLabel = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
+        if (department) regionLabel += `  |  Dept: ${department}`;
+        if (division) regionLabel += `  >  Div: ${division}`;
+        pdfDoc.text(regionLabel, cx, hy, textOpt({ fontSize: 9, align: 'center' }));
+        if (bagongPath) pdfDoc.text('ANNEX C', CONTENT_RIGHT - 62, MARGIN + logoH + 2, textOpt({ fontSize: 13, bold: true }));
+
+        curY = hy + LINE_H * 1.3;
+        pdfDoc.text('CONSOLIDATED MOOE REPORT', cx, curY, textOpt({ fontSize: 15, bold: true, align: 'center' }));
+        curY += LINE_H * 1.2;
+        pdfDoc.text(`Fiscal Year: ${safeStr(fiscalYear) || 'All Years'}  |  Budget Type: ${safeStr(budgetType) || 'All'}`, cx, curY, textOpt({ fontSize: 10, align: 'center' }));
+        curY += LINE_H * 1.8;
+      };
+
+      const startNewPage = () => {
+        pdfDoc.endPage();
+        pageNo += 1;
+        pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+        curY = MARGIN + 20;
+        drawPage(false);
+      };
+      const ensureSpace = (lines = 1) => {
+        if (curY + lines * LINE_H > PAGE_HEIGHT - MARGIN - 22) startNewPage();
+      };
+
+      const COL_REGION = 70;
+      const COL_UACS = 65;
+      const COL_INCOME = 75;
+      const COL_SUBSIDY = 75;
+      const COL_AMOUNT = 75;
+      const COL_TITLE = CONTENT_RIGHT - CONTENT_LEFT - COL_REGION - COL_UACS - COL_INCOME - COL_SUBSIDY - COL_AMOUNT;
+      const colX = {
+        region: CONTENT_LEFT,
+        uacs: CONTENT_LEFT + COL_REGION,
+        title: CONTENT_LEFT + COL_REGION + COL_UACS,
+        income: CONTENT_LEFT + COL_REGION + COL_UACS + COL_TITLE,
+        subsidy: CONTENT_LEFT + COL_REGION + COL_UACS + COL_TITLE + COL_INCOME,
+        amount: CONTENT_LEFT + COL_REGION + COL_UACS + COL_TITLE + COL_INCOME + COL_SUBSIDY,
+      };
+
+      const drawTableHeader = () => {
+        ensureSpace(2);
+        pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.5 });
+        pdfDoc.text('REGION', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        pdfDoc.text('UACS CODE', colX.uacs + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        pdfDoc.text('ACCOUNTING TITLE', colX.title + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        pdfDoc.text('INCOME', colX.income + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        pdfDoc.text('SUBSIDY', colX.subsidy + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        pdfDoc.text('AMOUNT', colX.amount + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        curY += LINE_H + 4;
+      };
+
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+      drawPage(true);
+      drawTableHeader();
+
+      let grandIncome = 0;
+      let grandSubsidy = 0;
+      let grandAmount = 0;
+      for (const [regionName, categories] of Object.entries(grouped)) {
+        let regionFirstRow = true;
+        for (const [catName, rows] of Object.entries(categories)) {
+          ensureSpace(2);
+          pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 2, { stroke: '#c0d0c0', lineWidth: 0.3 });
+          pdfDoc.text(regionFirstRow ? regionName : '', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
+          pdfDoc.text(catName, colX.uacs + 3, curY, textOpt({ fontSize: 8, bold: true }), { columnWidth: COL_TITLE + COL_UACS - 6, overflow: 'truncate' });
+          curY += LINE_H + 2;
+          regionFirstRow = false;
+
+          let catIncome = 0;
+          let catSubsidy = 0;
+          let catAmount = 0;
+          for (const row of rows) {
+            ensureSpace(1);
+            pdfDoc.text(safeStr(row.uacsCode), colX.uacs + 3, curY, textOpt({ fontSize: 7.5 }));
+            pdfDoc.text(safeStr(row.accountingTitle), colX.title + 3, curY, textOpt({ fontSize: 7.5 }), { columnWidth: COL_TITLE - 6, overflow: 'truncate' });
+            pdfDoc.text(formatPhp(row.income), colX.income + COL_INCOME - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
+            pdfDoc.text(formatPhp(row.subsidy), colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
+            pdfDoc.text(formatPhp(row.amount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
+            curY += LINE_H;
+            catIncome += row.income;
+            catSubsidy += row.subsidy;
+            catAmount += row.amount;
+          }
+
+          ensureSpace(1);
+          pdfDoc.rectangle(colX.region, curY - 1, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 1, { stroke: '#9e9e9e', lineWidth: 0.4 });
+          pdfDoc.text(`Subtotal: ${catName}`, colX.uacs + 3, curY, textOpt({ fontSize: 7.5, bold: true }));
+          pdfDoc.text(formatPhp(catIncome), colX.income + COL_INCOME - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
+          pdfDoc.text(formatPhp(catSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
+          pdfDoc.text(formatPhp(catAmount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
+          curY += LINE_H + 2;
+
+          grandIncome += catIncome;
+          grandSubsidy += catSubsidy;
+          grandAmount += catAmount;
+        }
+        curY += 4;
+      }
+
+      ensureSpace(2);
+      pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.6 });
+      pdfDoc.text('GRAND TOTAL', colX.region + 3, curY, textOpt({ fontSize: 9, bold: true }));
+      pdfDoc.text(formatPhp(grandIncome), colX.income + COL_INCOME - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+      pdfDoc.text(formatPhp(grandSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+      pdfDoc.text(formatPhp(grandAmount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+      curY += LINE_H + 6;
+
+      ensureSpace(8);
+      curY += LINE_H * 2;
+      const sigLineW = 140;
+      const leftSig = CONTENT_LEFT + 10;
+      const centerSig = (CONTENT_LEFT + CONTENT_RIGHT) / 2 - sigLineW / 2;
+      const rightSig = CONTENT_RIGHT - sigLineW - 10;
+
+      pdfDoc.text('Prepared by:', leftSig, curY, textOpt({ fontSize: 8 }));
+      pdfDoc.text('Noted by:', centerSig, curY, textOpt({ fontSize: 8 }));
+      pdfDoc.text('Approved by:', rightSig, curY, textOpt({ fontSize: 8 }));
+      curY += LINE_H * 3;
+      pdfDoc.rectangle(leftSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
+      pdfDoc.rectangle(centerSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
+      pdfDoc.rectangle(rightSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
+      curY += LINE_H * 0.6;
+      pdfDoc.text(preparedByName || '________________________', leftSig, curY, textOpt({ fontSize: 8, bold: !!preparedByName }));
+      pdfDoc.text(notedByName || '________________________', centerSig, curY, textOpt({ fontSize: 8, bold: !!notedByName }));
+      pdfDoc.text(approvedByName || '________________________', rightSig, curY, textOpt({ fontSize: 8, bold: !!approvedByName }));
+      curY += LINE_H;
+      pdfDoc.text('Budget Preparer', leftSig, curY, textOpt({ fontSize: 7 }));
+      pdfDoc.text('Budget Reviewer', centerSig, curY, textOpt({ fontSize: 7 }));
+      pdfDoc.text('Budget Approver', rightSig, curY, textOpt({ fontSize: 7 }));
+
+      pdfDoc.endPage().endPDF((err) => {
+        if (err) {
+          if (!res.headersSent) return res.status(500).json({ message: 'Failed to generate PDF', error: err.message });
+          return;
+        }
+        if (res.headersSent) return;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename=Consolidated_MOOE_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
+        const stream = fs.createReadStream(tmpFilePath);
+        stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
+        res.on('finish', () => fs.unlink(tmpFilePath, () => {}));
+        stream.pipe(res);
+      });
+    } catch (error) {
+      console.error('Error generating consolidated MOOE PDF:', error);
+      if (!res.headersSent) return res.status(500).json({ message: 'Failed to generate consolidated MOOE PDF', error: error.message });
     }
   },
   // Export consolidated data (placeholder for future implementation)

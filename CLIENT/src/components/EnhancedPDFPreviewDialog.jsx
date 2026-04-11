@@ -246,10 +246,9 @@ const EnhancedPDFPreviewDialog = ({
     <Dialog 
       open={open} 
       onClose={onClose} 
-      maxWidth="md" 
-      fullWidth
+      fullScreen
       PaperProps={{
-        sx: { minHeight: '60vh' }
+        sx: { minHeight: '100vh' }
       }}
     >
       <DialogTitle 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
@@ -45,12 +45,10 @@ import ReportPageLayout from "./ReportPageLayout";
 
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
-import GetAppIcon from "@mui/icons-material/GetApp";
 import ClearIcon from "@mui/icons-material/Clear";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import PrintIcon from "@mui/icons-material/Print";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import HomeIcon from "@mui/icons-material/Home";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -62,9 +60,30 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   const queryClient = useQueryClient();
   const [expandedRows, setExpandedRows] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState([]);
   const [consolidationType, setConsolidationType] = useState("current");
+  const [organizationStructure, setOrganizationStructure] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [divisions, setDivisions] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedDivision, setSelectedDivision] = useState("");
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const selectedDepartmentName = selectedDepartment
+    ? (departments.find((d) => String(d._id) === String(selectedDepartment))?.Department || selectedDepartment)
+    : "";
+  const selectedDivisionName = selectedDivision
+    ? (divisions.find((d) => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
+    : "";
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl) {
+        window.URL.revokeObjectURL(pdfPreviewUrl);
+      }
+    };
+  }, [pdfPreviewUrl]);
 
   // Fetch active settings
   const { data: activeSettings } = useQuery({
@@ -84,9 +103,92 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
     }
   });
 
+  useEffect(() => {
+    const fetchOrgStructure = async () => {
+      try {
+        const res = await api.get("/api/hierarchical-rbac/organization-structure", { params: { structure: "old" } });
+        setOrganizationStructure(res.data?.data || res.data);
+      } catch (_) {}
+    };
+    fetchOrgStructure();
+  }, []);
+
+  useEffect(() => {
+    if (consolidationType !== "current" || !organizationStructure || !activeRegion) {
+      setDepartments([]);
+      setDivisions([]);
+      setSelectedDepartment("");
+      setSelectedDivision("");
+      return;
+    }
+    const data = organizationStructure;
+    const allDepts = data?.availableUnits?.departments || [];
+    const mappings = data?.mappings || [];
+    const orgRegions = data?.availableUnits?.regions || [];
+    const regionId = String(activeRegion._id || activeRegion.id || "");
+    const selectedRegionName = (activeRegion.regionName || activeRegion.Region || activeRegion.name || "").trim();
+    const norm = (s) => String(s || "").trim().toUpperCase();
+    const rn = norm(selectedRegionName);
+    const isExcludeRegionalAndIMO = rn === "CENTRAL OFFICE" || rn === "MARIIS" || rn === "UPRIIS";
+    const excludeNames = isExcludeRegionalAndIMO ? ["REGIONAL OFFICE", "IRRIGATION MANAGEMENT OFFICE"] : [];
+
+    let regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === regionId);
+    if (regionMappings.length === 0) {
+      regionMappings = mappings.filter((m) => norm(m.regionName) === rn);
+    }
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO) {
+      const matchedOrgRegion = orgRegions.find((r) => norm(r.name || r.Region) === rn);
+      if (matchedOrgRegion) {
+        const altId = String(matchedOrgRegion.id || matchedOrgRegion._id);
+        regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === altId);
+      }
+    }
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO && allDepts.length > 0) {
+      const depts = allDepts
+        .filter((d) => !excludeNames.includes(norm(d.name || d.Department)))
+        .map((d) => ({ _id: d.id || d._id, Department: d.name || d.Department, name: d.name || d.Department }));
+      setDepartments(depts);
+      setSelectedDepartment("");
+      setSelectedDivision("");
+      return;
+    }
+
+    let regionDeptIds = [...new Set(regionMappings.map((m) => m.departmentId?.toString()).filter(Boolean))];
+    if (regionDeptIds.length === 0 && allDepts.length > 0 && !isExcludeRegionalAndIMO) {
+      regionDeptIds = allDepts.map((d) => String(d.id || d._id));
+    }
+    const regionDepts = allDepts.filter((d) => {
+      const id = d.id || d._id;
+      return id && regionDeptIds.includes(String(id)) && !excludeNames.includes(norm(d.name || d.Department));
+    });
+    const depts = regionDepts.map((d) => ({
+      _id: d.id || d._id,
+      Department: d.name || d.Department,
+      name: d.name || d.Department,
+    }));
+    setDepartments(depts);
+    setSelectedDepartment("");
+    setSelectedDivision("");
+  }, [consolidationType, organizationStructure, activeRegion]);
+
+  useEffect(() => {
+    if (consolidationType !== "current" || !selectedDepartment) {
+      setDivisions([]);
+      setSelectedDivision("");
+      return;
+    }
+    const regionId = String(activeRegion?._id || activeRegion?.id || "");
+    const params = new URLSearchParams({ departmentId: selectedDepartment });
+    if (regionId) params.set("regionId", regionId);
+    api.get(`/api/hierarchical-rbac/divisions?${params.toString()}`)
+      .then((res) => setDivisions(res.data?.data || res.data || []))
+      .catch(() => setDivisions([]));
+    setSelectedDivision("");
+  }, [selectedDepartment, consolidationType, activeRegion]);
+
   // Fetch consolidated personnel services data
   const { data: consolidatedData, isLoading: consolidatedLoading } = useQuery({
-    queryKey: ["consolidatedPersonnelServicesReports", activeRegion?.name, selectedRegions, consolidationType, activeSettings?.fiscalYear, activeSettings?.budgetType],
+    queryKey: ["consolidatedPersonnelServicesReports", activeRegion?.name, selectedRegions, consolidationType, activeSettings?.fiscalYear, activeSettings?.budgetType, selectedDepartmentName, selectedDivisionName],
     queryFn: async () => {
       let regionsToFetch;
       if (consolidationType === "current") {
@@ -105,6 +207,12 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
       };
       if (regionsToFetch) {
         apiParams.regions = regionsToFetch;
+      }
+      if (consolidationType === "current" && selectedDepartmentName) {
+        apiParams.department = selectedDepartmentName;
+      }
+      if (consolidationType === "current" && selectedDivisionName) {
+        apiParams.division = selectedDivisionName;
       }
       const response = await api.get("/api/consolidated-reports/personnel-services-data", {
         params: apiParams,
@@ -185,15 +293,10 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
     if (event.target.value !== "custom") {
       setSelectedRegions([]);
     }
-  };
-
-  const handleExport = () => {
-    setExportDialogOpen(true);
-  };
-
-  const handleExportConfirm = (format) => {
-    toast.success(`Exporting consolidated personnel services report as ${format}`);
-    setExportDialogOpen(false);
+    if (event.target.value !== "current") {
+      setSelectedDepartment("");
+      setSelectedDivision("");
+    }
   };
 
   const handleRefresh = () => {
@@ -210,6 +313,52 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   };
 
   const isLoading = consolidatedLoading;
+
+  const closePdfDialog = () => {
+    setPdfDialogOpen(false);
+    if (pdfPreviewUrl) {
+      window.URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl("");
+    }
+  };
+
+  const handlePreviewPdf = async () => {
+    try {
+      setPdfLoading(true);
+      let regionsToFetch;
+      if (consolidationType === "current") {
+        regionsToFetch = [activeRegion?.name].filter(Boolean);
+      } else if (consolidationType === "all") {
+        regionsToFetch = null;
+      } else {
+        regionsToFetch = selectedRegions;
+      }
+
+      const params = new URLSearchParams();
+      const fy = activeSettings?.fiscalYear || new Date().getFullYear();
+      const bt = activeSettings?.budgetType || "INITIAL";
+      if (fy) params.append("fiscalYear", fy);
+      if (bt) params.append("budgetType", bt);
+      if (regionsToFetch && regionsToFetch.length) {
+        regionsToFetch.forEach((r) => params.append("regions", r));
+      }
+      if (consolidationType === "current" && selectedDepartmentName) params.append("department", selectedDepartmentName);
+      if (consolidationType === "current" && selectedDivisionName) params.append("division", selectedDivisionName);
+
+      const response = await api.get(`/api/consolidated-reports/personnel-services-pdf?${params.toString()}`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      if (pdfPreviewUrl) window.URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(url);
+      setPdfDialogOpen(true);
+    } catch (err) {
+      toast.error("Failed to generate PDF preview.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   return (
     <ReportPageLayout
@@ -263,6 +412,53 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
               </FormControl>
             </Grid>
           )}
+
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Department</InputLabel>
+              <Select
+                value={String(selectedDepartment ?? "")}
+                onChange={(e) => {
+                  setSelectedDepartment(e.target.value || "");
+                  setSelectedDivision("");
+                }}
+                label="Department"
+                disabled={consolidationType !== "current" || !activeRegion || departments.length === 0}
+              >
+                <MenuItem value=""><em>All Departments</em></MenuItem>
+                {departments.map((dept, idx) => {
+                  const val = dept._id != null ? String(dept._id) : `dept-${idx}`;
+                  return (
+                    <MenuItem key={val} value={val}>
+                      {dept.Department || dept.name || "Unnamed Department"}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Division</InputLabel>
+              <Select
+                value={String(selectedDivision ?? "")}
+                onChange={(e) => setSelectedDivision(e.target.value || "")}
+                label="Division"
+                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
+              >
+                <MenuItem value=""><em>All Divisions</em></MenuItem>
+                {divisions.map((div, idx) => {
+                  const val = div.name != null && div.name !== "" ? String(div.name) : (div._id != null ? String(div._id) : `div-${idx}`);
+                  return (
+                    <MenuItem key={val} value={val}>
+                      {div.name || "Unnamed Division"}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          </Grid>
           <Grid item xs={12} md={3}>
             <TextField
               fullWidth
@@ -298,11 +494,13 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
               </Button>
               <Button
                 variant="outlined"
-                startIcon={<GetAppIcon />}
-                onClick={handleExport}
+                color="error"
+                startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
+                onClick={handlePreviewPdf}
+                disabled={pdfLoading || isLoading}
                 size="small"
               >
-                Export
+                PDF Preview
               </Button>
               <Button
                 variant="outlined"
@@ -527,42 +725,26 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         </Fade>
       </Paper>
 
-      <Dialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)}>
-        <DialogTitle>Export Consolidated Personnel Services Report</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            Choose the export format for your consolidated personnel services report:
-          </Typography>
-          <FormGroup>
-            <Button
-              variant="outlined"
-              startIcon={<GetAppIcon />}
-              onClick={() => handleExportConfirm('Excel')}
-              sx={{ mb: 1 }}
-            >
-              Export as Excel
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<PictureAsPdfIcon />}
-              onClick={() => handleExportConfirm('PDF')}
-              sx={{ mb: 1 }}
-            >
-              Export as PDF
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<PrintIcon />}
-              onClick={() => handleExportConfirm('Print')}
-            >
-              Print Report
-            </Button>
-          </FormGroup>
+      <Dialog open={pdfDialogOpen} onClose={closePdfDialog} fullScreen>
+        <DialogTitle>Consolidated Personnel Services PDF Preview</DialogTitle>
+        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
+          {pdfPreviewUrl ? (
+            <iframe
+              title="Consolidated Personnel Services PDF Preview"
+              src={pdfPreviewUrl}
+              style={{ width: "100%", height: "100%", border: "none" }}
+            />
+          ) : (
+            <Box sx={{ p: 3 }}>
+              <Typography variant="body2">No PDF preview available.</Typography>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setExportDialogOpen(false)}>Cancel</Button>
+          <Button onClick={closePdfDialog}>Close</Button>
         </DialogActions>
       </Dialog>
+
     </ReportPageLayout>
   );
 };

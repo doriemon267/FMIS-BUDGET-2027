@@ -1,4 +1,15 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+
+let MuhammaraRecipe;
+try {
+  MuhammaraRecipe = require('muhammara').Recipe;
+} catch (e) {
+  MuhammaraRecipe = null;
+}
 // Define the hierarchical structure mapping
 const PERSONNEL_SERVICES_STRUCTURE = {
   "B.1.1": {
@@ -301,8 +312,254 @@ const getStatusOfAppointmentValues = async (req, res) => {
     });
   }
 };
+
+const getConsolidatedPersonnelServicesPdf = async (req, res) => {
+  if (!MuhammaraRecipe) {
+    return res.status(500).json({ message: 'PDF generation library (muhammara) is not installed on the server.' });
+  }
+  const requesterId = String(req.user?.id || '').trim();
+  if (!requesterId) {
+    return res.status(401).json({ message: 'Authentication is required to generate PDF reports.' });
+  }
+
+  try {
+    const { regions, region, fiscalYear, budgetType, department, division } = req.query;
+    const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
+    const query = {};
+    if (regionList && regionList.length) query.region = { $in: regionList };
+    else if (region) query.region = region;
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region && !query.region) {
+      query.region = req.hierarchicalFilters.region;
+    }
+    if (fiscalYear) query.fiscalYear = fiscalYear;
+    if (budgetType) query.budgetType = budgetType;
+    if (department) query.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    if (division) query.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+    const psData = await PersonnelServices.find(query).lean();
+
+    let preparedByName = '';
+    let notedByName = '';
+    let approvedByName = '';
+    const workflowRefId = psData.map((m) => m.workflowRef).filter(Boolean)[0];
+    if (workflowRefId) {
+      const workflow = await NewProposalWorkflow.findById(workflowRefId)
+        .select('createdByName workflowHistory')
+        .lean();
+      if (workflow) {
+        preparedByName = workflow.createdByName || '';
+        const notedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FORWARDED_TO_APPROVER');
+        if (notedEntry) notedByName = notedEntry.performedByName || '';
+        const approvedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FINALIZED');
+        if (approvedEntry) approvedByName = approvedEntry.performedByName || '';
+      }
+    }
+
+    const grouped = {};
+    psData.forEach((employee) => {
+      const regionName = employee.region || 'Unknown Region';
+      if (!grouped[regionName]) grouped[regionName] = {};
+      Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
+        const categoryName = `${categoryKey} ${categoryData.name}`;
+        if (!grouped[regionName][categoryName]) grouped[regionName][categoryName] = {};
+        Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
+          if (!grouped[regionName][categoryName][itemKey]) {
+            grouped[regionName][categoryName][itemKey] = { key: `${categoryKey}.${itemKey}`, name: itemData.name, amount: 0 };
+          }
+          let amount = 0;
+          if (itemData.field) {
+            if (categoryKey === '1' && itemKey === 'a') {
+              if (employee.statusOfAppointment === 'PERMANENT') amount = Number(employee.annualSalary) || 0;
+            } else if (categoryKey === '1' && itemKey === 'b') {
+              if (employee.statusOfAppointment === 'CASUAL') amount = Number(employee.annualSalary) || 0;
+            } else if (itemData.field.includes(',')) {
+              const fields = itemData.field.split(',');
+              amount = fields.reduce((sum, field) => sum + (Number(employee[field.trim()]) || 0), 0);
+            } else {
+              amount = Number(employee[itemData.field]) || 0;
+            }
+          }
+          grouped[regionName][categoryName][itemKey].amount += amount;
+        });
+      });
+    });
+
+    const tmpFilePath = path.join(os.tmpdir(), `ps_report_${Date.now()}.pdf`);
+    const recipeOptions = { version: 1.6, author: 'FMIS-BUDGET', title: 'Consolidated Personnel Services Report' };
+    const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
+
+    const PAGE_WIDTH = 595.28;
+    const PAGE_HEIGHT = 841.89;
+    const MARGIN = 36;
+    const CONTENT_LEFT = MARGIN;
+    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
+    const LINE_H = 13;
+    let curY = MARGIN;
+    let pageNo = 1;
+    const textOpt = (o = {}) => ({ color: '#000000', ...o });
+    const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
+    const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.id || 'Authorized User');
+    const watermarkText = `FMIS CONFIDENTIAL • ${requesterLabel}`;
+    const formatPhp = (n) => Number(n || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
+    const resolveExisting = (...candidates) => {
+      for (const c of candidates) { if (c && fs.existsSync(c)) return c; }
+      return null;
+    };
+    const sealPath = resolveExisting(path.join(__dirname, '../assets/Seal.png'), path.join(process.cwd(), 'SERVER/assets/Seal.png'), path.join(process.cwd(), 'CLIENT/public/Seal.png'));
+    const nialogoPath = resolveExisting(path.join(__dirname, '../assets/logo.png'), path.join(process.cwd(), 'SERVER/assets/logo.png'), path.join(process.cwd(), 'CLIENT/public/logo.png'));
+    const bagongPath = resolveExisting(path.join(__dirname, '../assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png'));
+
+    const drawPage = (isFirst) => {
+      const cx = PAGE_WIDTH / 2;
+      const cy = PAGE_HEIGHT / 2;
+      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, { stroke: '#4d4c4c', lineWidth: 1.5 });
+      pdfDoc.text(watermarkText, cx, cy - 18, textOpt({ fontSize: 30, color: '#d9d9d9', align: 'center' }));
+      pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, cx, cy + 15, textOpt({ fontSize: 12, color: '#dddddd', align: 'center' }));
+      pdfDoc.text('Annex B.1.1 (Personnel Services)', CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
+      if (!isFirst) return;
+
+      const logoW = 44, logoH = 44, logoY = MARGIN + 2;
+      if (sealPath) { try { pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoW, height: logoH }); } catch (e) {} }
+      if (nialogoPath) { try { pdfDoc.image(nialogoPath, CONTENT_LEFT + logoW + 5, logoY, { width: logoW, height: logoH }); } catch (e) {} }
+      if (bagongPath) { try { pdfDoc.image(bagongPath, CONTENT_RIGHT - logoW, logoY, { width: logoW, height: logoH }); } catch (e) {} }
+
+      let hy = logoY + 6;
+      pdfDoc.text('Republic of the Philippines', cx, hy, textOpt({ fontSize: 10, align: 'center' }));
+      hy += LINE_H;
+      pdfDoc.text('OFFICE OF THE PRESIDENT', cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+      hy += LINE_H;
+      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+      hy += LINE_H;
+      let regionLabel = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
+      if (department) regionLabel += `  |  Dept: ${department}`;
+      if (division) regionLabel += `  >  Div: ${division}`;
+      pdfDoc.text(regionLabel, cx, hy, textOpt({ fontSize: 9, align: 'center' }));
+
+      curY = hy + LINE_H * 1.3;
+      pdfDoc.text('CONSOLIDATED PERSONNEL SERVICES REPORT', cx, curY, textOpt({ fontSize: 14, bold: true, align: 'center' }));
+      curY += LINE_H * 1.2;
+      pdfDoc.text(`Fiscal Year: ${safeStr(fiscalYear) || 'All Years'}  |  Budget Type: ${safeStr(budgetType) || 'All'}`, cx, curY, textOpt({ fontSize: 10, align: 'center' }));
+      curY += LINE_H * 1.8;
+    };
+
+    const startNewPage = () => {
+      pdfDoc.endPage();
+      pageNo += 1;
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+      curY = MARGIN + 20;
+      drawPage(false);
+    };
+    const ensureSpace = (lines = 1) => {
+      if (curY + lines * LINE_H > PAGE_HEIGHT - MARGIN - 22) startNewPage();
+    };
+
+    const COL_REGION = 80;
+    const COL_ITEM = 75;
+    const COL_AMOUNT = 90;
+    const COL_PARTICULARS = CONTENT_RIGHT - CONTENT_LEFT - COL_REGION - COL_ITEM - COL_AMOUNT;
+    const colX = {
+      region: CONTENT_LEFT,
+      item: CONTENT_LEFT + COL_REGION,
+      particulars: CONTENT_LEFT + COL_REGION + COL_ITEM,
+      amount: CONTENT_LEFT + COL_REGION + COL_ITEM + COL_PARTICULARS,
+    };
+
+    const drawTableHeader = () => {
+      ensureSpace(2);
+      pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.5 });
+      pdfDoc.text('REGION', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
+      pdfDoc.text('ITEM NO.', colX.item + 3, curY, textOpt({ fontSize: 8, bold: true }));
+      pdfDoc.text('PARTICULARS', colX.particulars + 3, curY, textOpt({ fontSize: 8, bold: true }));
+      pdfDoc.text('AMOUNT', colX.amount + 3, curY, textOpt({ fontSize: 8, bold: true }));
+      curY += LINE_H + 4;
+    };
+
+    pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+    drawPage(true);
+    drawTableHeader();
+
+    let grandAmount = 0;
+    for (const [regionName, categories] of Object.entries(grouped)) {
+      let regionFirstRow = true;
+      for (const [categoryName, itemsMap] of Object.entries(categories)) {
+        ensureSpace(2);
+        pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 2, { stroke: '#c0d0c0', lineWidth: 0.3 });
+        pdfDoc.text(regionFirstRow ? regionName : '', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        pdfDoc.text(categoryName, colX.item + 3, curY, textOpt({ fontSize: 8, bold: true }), { columnWidth: COL_PARTICULARS + COL_ITEM - 6, overflow: 'truncate' });
+        curY += LINE_H + 2;
+        regionFirstRow = false;
+
+        let catTotal = 0;
+        Object.values(itemsMap).forEach((item) => {
+          ensureSpace(1);
+          pdfDoc.text(safeStr(item.key), colX.item + 3, curY, textOpt({ fontSize: 7.5 }));
+          pdfDoc.text(safeStr(item.name), colX.particulars + 3, curY, textOpt({ fontSize: 7.5 }), { columnWidth: COL_PARTICULARS - 6, overflow: 'truncate' });
+          pdfDoc.text(formatPhp(item.amount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
+          curY += LINE_H;
+          catTotal += Number(item.amount || 0);
+        });
+
+        ensureSpace(1);
+        pdfDoc.rectangle(colX.region, curY - 1, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 1, { stroke: '#9e9e9e', lineWidth: 0.4 });
+        pdfDoc.text(`Subtotal: ${categoryName}`, colX.item + 3, curY, textOpt({ fontSize: 7.5, bold: true }));
+        pdfDoc.text(formatPhp(catTotal), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
+        curY += LINE_H + 2;
+        grandAmount += catTotal;
+      }
+      curY += 4;
+    }
+
+    ensureSpace(2);
+    pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.6 });
+    pdfDoc.text('GRAND TOTAL', colX.region + 3, curY, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text(formatPhp(grandAmount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+    curY += LINE_H + 6;
+
+    ensureSpace(8);
+    curY += LINE_H * 2;
+    const sigLineW = 140;
+    const leftSig = CONTENT_LEFT + 10;
+    const centerSig = (CONTENT_LEFT + CONTENT_RIGHT) / 2 - sigLineW / 2;
+    const rightSig = CONTENT_RIGHT - sigLineW - 10;
+    pdfDoc.text('Prepared by:', leftSig, curY, textOpt({ fontSize: 8 }));
+    pdfDoc.text('Noted by:', centerSig, curY, textOpt({ fontSize: 8 }));
+    pdfDoc.text('Approved by:', rightSig, curY, textOpt({ fontSize: 8 }));
+    curY += LINE_H * 3;
+    pdfDoc.rectangle(leftSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
+    pdfDoc.rectangle(centerSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
+    pdfDoc.rectangle(rightSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
+    curY += LINE_H * 0.6;
+    pdfDoc.text(preparedByName || '________________________', leftSig, curY, textOpt({ fontSize: 8, bold: !!preparedByName }));
+    pdfDoc.text(notedByName || '________________________', centerSig, curY, textOpt({ fontSize: 8, bold: !!notedByName }));
+    pdfDoc.text(approvedByName || '________________________', rightSig, curY, textOpt({ fontSize: 8, bold: !!approvedByName }));
+    curY += LINE_H;
+    pdfDoc.text('Budget Preparer', leftSig, curY, textOpt({ fontSize: 7 }));
+    pdfDoc.text('Budget Reviewer', centerSig, curY, textOpt({ fontSize: 7 }));
+    pdfDoc.text('Budget Approver', rightSig, curY, textOpt({ fontSize: 7 }));
+
+    pdfDoc.endPage().endPDF((err) => {
+      if (err) {
+        if (!res.headersSent) return res.status(500).json({ message: 'Failed to generate PDF', error: err.message });
+        return;
+      }
+      if (res.headersSent) return;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename=Consolidated_PS_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
+      const stream = fs.createReadStream(tmpFilePath);
+      stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
+      res.on('finish', () => fs.unlink(tmpFilePath, () => {}));
+      stream.pipe(res);
+    });
+  } catch (error) {
+    console.error('Error generating consolidated Personnel Services PDF:', error);
+    if (!res.headersSent) return res.status(500).json({ message: 'Failed to generate consolidated Personnel Services PDF', error: error.message });
+  }
+};
+
 module.exports = {
   getConsolidatedPersonnelServicesData,
   getAvailableRegions,
-  getStatusOfAppointmentValues
+  getStatusOfAppointmentValues,
+  getConsolidatedPersonnelServicesPdf
 };

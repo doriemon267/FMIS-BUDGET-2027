@@ -9,7 +9,8 @@ const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 const {
   getConsolidatedPersonnelServicesData,
   getAvailableRegions,
-  getStatusOfAppointmentValues
+  getStatusOfAppointmentValues,
+  getConsolidatedPersonnelServicesPdf
 } = require('../controllers/consolidatedPersonnelServicesController');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 // Apply authentication middleware to all routes in this router
@@ -18,4 +19,5 @@ router.use(tokenMiddleware);
 router.get('/personnel-services-data', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getConsolidatedPersonnelServicesData);
 router.get('/available-regions-ps', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAvailableRegions);
 router.get('/debug-status-values', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getStatusOfAppointmentValues);
+router.get('/personnel-services-pdf', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), getConsolidatedPersonnelServicesPdf);
 module.exports = router;

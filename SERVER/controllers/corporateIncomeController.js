@@ -235,7 +235,7 @@ exports.getCorporateIncome = async (req, res) => {
 // Get consolidated corporate income data
 exports.getConsolidatedCorporateIncome = async (req, res) => {
   try {
-    const { fiscalYear, budgetType } = req.query;
+    const { fiscalYear, budgetType, department, division } = req.query;
     if (!fiscalYear || !budgetType) {
       return res.status(400).json({ error: 'Fiscal year and budget type are required' });
     }
@@ -260,6 +260,12 @@ exports.getConsolidatedCorporateIncome = async (req, res) => {
       } else {
         baseFilter = { ...baseFilter, ...hierarchicalFilters };
       }
+    }
+    if (department && !baseFilter.department) {
+      baseFilter.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    }
+    if (division && !baseFilter.division) {
+      baseFilter.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     }
     const regionsResult = await Income.distinct('region', baseFilter);
     const regions = regionsResult.sort();

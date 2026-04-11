@@ -33,9 +33,8 @@ import {
   IconButton,
 } from '@mui/material';
 import { 
-  Download, 
   Refresh, 
-  PictureAsPdf, 
+  PictureAsPdf,
   ExpandMore,
   ExpandLess,
   Summarize,
@@ -47,8 +46,6 @@ import { useRegion } from '../context/RegionContext';
 import IncomeReportSummary from '../components/reports/IncomeReportSummary';
 import EnhancedPDFPreviewDialog from '../components/EnhancedPDFPreviewDialog';
 import ReportPageLayout from '../components/reports/ReportPageLayout';
-// Import xlsx with named exports
-import * as XLSX from 'xlsx';
 
 const ConsolidatedCorporateIncomePage = () => {
   const [loading, setLoading] = useState(false);
@@ -65,6 +62,17 @@ const ConsolidatedCorporateIncomePage = () => {
   const [showPercentages, setShowPercentages] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState(new Set());
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [organizationStructure, setOrganizationStructure] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [divisions, setDivisions] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [selectedDivision, setSelectedDivision] = useState('');
+  const selectedDepartmentName = selectedDepartment
+    ? (departments.find((d) => String(d._id) === String(selectedDepartment))?.Department || selectedDepartment)
+    : '';
+  const selectedDivisionName = selectedDivision
+    ? (divisions.find((d) => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
+    : '';
   
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -158,6 +166,97 @@ const ConsolidatedCorporateIncomePage = () => {
     fetchFiscalYears();
   }, []);
 
+  useEffect(() => {
+    const fetchOrgStructure = async () => {
+      try {
+        const res = await api.get('/api/hierarchical-rbac/organization-structure', { params: { structure: 'old' } });
+        setOrganizationStructure(res.data?.data || res.data);
+      } catch (_) {}
+    };
+    fetchOrgStructure();
+  }, []);
+
+  useEffect(() => {
+    if (!organizationStructure || selectedRegions === 'all') {
+      setDepartments([]);
+      setDivisions([]);
+      setSelectedDepartment('');
+      setSelectedDivision('');
+      return;
+    }
+
+    const selectedRegionName = String(selectedRegions || '').trim();
+    if (!selectedRegionName) {
+      setDepartments([]);
+      setSelectedDepartment('');
+      setSelectedDivision('');
+      return;
+    }
+
+    const data = organizationStructure;
+    const allDepts = data?.availableUnits?.departments || [];
+    const mappings = data?.mappings || [];
+    const orgRegions = data?.availableUnits?.regions || [];
+    const norm = (s) => String(s || '').trim().toUpperCase();
+    const rn = norm(selectedRegionName);
+    const isExcludeRegionalAndIMO = rn === 'CENTRAL OFFICE' || rn === 'MARIIS' || rn === 'UPRIIS';
+    const excludeNames = isExcludeRegionalAndIMO ? ['REGIONAL OFFICE', 'IRRIGATION MANAGEMENT OFFICE'] : [];
+
+    let regionMappings = mappings.filter((m) => norm(m.regionName) === rn);
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO) {
+      const matchedOrgRegion = orgRegions.find((r) => norm(r.name || r.Region) === rn);
+      if (matchedOrgRegion) {
+        const altId = String(matchedOrgRegion.id || matchedOrgRegion._id);
+        regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === altId);
+      }
+    }
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO && allDepts.length > 0) {
+      const depts = allDepts
+        .filter((d) => !excludeNames.includes(norm(d.name || d.Department)))
+        .map((d) => ({ _id: d.id || d._id, Department: d.name || d.Department, name: d.name || d.Department }));
+      setDepartments(depts);
+      setSelectedDepartment('');
+      setSelectedDivision('');
+      return;
+    }
+
+    let regionDeptIds = [...new Set(regionMappings.map((m) => m.departmentId?.toString()).filter(Boolean))];
+    if (regionDeptIds.length === 0 && allDepts.length > 0 && !isExcludeRegionalAndIMO) {
+      regionDeptIds = allDepts.map((d) => String(d.id || d._id));
+    }
+    const regionDepts = allDepts.filter((d) => {
+      const id = d.id || d._id;
+      return id && regionDeptIds.includes(String(id)) && !excludeNames.includes(norm(d.name || d.Department));
+    });
+    const depts = regionDepts.map((d) => ({
+      _id: d.id || d._id,
+      Department: d.name || d.Department,
+      name: d.name || d.Department,
+    }));
+    setDepartments(depts);
+    setSelectedDepartment('');
+    setSelectedDivision('');
+  }, [organizationStructure, selectedRegions]);
+
+  useEffect(() => {
+    if (!selectedDepartment || selectedRegions === 'all') {
+      setDivisions([]);
+      setSelectedDivision('');
+      return;
+    }
+    const norm = (s) => String(s || '').trim().toUpperCase();
+    const selectedRegionName = String(selectedRegions || '').trim();
+    const orgRegions = organizationStructure?.availableUnits?.regions || [];
+    const matchedOrgRegion = orgRegions.find((r) => norm(r.name || r.Region) === norm(selectedRegionName));
+    const regionId = String(matchedOrgRegion?.id || matchedOrgRegion?._id || '');
+    const params = new URLSearchParams({ departmentId: selectedDepartment });
+    if (regionId) params.set('regionId', regionId);
+    api.get(`/api/hierarchical-rbac/divisions?${params.toString()}`)
+      .then((res) => setDivisions(res.data?.data || res.data || []))
+      .catch(() => setDivisions([]));
+    setSelectedDivision('');
+  }, [selectedDepartment, selectedRegions, organizationStructure]);
+
   // Fetch report data
   const fetchReportData = async () => {
     if (!fiscalYear) {
@@ -174,7 +273,9 @@ const ConsolidatedCorporateIncomePage = () => {
         fiscalYear,
         budgetType,
         // Ensure 'all' to bypass region interceptor filter when viewing all regions
-        ...(selectedRegions === 'all' ? { region: 'all' } : {})
+        ...(selectedRegions === 'all' ? { region: 'all' } : {}),
+        ...(selectedDepartmentName && selectedRegions !== 'all' ? { department: selectedDepartmentName } : {}),
+        ...(selectedDivisionName && selectedRegions !== 'all' ? { division: selectedDivisionName } : {})
       };
 
       const response = await api.get('reports/consolidated-corporate-income', {
@@ -212,208 +313,6 @@ const ConsolidatedCorporateIncomePage = () => {
     }
   };
 
-  // Export to Excel
-  const handleExportToExcel = () => {
-    if (!reportData) return;
-
-    try {
-      // Create workbook
-      const wb = XLSX.utils.book_new();
-      
-      // Export hierarchical worksheet (categories with subcategories)
-      const hierarchicalWsData = [];
-      
-      // Add title row
-      hierarchicalWsData.push([`Consolidated Corporate Income Report - Fiscal Year ${reportData.fiscalYear} - ${reportData.budgetType}`]);
-      hierarchicalWsData.push([]); // Empty row
-      
-      // Add header row with regions
-      const hierarchicalHeaderRow = ['Income Category / Subcategory'];
-      reportData.regions.forEach(region => {
-        hierarchicalHeaderRow.push(region);
-      });
-      hierarchicalHeaderRow.push('Total');
-      hierarchicalWsData.push(hierarchicalHeaderRow);
-      
-      // Add data rows with hierarchical structure
-      reportData.hierarchicalData.forEach(category => {
-        // Add category row
-        const categoryRow = [category.name];
-        let categoryTotal = 0;
-        
-        reportData.regions.forEach(region => {
-          const amount = reportData.regionData[region]?.categoryAmounts[category.id] || 0;
-          // Use actual number values for Excel
-          categoryRow.push(amount);
-          categoryTotal += amount;
-        });
-        
-        // Use actual number value for the total
-        categoryRow.push(categoryTotal);
-        hierarchicalWsData.push(categoryRow);
-        
-        // Add subcategory rows
-        category.subcategories.forEach(subcategory => {
-          const subcategoryRow = [`    ${subcategory.name}`]; // Indent with spaces
-          let subcategoryTotal = 0;
-          
-          reportData.regions.forEach(region => {
-            const amount = reportData.regionData[region]?.subcategoryAmounts[subcategory.id] || 0;
-            // Use actual number values for Excel
-            subcategoryRow.push(amount);
-            subcategoryTotal += amount;
-          });
-          
-          // Use actual number value for the total
-          subcategoryRow.push(subcategoryTotal);
-          hierarchicalWsData.push(subcategoryRow);
-        });
-      });
-      
-      // Add total row
-      const totalRow = ['TOTAL'];
-      reportData.regions.forEach(region => {
-        // Use actual number values for Excel
-        totalRow.push(reportData.regionData[region]?.total || 0);
-      });
-      totalRow.push(reportData.grandTotal);
-      hierarchicalWsData.push(totalRow);
-      
-      // Create hierarchical worksheet
-      const hierarchicalWs = XLSX.utils.aoa_to_sheet(hierarchicalWsData);
-      
-      // Set column widths
-      const hierarchicalColWidths = [
-        { wch: 40 }, // Income Category / Subcategory
-        ...reportData.regions.map(() => ({ wch: 15 })), // Region columns
-        { wch: 15 }, // Total column
-      ];
-      hierarchicalWs['!cols'] = hierarchicalColWidths;
-      
-      // Apply number formatting to cells (starting from row 3, which is the data rows)
-      const hierarchicalRange = XLSX.utils.decode_range(hierarchicalWs['!ref']);
-      for (let R = 3; R <= hierarchicalRange.e.r; R++) {
-        for (let C = 1; C <= hierarchicalRange.e.c; C++) {
-          const cell_address = { c: C, r: R };
-          const cell_ref = XLSX.utils.encode_cell(cell_address);
-          if (hierarchicalWs[cell_ref] && typeof hierarchicalWs[cell_ref].v === 'number') {
-            hierarchicalWs[cell_ref].z = '#,##0.00'; // Apply number format with 2 decimal places
-          }
-        }
-      }
-      
-      // Add hierarchical worksheet to workbook
-      XLSX.utils.book_append_sheet(wb, hierarchicalWs, 'Consolidated Income');
-      
-      // Export subcategories worksheet with tree view
-      // Group subcategories by parent category for tree view
-      const categoriesWithSubcategories = [];
-      if (reportData.hierarchicalData) {
-        reportData.hierarchicalData.forEach(category => {
-          if (category.subcategories && category.subcategories.length > 0) {
-            categoriesWithSubcategories.push({
-              ...category,
-              subcategories: category.subcategories
-            });
-          }
-        });
-      }
-      
-      if (categoriesWithSubcategories.length > 0) {
-        const subcategoryWsData = [];
-        
-        // Add title row
-        subcategoryWsData.push([`Consolidated Corporate Income Report - Subcategory Details (Tree View) - Fiscal Year ${reportData.fiscalYear} - ${reportData.budgetType}`]);
-        subcategoryWsData.push([]); // Empty row
-        
-        // Add header row with regions
-        const subcategoryHeaderRow = ['Income Category / Subcategory (Tree View)'];
-        reportData.regions.forEach(region => {
-          subcategoryHeaderRow.push(region);
-        });
-        subcategoryHeaderRow.push('Total');
-        subcategoryWsData.push(subcategoryHeaderRow);
-        
-        // Add data rows with tree structure
-        categoriesWithSubcategories
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .forEach(category => {
-            // Add parent category row
-            const categoryRow = [`📁 ${category.name}`];
-            let categoryTotal = 0;
-            
-            reportData.regions.forEach(region => {
-              const amount = reportData.regionData[region]?.categoryAmounts[category.id] || 0;
-              categoryRow.push(amount);
-              categoryTotal += amount;
-            });
-            
-            categoryRow.push(categoryTotal);
-            subcategoryWsData.push(categoryRow);
-            
-            // Add subcategory rows
-            category.subcategories
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .forEach(subcategory => {
-                const subcategoryRow = [`    └── 📄 ${subcategory.name}`];
-                let subcategoryTotal = 0;
-                
-                reportData.regions.forEach(region => {
-                  const amount = reportData.regionData[region]?.subcategoryAmounts[subcategory.id] || 0;
-                  subcategoryRow.push(amount);
-                  subcategoryTotal += amount;
-                });
-                
-                subcategoryRow.push(subcategoryTotal);
-                subcategoryWsData.push(subcategoryRow);
-              });
-          });
-        
-        // Add total row
-        const subcategoryTotalRow = ['🏆 GRAND TOTAL'];
-        reportData.regions.forEach(region => {
-          // Use actual number values for Excel
-          subcategoryTotalRow.push(reportData.regionData[region]?.total || 0);
-        });
-        subcategoryTotalRow.push(reportData.grandTotal);
-        subcategoryWsData.push(subcategoryTotalRow);
-        
-        // Create subcategory worksheet
-        const subcategoryWs = XLSX.utils.aoa_to_sheet(subcategoryWsData);
-        
-        // Set column widths
-        const subcategoryColWidths = [
-          { wch: 40 }, // Tree view column (wider for indentation)
-          ...reportData.regions.map(() => ({ wch: 15 })), // Region columns
-          { wch: 15 }, // Total column
-        ];
-        subcategoryWs['!cols'] = subcategoryColWidths;
-        
-        // Apply number formatting to cells (starting from row 3, which is the data rows)
-        const subcategoryRange = XLSX.utils.decode_range(subcategoryWs['!ref']);
-        for (let R = 3; R <= subcategoryRange.e.r; R++) {
-          for (let C = 1; C <= subcategoryRange.e.c; C++) { // Start from column 1 (after tree view column)
-            const cell_address = { c: C, r: R };
-            const cell_ref = XLSX.utils.encode_cell(cell_address);
-            if (subcategoryWs[cell_ref] && typeof subcategoryWs[cell_ref].v === 'number') {
-              subcategoryWs[cell_ref].z = '#,##0.00'; // Apply number format with 2 decimal places
-            }
-          }
-        }
-        
-        // Add subcategory worksheet to workbook
-        XLSX.utils.book_append_sheet(wb, subcategoryWs, 'Subcategory Details');
-      }
-      
-      // Generate Excel file and trigger download
-      XLSX.writeFile(wb, `Consolidated_Corporate_Income_${reportData.fiscalYear}_${reportData.budgetType}.xlsx`);
-    } catch (err) {
-      console.error('Error exporting to Excel:', err);
-      setError('Failed to export to Excel. Please try again.');
-    }
-  };
-  
-  // Open PDF Preview Dialog
   const handleExportToPDF = () => {
     if (!reportData) return;
     setPdfPreviewOpen(true);
@@ -497,7 +396,11 @@ const ConsolidatedCorporateIncomePage = () => {
                       id="region-filter"
                       value={selectedRegions}
                       label="Region View"
-                      onChange={(e) => setSelectedRegions(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedRegions(e.target.value);
+                        setSelectedDepartment('');
+                        setSelectedDivision('');
+                      }}
                     >
                       <MenuItem value="all">All Regions</MenuItem>
                       {reportData?.regions?.map((region) => (
@@ -511,6 +414,55 @@ const ConsolidatedCorporateIncomePage = () => {
               </Grid>
 
               {/* View Options */}
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="department-filter-label">Department</InputLabel>
+                  <Select
+                    labelId="department-filter-label"
+                    value={String(selectedDepartment ?? '')}
+                    label="Department"
+                    disabled={selectedRegions === 'all' || departments.length === 0}
+                    onChange={(e) => {
+                      setSelectedDepartment(e.target.value || '');
+                      setSelectedDivision('');
+                    }}
+                  >
+                    <MenuItem value=""><em>All Departments</em></MenuItem>
+                    {departments.map((dept, idx) => {
+                      const val = dept._id != null ? String(dept._id) : `dept-${idx}`;
+                      return (
+                        <MenuItem key={val} value={val}>
+                          {dept.Department || dept.name || 'Unnamed Department'}
+                        </MenuItem>
+                      );
+                    })}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="division-filter-label">Division</InputLabel>
+                  <Select
+                    labelId="division-filter-label"
+                    value={String(selectedDivision ?? '')}
+                    label="Division"
+                    disabled={selectedRegions === 'all' || !selectedDepartment || divisions.length === 0}
+                    onChange={(e) => setSelectedDivision(e.target.value || '')}
+                  >
+                    <MenuItem value=""><em>All Divisions</em></MenuItem>
+                    {divisions.map((div, idx) => {
+                      const val = div.name != null && div.name !== '' ? String(div.name) : (div._id != null ? String(div._id) : `div-${idx}`);
+                      return (
+                        <MenuItem key={val} value={val}>
+                          {div.name || 'Unnamed Division'}
+                        </MenuItem>
+                      );
+                    })}
+                  </Select>
+                </FormControl>
+              </Grid>
+
               <Grid item xs={12} md={3}>
                 <FormControlLabel
                   control={
@@ -537,29 +489,16 @@ const ConsolidatedCorporateIncomePage = () => {
                   >
                     {loading ? 'Loading...' : 'Generate Report'}
                   </Button>
-                  
                   {reportData && (
-                    <>
-                      <Button
-                        variant="outlined"
-                        color="primary"
-                        onClick={handleExportToExcel}
-                        startIcon={<Download />}
-                        sx={{ minWidth: 140 }}
-                      >
-                        Export Excel
-                      </Button>
-                      
-                      <Button
-                        variant="outlined"
-                        color="secondary"
-                        onClick={handleExportToPDF}
-                        startIcon={<PictureAsPdf />}
-                        sx={{ minWidth: 140 }}
-                      >
-                        PDF Preview
-                      </Button>
-                    </>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      onClick={handleExportToPDF}
+                      startIcon={<PictureAsPdf />}
+                      sx={{ minWidth: 140 }}
+                    >
+                      PDF Preview
+                    </Button>
                   )}
                 </Stack>
               </Grid>
@@ -981,7 +920,6 @@ const ConsolidatedCorporateIncomePage = () => {
         )}
       </Paper>
 
-      {/* Enhanced PDF Preview Dialog with Server-Side Generation */}
       <EnhancedPDFPreviewDialog
         open={pdfPreviewOpen}
         onClose={() => setPdfPreviewOpen(false)}

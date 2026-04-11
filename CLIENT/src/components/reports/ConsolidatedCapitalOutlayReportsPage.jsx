@@ -976,31 +976,10 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
       <Dialog
         open={pdfDialogOpen}
         onClose={closePdfDialog}
-        fullWidth
-        maxWidth="xl"
-        PaperProps={{ sx: { height: '95vh', display: 'flex', flexDirection: 'column' } }}
+        fullScreen
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, bgcolor: '#375e38', color: '#fff', flexShrink: 0 }}>
-          <Typography variant="subtitle1" fontWeight="bold">
-            Consolidated Capital Outlay Report — PDF Preview
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            {pdfPreviewUrl && (
-              <Button
-                size="small"
-                variant="outlined"
-                sx={{ color: '#fff', borderColor: '#fff' }}
-                onClick={() => window.open(pdfPreviewUrl, '_blank', 'width=1200,height=800')}
-              >
-                Open in new tab
-              </Button>
-            )}
-            <IconButton size="small" onClick={closePdfDialog} sx={{ color: '#fff' }}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </Box>
-        <DialogContent sx={{ p: 0, flex: 1, overflow: 'hidden' }}>
+        <DialogTitle>Consolidated Capital Outlay PDF Preview</DialogTitle>
+        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
           {pdfPreviewUrl ? (
             <iframe
               src={pdfPreviewUrl}
@@ -1013,6 +992,9 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
             </Box>
           )}
         </DialogContent>
+        <DialogActions>
+          <Button onClick={closePdfDialog}>Close</Button>
+        </DialogActions>
       </Dialog>
     </ReportPageLayout>
   );
