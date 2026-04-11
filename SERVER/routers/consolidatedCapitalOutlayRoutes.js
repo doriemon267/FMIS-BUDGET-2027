@@ -17,4 +17,10 @@ router.get('/test', (req, res) => {
 });
 // Get consolidated Capital Outlay data for reports - USE SUBMISSION WORKFLOW CONTROL
 router.get('/capital-outlay-data', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), consolidatedCapitalOutlayController.getConsolidatedCapitalOutlayData);
+// Generate Capital Outlay PDF report (inline preview)
+router.get('/capital-outlay-pdf', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), consolidatedCapitalOutlayController.getConsolidatedCapitalOutlayPdf);
+// Available departments and divisions for filter selectors
+router.get('/capital-outlay-departments', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), consolidatedCapitalOutlayController.getAvailableDepartments);
+router.get('/capital-outlay-divisions', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), consolidatedCapitalOutlayController.getAvailableDivisions);
+router.get('/capital-outlay-regions', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), consolidatedCapitalOutlayController.getAvailableRegionsCapitalOutlay);
 module.exports = router;

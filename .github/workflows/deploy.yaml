@@ -1,0 +1,44 @@
+name: System 1 Deployment
+
+on:
+  push:
+    branches: [ main ] # Mag-deploy kusa pag nag-push sa main
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted # Dito niya tatawagin ang runner na ininstall mo
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # --- STEP 1: FRONTEND BUILD ---
+      - name: Install and Build Frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      # --- STEP 2: ORGANIZE FILES ---
+      - name: Move Build to Backend Public
+        run: |
+          # Siguraduhin na may 'public' folder ang backend mo
+          if (!(Test-Path "backend/public")) { New-Item -ItemType Directory -Path "backend/public" }
+          xcopy "frontend/dist/*" "backend/public/" /E /H /Y /I
+
+      # --- STEP 3: BACKEND DEPS ---
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm install --production
+
+      # --- STEP 4: DEPLOY TO IIS FOLDER ---
+      - name: Sync to Production Folder
+        run: |
+          # I-copy lahat ng laman ng backend folder papunta sa live folder ng system1
+          xcopy "backend/*" "C:\node-apps\fmis-budget" /E /H /Y /I
+
+      # --- STEP 5: RESTART VIA PM2 ---
+      - name: Restart Application
+        run: |
+          pm2 restart system1 || pm2 start C:\node-apps\fmis-budget\index.js --name system1

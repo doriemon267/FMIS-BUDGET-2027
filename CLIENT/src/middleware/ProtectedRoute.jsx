@@ -91,8 +91,11 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   // Also check for workflow roles from Roles array
   const workflowRolesFromJobRoles = {
     'BUDGET_PREPARER': 'preparer',
+    'BUDGET PREPARER': 'preparer',
     'BUDGET_REVIEWER': 'reviewer',
+    'BUDGET REVIEWER': 'reviewer',
     'BUDGET_APPROVER': 'approver',
+    'BUDGET APPROVER': 'approver',
     'OVERALL_BUDGET_APPROVER': 'overallBudgetApprover'
   };
   

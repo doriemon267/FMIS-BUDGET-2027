@@ -57,6 +57,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import HomeIcon from "@mui/icons-material/Home";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import CloseIcon from "@mui/icons-material/Close";
 // Removed DeleteIcon import - not used in reports
 
 const NumberFormatCustom = React.memo(React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -101,6 +102,77 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState([]);
   const [consolidationType, setConsolidationType] = useState("current");
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState("");
+  const [selectedBudgetType, setSelectedBudgetType] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [selectedDivision, setSelectedDivision] = useState("");
+  const [organizationStructure, setOrganizationStructure] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [divisions, setDivisions] = useState([]);
+
+  // Derived names for API calls (org-structure IDs → name strings)
+  const selectedDepartmentName = selectedDepartment
+    ? (departments.find(d => String(d._id) === String(selectedDepartment))?.Department || selectedDepartment)
+    : '';
+  const selectedDivisionName = selectedDivision
+    ? (divisions.find(d => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
+    : '';
+
+  // PDF preview dialog
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Revoke blob URL on unmount
+  React.useEffect(() => {
+    return () => { if (pdfPreviewUrl) window.URL.revokeObjectURL(pdfPreviewUrl); };
+  }, [pdfPreviewUrl]);
+
+  const closePdfDialog = () => {
+    setPdfDialogOpen(false);
+    if (pdfPreviewUrl) { window.URL.revokeObjectURL(pdfPreviewUrl); setPdfPreviewUrl(""); }
+  };
+
+  const handlePreviewPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const params = new URLSearchParams();
+      const fy = selectedFiscalYear || activeSettings?.fiscalYear;
+      const bt = selectedBudgetType || activeSettings?.budgetType;
+      if (fy) params.append("fiscalYear", fy);
+      if (bt) params.append("budgetType", bt);
+      if (consolidationType === "current" && activeRegion) {
+        params.append("regions", activeRegion.name || activeRegion.Region);
+      } else if (consolidationType === "custom" && selectedRegions.length > 0) {
+        selectedRegions.forEach((r) => params.append("regions", r));
+      }
+      if (selectedDepartmentName) params.append("department", selectedDepartmentName);
+      if (selectedDivisionName) params.append("division", selectedDivisionName);
+      const response = await api.get(
+        `/api/consolidated-reports/capital-outlay-pdf?${params.toString()}`,
+        { responseType: "blob" }
+      );
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      if (pdfPreviewUrl) window.URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(url);
+      setPdfDialogOpen(true);
+    } catch (err) {
+      let message = "Failed to generate PDF preview. Please try again.";
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const parsed = JSON.parse(text);
+          if (parsed?.message) message = parsed.message;
+        } catch (_) {}
+      } else if (err?.response?.data?.message) {
+        message = err.response.data.message;
+      }
+      toast.error(message, { toastId: "co-pdf-preview-error" });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   // Fetch active settings
   const { data: activeSettings } = useQuery({
@@ -111,18 +183,129 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
     },
   });
 
-  // Fetch all regions for selection
+  // Initialise FY / budget type from active settings (only on first load)
+  const settingsInitializedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!settingsInitializedRef.current && activeSettings?.fiscalYear && activeSettings?.budgetType) {
+      setSelectedFiscalYear(String(activeSettings.fiscalYear));
+      setSelectedBudgetType(activeSettings.budgetType);
+      settingsInitializedRef.current = true;
+    }
+  }, [activeSettings]);
+
+  // Fetch all regions for selection (from CapitalOutlay collection)
   const { data: regions = [] } = useQuery({
-    queryKey: ["availableRegions"],
+    queryKey: ["capitalOutlayAvailableRegions"],
     queryFn: async () => {
-      const response = await api.get("/api/consolidated-reports/available-regions");
+      const response = await api.get("/api/consolidated-reports/capital-outlay-regions");
       return response.data?.regions || [];
     }
   });
 
+  // Fetch available fiscal years and budget types for the filter selectors
+  const { data: availableFiscalYears = [] } = useQuery({
+    queryKey: ["capitalOutlayAvailableFiscalYears"],
+    queryFn: async () => {
+      const response = await api.get("/api/comprehensive-reports/available-fiscal-years");
+      return response.data?.fiscalYears || [];
+    }
+  });
+  const { data: availableBudgetTypes = [] } = useQuery({
+    queryKey: ["capitalOutlayAvailableBudgetTypes"],
+    queryFn: async () => {
+      const response = await api.get("/api/comprehensive-reports/available-budget-types");
+      return response.data?.budgetTypes || [];
+    }
+  });
+
+  // Fetch org structure once on mount (drives department/division cascade)
+  React.useEffect(() => {
+    const fetchOrgStructure = async () => {
+      try {
+        const res = await api.get("/api/hierarchical-rbac/organization-structure", { params: { structure: "old" } });
+        setOrganizationStructure(res.data?.data || res.data);
+      } catch (_) {}
+    };
+    fetchOrgStructure();
+  }, []);
+
+  // Derive departments from org structure whenever activeRegion changes
+  React.useEffect(() => {
+    if (!organizationStructure || !activeRegion) {
+      setDepartments([]);
+      setSelectedDepartment("");
+      setSelectedDivision("");
+      return;
+    }
+    const data = organizationStructure;
+    const allDepts = data?.availableUnits?.departments || [];
+    const mappings = data?.mappings || [];
+    const orgRegions = data?.availableUnits?.regions || [];
+    const regionId = String(activeRegion._id || activeRegion.id || "");
+    const selectedRegionName = (activeRegion.regionName || activeRegion.Region || activeRegion.name || "").trim();
+    const norm = (s) => String(s || "").trim().toUpperCase();
+    const rn = norm(selectedRegionName);
+    const isExcludeRegionalAndIMO = rn === "CENTRAL OFFICE" || rn === "MARIIS" || rn === "UPRIIS";
+    const excludeNames = isExcludeRegionalAndIMO ? ["REGIONAL OFFICE", "IRRIGATION MANAGEMENT OFFICE"] : [];
+
+    let regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === regionId);
+    if (regionMappings.length === 0) {
+      regionMappings = mappings.filter((m) => norm(m.regionName) === rn);
+    }
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO) {
+      const matchedOrgRegion = orgRegions.find((r) => norm(r.name || r.Region) === rn);
+      if (matchedOrgRegion) {
+        const altId = String(matchedOrgRegion.id || matchedOrgRegion._id);
+        regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === altId);
+      }
+    }
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO && allDepts.length > 0) {
+      const depts = allDepts
+        .filter((d) => !excludeNames.includes(norm(d.name || d.Department)))
+        .map((d) => ({ _id: d.id || d._id, Department: d.name || d.Department, name: d.name || d.Department }));
+      setDepartments(depts);
+      setSelectedDepartment("");
+      setSelectedDivision("");
+      return;
+    }
+
+    let regionDeptIds = [...new Set(regionMappings.map((m) => m.departmentId?.toString()).filter(Boolean))];
+    if (regionDeptIds.length === 0 && allDepts.length > 0 && !isExcludeRegionalAndIMO) {
+      regionDeptIds = allDepts.map((d) => String(d.id || d._id));
+    }
+    const regionDepts = allDepts.filter((d) => {
+      const id = d.id || d._id;
+      return id && regionDeptIds.includes(String(id)) && !excludeNames.includes(norm(d.name || d.Department));
+    });
+    const depts = regionDepts.map((d) => ({
+      _id: d.id || d._id,
+      Department: d.name || d.Department,
+      name: d.name || d.Department,
+    }));
+    setDepartments(depts);
+    setSelectedDepartment("");
+    setSelectedDivision("");
+  }, [organizationStructure, activeRegion]);
+
+  // Fetch divisions when selectedDepartment changes
+  React.useEffect(() => {
+    if (!selectedDepartment) {
+      setDivisions([]);
+      setSelectedDivision("");
+      return;
+    }
+    const regionId = String(activeRegion?._id || activeRegion?.id || "");
+    const params = new URLSearchParams({ departmentId: selectedDepartment });
+    if (regionId) params.set("regionId", regionId);
+    api.get(`/api/hierarchical-rbac/divisions?${params.toString()}`)
+      .then((res) => setDivisions(res.data?.data || res.data || []))
+      .catch(() => setDivisions([]));
+    setSelectedDivision("");
+  }, [selectedDepartment, activeRegion]);
+
   // Fetch consolidated capital outlay data
   const { data: consolidatedData, isLoading: consolidatedLoading } = useQuery({
-    queryKey: ["consolidatedCapitalOutlayReports", activeRegion?.name, selectedRegions, consolidationType, activeSettings?.fiscalYear, activeSettings?.budgetType],
+    queryKey: ["consolidatedCapitalOutlayReports", activeRegion?.name, selectedRegions, consolidationType, selectedFiscalYear || activeSettings?.fiscalYear, selectedBudgetType || activeSettings?.budgetType, selectedDepartmentName, selectedDivisionName],
     queryFn: async () => {
       let regionsToFetch;
       if (consolidationType === "current") {
@@ -136,9 +319,11 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
         return [];
       }
       const apiParams = {
-        fiscalYear: activeSettings?.fiscalYear || new Date().getFullYear(),
-        budgetType: activeSettings?.budgetType || 'INITIAL',
+        fiscalYear: selectedFiscalYear || activeSettings?.fiscalYear || new Date().getFullYear(),
+        budgetType: selectedBudgetType || activeSettings?.budgetType || 'INITIAL',
       };
+      if (selectedDepartmentName) apiParams.department = selectedDepartmentName;
+      if (selectedDivisionName) apiParams.division = selectedDivisionName;
       if (regionsToFetch) {
         apiParams.regions = regionsToFetch;
       }
@@ -213,8 +398,10 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
       return transformedData;
     },
     enabled: Boolean(
-      activeSettings && (
-        (consolidationType === "current" && activeRegion) || 
+      (selectedFiscalYear || activeSettings?.fiscalYear) &&
+      (selectedBudgetType || activeSettings?.budgetType) &&
+      (
+        (consolidationType === "current" && activeRegion) ||
         (consolidationType === "all") ||
         (consolidationType === "custom" && selectedRegions.length > 0)
       )
@@ -336,11 +523,42 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
       }
       showNiaBranding={true}
       breadcrumbLabel="Consolidated Capital Outlay Reports"
-      fiscalYear={activeSettings?.fiscalYear || new Date().getFullYear()}
+      fiscalYear={selectedFiscalYear || activeSettings?.fiscalYear || new Date().getFullYear()}
     >
       <ToastContainer position="top-right" autoClose={3000} />
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
+          {/* Fiscal Year filter */}
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Fiscal Year</InputLabel>
+              <Select
+                value={selectedFiscalYear}
+                onChange={(e) => setSelectedFiscalYear(e.target.value)}
+                label="Fiscal Year"
+              >
+                {availableFiscalYears.map((fy) => (
+                  <MenuItem key={fy} value={String(fy)}>{fy}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          {/* Budget Type filter */}
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Budget Type</InputLabel>
+              <Select
+                value={selectedBudgetType}
+                onChange={(e) => setSelectedBudgetType(e.target.value)}
+                label="Budget Type"
+              >
+                {availableBudgetTypes.map((bt) => (
+                  <MenuItem key={bt} value={bt}>{bt}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          {/* Consolidation Type */}
           <Grid item xs={12} md={3}>
             <FormControl fullWidth size="small">
               <InputLabel>Consolidation Type</InputLabel>
@@ -371,16 +589,60 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                     </Box>
                   )}
                 >
-                  {regions.map((region) => (
-                    <MenuItem key={region.id} value={region.name}>
-                      <Checkbox checked={selectedRegions.indexOf(region.name) > -1} />
-                      {region.name}
+                  {regions.map((r) => (
+                    <MenuItem key={r} value={r}>
+                      <Checkbox checked={selectedRegions.indexOf(r) > -1} />
+                      {r}
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             </Grid>
           )}
+          {/* Department filter */}
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Department</InputLabel>
+              <Select
+                value={String(selectedDepartment ?? "")}
+                onChange={(e) => { setSelectedDepartment(e.target.value || ""); setSelectedDivision(""); }}
+                label="Department"
+                disabled={!activeRegion || departments.length === 0}
+              >
+                <MenuItem value=""><em>All Departments</em></MenuItem>
+                {departments.map((dept, idx) => {
+                  const val = dept._id != null ? String(dept._id) : `dept-${idx}`;
+                  return (
+                    <MenuItem key={val} value={val}>
+                      {dept.Department || dept.name || "Unnamed Department"}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          </Grid>
+          {/* Division filter */}
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Division</InputLabel>
+              <Select
+                value={String(selectedDivision ?? "")}
+                onChange={(e) => setSelectedDivision(e.target.value || "")}
+                label="Division"
+                disabled={!selectedDepartment || divisions.length === 0}
+              >
+                <MenuItem value=""><em>All Divisions</em></MenuItem>
+                {divisions.map((div, idx) => {
+                  const val = div.name != null && div.name !== "" ? String(div.name) : (div._id != null ? String(div._id) : `div-${idx}`);
+                  return (
+                    <MenuItem key={val} value={val}>
+                      {div.name || "Unnamed Division"}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          </Grid>
           <Grid item xs={12} md={4}>
             <TextField
               fullWidth
@@ -424,17 +686,32 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
             </Box>
           </Grid>
         </Grid>
-        <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+
+        {/* ── Second toolbar row: expand controls + PDF button on the right ── */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Button
+              variant="outlined"
+              onClick={toggleExpandAll}
+              size="small"
+            >
+              {expandedRows.length === filteredData.length ? "Collapse All" : "Expand All"}
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Showing {filteredData.length} categories
+            </Typography>
+          </Box>
           <Button
-            variant="outlined"
-            onClick={toggleExpandAll}
+            variant="contained"
+            color="error"
+            startIcon={pdfLoading ? <CircularProgress size={18} color="inherit" /> : <PictureAsPdfIcon />}
+            onClick={handlePreviewPdf}
+            disabled={pdfLoading || isLoading}
             size="small"
+            sx={{ minWidth: 140 }}
           >
-            {expandedRows.length === filteredData.length ? "Collapse All" : "Expand All"}
+            {pdfLoading ? "Generating..." : "Preview PDF"}
           </Button>
-          <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center', ml: 2 }}>
-            Showing {filteredData.length} categories
-          </Typography>
         </Box>
       </Paper>
       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -693,6 +970,49 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
         <DialogActions>
           <Button onClick={() => setExportDialogOpen(false)}>Cancel</Button>
         </DialogActions>
+      </Dialog>
+
+      {/* ── PDF Preview Dialog ─────────────────────────────────────────────── */}
+      <Dialog
+        open={pdfDialogOpen}
+        onClose={closePdfDialog}
+        fullWidth
+        maxWidth="xl"
+        PaperProps={{ sx: { height: '95vh', display: 'flex', flexDirection: 'column' } }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, bgcolor: '#375e38', color: '#fff', flexShrink: 0 }}>
+          <Typography variant="subtitle1" fontWeight="bold">
+            Consolidated Capital Outlay Report — PDF Preview
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {pdfPreviewUrl && (
+              <Button
+                size="small"
+                variant="outlined"
+                sx={{ color: '#fff', borderColor: '#fff' }}
+                onClick={() => window.open(pdfPreviewUrl, '_blank', 'width=1200,height=800')}
+              >
+                Open in new tab
+              </Button>
+            )}
+            <IconButton size="small" onClick={closePdfDialog} sx={{ color: '#fff' }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </Box>
+        <DialogContent sx={{ p: 0, flex: 1, overflow: 'hidden' }}>
+          {pdfPreviewUrl ? (
+            <iframe
+              src={pdfPreviewUrl}
+              title="Capital Outlay PDF Preview"
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
+          ) : (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </DialogContent>
       </Dialog>
     </ReportPageLayout>
   );

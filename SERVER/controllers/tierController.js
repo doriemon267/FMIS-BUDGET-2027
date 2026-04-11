@@ -17,6 +17,90 @@ try {
 }
 
 /**
+ * Build a broad TierRevision query that matches region, department, and division by both name and ObjectId
+ * (handles docs stored either way — e.g. region saved as name in one save, ObjectId in another).
+ * Returns { query, normalizedScope } — use `query` for TierRevision lookups, `normalizedScope` for new doc creation.
+ */
+const buildRevisionQuery = async (fiscalYear, region, department, division) => {
+  const scope = await normalizeTierScope(fiscalYear, region, department, division);
+  const rawRegion = String(region || '');
+  const rawDepartment = String(department ?? '');
+  const rawDivision = String(division ?? '');
+
+  // --- Region: match by normalized name AND raw value AND any ObjectId for that region name ---
+  const regionValues = [scope.region].filter(Boolean);
+  if (rawRegion && !regionValues.includes(rawRegion)) regionValues.push(rawRegion);
+  try {
+    const Region = require('../models/Region');
+    if (rawRegion && mongoose.Types.ObjectId.isValid(rawRegion) && rawRegion.length === 24) {
+      const r = await Region.findById(rawRegion).select('Region').lean();
+      if (r && r.Region && !regionValues.includes(String(r.Region))) regionValues.push(String(r.Region));
+    }
+    if (scope.region) {
+      const ids = await Region.find({ Region: scope.region }).select('_id').lean();
+      ids.forEach((r) => { const s = String(r._id); if (s && !regionValues.includes(s)) regionValues.push(s); });
+    }
+  } catch (e) { /* ignore */ }
+
+  const regionFilter = regionValues.length === 0
+    ? { region: scope.region || rawRegion }
+    : regionValues.length === 1 ? { region: regionValues[0] } : { region: { $in: regionValues } };
+
+  // --- Department: match by normalized name AND raw value AND any ObjectId for that dept name ---
+  let departmentFilter;
+  if (!scope.department && !rawDepartment) {
+    // No department filter — match empty, null, or missing
+    departmentFilter = { $or: [{ department: '' }, { department: null }, { department: { $exists: false } }] };
+  } else {
+    const deptValues = [scope.department].filter(Boolean);
+    if (rawDepartment && !deptValues.includes(rawDepartment)) deptValues.push(rawDepartment);
+    try {
+      const Department = require('../models/Department');
+      // If raw value is an ObjectId, resolve to name and add
+      if (rawDepartment && mongoose.Types.ObjectId.isValid(rawDepartment) && rawDepartment.length === 24) {
+        const d = await Department.findById(rawDepartment).select('Department').lean();
+        if (d && d.Department && !deptValues.includes(String(d.Department))) deptValues.push(String(d.Department));
+      }
+      // Also collect ObjectIds for the normalized name (docs stored with ObjectId)
+      if (scope.department) {
+        const ids = await Department.find({ Department: scope.department }).select('_id').lean();
+        ids.forEach((d) => { const s = String(d._id); if (s && !deptValues.includes(s)) deptValues.push(s); });
+      }
+    } catch (e) { /* ignore */ }
+    departmentFilter = deptValues.length === 1 ? { department: deptValues[0] } : { department: { $in: deptValues } };
+  }
+
+  // --- Division: match by normalized value AND raw value (no collection, but include both) ---
+  let divisionFilter;
+  if (!scope.division && !rawDivision) {
+    // No division filter — match empty, null, or missing
+    divisionFilter = { $or: [{ division: '' }, { division: null }, { division: { $exists: false } }] };
+  } else {
+    const divValues = [scope.division].filter(Boolean);
+    if (rawDivision && !divValues.includes(rawDivision)) divValues.push(rawDivision);
+    divisionFilter = divValues.length === 1 ? { division: divValues[0] } : { division: { $in: divValues } };
+  }
+
+  const fiscalYearStr = String(scope.fiscalYear || '');
+
+  // Merge filters — avoid duplicate $or keys by wrapping with $and when needed
+  const filters = [regionFilter, departmentFilter, divisionFilter].filter(Boolean);
+  const hasMultipleOrFilters = filters.filter((f) => f.$or).length > 1;
+
+  let query;
+  if (hasMultipleOrFilters) {
+    // Use $and to combine multiple $or clauses
+    const orFilters = filters.filter((f) => f.$or);
+    const plainFilters = filters.filter((f) => !f.$or).reduce((acc, f) => ({ ...acc, ...f }), {});
+    query = { fiscalYear: fiscalYearStr, ...plainFilters, $and: orFilters };
+  } else {
+    query = { fiscalYear: fiscalYearStr, ...filters.reduce((acc, f) => ({ ...acc, ...f }), {}) };
+  }
+
+  return { query, normalizedScope: scope };
+};
+
+/**
  * Normalize tier scope so save and getRevisions match whether user filtered by Region only, Department, or Division.
  * Resolves region/department/division IDs to canonical names; query logic then matches both name and any stored IDs.
  */
@@ -157,8 +241,15 @@ const getFinalizedData = async (req, res) => {
       }
     }
 
-    if (department) query.department = department;
-    if (division) query.division = division;
+    if (department) {
+      // department is stored as a plain String — use case-insensitive regex to avoid case-mismatch misses
+      query.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    }
+
+    if (division) {
+      // division is stored as a plain String — use case-insensitive regex
+      query.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    }
 
     console.log('getFinalizedData query:', JSON.stringify(query, null, 2));
     const proposals = await NewProposalWorkflow.find(query).lean();
@@ -328,12 +419,16 @@ const getTierSavedItems = async (req, res) => {
 
 const saveTierData = async (req, res) => {
   try {
-    const { fiscalYear, region, department, division, items, revisionComment } = req.body;
-    const queryConditions = await normalizeTierScope(fiscalYear, region, department, division);
+    const { fiscalYear, region, department, division, items, revisionComment, createNewVersion } = req.body;
+
+    // Use broad query (matches region stored as name OR ObjectId) to find existing revisions.
+    // Use normalizedScope for creating new documents so future lookups are consistent.
+    const { query: broadQuery, normalizedScope } = await buildRevisionQuery(fiscalYear, region, department, division);
+    const queryConditions = normalizedScope; // used for new doc creation only
 
     const { createdBy: userObjectId, createdByName } = await resolveCreatedBy(req);
 
-    let tierDoc = await Tier.findOne(queryConditions);
+    let tierDoc = await Tier.findOne(broadQuery);
 
     const VALID_CATEGORIES = ['Personnel', 'MOOE', 'Capital Outlay'];
     const itemsToSave = Array.isArray(items) ? items : [];
@@ -349,22 +444,43 @@ const saveTierData = async (req, res) => {
       };
     });
 
-    const nextVersion = await TierRevision.findOne(queryConditions)
-      .sort({ version: -1 })
-      .select('version')
-      .lean()
-      .then((r) => (r ? (r.version || 0) + 1 : 1))
-      .catch(() => 1);
+    // Find the latest existing revision for this scope using broad query (handles region stored as name or ObjectId)
+    const latestRevision = await TierRevision.findOne(broadQuery).sort({ version: -1 }).catch(() => null);
+    let savedVersion;
 
-    await TierRevision.create({
-      ...queryConditions,
-      version: nextVersion,
-      comment: revisionComment || `Saved revision v${nextVersion}`,
-      items: revisionItems,
-      createdBy: userObjectId,
-      createdByName: createdByName || undefined,
-    });
-    await pruneRevisionsForScope(queryConditions.fiscalYear, queryConditions.region, queryConditions.department, queryConditions.division);
+    if (createNewVersion) {
+      // Explicitly creating a new version — increment and save as new TierRevision
+      const nextVersion = latestRevision ? (latestRevision.version || 0) + 1 : 1;
+      await TierRevision.create({
+        ...queryConditions,
+        version: nextVersion,
+        comment: revisionComment || `Version ${nextVersion}`,
+        items: revisionItems,
+        createdBy: userObjectId,
+        createdByName: createdByName || undefined,
+      });
+      await pruneRevisionsForScope(queryConditions.fiscalYear, queryConditions.region, queryConditions.department, queryConditions.division);
+      savedVersion = nextVersion;
+    } else if (latestRevision) {
+      // Save = update current version in-place (no new version created)
+      latestRevision.items = revisionItems;
+      if (revisionComment && revisionComment.trim()) latestRevision.comment = revisionComment.trim();
+      if (userObjectId) latestRevision.createdBy = userObjectId;
+      if (createdByName) latestRevision.createdByName = createdByName;
+      await latestRevision.save();
+      savedVersion = latestRevision.version;
+    } else {
+      // No revision exists yet — create the first one (version 1)
+      await TierRevision.create({
+        ...queryConditions,
+        version: 1,
+        comment: revisionComment || 'Version 1',
+        items: revisionItems,
+        createdBy: userObjectId,
+        createdByName: createdByName || undefined,
+      });
+      savedVersion = 1;
+    }
 
     if (tierDoc) {
       itemsToSave.forEach((newItem) => {
@@ -399,7 +515,7 @@ const saveTierData = async (req, res) => {
     }
 
     const savedTier = await tierDoc.save();
-    res.status(200).json({ ...savedTier.toObject(), version: nextVersion });
+    res.status(200).json({ ...savedTier.toObject(), version: savedVersion });
   } catch (error) {
     console.error('Error in saveTierData:', error);
     res.status(500).json({ message: error.message });
@@ -468,14 +584,10 @@ const getCurrentVersionForScope = async (fiscalYear, region, department, divisio
 
 /**
  * Keep only the latest MAX_REVISIONS_TO_KEEP revisions for the scope; delete older ones.
+ * Uses buildRevisionQuery so it finds revisions regardless of whether region was stored as name or ObjectId.
  */
 const pruneRevisionsForScope = async (fiscalYear, region, department, division) => {
-  const query = {
-    fiscalYear: String(fiscalYear),
-    region: String(region || ''),
-    department: String(department || ''),
-    division: String(division || ''),
-  };
+  const { query } = await buildRevisionQuery(fiscalYear, region, department, division);
   const idsToRemove = await TierRevision.find(query)
     .sort({ version: -1 })
     .skip(MAX_REVISIONS_TO_KEEP)
@@ -746,10 +858,15 @@ const restoreRevision = async (req, res) => {
 // Use "Php " in PDF (Helvetica does not support ₱; some viewers show it as ±)
 const formatTierCurrency = (amount) => {
   const n = Number(amount);
-  if (n === undefined || n === null || isNaN(n) || !Number.isFinite(n)) return 'Php 0.00';
-  return `Php ${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  
+  // Check kung valid number, pag hindi, default sa 0.00
+  if (isNaN(n) || !Number.isFinite(n)) return '0.00';
+  
+  return n.toLocaleString('en-PH', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  });
 };
-
 const safeNum = (val, fallback = 0) => {
   const n = Number(val);
   return (n !== undefined && n !== null && !isNaN(n) && Number.isFinite(n)) ? n : fallback;
@@ -792,8 +909,8 @@ const generateTierPDF = async (req, res) => {
       subject: 'Tier Budget Report',
     });
 
-    const PAGE_WIDTH = 595;
-    const PAGE_HEIGHT = 842;
+    const PAGE_WIDTH = 842;
+    const PAGE_HEIGHT = 595;
     const MARGIN = 40;
     const MARGIN_TOP = 50;
     const MARGIN_BOTTOM = 60;
@@ -805,13 +922,15 @@ const generateTierPDF = async (req, res) => {
     let currentY = MARGIN_TOP;
     let currentPage = 1;
     const rowH = 16;
-    const descColWidth = pageW * 0.36;
+    const descColWidth = 230;
     const col1 = CONTENT_LEFT;
-    const col2 = col1 + descColWidth + 6;
-    const col3 = col2 + (pageW - descColWidth - 6) * 0.22;
-    const col4 = col2 + (pageW - descColWidth - 6) * 0.44;
-    const col5 = col2 + (pageW - descColWidth - 6) * 0.66;
-    const numColW = col3 - col2 - 4;
+    const numAreaLeft = col1 + descColWidth + 6;
+    const numColStep = (CONTENT_RIGHT - numAreaLeft) / 5;
+    const col2 = numAreaLeft + numColStep;
+    const col3 = numAreaLeft + 2 * numColStep;
+    const col4 = numAreaLeft + 3 * numColStep;
+    const col5 = numAreaLeft + 4 * numColStep;
+    const col6 = CONTENT_RIGHT;
 
     const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
     const drawBorder = () => {
@@ -837,7 +956,7 @@ const generateTierPDF = async (req, res) => {
         pdfDoc.endPage();
         currentPage += 1;
       }
-      pdfDoc.createPage('A4');
+      pdfDoc.createPage(842, 595);
       currentY = MARGIN_TOP;
       drawBorder();
 
@@ -873,6 +992,7 @@ const generateTierPDF = async (req, res) => {
       pdfDoc.text(safe(cells[2]), col3, currentY, textOpt({ fontSize, bold, align: 'right' }));
       pdfDoc.text(safe(cells[3]), col4, currentY, textOpt({ fontSize, bold, align: 'right' }));
       pdfDoc.text(safe(cells[4]), col5, currentY, textOpt({ fontSize, bold, align: 'right' }));
+      pdfDoc.text(safe(cells[5]), col6, currentY, textOpt({ fontSize, bold, align: 'right' }));
       currentY += rowH;
     };
 
@@ -890,16 +1010,16 @@ const generateTierPDF = async (req, res) => {
 
     pdfDoc.text('A. SOURCES OF FUNDS', CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
     currentY += LINE_HEIGHT;
-    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total'], true);
+    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total', 'Proposed Budget'], true);
     pdfDoc.rectangle(col1, currentY - 4, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
-    drawRow(['Projected Corporate Income', formatTierCurrency(src.corporateIncome), '—', '—', formatTierCurrency(src.corporateIncome)]);
-    drawRow(['Budgetary Support (Tier 1 + Tier 2)', '—', formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(bs.total)]);
-    drawRow(['TOTAL SOURCES OF FUNDS', formatTierCurrency(src.corporateIncome), formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(src.proposedBudget || src.total)], true);
+    drawRow(['Projected Corporate Income', formatTierCurrency(src.corporateIncome), '—', '—', '—', formatTierCurrency(src.corporateIncome)]);
+    drawRow(['Budgetary Support (Tier 1 + Tier 2)', '—', formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(bs.total), formatTierCurrency(bs.total)]);
+    drawRow(['TOTAL SOURCES OF FUNDS', formatTierCurrency(src.corporateIncome), formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(bs.total), formatTierCurrency(src.proposedBudget || src.total)], true);
     currentY += 6;
 
     pdfDoc.text('B. USES OF FUNDS', CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
     currentY += LINE_HEIGHT;
-    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total'], true);
+    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total', 'Proposed Budget'], true);
     pdfDoc.rectangle(col1, currentY - 4, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
 
     let currentCategory = '';
@@ -916,17 +1036,18 @@ const generateTierPDF = async (req, res) => {
         formatTierCurrency(item.corporateIncome),
         formatTierCurrency(item.tier1),
         formatTierCurrency(item.tier2),
-        formatTierCurrency(item.total)
+        formatTierCurrency(item.total),
+        formatTierCurrency((Number(item.corporateIncome) || 0) + (Number(item.total) || 0)),
       ]);
     }
 
     currentY += 3;
     pdfDoc.rectangle(col1, currentY, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
     currentY += 6;
-    drawRow(['Personnel Services', formatTierCurrency(usesCorporateIncome['Personnel Services']), formatTierCurrency(ps?.tier1), formatTierCurrency(ps?.tier2), formatTierCurrency(ps?.total)], true);
-    drawRow(['Maintenance and Other Operating Expenses', formatTierCurrency(usesCorporateIncome['Maintenance and Other Operating Expenses']), formatTierCurrency(mooe?.tier1), formatTierCurrency(mooe?.tier2), formatTierCurrency(mooe?.total)], true);
-    drawRow(['Capital Outlay', formatTierCurrency(usesCorporateIncome['Capital Outlay']), formatTierCurrency(co?.tier1), formatTierCurrency(co?.tier2), formatTierCurrency(co?.total)], true);
-    drawRow(['TOTAL USES OF FUNDS', formatTierCurrency(tot.totalCorporateIncome ?? totalCorp), formatTierCurrency(tot.totalTier1), formatTierCurrency(tot.totalTier2), formatTierCurrency(tot.proposedBudget)], true);
+    drawRow(['Personnel Services', formatTierCurrency(usesCorporateIncome['Personnel Services']), formatTierCurrency(ps?.tier1), formatTierCurrency(ps?.tier2), formatTierCurrency(ps?.total), formatTierCurrency((Number(usesCorporateIncome['Personnel Services']) || 0) + (Number(ps?.total) || 0))], true);
+    drawRow(['Maintenance and Other Operating Expenses', formatTierCurrency(usesCorporateIncome['Maintenance and Other Operating Expenses']), formatTierCurrency(mooe?.tier1), formatTierCurrency(mooe?.tier2), formatTierCurrency(mooe?.total), formatTierCurrency((Number(usesCorporateIncome['Maintenance and Other Operating Expenses']) || 0) + (Number(mooe?.total) || 0))], true);
+    drawRow(['Capital Outlay', formatTierCurrency(usesCorporateIncome['Capital Outlay']), formatTierCurrency(co?.tier1), formatTierCurrency(co?.tier2), formatTierCurrency(co?.total), formatTierCurrency((Number(usesCorporateIncome['Capital Outlay']) || 0) + (Number(co?.total) || 0))], true);
+    drawRow(['TOTAL USES OF FUNDS', formatTierCurrency(tot.totalCorporateIncome ?? totalCorp), formatTierCurrency(tot.totalTier1), formatTierCurrency(tot.totalTier2), formatTierCurrency((Number(tot.totalTier1) || 0) + (Number(tot.totalTier2) || 0)), formatTierCurrency(tot.proposedBudget)], true);
 
     currentY += 8;
     ensureSpace(1);

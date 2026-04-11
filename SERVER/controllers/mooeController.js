@@ -1681,8 +1681,8 @@ exports.getMOOEByParams = async (req, res) => {
       if (processBy) query.processBy = processBy;
       if (region) query.region = region;
       if (status) query.status = status;
-      if (department) query.department = department;
-      if (division) query.division = division;
+      if (department) query.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      if (division) query.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     }
 
     let mooe = await MooeProposal.find(query).lean();

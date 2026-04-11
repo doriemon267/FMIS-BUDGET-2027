@@ -40,6 +40,10 @@ export const WorkflowNotificationProvider = ({ children }) => {
         const data = response.data?.data || [];
         return data;
       } catch (err) {
+        // Network Error (server down / unreachable) — return empty silently
+        if (!err?.response) {
+          return [];
+        }
         console.error('[WorkflowNotificationContext] Fetch error:', err);
         throw err;
       }
@@ -50,7 +54,7 @@ export const WorkflowNotificationProvider = ({ children }) => {
     refetchInterval: 30000,    // Poll every 30 seconds for workflow notifications
     refetchOnWindowFocus: true, // Refetch when user returns to tab (see new submissions)
     refetchOnReconnect: true,  // Refresh when reconnecting
-    retry: 1,
+    retry: 0,
     retryDelay: 1000
   });
 

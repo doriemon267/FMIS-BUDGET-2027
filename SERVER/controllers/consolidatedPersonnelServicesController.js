@@ -86,8 +86,8 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
     }
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
-    if (department) query.department = department;
-    if (division) query.division = division;
+    if (department) query.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    if (division) query.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     // Fetch all PersonnelServices data
     const psData = await PersonnelServices.find(query).lean();
     if (!Array.isArray(psData) || psData.length === 0) {

@@ -16,6 +16,7 @@ SERVER/dist/
 .env
 CLIENT/.env
 SERVER/.env
+SERVER/.env-production
 .env.local
 .env.development.local
 .env.test.local

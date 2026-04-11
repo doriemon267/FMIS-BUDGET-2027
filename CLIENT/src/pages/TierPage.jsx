@@ -19,6 +19,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
+  DialogContentText,
   IconButton,
   List,
   ListItem,
@@ -42,6 +44,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import HistoryIcon from '@mui/icons-material/History';
 import RestoreIcon from '@mui/icons-material/Restore';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 
 const TierPage = () => {
   const queryClient = useQueryClient();
@@ -61,6 +64,7 @@ const TierPage = () => {
   const [selectedDivision, setSelectedDivision] = useState("");
   const [tierData, setTierData] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [lastSavedJson, setLastSavedJson] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
@@ -80,6 +84,7 @@ const TierPage = () => {
   const [viewRevisionOpen, setViewRevisionOpen] = useState(false);
   const [viewRevisionDetail, setViewRevisionDetail] = useState(null);
   const [viewRevisionLoading, setViewRevisionLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: null });
 
   // Budget Officer and Budget Manager: view only. Budget Planning Analyst (and Super Admin) can edit/save.
   const roles = currentUser?.Roles ?? currentUser?.workflowRoles ?? (currentUser?.hierarchicalAccess?.workflowRoles ?? []);
@@ -369,22 +374,16 @@ const TierPage = () => {
       const source = tierData.displayedItems || tierData.items || {};
       
       // Transform object to array format expected by backend
-      // Key format: "CategoryName-lineItemId" (e.g. "Personnel Services-1.a", "Salaries and Wages-1.a", "Capital Outlay-5-02-01-010")
       const itemsArray = Object.entries(source).map(([key, v]) => {
-        // Use full key as lineItemId (unique string; backend accepts String)
         const lineItemId = key;
-        
-        // Map to backend enum: Personnel | MOOE | Capital Outlay (subcategories map to parent)
         let category = v.category || '';
         if (category === 'Capital Outlay') {
           category = 'Capital Outlay';
         } else if (category === 'Maintenance and Other Operating Expenses') {
           category = 'MOOE';
         } else {
-          // All personnel subcategories (Personnel Services, Salaries and Wages, Other Compensation, etc.)
           category = 'Personnel';
         }
-        
         return {
           lineItemId,
           category,
@@ -394,25 +393,25 @@ const TierPage = () => {
         };
       });
 
-      // Use same scope as fetchRevisions so saved TierRevision is found when loading version history
       const saveData = {
         fiscalYear: String(activeFiscalYear),
         region: String(selectedRegion),
         department: String(selectedDepartmentName ?? ''),
         division: String(selectedDivisionName ?? ''),
         items: itemsArray,
+        createNewVersion: false,
         ...(revisionComment.trim() && { revisionComment: revisionComment.trim() }),
       };
 
       const saveRes = await api.post('/tier/data', saveData);
-      const saved = JSON.stringify({ items: source });
+      const saved = JSON.stringify(tierData);
       setLastSavedJson(saved);
       lastSavedJsonRef.current = saved;
       setIsDirty(false);
       const version = saveRes?.data?.version ?? saveRes?.data?.versionNumber;
       setSnackbar({
         open: true,
-        message: version != null ? `Tier data saved successfully (Version ${version}).` : 'Tier data saved successfully.',
+        message: version != null ? `Tier data saved (Version ${version} updated).` : 'Tier data saved successfully.',
         severity: 'success',
       });
       setRevisionComment('');
@@ -424,6 +423,73 @@ const TierPage = () => {
       setSnackbar({ open: true, message: 'Error saving tier data. Please try again.', severity: 'error' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCreateNewVersion = () => {
+    if (!tierData || !activeFiscalYear) return;
+    setConfirmDialog({
+      open: true,
+      title: 'Create New Version',
+      message: `Ile-lock ang kasalukuyang Version ${currentVersion ?? ''}. Malilikha ng bagong version na maaari pang i-edit. Ituloy?`,
+      onConfirm: () => _doCreateNewVersion(),
+    });
+  };
+
+  const _doCreateNewVersion = async () => {
+
+    setIsCreatingVersion(true);
+    try {
+      const source = tierData.displayedItems || tierData.items || {};
+      const itemsArray = Object.entries(source).map(([key, v]) => {
+        const lineItemId = key;
+        let category = v.category || '';
+        if (category === 'Capital Outlay') {
+          category = 'Capital Outlay';
+        } else if (category === 'Maintenance and Other Operating Expenses') {
+          category = 'MOOE';
+        } else {
+          category = 'Personnel';
+        }
+        return {
+          lineItemId,
+          category,
+          tier1: Number(v.tier1) || 0,
+          tier2: Number(v.tier2) || 0,
+          description: v.description || key,
+        };
+      });
+
+      const saveData = {
+        fiscalYear: String(activeFiscalYear),
+        region: String(selectedRegion),
+        department: String(selectedDepartmentName ?? ''),
+        division: String(selectedDivisionName ?? ''),
+        items: itemsArray,
+        createNewVersion: true,
+        ...(revisionComment.trim() && { revisionComment: revisionComment.trim() }),
+      };
+
+      const saveRes = await api.post('/tier/data', saveData);
+      const saved = JSON.stringify(tierData);
+      setLastSavedJson(saved);
+      lastSavedJsonRef.current = saved;
+      setIsDirty(false);
+      const version = saveRes?.data?.version ?? saveRes?.data?.versionNumber;
+      setSnackbar({
+        open: true,
+        message: `New version created (Version ${version}). Previous version is now locked.`,
+        severity: 'success',
+      });
+      setRevisionComment('');
+      queryClient.invalidateQueries({ queryKey: ['tierSavedItems', activeFiscalYear, selectedRegion, selectedDepartmentName, selectedDivisionName] });
+      try { await fetchCurrentVersion(); } catch (_) { /* ignore */ }
+      if (revisionsDrawerOpen) fetchRevisions();
+    } catch (error) {
+      console.error('Error creating new version:', error);
+      setSnackbar({ open: true, message: 'Error creating new version. Please try again.', severity: 'error' });
+    } finally {
+      setIsCreatingVersion(false);
     }
   };
 
@@ -725,14 +791,25 @@ const TierPage = () => {
                 color="success"
                 startIcon={<SaveIcon />}
                 onClick={handleSave}
-                disabled={isSaving || !tierData || !isDirty}
+                disabled={isSaving || isCreatingVersion || !tierData || !isDirty}
                 sx={{ minWidth: 120 }}
               >
                 {isSaving ? 'Saving...' : 'Save'}
               </Button>
+              <Button
+                variant="outlined"
+                color="warning"
+                startIcon={<AddCircleOutlineIcon />}
+                onClick={handleCreateNewVersion}
+                disabled={isSaving || isCreatingVersion || !tierData || currentVersion == null}
+                sx={{ minWidth: 150 }}
+                title="Lock the current version and create a new one"
+              >
+                {isCreatingVersion ? 'Creating...' : 'New Version'}
+              </Button>
               <TextField
                 size="small"
-                placeholder="Revision note (optional)"
+                placeholder="Version note (optional)"
                 value={revisionComment}
                 onChange={(e) => setRevisionComment(e.target.value)}
                 sx={{ minWidth: 200, maxWidth: 280 }}
@@ -752,13 +829,19 @@ const TierPage = () => {
                 color="inherit"
                 onClick={() => {
                   if (!tierData) return;
-                  if (!confirm('Reset all Tier inputs? This cannot be undone.')) return;
-                  setTableKey(Date.now());
-                  setTierData(null);
-                  lastSavedJsonRef.current = null;
-                  setLastSavedJson(null);
-                  setIsDirty(false);
-                  setSnackbar({ open: true, message: 'Inputs reset', severity: 'info' });
+                  setConfirmDialog({
+                    open: true,
+                    title: 'I-reset ang Tier Inputs',
+                    message: 'Ire-reset ang lahat ng Tier inputs. Hindi na ito maibabalik. Ituloy?',
+                    onConfirm: () => {
+                      setTableKey(Date.now());
+                      setTierData(null);
+                      lastSavedJsonRef.current = null;
+                      setLastSavedJson(null);
+                      setIsDirty(false);
+                      setSnackbar({ open: true, message: 'Inputs reset', severity: 'info' });
+                    },
+                  });
                 }}
                 sx={{ minWidth: 120 }}
               >
@@ -1020,6 +1103,43 @@ const TierPage = () => {
             </>
           ) : null}
         </DialogContent>
+      </Dialog>
+
+      {/* Reusable Confirm Dialog */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog((s) => ({ ...s, open: false }))}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, pb: 0.5 }}>
+          {confirmDialog.title}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>{confirmDialog.message}</DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setConfirmDialog((s) => ({ ...s, open: false }))}
+            sx={{ minWidth: 90 }}
+          >
+            Kanselahin
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => {
+              setConfirmDialog((s) => ({ ...s, open: false }));
+              confirmDialog.onConfirm?.();
+            }}
+            sx={{ minWidth: 90 }}
+            autoFocus
+          >
+            OK, Ituloy
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Snackbar
