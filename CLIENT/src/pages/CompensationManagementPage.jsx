@@ -138,8 +138,6 @@ const CompensationManagementPage = () => {
     refetch();
   };
 
-
-
   // Summary Cards
   const SummaryCards = () => {
     const linkedCount = compensationList.filter(c => c.linkedFiscalYears?.length > 0).length;
@@ -296,7 +294,6 @@ const CompensationManagementPage = () => {
                   <TableRow>
                     <TableCell sx={{ fontWeight: "bold" }}>Name</TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsistence Allowance (Monthly)</TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>Medical Allowance</TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>Additional Medical</TableCell>
                     <TableCell align="center" sx={{ fontWeight: "bold" }}>PhilHealth %</TableCell>
@@ -331,9 +328,6 @@ const CompensationManagementPage = () => {
                         </TableCell>
                         <TableCell align="right">
                           ₱{(row.PERA || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell align="right">
-                          ₱{(row.subsistenceAllowance ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell align="right">
                           ₱{(row.medicalAllowance || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}

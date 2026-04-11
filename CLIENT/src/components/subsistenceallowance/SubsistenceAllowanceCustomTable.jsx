@@ -253,6 +253,8 @@ const CustomTable = ({
         'Department': row.department,
         'Division': row.division,
         'Region': row.region,
+        'No. of Hrs/Day': row.noOfHrsPerDay,
+        'Monthly Amount': row.monthlyAmount,
         'Amount': row.Amount,
         'Fiscal Year': row.fiscalYear,
         'Processed By': row.processBy,

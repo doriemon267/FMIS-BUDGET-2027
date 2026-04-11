@@ -36,13 +36,28 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
 
   const [annualAmount, setAnnualAmount] = useState(0);
   const [monthlyAmount, setMonthlyAmount] = useState(0);
+  const [workDaysPerMonth, setWorkDaysPerMonth] = useState(22);
+  const [subsistenceTiers, setSubsistenceTiers] = useState({
+    eightHoursOrMore: 150,
+    sixToLessThanEight: 125,
+    fiveToLessThanSix: 100,
+    fourToLessThanFive: 75,
+    belowFour: 0,
+  });
+  const [subsistenceThresholds, setSubsistenceThresholds] = useState({
+    eightHoursOrMoreMin: 8,
+    sixToLessThanEightMin: 6,
+    fiveToLessThanSixMin: 5,
+    fourToLessThanFiveMin: 4,
+  });
   const [fiscalYearFromSettings, setFiscalYearFromSettings] = useState("");
   const [budgetTypeFromSettings, setBudgetTypeFromSettings] = useState("");
 
   const { control, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: { 
         employees: [],  // Always an array for consistency
-        positionTitle: "" 
+        positionTitle: "",
+        noOfHrsPerDay: 8,
     },
   });
 
@@ -81,14 +96,32 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
         reset({
           employees: [row], // Pass as array even for edit mode
           positionTitle: row.positionTitle || "",
+          noOfHrsPerDay: Number(row.noOfHrsPerDay ?? 8),
         });
       } else {
-        reset({ employees: [], positionTitle: "" });
+        reset({ employees: [], positionTitle: "", noOfHrsPerDay: 8 });
       }
     }
   }, [open, row, isEditing, reset]);
 
   const selectedEmployees = Array.isArray(watch("employees")) ? watch("employees") : [];
+  const selectedNoOfHrsPerDay = Number(watch("noOfHrsPerDay") ?? 8);
+
+  const getDailyRate = (hoursPerDay) => {
+    if (hoursPerDay >= Number(subsistenceThresholds.eightHoursOrMoreMin ?? 8)) return Number(subsistenceTiers.eightHoursOrMore || 0);
+    if (hoursPerDay >= Number(subsistenceThresholds.sixToLessThanEightMin ?? 6)) return Number(subsistenceTiers.sixToLessThanEight || 0);
+    if (hoursPerDay >= Number(subsistenceThresholds.fiveToLessThanSixMin ?? 5)) return Number(subsistenceTiers.fiveToLessThanSix || 0);
+    if (hoursPerDay >= Number(subsistenceThresholds.fourToLessThanFiveMin ?? 4)) return Number(subsistenceTiers.fourToLessThanFive || 0);
+    return Number(subsistenceTiers.belowFour || 0);
+  };
+
+  useEffect(() => {
+    const safeHours = Number.isNaN(selectedNoOfHrsPerDay) ? 0 : selectedNoOfHrsPerDay;
+    const dailyRate = getDailyRate(safeHours);
+    const monthly = dailyRate * Number(workDaysPerMonth || 22);
+    setMonthlyAmount(monthly);
+    setAnnualAmount(monthly * 12);
+  }, [selectedNoOfHrsPerDay, subsistenceTiers, subsistenceThresholds, workDaysPerMonth]);
 
   const getHierarchicalDisplay = () => {
     const hierarchical = currentUser?.hierarchicalAccess || {};
@@ -127,8 +160,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
           processBy,
           processDate,
           budgetType: budgetTypeFromSettings,
-          monthlyAmount,
-          annualAmount
+          noOfHrsPerDay: Number(data.noOfHrsPerDay ?? 8),
         };
         return await api.put(`${endpoint}/${row._id}`, payload);
       } else {
@@ -150,8 +182,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
           processBy,
           processDate,
           budgetType: budgetTypeFromSettings,
-          monthlyAmount,
-          annualAmount
+          noOfHrsPerDay: Number(data.noOfHrsPerDay ?? 8),
         }));
 
         // Send bulk add request
@@ -180,9 +211,22 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     try {
       const res = await api.get("/settings/active");
       const compensation = res.data?.compensationSettingsId;
-      const monthly = Number(compensation?.subsistenceAllowance) || 0;
-      setMonthlyAmount(monthly);
-      setAnnualAmount(monthly * 12);
+      const tiers = compensation?.subsistenceAllowanceMonthlyTiers || {};
+      const thresholds = compensation?.subsistenceAllowanceHourThresholds || {};
+      setSubsistenceTiers({
+        eightHoursOrMore: Number(tiers.eightHoursOrMore ?? 150),
+        sixToLessThanEight: Number(tiers.sixToLessThanEight ?? 125),
+        fiveToLessThanSix: Number(tiers.fiveToLessThanSix ?? 100),
+        fourToLessThanFive: Number(tiers.fourToLessThanFive ?? 75),
+        belowFour: Number(tiers.belowFour ?? 0),
+      });
+      setSubsistenceThresholds({
+        eightHoursOrMoreMin: Number(thresholds.eightHoursOrMoreMin ?? 8),
+        sixToLessThanEightMin: Number(thresholds.sixToLessThanEightMin ?? 6),
+        fiveToLessThanSixMin: Number(thresholds.fiveToLessThanSixMin ?? 5),
+        fourToLessThanFiveMin: Number(thresholds.fourToLessThanFiveMin ?? 4),
+      });
+      setWorkDaysPerMonth(Number(tiers.workDaysPerMonth ?? 22));
       setFiscalYearFromSettings(res.data?.fiscalYear || new Date().getFullYear().toString());
       setBudgetTypeFromSettings(res.data?.budgetType || "Initial");
     } catch (error) {
@@ -329,8 +373,25 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
               </Grid>
             )}
             <Grid item xs={12} sm={6}>
+              <Controller
+                name="noOfHrsPerDay"
+                control={control}
+                rules={{ required: "No. of hrs/day is required", min: 0 }}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="No. of Hrs per Day"
+                    type="number"
+                    inputProps={{ min: 0, step: 0.5 }}
+                    fullWidth
+                    required
+                  />
+                )}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
-                label="Monthly (Compensation)"
+                label={`Monthly (Daily Rate x ${workDaysPerMonth})`}
                 value={monthlyAmount.toLocaleString("en-PH", { style: "currency", currency: "PHP" })}
                 fullWidth
                 disabled

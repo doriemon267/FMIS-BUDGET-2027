@@ -53,7 +53,6 @@ const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, r
     />
   );
 });
-
 // Percentage format component
 const PercentageFormatCustom = React.forwardRef(function PercentageFormatCustom(props, ref) {
   const { onChange, onBlur, ...other } = props;
@@ -66,6 +65,22 @@ const PercentageFormatCustom = React.forwardRef(function PercentageFormatCustom(
       suffix="%"
       onValueChange={(values) => onChange(values.floatValue / 100)}
       value={props.value * 100}
+      onBlur={(e) => onBlur && onBlur(e)}
+    />
+  );
+});
+
+// Integer-only format component (for whole-number fields like workdays per month)
+const IntegerFormatCustom = React.forwardRef(function IntegerFormatCustom(props, ref) {
+  const { onChange, onBlur, ...other } = props;
+  return (
+    <NumericFormat
+      {...other}
+      getInputRef={ref}
+      thousandSeparator
+      decimalScale={0}
+      allowNegative={false}
+      onValueChange={(values) => onChange(values.value)}
       onBlur={(e) => onBlur && onBlur(e)}
     />
   );
@@ -114,7 +129,20 @@ const compensationSchema = yup.object().shape({
   employeeCompensation: yup.number().min(0),
   weekdayMultiplier: yup.number().min(0),
   weekendMultiplier: yup.number().min(0),
-  subsistenceAllowance: yup.number().min(0),
+  subsistenceAllowanceMonthlyTiers: yup.object({
+    eightHoursOrMore: yup.number().min(0),
+    sixToLessThanEight: yup.number().min(0),
+    fiveToLessThanSix: yup.number().min(0),
+    fourToLessThanFive: yup.number().min(0),
+    belowFour: yup.number().min(0),
+    workDaysPerMonth: yup.number().min(1),
+  }),
+  subsistenceAllowanceHourThresholds: yup.object({
+    eightHoursOrMoreMin: yup.number().min(0),
+    sixToLessThanEightMin: yup.number().min(0),
+    fiveToLessThanSixMin: yup.number().min(0),
+    fourToLessThanFiveMin: yup.number().min(0),
+  }),
   subsistenceAllowanceRate: yup.number().min(0),
   earnedLeaves: yup.number().min(0),
   loyaltyPay: yup.object({
@@ -206,7 +234,20 @@ const CompensationStandaloneDialog = ({
       employeeCompensation: 0,
       weekdayMultiplier: 0,
       weekendMultiplier: 0,
-      subsistenceAllowance: 0,
+      subsistenceAllowanceMonthlyTiers: {
+        eightHoursOrMore: 150,
+        sixToLessThanEight: 125,
+        fiveToLessThanSix: 100,
+        fourToLessThanFive: 75,
+        belowFour: 0,
+        workDaysPerMonth: 22,
+      },
+      subsistenceAllowanceHourThresholds: {
+        eightHoursOrMoreMin: 8,
+        sixToLessThanEightMin: 6,
+        fiveToLessThanSixMin: 5,
+        fourToLessThanFiveMin: 4,
+      },
       subsistenceAllowanceRate: 0,
       earnedLeaves: 0,
       loyaltyPay: {
@@ -233,7 +274,23 @@ const CompensationStandaloneDialog = ({
   // ✅ FIX: Reset form when editData changes (when user clicks Edit on different row)
   useEffect(() => {
     if (editData) {
-      reset(editData);
+      reset({
+        ...editData,
+        subsistenceAllowanceMonthlyTiers: {
+          eightHoursOrMore: editData.subsistenceAllowanceMonthlyTiers?.eightHoursOrMore ?? 150,
+          sixToLessThanEight: editData.subsistenceAllowanceMonthlyTiers?.sixToLessThanEight ?? 125,
+          fiveToLessThanSix: editData.subsistenceAllowanceMonthlyTiers?.fiveToLessThanSix ?? 100,
+          fourToLessThanFive: editData.subsistenceAllowanceMonthlyTiers?.fourToLessThanFive ?? 75,
+          belowFour: editData.subsistenceAllowanceMonthlyTiers?.belowFour ?? 0,
+          workDaysPerMonth: editData.subsistenceAllowanceMonthlyTiers?.workDaysPerMonth ?? 22,
+        },
+        subsistenceAllowanceHourThresholds: {
+          eightHoursOrMoreMin: editData.subsistenceAllowanceHourThresholds?.eightHoursOrMoreMin ?? 8,
+          sixToLessThanEightMin: editData.subsistenceAllowanceHourThresholds?.sixToLessThanEightMin ?? 6,
+          fiveToLessThanSixMin: editData.subsistenceAllowanceHourThresholds?.fiveToLessThanSixMin ?? 5,
+          fourToLessThanFiveMin: editData.subsistenceAllowanceHourThresholds?.fourToLessThanFiveMin ?? 4,
+        },
+      });
     } else {
       reset();
     }
@@ -445,6 +502,14 @@ const CompensationStandaloneDialog = ({
             </Box>
 
             {/* Compensation Sections */}
+            <Box sx={{ mt: 0.5 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#264524' }}>
+                1. Basic Settings
+              </Typography>
+              <FormHelperText sx={{ mt: 0.5, mb: 1.5, color: '#666' }}>
+                Core allowances and government contribution values.
+              </FormHelperText>
+            </Box>
             {/* Allowances Section */}
             <Accordion defaultExpanded>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -460,7 +525,6 @@ const CompensationStandaloneDialog = ({
                     { name: "productivityIncentive", label: "Productivity Incentive (₱)" },
                     { name: "medicalAllowance", label: "Medical Allowance (₱)" },
                     { name: "additionalMedical", label: "Additional Medical (₱)" },
-                    { name: "subsistenceAllowance", label: "Subsistence Allowance (Monthly ₱)" },
                     { name: "cashGift", label: "Cash Gift (₱)" },
                     { name: "meal", label: "Meal Allowance (₱)" },
                     { name: "courtAppearance", label: "Court Appearance (₱)" },
@@ -490,6 +554,9 @@ const CompensationStandaloneDialog = ({
                     </Grid>
                   ))}
                 </Grid>
+                <FormHelperText sx={{ mt: 2, color: '#666' }}>
+                  Subsistence monthly amount is computed from the Subsistence Settings section (daily rate x workdays/month).
+                </FormHelperText>
               </AccordionDetails>
             </Accordion>
 
@@ -536,19 +603,130 @@ const CompensationStandaloneDialog = ({
               </AccordionDetails>
             </Accordion>
 
-            {/* Other Settings Section */}
+            <Box sx={{ mt: 1.5 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#264524' }}>
+                2. Subsistence Settings
+              </Typography>
+              <FormHelperText sx={{ mt: 0.5, mb: 1.5, color: '#666' }}>
+                Daily tier rates, hour thresholds, and EST rates for subsistence computation.
+              </FormHelperText>
+            </Box>
+
+            {/* Subsistence Monthly Tiers Section */}
             <Accordion>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography variant="h6" sx={{ fontWeight: 600, color: '#264524' }}>
-                  ⚙️ Other Settings
+                  🍽️ Subsistence Allowance (Monthly Tiers)
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ backgroundColor: '#ffffff' }}>
+                <Grid container spacing={2}>
+                  {[
+                    { name: "subsistenceAllowanceMonthlyTiers.eightHoursOrMore", label: "Subsistence Daily Rate (>=8 hrs)" },
+                    { name: "subsistenceAllowanceMonthlyTiers.sixToLessThanEight", label: "Subsistence Daily Rate (>=6 and <=8 hrs)" },
+                    { name: "subsistenceAllowanceMonthlyTiers.fiveToLessThanSix", label: "Subsistence Daily Rate (>=5 and <6 hrs)" },
+                    { name: "subsistenceAllowanceMonthlyTiers.fourToLessThanFive", label: "Subsistence Daily Rate (>=4 and <5 hrs)" },
+                    { name: "subsistenceAllowanceMonthlyTiers.belowFour", label: "Subsistence Daily Rate (<4 hrs)" },
+                    { name: "subsistenceAllowanceMonthlyTiers.workDaysPerMonth", label: "Subsistence Workdays Per Month", component: IntegerFormatCustom },
+                  ].map(({ name, label, component }) => (
+                    <Grid item xs={12} sm={6} key={name}>
+                      <Controller
+                        name={name}
+                        control={control}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            label={label}
+                            fullWidth
+                            InputProps={{ inputComponent: component || NumberFormatCustom }}
+                            error={!!errors[name]}
+                            helperText={errors[name]?.message}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                '&:hover fieldset': { borderColor: '#264524' },
+                                '&.Mui-focused fieldset': { borderColor: '#264524' }
+                              }
+                            }}
+                          />
+                        )}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+                <FormHelperText sx={{ mt: 2, color: '#666' }}>
+                  Monthly amount is computed automatically from selected hours/day tier and workdays/month.
+                </FormHelperText>
+              </AccordionDetails>
+            </Accordion>
+
+            <Box sx={{ mt: 1.5 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#264524' }}>
+                3. Overtime Settings
+              </Typography>
+              <FormHelperText sx={{ mt: 0.5, mb: 1.5, color: '#666' }}>
+                Overtime pay multipliers for weekday and weekend computations.
+              </FormHelperText>
+            </Box>
+
+            {/* Overtime Settings Section */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#264524' }}>
+                  ⏱️ Overtime Pay Multipliers
                 </Typography>
               </AccordionSummary>
               <AccordionDetails sx={{ backgroundColor: '#ffffff' }}>
                 <Grid container spacing={2}>
                   {[
                     { name: "weekdayMultiplier", label: "Weekday Multiplier" },
-                    { name: "weekendMultiplier", label: "Weekend Multiplier" },
-                    { name: "subsistenceAllowance", label: "Subsistence Allowance (Monthly ₱)" },
+                    { name: "weekendMultiplier", label: "Weekend Multiplier" }
+                  ].map(({ name, label, component }) => (
+                    <Grid item xs={12} sm={6} key={name}>
+                      <Controller
+                        name={name}
+                        control={control}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            label={label}
+                            fullWidth
+                            InputProps={{ inputComponent: component || NumberFormatCustom }}
+                            error={!!errors[name]}
+                            helperText={errors[name]?.message}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                '&:hover fieldset': { borderColor: '#264524' },
+                                '&.Mui-focused fieldset': { borderColor: '#264524' }
+                              }
+                            }}
+                          />
+                        )}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </AccordionDetails>
+            </Accordion>
+
+            <Box sx={{ mt: 1.5 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#264524' }}>
+                4. Advanced Settings
+              </Typography>
+              <FormHelperText sx={{ mt: 0.5, mb: 1.5, color: '#666' }}>
+                Additional rates and earned leaves configuration.
+              </FormHelperText>
+            </Box>
+
+            {/* Advanced Settings Section */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#264524' }}>
+                  ⚙️ Advanced Settings
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ backgroundColor: '#ffffff' }}>
+                <Grid container spacing={2}>
+                  {[
                     { name: "subsistenceAllowanceRate", label: "Subsistence Allowance MDS Rate (₱)" },
                     { name: "earnedLeaves", label: "Earned Leaves (Days)", component: HighPrecisionFormatCustom }
                   ].map(({ name, label, component }) => (
@@ -562,6 +740,48 @@ const CompensationStandaloneDialog = ({
                             label={label}
                             fullWidth
                             InputProps={{ inputComponent: component || NumberFormatCustom }}
+                            error={!!errors[name]}
+                            helperText={errors[name]?.message}
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                '&:hover fieldset': { borderColor: '#264524' },
+                                '&.Mui-focused fieldset': { borderColor: '#264524' }
+                              }
+                            }}
+                          />
+                        )}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Subsistence Hour Thresholds Section */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#264524' }}>
+                  ⏱️ Subsistence Allowance (Hour Thresholds)
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ backgroundColor: '#ffffff' }}>
+                <Grid container spacing={2}>
+                  {[
+                    { name: "subsistenceAllowanceHourThresholds.eightHoursOrMoreMin", label: "Threshold: 8+ tier min hours" },
+                    { name: "subsistenceAllowanceHourThresholds.sixToLessThanEightMin", label: "Threshold: 6-<=8 tier min hours" },
+                    { name: "subsistenceAllowanceHourThresholds.fiveToLessThanSixMin", label: "Threshold: 5-<6 tier min hours" },
+                    { name: "subsistenceAllowanceHourThresholds.fourToLessThanFiveMin", label: "Threshold: 4-<5 tier min hours" },
+                  ].map(({ name, label }) => (
+                    <Grid item xs={12} sm={6} key={name}>
+                      <Controller
+                        name={name}
+                        control={control}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            label={label}
+                            fullWidth
+                            InputProps={{ inputComponent: NumberFormatCustom }}
                             error={!!errors[name]}
                             helperText={errors[name]?.message}
                             sx={{

@@ -11,6 +11,8 @@ const SubsistenceAllowancePage = () => {
     department: { type: "text", label: "Department", show: true, searchable: true },
     division: { type: "text", label: "Division", show: true, searchable: true },
     region: { type: "text", label: "Region", show: true, searchable: true },
+    noOfHrsPerDay: { type: "number", label: "No. of Hrs/Day", searchable: true, show: true },
+    monthlyAmount: { type: "number", label: "AMOUNT (Monthly)", searchable: true, show: true },
     Amount: { type: "number", label: "AMOUNT (Annual)", required: true, searchable: true, show: true },
     processBy: { type: "text", label: "Processed By", searchable: true },
     processDate: { type: "date", label: "Processed Date" },

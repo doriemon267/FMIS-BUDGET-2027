@@ -19,7 +19,8 @@ import {
   Select,
   FormControl,
   InputLabel,
-  CircularProgress
+  CircularProgress,
+  FormHelperText,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useForm, Controller } from "react-hook-form";
@@ -73,6 +74,22 @@ const PercentageFormatCustom = React.forwardRef(function PercentageFormatCustom(
   );
 });
 
+// Integer-only format component (for whole-number fields like workdays per month)
+const IntegerFormatCustom = React.forwardRef(function IntegerFormatCustom(props, ref) {
+  const { onChange, onBlur, ...other } = props;
+  return (
+    <NumericFormat
+      {...other}
+      getInputRef={ref}
+      thousandSeparator
+      decimalScale={0}
+      allowNegative={false}
+      onValueChange={(values) => onChange(values.value)}
+      onBlur={(e) => onBlur && onBlur(e)}
+    />
+  );
+});
+
 // Add this component for earned leaves input
 const EarnedLeavesFormatCustom = React.forwardRef(function EarnedLeavesFormatCustom(props, ref) {
   const { onChange, onBlur, ...other } = props;
@@ -115,8 +132,21 @@ const advancedSchema = yup.object().shape({
   employeeCompensation: yup.number().min(0),
   weekdayMultiplier: yup.number().min(0),
   weekendMultiplier: yup.number().min(0),
-  subsistenceAllowance: yup.number().min(0),
   subsistenceAllowanceRate: yup.number().min(0),
+  subsistenceAllowanceMonthlyTiers: yup.object({
+    eightHoursOrMore: yup.number().min(0),
+    sixToLessThanEight: yup.number().min(0),
+    fiveToLessThanSix: yup.number().min(0),
+    fourToLessThanFive: yup.number().min(0),
+    belowFour: yup.number().min(0),
+    workDaysPerMonth: yup.number().min(0),
+  }),
+  subsistenceAllowanceHourThresholds: yup.object({
+    eightHoursOrMoreMin: yup.number().min(0),
+    sixToLessThanEightMin: yup.number().min(0),
+    fiveToLessThanSixMin: yup.number().min(0),
+    fourToLessThanFiveMin: yup.number().min(0),
+  }),
   earnedLeaves: yup.number().min(0),
   loyaltyPay: yup.object({
     baseYears: yup.number(),
@@ -291,7 +321,6 @@ const CompensationSection = ({ control, errors }) => {
     { name: "meal", label: "Meal Allowance (₱)" },
     { name: "courtAppearance", label: "Court Appearance (₱)" },
     { name: "childrenAllowance", label: "Children Allowance (₱)" },
-    { name: "subsistenceAllowance", label: "Subsistence Allowance (Monthly ₱)" },
     { name: "subsistenceAllowanceRate", label: "Subsistence Allowance MDS Rate" },
     { name: "earnedLeaves", label: "Earned Leaves (Days)", special: true },
     { name: "additionalMedical", label: "Additional Medical(₱)" },
@@ -316,6 +345,144 @@ const CompensationSection = ({ control, errors }) => {
                   }}
                   error={!!errors[name]}
                   helperText={errors[name]?.message}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      '&:hover fieldset': {
+                        borderColor: '#264524',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#264524',
+                      },
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: '#264524',
+                    },
+                  }}
+                />
+              )}
+            />
+          </Grid>
+        ))}
+      </Grid>
+      <FormHelperText sx={{ mt: 2, color: '#666' }}>
+        Subsistence monthly amount is now computed from the tier rates below (daily rate x workdays/month).
+      </FormHelperText>
+    </AccordionSection>
+  );
+};
+
+const SubsistenceAllowanceMonthlyTiersSection = ({ control, errors }) => {
+  const fields = [
+    {
+      name: "subsistenceAllowanceMonthlyTiers.eightHoursOrMore",
+      label: "8 hrs or more (\u20b1/day)",
+    },
+    {
+      name: "subsistenceAllowanceMonthlyTiers.sixToLessThanEight",
+      label: "6 to <=8 hrs (\u20b1/day)",
+    },
+    {
+      name: "subsistenceAllowanceMonthlyTiers.fiveToLessThanSix",
+      label: "5 to <6 hrs (\u20b1/day)",
+    },
+    {
+      name: "subsistenceAllowanceMonthlyTiers.fourToLessThanFive",
+      label: "4 to <5 hrs (\u20b1/day)",
+    },
+    {
+      name: "subsistenceAllowanceMonthlyTiers.belowFour",
+      label: "Below 4 hrs (\u20b1/day)",
+    },
+    {
+      name: "subsistenceAllowanceMonthlyTiers.workDaysPerMonth",
+      label: "Work Days per Month",
+      inputComponent: IntegerFormatCustom,
+    },
+  ];
+
+  return (
+    <AccordionSection title="Subsistence Allowance (Monthly Tiers)">
+      <Grid container spacing={3}>
+        {fields.map(({ name, label, inputComponent }) => (
+          <Grid item xs={12} sm={6} key={name}>
+            <Controller
+              name={name}
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label={label}
+                  fullWidth
+                  variant="outlined"
+                  InputProps={{
+                    inputComponent: inputComponent || NumberFormatCustom,
+                    style: { textAlign: "right" },
+                  }}
+                  error={!!errors?.subsistenceAllowanceMonthlyTiers?.[name.split(".").pop()]}
+                  helperText={errors?.subsistenceAllowanceMonthlyTiers?.[name.split(".").pop()]?.message}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      '&:hover fieldset': {
+                        borderColor: '#264524',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#264524',
+                      },
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: '#264524',
+                    },
+                  }}
+                />
+              )}
+            />
+          </Grid>
+        ))}
+      </Grid>
+    </AccordionSection>
+  );
+};
+
+const SubsistenceAllowanceHourThresholdsSection = ({ control, errors }) => {
+  const fields = [
+    {
+      name: "subsistenceAllowanceHourThresholds.eightHoursOrMoreMin",
+      label: "8+ Tier Min Hours",
+    },
+    {
+      name: "subsistenceAllowanceHourThresholds.sixToLessThanEightMin",
+      label: "6-<=8 Tier Min Hours",
+    },
+    {
+      name: "subsistenceAllowanceHourThresholds.fiveToLessThanSixMin",
+      label: "5-<6 Tier Min Hours",
+    },
+    {
+      name: "subsistenceAllowanceHourThresholds.fourToLessThanFiveMin",
+      label: "4-<5 Tier Min Hours",
+    },
+  ];
+
+  return (
+    <AccordionSection title="Subsistence Allowance (Hour Thresholds)">
+      <Grid container spacing={3}>
+        {fields.map(({ name, label }) => (
+          <Grid item xs={12} sm={6} key={name}>
+            <Controller
+              name={name}
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label={label}
+                  fullWidth
+                  variant="outlined"
+                  InputProps={{
+                    inputComponent: NumberFormatCustom,
+                    style: { textAlign: "right" },
+                  }}
+                  error={!!errors?.subsistenceAllowanceHourThresholds?.[name.split(".").pop()]}
+                  helperText={errors?.subsistenceAllowanceHourThresholds?.[name.split(".").pop()]?.message}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       '&:hover fieldset': {
@@ -726,8 +893,22 @@ const CompensationSettingsDialogForm = ({
       employeeCompensation: 0,
       weekdayMultiplier: 0,
       weekendMultiplier: 0,
-      subsistenceAllowance: 0,
       subsistenceAllowanceRate: 0,
+      subsistenceAllowanceMonthlyTiers: {
+        eightHoursOrMore: 150,
+        sixToLessThanEight: 125,
+        fiveToLessThanSix: 100,
+        fourToLessThanFive: 75,
+        belowFour: 0,
+        workDaysPerMonth: 22,
+      },
+      subsistenceAllowanceHourThresholds: {
+        eightHoursOrMoreMin: 8,
+        sixToLessThanEightMin: 6,
+        fiveToLessThanSixMin: 5,
+        fourToLessThanFiveMin: 4,
+      },
+      earnedLeaves: 0,
       loyaltyPay: {
         baseYears: 0,
         baseAmount: 0,
@@ -771,8 +952,21 @@ const CompensationSettingsDialogForm = ({
         employeeCompensation: editData.employeeCompensation,
         weekdayMultiplier: editData.weekdayMultiplier,
         weekendMultiplier: editData.weekendMultiplier,
-        subsistenceAllowance: editData.subsistenceAllowance,
         subsistenceAllowanceRate: editData.subsistenceAllowanceRate,
+        subsistenceAllowanceMonthlyTiers: {
+          eightHoursOrMore: editData.subsistenceAllowanceMonthlyTiers?.eightHoursOrMore ?? 150,
+          sixToLessThanEight: editData.subsistenceAllowanceMonthlyTiers?.sixToLessThanEight ?? 125,
+          fiveToLessThanSix: editData.subsistenceAllowanceMonthlyTiers?.fiveToLessThanSix ?? 100,
+          fourToLessThanFive: editData.subsistenceAllowanceMonthlyTiers?.fourToLessThanFive ?? 75,
+          belowFour: editData.subsistenceAllowanceMonthlyTiers?.belowFour ?? 0,
+          workDaysPerMonth: editData.subsistenceAllowanceMonthlyTiers?.workDaysPerMonth ?? 22,
+        },
+        subsistenceAllowanceHourThresholds: {
+          eightHoursOrMoreMin: editData.subsistenceAllowanceHourThresholds?.eightHoursOrMoreMin ?? 8,
+          sixToLessThanEightMin: editData.subsistenceAllowanceHourThresholds?.sixToLessThanEightMin ?? 6,
+          fiveToLessThanSixMin: editData.subsistenceAllowanceHourThresholds?.fiveToLessThanSixMin ?? 5,
+          fourToLessThanFiveMin: editData.subsistenceAllowanceHourThresholds?.fourToLessThanFiveMin ?? 4,
+        },
         earnedLeaves: editData.earnedLeaves,
         loyaltyPay: {
           baseYears: editData.loyaltyPay?.baseYears,
@@ -830,8 +1024,41 @@ const CompensationSettingsDialogForm = ({
             employeeCompensation: advanced.employeeCompensation ?? current.employeeCompensation,
             weekdayMultiplier: advanced.weekdayMultiplier ?? current.weekdayMultiplier,
             weekendMultiplier: advanced.weekendMultiplier ?? current.weekendMultiplier,
-            subsistenceAllowance: advanced.subsistenceAllowance ?? current.subsistenceAllowance,
             subsistenceAllowanceRate: advanced.subsistenceAllowanceRate ?? current.subsistenceAllowanceRate,
+            subsistenceAllowanceMonthlyTiers: {
+              eightHoursOrMore:
+                advanced.subsistenceAllowanceMonthlyTiers?.eightHoursOrMore ??
+                current.subsistenceAllowanceMonthlyTiers.eightHoursOrMore,
+              sixToLessThanEight:
+                advanced.subsistenceAllowanceMonthlyTiers?.sixToLessThanEight ??
+                current.subsistenceAllowanceMonthlyTiers.sixToLessThanEight,
+              fiveToLessThanSix:
+                advanced.subsistenceAllowanceMonthlyTiers?.fiveToLessThanSix ??
+                current.subsistenceAllowanceMonthlyTiers.fiveToLessThanSix,
+              fourToLessThanFive:
+                advanced.subsistenceAllowanceMonthlyTiers?.fourToLessThanFive ??
+                current.subsistenceAllowanceMonthlyTiers.fourToLessThanFive,
+              belowFour:
+                advanced.subsistenceAllowanceMonthlyTiers?.belowFour ??
+                current.subsistenceAllowanceMonthlyTiers.belowFour,
+              workDaysPerMonth:
+                advanced.subsistenceAllowanceMonthlyTiers?.workDaysPerMonth ??
+                current.subsistenceAllowanceMonthlyTiers.workDaysPerMonth,
+            },
+            subsistenceAllowanceHourThresholds: {
+              eightHoursOrMoreMin:
+                advanced.subsistenceAllowanceHourThresholds?.eightHoursOrMoreMin ??
+                current.subsistenceAllowanceHourThresholds.eightHoursOrMoreMin,
+              sixToLessThanEightMin:
+                advanced.subsistenceAllowanceHourThresholds?.sixToLessThanEightMin ??
+                current.subsistenceAllowanceHourThresholds.sixToLessThanEightMin,
+              fiveToLessThanSixMin:
+                advanced.subsistenceAllowanceHourThresholds?.fiveToLessThanSixMin ??
+                current.subsistenceAllowanceHourThresholds.fiveToLessThanSixMin,
+              fourToLessThanFiveMin:
+                advanced.subsistenceAllowanceHourThresholds?.fourToLessThanFiveMin ??
+                current.subsistenceAllowanceHourThresholds.fourToLessThanFiveMin,
+            },
             earnedLeaves: advanced.earnedLeaves ?? current.earnedLeaves,
           }));
           toast.info(`Prefilled from previous fiscal year settings.`, { autoClose: 2000 });
@@ -963,6 +1190,10 @@ const CompensationSettingsDialogForm = ({
             
             <Divider sx={{ my: 3 }} />
             <CompensationSection control={control} errors={errors} />
+            <Divider sx={{ my: 3 }} />
+            <SubsistenceAllowanceMonthlyTiersSection control={control} errors={errors} />
+            <Divider sx={{ my: 3 }} />
+            <SubsistenceAllowanceHourThresholdsSection control={control} errors={errors} />
             <Divider sx={{ my: 3 }} />
             <GovernmentShareSection control={control} errors={errors} />
             <Divider sx={{ my: 3 }} />

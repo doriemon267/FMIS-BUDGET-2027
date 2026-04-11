@@ -48,6 +48,20 @@ const compensationSettingsSchema = new mongoose.Schema(
     
     // Subsistence Allowance Rates
     subsistenceAllowanceRate: { type: Number },
+    subsistenceAllowanceMonthlyTiers: {
+      eightHoursOrMore: { type: Number, default: 150 },
+      sixToLessThanEight: { type: Number, default: 125 },
+      fiveToLessThanSix: { type: Number, default: 100 },
+      fourToLessThanFive: { type: Number, default: 75 },
+      belowFour: { type: Number, default: 0 },
+      workDaysPerMonth: { type: Number, default: 22 },
+    },
+    subsistenceAllowanceHourThresholds: {
+      eightHoursOrMoreMin: { type: Number, default: 8 },
+      sixToLessThanEightMin: { type: Number, default: 6 },
+      fiveToLessThanSixMin: { type: Number, default: 5 },
+      fourToLessThanFiveMin: { type: Number, default: 4 },
+    },
     subsistenceAllowanceSTRates: {
       highRisk: {
         fifteenOrMoreDays: { type: Number },

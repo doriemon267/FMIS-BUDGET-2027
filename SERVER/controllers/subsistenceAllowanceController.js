@@ -57,6 +57,60 @@ function regionMatch(regionValue) {
   return [...new Set(variants)];
 }
 
+function resolveSubsistenceTierConfig(activeSettings = {}) {
+  const tiers = activeSettings.subsistenceAllowanceMonthlyTiers || {};
+  const thresholds = activeSettings.subsistenceAllowanceHourThresholds || {};
+
+  const eightMin = Number(thresholds.eightHoursOrMoreMin ?? 8);
+  const sixMin = Number(thresholds.sixToLessThanEightMin ?? 6);
+  const fiveMin = Number(thresholds.fiveToLessThanSixMin ?? 5);
+  const fourMin = Number(thresholds.fourToLessThanFiveMin ?? 4);
+
+  const normalizedThresholds = {
+    eightHoursOrMoreMin: Number.isFinite(eightMin) ? eightMin : 8,
+    sixToLessThanEightMin: Number.isFinite(sixMin) ? sixMin : 6,
+    fiveToLessThanSixMin: Number.isFinite(fiveMin) ? fiveMin : 5,
+    fourToLessThanFiveMin: Number.isFinite(fourMin) ? fourMin : 4,
+  };
+
+  if (
+    normalizedThresholds.eightHoursOrMoreMin < normalizedThresholds.sixToLessThanEightMin ||
+    normalizedThresholds.sixToLessThanEightMin < normalizedThresholds.fiveToLessThanSixMin ||
+    normalizedThresholds.fiveToLessThanSixMin < normalizedThresholds.fourToLessThanFiveMin
+  ) {
+    normalizedThresholds.eightHoursOrMoreMin = 8;
+    normalizedThresholds.sixToLessThanEightMin = 6;
+    normalizedThresholds.fiveToLessThanSixMin = 5;
+    normalizedThresholds.fourToLessThanFiveMin = 4;
+  }
+
+  return {
+    eightHoursOrMore: Number(tiers.eightHoursOrMore ?? 150),
+    sixToLessThanEight: Number(tiers.sixToLessThanEight ?? 125),
+    fiveToLessThanSix: Number(tiers.fiveToLessThanSix ?? 100),
+    fourToLessThanFive: Number(tiers.fourToLessThanFive ?? 75),
+    belowFour: Number(tiers.belowFour ?? 0),
+    workDaysPerMonth: Number(tiers.workDaysPerMonth ?? 22),
+    ...normalizedThresholds,
+  };
+}
+
+function getDailySubsistenceRate(noOfHrsPerDay, tierConfig) {
+  if (noOfHrsPerDay >= tierConfig.eightHoursOrMoreMin) return tierConfig.eightHoursOrMore;
+  if (noOfHrsPerDay >= tierConfig.sixToLessThanEightMin) return tierConfig.sixToLessThanEight;
+  if (noOfHrsPerDay >= tierConfig.fiveToLessThanSixMin) return tierConfig.fiveToLessThanSix;
+  if (noOfHrsPerDay >= tierConfig.fourToLessThanFiveMin) return tierConfig.fourToLessThanFive;
+  return tierConfig.belowFour;
+}
+
+function computeSubsistenceAmounts(noOfHrsPerDay, activeSettings) {
+  const tierConfig = resolveSubsistenceTierConfig(activeSettings);
+  const dailyRate = getDailySubsistenceRate(noOfHrsPerDay, tierConfig);
+  const monthlyAmount = dailyRate * tierConfig.workDaysPerMonth;
+  const annualAmount = monthlyAmount * 12;
+  return { monthlyAmount, annualAmount };
+}
+
 /**
  * Create a new Subsistence Allowance record (amount from compensation monthly * 12),
  * then sync to PersonnelServices.subsistenceAllowance.
@@ -76,6 +130,7 @@ exports.createSubsistenceAllowance = async (req, res) => {
       processDate,
       fiscalYear,
       budgetType,
+      noOfHrsPerDay,
     } = req.body;
 
     const activeSettings = await getActiveSettingsWithCompensation({ lean: true });
@@ -84,14 +139,14 @@ exports.createSubsistenceAllowance = async (req, res) => {
         message: "Walang active settings na naka-link sa compensation.",
       });
     }
-    const monthlyAmount = Number(activeSettings.subsistenceAllowance) || 0;
-    if (monthlyAmount <= 0) {
+    const parsedHours = Number(noOfHrsPerDay ?? 8);
+    if (Number.isNaN(parsedHours) || parsedHours < 0) {
       return res.status(400).json({
-        message:
-          "Walang subsistence allowance (monthly) sa Compensation Management. Mag-set muna sa /compensation-management.",
+        message: "Invalid noOfHrsPerDay. Please provide a non-negative number.",
       });
     }
-    const amount = monthlyAmount * 12;
+
+    const { monthlyAmount, annualAmount } = computeSubsistenceAmounts(parsedHours, activeSettings);
     const usedFiscalYear = fiscalYear || activeSettings.fiscalYear;
     const usedBudgetType = budgetType || activeSettings.budgetType;
 
@@ -102,7 +157,9 @@ exports.createSubsistenceAllowance = async (req, res) => {
       department,
       division,
       region,
-      Amount: amount,
+      noOfHrsPerDay: parsedHours,
+      monthlyAmount,
+      Amount: annualAmount,
       processBy,
       processDate,
       fiscalYear: usedFiscalYear,
@@ -115,7 +172,7 @@ exports.createSubsistenceAllowance = async (req, res) => {
       "subsistence allowance"
     );
     if (personnel) {
-      personnel.subsistenceAllowance = amount;
+      personnel.subsistenceAllowance = annualAmount;
       // CRITICAL FIX: Recalculate Total after adding subsistence allowance
       personnel.Total = calculatePersonnelTotal(personnel);
       // CRITICAL FIX: Recalculate Total after updating subsistence allowance
@@ -165,15 +222,6 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
       });
     }
 
-    const monthlyAmount = Number(activeSettings.subsistenceAllowance) || 0;
-    if (monthlyAmount <= 0) {
-      return res.status(400).json({
-        message:
-          "Walang subsistence allowance (monthly) sa Compensation Management. Mag-set muna sa /compensation-management.",
-      });
-    }
-
-    const amount = monthlyAmount * 12;
     const createdRecords = [];
     const errors = [];
 
@@ -192,7 +240,21 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
           processDate,
           fiscalYear,
           budgetType,
+          noOfHrsPerDay,
         } = entries[i];
+
+        const parsedHours = Number(noOfHrsPerDay ?? 8);
+        if (Number.isNaN(parsedHours) || parsedHours < 0) {
+          errors.push({
+            index: i,
+            employeeNumber,
+            employeeFullName,
+            message: "Invalid noOfHrsPerDay. Please provide a non-negative number.",
+          });
+          continue;
+        }
+
+        const { monthlyAmount, annualAmount } = computeSubsistenceAmounts(parsedHours, activeSettings);
 
         const usedFiscalYear = fiscalYear || activeSettings.fiscalYear;
         const usedBudgetType = budgetType || activeSettings.budgetType;
@@ -220,7 +282,9 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
           department,
           division,
           region,
-          Amount: amount,
+          noOfHrsPerDay: parsedHours,
+          monthlyAmount,
+          Amount: annualAmount,
           processBy,
           processDate,
           fiscalYear: usedFiscalYear,
@@ -237,7 +301,7 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
         );
 
         if (personnel) {
-          personnel.subsistenceAllowance = amount;
+          personnel.subsistenceAllowance = annualAmount;
           // CRITICAL FIX: Recalculate Total after adding subsistence allowance
           personnel.Total = calculatePersonnelTotal(personnel);
           await personnel.save();
@@ -360,14 +424,20 @@ exports.updateSubsistenceAllowance = async (req, res) => {
       processDate,
       fiscalYear,
       budgetType,
+      noOfHrsPerDay,
     } = req.body;
 
     const activeSettings = await getActiveSettingsWithCompensation({ lean: true });
     if (!activeSettings) {
       return res.status(404).json({ message: "Active settings with compensation not found." });
     }
-    const monthlyAmount = Number(activeSettings.subsistenceAllowance) || 0;
-    const amount = monthlyAmount * 12;
+    const parsedHours = Number(noOfHrsPerDay ?? 8);
+    if (Number.isNaN(parsedHours) || parsedHours < 0) {
+      return res.status(400).json({
+        message: "Invalid noOfHrsPerDay. Please provide a non-negative number.",
+      });
+    }
+    const { monthlyAmount, annualAmount } = computeSubsistenceAmounts(parsedHours, activeSettings);
     const usedFiscalYear = fiscalYear || activeSettings.fiscalYear;
     const usedBudgetType = budgetType || activeSettings.budgetType;
 
@@ -380,11 +450,13 @@ exports.updateSubsistenceAllowance = async (req, res) => {
         department,
         division,
         region,
+        noOfHrsPerDay: parsedHours,
+        monthlyAmount,
         processBy,
         processDate,
         fiscalYear: usedFiscalYear,
         budgetType: usedBudgetType,
-        Amount: amount,
+        Amount: annualAmount,
       },
       { new: true }
     );
@@ -400,7 +472,7 @@ exports.updateSubsistenceAllowance = async (req, res) => {
       "subsistence allowance"
     );
     if (personnel) {
-      personnel.subsistenceAllowance = amount;
+      personnel.subsistenceAllowance = annualAmount;
       await personnel.save();
       if (personnel.proposalId) {
         try {

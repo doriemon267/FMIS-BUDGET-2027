@@ -8,6 +8,8 @@ const SubsistenceAllowanceSchema = mongoose.Schema(
     department: String,
     division: String,
     region: String,
+    noOfHrsPerDay: { type: Number, default: 8 },
+    monthlyAmount: { type: Number, default: 0 },
     Amount: { type: Number, default: 0 },
     processBy: String,
     processDate: Date,

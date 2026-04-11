@@ -908,6 +908,20 @@ exports.getAdvancedSettings = async (req, res) => {
       weekdayMultiplier: settings.weekdayMultiplier,
       weekendMultiplier: settings.weekendMultiplier,
       subsistenceAllowanceRate: settings.subsistenceAllowanceRate,
+      subsistenceAllowanceMonthlyTiers: {
+        eightHoursOrMore: 150,
+        sixToLessThanEight: 125,
+        fiveToLessThanSix: 100,
+        fourToLessThanFive: 75,
+        belowFour: 0,
+        workDaysPerMonth: 22,
+      },
+      subsistenceAllowanceHourThresholds: {
+        eightHoursOrMoreMin: 8,
+        sixToLessThanEightMin: 6,
+        fiveToLessThanSixMin: 5,
+        fourToLessThanFiveMin: 4,
+      },
       earnedLeaves: settings.earnedLeaves,
       additionalMedical: settings.additionalMedical,
     };
@@ -968,6 +982,20 @@ exports.createCompensationSettings = async (req, res) => {
       weekendMultiplier: compensationData.weekendMultiplier ?? 1.5,
       // Subsistence Allowance
       subsistenceAllowanceRate: compensationData.subsistenceAllowanceRate ?? 0,
+      subsistenceAllowanceMonthlyTiers: {
+        eightHoursOrMore: compensationData.subsistenceAllowanceMonthlyTiers?.eightHoursOrMore ?? 150,
+        sixToLessThanEight: compensationData.subsistenceAllowanceMonthlyTiers?.sixToLessThanEight ?? 125,
+        fiveToLessThanSix: compensationData.subsistenceAllowanceMonthlyTiers?.fiveToLessThanSix ?? 100,
+        fourToLessThanFive: compensationData.subsistenceAllowanceMonthlyTiers?.fourToLessThanFive ?? 75,
+        belowFour: compensationData.subsistenceAllowanceMonthlyTiers?.belowFour ?? 0,
+        workDaysPerMonth: compensationData.subsistenceAllowanceMonthlyTiers?.workDaysPerMonth ?? 22,
+      },
+      subsistenceAllowanceHourThresholds: {
+        eightHoursOrMoreMin: compensationData.subsistenceAllowanceHourThresholds?.eightHoursOrMoreMin ?? 8,
+        sixToLessThanEightMin: compensationData.subsistenceAllowanceHourThresholds?.sixToLessThanEightMin ?? 6,
+        fiveToLessThanSixMin: compensationData.subsistenceAllowanceHourThresholds?.fiveToLessThanSixMin ?? 5,
+        fourToLessThanFiveMin: compensationData.subsistenceAllowanceHourThresholds?.fourToLessThanFiveMin ?? 4,
+      },
       subsistenceAllowanceSTRates: {
         highRisk: {
           fifteenOrMoreDays: compensationData.subsistenceAllowanceSTRates?.highRisk?.fifteenOrMoreDays ?? 0.3,
@@ -1255,6 +1283,43 @@ exports.updateAdvancedSettings = async (req, res) => {
       return res.status(400).json({
         message: "No compensation settings linked to this fiscal year. Please go to 'Compensation Management' page and link existing compensation settings to this fiscal year.",
       });
+    }
+
+    const existingCompensation = await CompensationSettings.findById(settings.compensationSettingsId);
+    if (!existingCompensation) {
+      return res.status(404).json({
+        message: "Linked compensation settings not found.",
+      });
+    }
+
+    if (updateData.subsistenceAllowanceMonthlyTiers) {
+      const incomingTiers = updateData.subsistenceAllowanceMonthlyTiers || {};
+      const currentTiers = existingCompensation.subsistenceAllowanceMonthlyTiers || {};
+
+      updateData.subsistenceAllowanceMonthlyTiers = {
+        eightHoursOrMore: incomingTiers.eightHoursOrMore ?? currentTiers.eightHoursOrMore ?? 150,
+        sixToLessThanEight: incomingTiers.sixToLessThanEight ?? currentTiers.sixToLessThanEight ?? 125,
+        fiveToLessThanSix: incomingTiers.fiveToLessThanSix ?? currentTiers.fiveToLessThanSix ?? 100,
+        fourToLessThanFive: incomingTiers.fourToLessThanFive ?? currentTiers.fourToLessThanFive ?? 75,
+        belowFour: incomingTiers.belowFour ?? currentTiers.belowFour ?? 0,
+        workDaysPerMonth: incomingTiers.workDaysPerMonth ?? currentTiers.workDaysPerMonth ?? 22,
+      };
+    }
+
+    if (updateData.subsistenceAllowanceHourThresholds) {
+      const incomingThresholds = updateData.subsistenceAllowanceHourThresholds || {};
+      const currentThresholds = existingCompensation.subsistenceAllowanceHourThresholds || {};
+
+      updateData.subsistenceAllowanceHourThresholds = {
+        eightHoursOrMoreMin:
+          incomingThresholds.eightHoursOrMoreMin ?? currentThresholds.eightHoursOrMoreMin ?? 8,
+        sixToLessThanEightMin:
+          incomingThresholds.sixToLessThanEightMin ?? currentThresholds.sixToLessThanEightMin ?? 6,
+        fiveToLessThanSixMin:
+          incomingThresholds.fiveToLessThanSixMin ?? currentThresholds.fiveToLessThanSixMin ?? 5,
+        fourToLessThanFiveMin:
+          incomingThresholds.fourToLessThanFiveMin ?? currentThresholds.fourToLessThanFiveMin ?? 4,
+      };
     }
 
     let compensationSettings;
