@@ -1190,6 +1190,16 @@ const pickBestCarryForwardCandidate = (candidates = []) => {
   };
 
   return [...candidates].sort((left, right) => {
+    const leftCoverage = Number(left?.sourceCounts?.populatedModules || 0);
+    const rightCoverage = Number(right?.sourceCounts?.populatedModules || 0);
+    const coverageDiff = rightCoverage - leftCoverage;
+    if (coverageDiff !== 0) return coverageDiff;
+
+    const leftTotalRows = Number(left?.sourceCounts?.totalRows || 0);
+    const rightTotalRows = Number(right?.sourceCounts?.totalRows || 0);
+    const totalRowsDiff = rightTotalRows - leftTotalRows;
+    if (totalRowsDiff !== 0) return totalRowsDiff;
+
     const fiscalDiff = Number(right?.fiscalYear || 0) - Number(left?.fiscalYear || 0);
     if (fiscalDiff !== 0) return fiscalDiff;
 
@@ -1198,6 +1208,37 @@ const pickBestCarryForwardCandidate = (candidates = []) => {
 
     return new Date(right?.updatedAt || 0).getTime() - new Date(left?.updatedAt || 0).getTime();
   })[0];
+};
+
+const getCarryForwardSourceCounts = async ({ sourceWorkflowId, sourceLegacyId }) => {
+  const sourceQuery = buildCarryForwardSourceQuery({ sourceWorkflowId, sourceLegacyId });
+  if (!sourceQuery) {
+    return {
+      income: 0,
+      personnel: 0,
+      mooe: 0,
+      capitalOutlay: 0,
+      populatedModules: 0,
+      totalRows: 0
+    };
+  }
+
+  const [income, personnel, mooe, capitalOutlay] = await Promise.all([
+    Income.countDocuments(sourceQuery),
+    PersonnelServices.countDocuments(sourceQuery),
+    MooeProposal.countDocuments(sourceQuery),
+    CapitalOutlay.countDocuments(sourceQuery)
+  ]);
+
+  const counts = { income, personnel, mooe, capitalOutlay };
+  const populatedModules = Object.values(counts).filter((count) => Number(count) > 0).length;
+  const totalRows = Object.values(counts).reduce((sum, count) => sum + Number(count || 0), 0);
+
+  return {
+    ...counts,
+    populatedModules,
+    totalRows
+  };
 };
 
 const matchesCarryForwardScope = ({ candidate, regionName, department, division }) => {
@@ -1238,25 +1279,40 @@ const findCarryForwardSource = async ({ fiscalYear, userId, userName, regionId, 
     .populate('region', 'Region regionName RegionName name')
     .lean();
 
-  const matchedWorkflow = pickBestCarryForwardCandidate(
-    workflowCandidates.filter((candidate) =>
-      matchesCarryForwardScope({ candidate, regionName: normalizedRegionName, department, division })
-    )
+  const scopedWorkflowCandidates = workflowCandidates.filter((candidate) =>
+    matchesCarryForwardScope({ candidate, regionName: normalizedRegionName, department, division })
   );
 
-  if (matchedWorkflow) {
-    const linkedLegacy = await Proposal.findOne({ workflowRef: matchedWorkflow._id })
-      .select('_id fiscalYear status workflowRef updatedAt region department division')
-      .lean();
+  const enrichedWorkflowCandidates = await Promise.all(
+    scopedWorkflowCandidates.map(async (candidate) => {
+      const linkedLegacy = await Proposal.findOne({ workflowRef: candidate._id })
+        .select('_id')
+        .lean();
 
+      return {
+        ...candidate,
+        sourceWorkflowId: candidate._id,
+        sourceLegacyId: linkedLegacy?._id || null,
+        sourceCounts: await getCarryForwardSourceCounts({
+          sourceWorkflowId: candidate._id,
+          sourceLegacyId: linkedLegacy?._id || null
+        })
+      };
+    })
+  );
+
+  const matchedWorkflow = pickBestCarryForwardCandidate(enrichedWorkflowCandidates);
+
+  if (matchedWorkflow) {
     return {
-      sourceWorkflowId: matchedWorkflow._id,
-      sourceLegacyId: linkedLegacy?._id || null,
+      sourceWorkflowId: matchedWorkflow.sourceWorkflowId || matchedWorkflow._id,
+      sourceLegacyId: matchedWorkflow.sourceLegacyId || null,
       sourceFiscalYear: Number(matchedWorkflow.fiscalYear),
       sourceStatus: matchedWorkflow.status,
       sourceRegion: extractRegionName(matchedWorkflow.region),
       sourceDepartment: matchedWorkflow.department || '',
-      sourceDivision: matchedWorkflow.division || ''
+      sourceDivision: matchedWorkflow.division || '',
+      sourceCounts: matchedWorkflow.sourceCounts
     };
   }
 
@@ -1281,22 +1337,35 @@ const findCarryForwardSource = async ({ fiscalYear, userId, userName, regionId, 
     .limit(12)
     .lean();
 
-  const matchedLegacy = pickBestCarryForwardCandidate(
-    legacyCandidates.filter((candidate) =>
-      matchesCarryForwardScope({ candidate, regionName: normalizedRegionName, department, division })
-    )
+  const scopedLegacyCandidates = legacyCandidates.filter((candidate) =>
+    matchesCarryForwardScope({ candidate, regionName: normalizedRegionName, department, division })
   );
+
+  const enrichedLegacyCandidates = await Promise.all(
+    scopedLegacyCandidates.map(async (candidate) => ({
+      ...candidate,
+      sourceWorkflowId: candidate.workflowRef || null,
+      sourceLegacyId: candidate._id,
+      sourceCounts: await getCarryForwardSourceCounts({
+        sourceWorkflowId: candidate.workflowRef || null,
+        sourceLegacyId: candidate._id
+      })
+    }))
+  );
+
+  const matchedLegacy = pickBestCarryForwardCandidate(enrichedLegacyCandidates);
 
   if (!matchedLegacy) return null;
 
   return {
-    sourceWorkflowId: matchedLegacy.workflowRef || null,
-    sourceLegacyId: matchedLegacy._id,
+    sourceWorkflowId: matchedLegacy.sourceWorkflowId || matchedLegacy.workflowRef || null,
+    sourceLegacyId: matchedLegacy.sourceLegacyId || matchedLegacy._id,
     sourceFiscalYear: Number(matchedLegacy.fiscalYear),
     sourceStatus: matchedLegacy.status,
     sourceRegion: matchedLegacy.region || '',
     sourceDepartment: matchedLegacy.department || '',
-    sourceDivision: matchedLegacy.division || ''
+    sourceDivision: matchedLegacy.division || '',
+    sourceCounts: matchedLegacy.sourceCounts
   };
 };
 
