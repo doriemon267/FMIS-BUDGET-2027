@@ -1346,6 +1346,40 @@ const cloneIncomeEntries = async ({ sourceQuery, target }) => {
   return insertManyWithCount(Income, docs);
 };
 
+const clonePersonnelEntries = async ({ sourceQuery, target }) => {
+  const rows = await PersonnelServices.find(sourceQuery).lean();
+  if (!rows.length) return 0;
+
+  const docs = rows.map((row) => {
+    const cloned = { ...row };
+    delete cloned._id;
+    delete cloned.createdAt;
+    delete cloned.updatedAt;
+    delete cloned.__v;
+
+    return {
+      ...cloned,
+      region: target.regionName,
+      department: target.department,
+      division: target.division,
+      fiscalYear: target.fiscalYearString,
+      fiscal_year: target.fiscalYearNumber,
+      budgetType: target.budgetType,
+      proposalId: target.legacyProposalId,
+      workflowRef: target.workflowId,
+      processBy: target.userName,
+      processDate: target.now,
+      username_process: target.userName,
+      date_process: target.now,
+      status: 'Draft',
+      workflowLevel: 'BUDGET PREPARER',
+      createdBy: target.userId
+    };
+  });
+
+  return insertManyWithCount(PersonnelServices, docs);
+};
+
 const cloneMooeEntries = async ({ sourceQuery, target }) => {
   const rows = await MooeProposal.find(sourceQuery).lean();
   if (!rows.length) return 0;
@@ -1425,7 +1459,7 @@ const carryForwardInitialProposalData = async ({ fiscalYear, userId, userName, r
     return {
       carriedForward: false,
       source: null,
-      counts: { income: 0, mooe: 0, capitalOutlay: 0 }
+      counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 }
     };
   }
 
@@ -1434,7 +1468,7 @@ const carryForwardInitialProposalData = async ({ fiscalYear, userId, userName, r
     return {
       carriedForward: false,
       source,
-      counts: { income: 0, mooe: 0, capitalOutlay: 0 }
+      counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 }
     };
   }
 
@@ -1454,6 +1488,7 @@ const carryForwardInitialProposalData = async ({ fiscalYear, userId, userName, r
 
   const counts = {
     income: await cloneIncomeEntries({ sourceQuery, target: targetContext }),
+    personnel: await clonePersonnelEntries({ sourceQuery, target: targetContext }),
     mooe: await cloneMooeEntries({ sourceQuery, target: targetContext }),
     capitalOutlay: await cloneCapitalOutlayEntries({ sourceQuery, target: targetContext })
   };
@@ -1472,6 +1507,7 @@ const formatCarryForwardMessage = (result) => {
 
   const parts = [];
   if (result.counts.income) parts.push(`${result.counts.income} Income`);
+  if (result.counts.personnel) parts.push(`${result.counts.personnel} Personnel Services`);
   if (result.counts.mooe) parts.push(`${result.counts.mooe} MOOE`);
   if (result.counts.capitalOutlay) parts.push(`${result.counts.capitalOutlay} Capital Outlay`);
 
@@ -1682,7 +1718,7 @@ exports.createProposal = async (req, res) => {
     let carryForwardResult = {
       carriedForward: false,
       source: null,
-      counts: { income: 0, mooe: 0, capitalOutlay: 0 }
+      counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 }
     };
 
     const shouldCarryForward = normalizedModelType === 'Initial' && carryForwardPreviousYear !== false;
@@ -1720,7 +1756,7 @@ exports.createProposal = async (req, res) => {
         carryForwardResult = {
           carriedForward: false,
           source: null,
-          counts: { income: 0, mooe: 0, capitalOutlay: 0 },
+          counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 },
           warning: carryForwardError.message
         };
       }
