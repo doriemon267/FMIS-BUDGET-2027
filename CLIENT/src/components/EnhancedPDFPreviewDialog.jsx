@@ -22,17 +22,14 @@ import {
   LinearProgress,
 } from '@mui/material';
 import {
-  Close as CloseIcon,
   Download as DownloadIcon,
   Print as PrintIcon,
   Preview as PreviewIcon,
   Security as SecurityIcon,
   CheckCircle as CheckCircleIcon,
   Description as DescriptionIcon,
-  Shield as ShieldIcon,
   Fingerprint as FingerprintIcon,
   CalendarToday as CalendarIcon,
-  Person as PersonIcon,
 } from '@mui/icons-material';
 import api from '../config/api';
 
@@ -243,41 +240,10 @@ const EnhancedPDFPreviewDialog = ({
   };
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      fullScreen
-      PaperProps={{
-        sx: { minHeight: '100vh' }
-      }}
-    >
-      <DialogTitle 
-        sx={{ 
-          m: 0, 
-          p: 2, 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'space-between',
-          backgroundColor: '#1976d2',
-          color: 'white'
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <ShieldIcon />
-          <Typography variant="h6" component="div">
-            Secure PDF Export
-          </Typography>
-        </Box>
-        <IconButton
-          aria-label="close"
-          onClick={onClose}
-          sx={{ color: 'white' }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
+    <Dialog open={open} onClose={onClose} fullScreen>
+      <DialogTitle>Consolidated Corporate Income PDF Preview</DialogTitle>
 
-      <DialogContent sx={{ p: 3 }}>
+      <DialogContent dividers sx={{ p: 3 }}>
         {loading && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 4 }}>
             <CircularProgress size={60} />
@@ -447,13 +413,11 @@ const EnhancedPDFPreviewDialog = ({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider', backgroundColor: '#fafafa' }}>
+      <DialogActions>
         <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-          🔒 Server-side PDF generation ensures data security and authenticity
+          Server-side PDF generation ensures data security and authenticity.
         </Typography>
-        <Button onClick={onClose} variant="outlined">
-          Close
-        </Button>
+        <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   );

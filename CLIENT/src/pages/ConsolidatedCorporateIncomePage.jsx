@@ -56,7 +56,9 @@ const ConsolidatedCorporateIncomePage = () => {
   const [fiscalYears, setFiscalYears] = useState([]);
   const [budgetTypes] = useState(['INITIAL', 'NEP', 'GAA']);
   const [activeTab, setActiveTab] = useState(0); // 0 for summary, 1 for categories, 2 for subcategories
-  const [selectedRegions, setSelectedRegions] = useState('all'); // 'all' or specific region
+  const [selectedRegions, setSelectedRegions] = useState('');
+  const [consolidationType, setConsolidationType] = useState('current'); // current | all
+  const [availableRegions, setAvailableRegions] = useState([]);
   const { activeRegion } = useRegion();
   const activeRegionName = activeRegion?.name || activeRegion?.regionName || activeRegion?.Region || '';
   const [showPercentages, setShowPercentages] = useState(false);
@@ -177,7 +179,34 @@ const ConsolidatedCorporateIncomePage = () => {
   }, []);
 
   useEffect(() => {
-    if (!organizationStructure || selectedRegions === 'all') {
+    const fetchAvailableRegions = async () => {
+      try {
+        const response = await api.get('/api/consolidated-reports/available-regions');
+        setAvailableRegions(response.data?.regions || []);
+      } catch (_) {
+        setAvailableRegions([]);
+      }
+    };
+    fetchAvailableRegions();
+  }, []);
+
+  useEffect(() => {
+    if (consolidationType === 'all') return;
+    if (selectedRegions) return;
+
+    const fallbackRegion =
+      activeRegionName ||
+      availableRegions?.[0]?.name ||
+      availableRegions?.[0]?.Region ||
+      '';
+
+    if (fallbackRegion) {
+      setSelectedRegions(fallbackRegion);
+    }
+  }, [consolidationType, selectedRegions, activeRegionName, availableRegions]);
+
+  useEffect(() => {
+    if (!organizationStructure || consolidationType === 'all') {
       setDepartments([]);
       setDivisions([]);
       setSelectedDepartment('');
@@ -236,10 +265,10 @@ const ConsolidatedCorporateIncomePage = () => {
     setDepartments(depts);
     setSelectedDepartment('');
     setSelectedDivision('');
-  }, [organizationStructure, selectedRegions]);
+  }, [organizationStructure, selectedRegions, consolidationType]);
 
   useEffect(() => {
-    if (!selectedDepartment || selectedRegions === 'all') {
+    if (!selectedDepartment || consolidationType === 'all') {
       setDivisions([]);
       setSelectedDivision('');
       return;
@@ -255,7 +284,7 @@ const ConsolidatedCorporateIncomePage = () => {
       .then((res) => setDivisions(res.data?.data || res.data || []))
       .catch(() => setDivisions([]));
     setSelectedDivision('');
-  }, [selectedDepartment, selectedRegions, organizationStructure]);
+  }, [selectedDepartment, selectedRegions, consolidationType, organizationStructure]);
 
   // Fetch report data
   const fetchReportData = async () => {
@@ -272,10 +301,10 @@ const ConsolidatedCorporateIncomePage = () => {
       const params = {
         fiscalYear,
         budgetType,
-        // Ensure 'all' to bypass region interceptor filter when viewing all regions
-        ...(selectedRegions === 'all' ? { region: 'all' } : {}),
-        ...(selectedDepartmentName && selectedRegions !== 'all' ? { department: selectedDepartmentName } : {}),
-        ...(selectedDivisionName && selectedRegions !== 'all' ? { division: selectedDivisionName } : {})
+        ...(consolidationType === 'all' ? { region: 'all' } : {}),
+        ...(consolidationType === 'current' && selectedRegions ? { region: selectedRegions } : {}),
+        ...(selectedDepartmentName && consolidationType === 'current' ? { department: selectedDepartmentName } : {}),
+        ...(selectedDivisionName && consolidationType === 'current' ? { division: selectedDivisionName } : {})
       };
 
       const response = await api.get('reports/consolidated-corporate-income', {
@@ -321,7 +350,11 @@ const ConsolidatedCorporateIncomePage = () => {
   return (
     <ReportPageLayout
       title="CONSOLIDATED CORPORATE INCOME REPORT"
-      subtitle="Comprehensive income analysis across all regions with detailed breakdown by categories and subcategories."
+      subtitle={
+        consolidationType === 'all'
+          ? 'Consolidated income data from all regions'
+          : `Consolidated income data for ${selectedRegions || activeRegionName || 'selected region'}`
+      }
       showNiaBranding={true}
       breadcrumbLabel="Consolidated Corporate Income"
       fiscalYear={fiscalYear || new Date().getFullYear().toString()}
@@ -335,6 +368,31 @@ const ConsolidatedCorporateIncomePage = () => {
             
             <Grid container spacing={3} alignItems="center">
               {/* Filter Controls */}
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel id="consolidation-type-label">Consolidation Type</InputLabel>
+                  <Select
+                    labelId="consolidation-type-label"
+                    value={consolidationType}
+                    label="Consolidation Type"
+                    onChange={(e) => {
+                      const nextType = e.target.value;
+                      setConsolidationType(nextType);
+                      if (nextType === 'all') {
+                        setSelectedRegions('all');
+                      } else {
+                        setSelectedRegions(activeRegionName || '');
+                      }
+                      setSelectedDepartment('');
+                      setSelectedDivision('');
+                    }}
+                  >
+                    <MenuItem value="current">Current Region</MenuItem>
+                    <MenuItem value="all">All Regions</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
               <Grid item xs={12} md={3}>
                 <FormControl fullWidth size="small">
                   <InputLabel id="fiscal-year-label">Fiscal Year</InputLabel>
@@ -373,44 +431,31 @@ const ConsolidatedCorporateIncomePage = () => {
                 </FormControl>
               </Grid>
 
-              {/* Region Toggle and Filter */}
+              {/* Region Selector */}
               <Grid item xs={12} md={3}>
-                <Stack spacing={1}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={selectedRegions === 'all'}
-                        onChange={(e) => {
-                          const isAll = e.target.checked;
-                          setSelectedRegions(isAll ? 'all' : (activeRegionName || 'all'));
-                        }}
-                        size="small"
-                      />
-                    }
-                    label={selectedRegions === 'all' ? 'Viewing: All Regions' : `Viewing: Current Region (${activeRegionName || 'N/A'})`}
-                  />
-                  <FormControl fullWidth size="small">
-                    <InputLabel id="region-filter-label">Region View</InputLabel>
-                    <Select
-                      labelId="region-filter-label"
-                      id="region-filter"
-                      value={selectedRegions}
-                      label="Region View"
-                      onChange={(e) => {
-                        setSelectedRegions(e.target.value);
-                        setSelectedDepartment('');
-                        setSelectedDivision('');
-                      }}
-                    >
-                      <MenuItem value="all">All Regions</MenuItem>
-                      {reportData?.regions?.map((region) => (
+                <FormControl fullWidth size="small" disabled={consolidationType === 'all'}>
+                  <InputLabel id="region-filter-label">Region</InputLabel>
+                  <Select
+                    labelId="region-filter-label"
+                    id="region-filter"
+                    value={consolidationType === 'all' ? 'all' : selectedRegions}
+                    label="Region"
+                    onChange={(e) => {
+                      setSelectedRegions(e.target.value);
+                      setSelectedDepartment('');
+                      setSelectedDivision('');
+                    }}
+                  >
+                    {(availableRegions || []).map((regionObj) => {
+                      const region = regionObj?.name || regionObj?.Region;
+                      return (
                         <MenuItem key={region} value={region}>
                           {region}
                         </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Stack>
+                      );
+                    })}
+                  </Select>
+                </FormControl>
               </Grid>
 
               {/* View Options */}
@@ -421,7 +466,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="department-filter-label"
                     value={String(selectedDepartment ?? '')}
                     label="Department"
-                    disabled={selectedRegions === 'all' || departments.length === 0}
+                    disabled={consolidationType === 'all' || departments.length === 0}
                     onChange={(e) => {
                       setSelectedDepartment(e.target.value || '');
                       setSelectedDivision('');
@@ -447,7 +492,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="division-filter-label"
                     value={String(selectedDivision ?? '')}
                     label="Division"
-                    disabled={selectedRegions === 'all' || !selectedDepartment || divisions.length === 0}
+                    disabled={consolidationType === 'all' || !selectedDepartment || divisions.length === 0}
                     onChange={(e) => setSelectedDivision(e.target.value || '')}
                   >
                     <MenuItem value=""><em>All Divisions</em></MenuItem>
@@ -480,26 +525,25 @@ const ConsolidatedCorporateIncomePage = () => {
               <Grid item xs={12}>
                 <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
                   <Button
-                    variant="contained"
-                    color="primary"
+                    variant="outlined"
+                    color="success"
                     onClick={fetchReportData}
                     disabled={loading || !fiscalYear}
                     startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
-                    sx={{ minWidth: 140 }}
+                    sx={{ minWidth: 140, fontWeight: 600 }}
                   >
-                    {loading ? 'Loading...' : 'Generate Report'}
+                    {loading ? 'Loading...' : 'Refresh'}
                   </Button>
-                  {reportData && (
-                    <Button
-                      variant="outlined"
-                      color="secondary"
-                      onClick={handleExportToPDF}
-                      startIcon={<PictureAsPdf />}
-                      sx={{ minWidth: 140 }}
-                    >
-                      PDF Preview
-                    </Button>
-                  )}
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={handleExportToPDF}
+                    disabled={!reportData || loading}
+                    startIcon={<PictureAsPdf />}
+                    sx={{ minWidth: 140, fontWeight: 600 }}
+                  >
+                    PDF Preview
+                  </Button>
                 </Stack>
               </Grid>
             </Grid>
@@ -612,7 +656,7 @@ const ConsolidatedCorporateIncomePage = () => {
                               Income Category / Subcategory
                             </TableCell>
                             {reportData.regions
-                              .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                              .filter(region => consolidationType === 'all' || selectedRegions === region)
                               .map((region) => (
                                 <TableCell 
                                   key={region} 
@@ -664,7 +708,7 @@ const ConsolidatedCorporateIncomePage = () => {
                                   </Box>
                                 </TableCell>
                                 {reportData.regions
-                                  .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                                  .filter(region => consolidationType === 'all' || selectedRegions === region)
                                   .map((region) => (
                                     <TableCell key={`${region}-${category.id}`} align="right">
                                       ₱{(reportData.regionData[region]?.categoryAmounts[category.id] || 0)
@@ -694,7 +738,7 @@ const ConsolidatedCorporateIncomePage = () => {
                                       {subcategory.name}
                                     </TableCell>
                                     {reportData.regions
-                                      .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                                      .filter(region => consolidationType === 'all' || selectedRegions === region)
                                       .map((region) => (
                                         <TableCell key={`${region}-${subcategory.id}`} align="right">
                                           ₱{(reportData.regionData[region]?.subcategoryAmounts[subcategory.id] || 0)
@@ -723,7 +767,7 @@ const ConsolidatedCorporateIncomePage = () => {
                               GRAND TOTAL
                             </TableCell>
                             {reportData.regions
-                              .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                              .filter(region => consolidationType === 'all' || selectedRegions === region)
                               .map((region) => (
                                 <TableCell key={`total-${region}`} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
                                   ₱{(reportData.regionData[region]?.total || 0)
@@ -770,7 +814,7 @@ const ConsolidatedCorporateIncomePage = () => {
                                     Income Category / Subcategory (Tree View)
                                   </TableCell>
                                   {reportData.regions
-                                    .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                                    .filter(region => consolidationType === 'all' || selectedRegions === region)
                                     .map((region) => (
                                       <TableCell 
                                         key={region} 
@@ -819,7 +863,7 @@ const ConsolidatedCorporateIncomePage = () => {
                                             📁 {category.name}
                                           </TableCell>
                                           {reportData.regions
-                                            .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                                            .filter(region => consolidationType === 'all' || selectedRegions === region)
                                             .map((region) => (
                                               <TableCell key={`${region}-${category.id}`} align="right" sx={{ fontWeight: 'bold' }}>
                                                 ₱{(reportData.regionData[region]?.categoryAmounts[category.id] || 0)
@@ -857,7 +901,7 @@ const ConsolidatedCorporateIncomePage = () => {
                                                   └── 📄 {subcategory.name}
                                                 </TableCell>
                                                 {reportData.regions
-                                                  .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                                                  .filter(region => consolidationType === 'all' || selectedRegions === region)
                                                   .map((region) => (
                                                     <TableCell key={`${region}-${subcategory.id}`} align="right">
                                                       ₱{(reportData.regionData[region]?.subcategoryAmounts[subcategory.id] || 0)
@@ -885,7 +929,7 @@ const ConsolidatedCorporateIncomePage = () => {
                                     🏆 GRAND TOTAL
                                   </TableCell>
                                   {reportData.regions
-                                    .filter(region => selectedRegions === 'all' || selectedRegions === region)
+                                    .filter(region => consolidationType === 'all' || selectedRegions === region)
                                     .map((region) => (
                                       <TableCell key={`total-${region}`} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
                                         ₱{(reportData.regionData[region]?.total || 0)
