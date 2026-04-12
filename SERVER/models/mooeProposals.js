@@ -167,7 +167,17 @@ const mooeProposalSchema = new Schema({
     type: String
   }
 }, { timestamps: true });
-// Create a compound unique index that includes department and division
-// This allows the same UACS code in the same region/fiscal year but with different department/division
-mooeProposalSchema.index({ uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 }, { unique: true });
+// Keep MOOE rows unique within a specific proposal, not across every proposal in the same FY/scope.
+mooeProposalSchema.index(
+  { proposalId: 1, uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      proposalId: { $exists: true },
+      uacsCode: { $exists: true },
+      fiscalYear: { $exists: true },
+      region: { $exists: true }
+    }
+  }
+);
 module.exports = mongoose.model('MooeProposal', mooeProposalSchema);

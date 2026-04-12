@@ -230,32 +230,82 @@ require("./models/UserOrganizationalAssignment");
 mongoose.connection.once("open", async () => {
   try {
     const db = mongoose.connection.db;
-    const collection = db.collection("mooeproposals");
-    // Check if old problematic index exists
-    const indexes = await collection.indexes();
-    const hasOldIndex = indexes.some(
-      (idx) =>
-        idx.key &&
-        idx.key.uacsCode === 1 &&
-        idx.key.fiscalYear === 1 &&
-        !idx.key.region
-    );
-    if (hasOldIndex) {
-      try {
-        await collection.dropIndex({ uacsCode: 1, fiscalYear: 1 });
-      } catch (error) {}
-    }
-    // Ensure new index with region exists
+    const dropMatchingUniqueIndexes = async (collectionName, shouldDrop) => {
+      const collection = db.collection(collectionName);
+      const indexes = await collection.indexes();
+
+      for (const index of indexes) {
+        if (!index?.unique || !shouldDrop(index)) continue;
+
+        try {
+          await collection.dropIndex(index.name);
+        } catch (error) {}
+      }
+
+      return collection;
+    };
+
+    const mooeCollection = await dropMatchingUniqueIndexes("mooeproposals", (index) => {
+      const key = index?.key || {};
+      return (
+        key.uacsCode === 1 &&
+        key.fiscalYear === 1 &&
+        (!key.proposalId || key.proposalId !== 1)
+      );
+    });
+
     try {
-      await collection.createIndex(
-        { uacsCode: 1, fiscalYear: 1, region: 1 },
-        { unique: true, background: true }
+      await mooeCollection.createIndex(
+        { proposalId: 1, uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 },
+        {
+          unique: true,
+          background: true,
+          partialFilterExpression: {
+            proposalId: { $exists: true },
+            uacsCode: { $exists: true },
+            fiscalYear: { $exists: true },
+            region: { $exists: true }
+          }
+        }
       );
     } catch (error) {
       if (error.code !== 85) {
-        // 85 = index already exists
+        console.error("Failed to ensure MOOE proposal-scoped unique index:", error.message);
       }
     }
+
+    const capitalOutlayCollection = await dropMatchingUniqueIndexes("capitaloutlays", (index) => {
+      const key = index?.key || {};
+      return (
+        key.uacsCode === 1 &&
+        key.region === 1 &&
+        key.fiscalYear === 1 &&
+        key.sublineItem === 1 &&
+        (!key.proposalId || key.proposalId !== 1)
+      );
+    });
+
+    try {
+      await capitalOutlayCollection.createIndex(
+        { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1 },
+        {
+          unique: true,
+          background: true,
+          partialFilterExpression: {
+            proposalId: { $exists: true },
+            uacsCode: { $exists: true },
+            region: { $exists: true },
+            fiscalYear: { $exists: true },
+            sublineItem: { $exists: true }
+          }
+        }
+      );
+    } catch (error) {
+      if (error.code !== 85) {
+        console.error("Failed to ensure Capital Outlay proposal-scoped unique index:", error.message);
+      }
+    }
+
     // Ensure Settings collection has compound unique index (fiscalYear, budgetType) and drop old unique FY index if present
     try {
       const settingsCol = mongoose.connection.db.collection("settings");

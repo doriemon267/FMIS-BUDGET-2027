@@ -1385,6 +1385,14 @@ const buildCarryForwardSourceQuery = ({ sourceWorkflowId, sourceLegacyId }) => {
   return { $or: orConditions };
 };
 
+const resolveCarryForwardOrgValue = (targetValue, sourceValue) => {
+  const normalizedTargetValue = typeof targetValue === 'string' ? targetValue.trim() : targetValue;
+  if (normalizedTargetValue) return normalizedTargetValue;
+
+  const normalizedSourceValue = typeof sourceValue === 'string' ? sourceValue.trim() : sourceValue;
+  return normalizedSourceValue || '';
+};
+
 const cloneIncomeEntries = async ({ sourceQuery, target }) => {
   const rows = await Income.find(sourceQuery).lean();
   if (!rows.length) return 0;
@@ -1398,13 +1406,13 @@ const cloneIncomeEntries = async ({ sourceQuery, target }) => {
     amount: Number(row.amount || 0),
     fiscalYear: target.fiscalYearString,
     budgetType: target.budgetType,
-    region: target.regionName,
+    region: resolveCarryForwardOrgValue(target.regionName, row.region),
     processBy: target.userName,
     processDate: target.now,
     status: 'Draft',
     workflowLevel: 'BUDGET PREPARER',
-    department: target.department,
-    division: target.division,
+    department: resolveCarryForwardOrgValue(target.department, row.department),
+    division: resolveCarryForwardOrgValue(target.division, row.division),
     originalLevel: row.originalLevel || null,
     consolidatedFrom: row.consolidatedFrom || null,
     proposalId: target.legacyProposalId,
@@ -1428,9 +1436,9 @@ const clonePersonnelEntries = async ({ sourceQuery, target }) => {
 
     return {
       ...cloned,
-      region: target.regionName,
-      department: target.department,
-      division: target.division,
+      region: resolveCarryForwardOrgValue(target.regionName, row.region),
+      department: resolveCarryForwardOrgValue(target.department, row.department),
+      division: resolveCarryForwardOrgValue(target.division, row.division),
       fiscalYear: target.fiscalYearString,
       fiscal_year: target.fiscalYearNumber,
       budgetType: target.budgetType,
@@ -1464,9 +1472,9 @@ const cloneMooeEntries = async ({ sourceQuery, target }) => {
     cis: Number(row.cis || 0),
     processBy: target.userName,
     processDate: target.now,
-    region: target.regionName,
-    department: target.department,
-    division: target.division,
+    region: resolveCarryForwardOrgValue(target.regionName, row.region),
+    department: resolveCarryForwardOrgValue(target.department, row.department),
+    division: resolveCarryForwardOrgValue(target.division, row.division),
     status: 'Draft',
     workflowLevel: 'BUDGET PREPARER',
     fiscalYear: target.fiscalYearString,
@@ -1491,9 +1499,9 @@ const cloneCapitalOutlayEntries = async ({ sourceQuery, target }) => {
     subsidy: Number(row.subsidy || 0),
     category: row.category,
     date_process: target.now,
-    department: target.department,
-    division: target.division,
-    region: target.regionName,
+    department: resolveCarryForwardOrgValue(target.department, row.department),
+    division: resolveCarryForwardOrgValue(target.division, row.division),
+    region: resolveCarryForwardOrgValue(target.regionName, row.region),
     fiscal_year: target.fiscalYearNumber,
     budgetType: target.budgetType,
     username_process: target.userName,

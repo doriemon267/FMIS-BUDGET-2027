@@ -161,7 +161,16 @@ const CapitalOutlaySchema = new mongoose.Schema(
   { timestamps: true }
 );
 CapitalOutlaySchema.index(
-  { uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1 },
-  { unique: true, partialFilterExpression: { uacsCode: { $exists: true }, region: { $exists: true }, fiscalYear: { $exists: true }, sublineItem: { $exists: true } } }
+  { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      proposalId: { $exists: true },
+      uacsCode: { $exists: true },
+      region: { $exists: true },
+      fiscalYear: { $exists: true },
+      sublineItem: { $exists: true }
+    }
+  }
 );
 module.exports = mongoose.model("CapitalOutlay", CapitalOutlaySchema);
