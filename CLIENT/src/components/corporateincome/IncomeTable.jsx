@@ -19,13 +19,14 @@ import {
   TrendingUp as TrendingUpIcon, AccountBalance as AccountBalanceIcon,
   Info as InfoIcon, CheckCircle as CheckCircleIcon, Warning as WarningIcon,
   ExpandMore as ExpandMoreIcon, Add as AddIcon, Search as SearchIcon,
-  Summarize as SummarizeIcon
+  Summarize as SummarizeIcon, CloudUpload as CloudUploadIcon
 } from "@mui/icons-material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { NumericFormat } from "react-number-format";
 import { debounce } from 'lodash';
 import { getErrorMessage } from "../../utils/errorHandler";
+import BulkUploadModal from "../common/BulkUploadModal";
 
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {
   const { onChange, value, ...other } = props;
@@ -103,6 +104,7 @@ const IncomeTable = ({
   const [expandedCategories, setExpandedCategories] = useState({});
   const [autoSaveTimer, setAutoSaveTimer] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const allowedFiscalYears = useMemo(() => {
     const fromHierarchy = currentUser?.hierarchicalAccess?.restrictions?.allowedFiscalYears;
@@ -1090,6 +1092,16 @@ const IncomeTable = ({
                 Discount {applyDiscount ? (discountType === 'percentage' ? `(${discountValue}%)` : `(₱${formatNumber(discountValue)})`) : ''}
               </Button>
             </Tooltip>
+
+            <Tooltip title="Bulk import income data">
+              <IconButton
+                color="primary"
+                onClick={() => setShowBulkUpload(true)}
+                size="small"
+              >
+                <CloudUploadIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -1531,6 +1543,17 @@ const IncomeTable = ({
           <Button onClick={() => deleteItemMutation.mutate(itemToDelete)} color="error" variant="contained" autoFocus>Delete</Button>
         </DialogActions>
       </Dialog>
+
+      <BulkUploadModal
+        open={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        tableType="income"
+        onUploadSuccess={() => {
+          setShowBulkUpload(false);
+          handleRefresh();
+        }}
+      />
+
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
     </Paper>
   );

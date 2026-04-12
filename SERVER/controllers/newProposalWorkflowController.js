@@ -1131,6 +1131,357 @@ const sendWorkflowEmails = async (action, proposal, recipientUserIds, currentUse
   }
 };
 
+const normalizeComparableText = (value) => String(value || '').trim().toLowerCase();
+
+const extractRegionName = (region) => {
+  if (!region) return '';
+  if (typeof region === 'string') return region;
+  return region.Region || region.regionName || region.RegionName || region.name || '';
+};
+
+const buildIdentityCandidates = (userId, userName) => {
+  const values = [userId, userName]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(values));
+};
+
+const getInsertedCountFromBulkError = (error) => {
+  if (Array.isArray(error?.insertedDocs)) return error.insertedDocs.length;
+  if (typeof error?.result?.result?.nInserted === 'number') return error.result.result.nInserted;
+  if (typeof error?.result?.nInserted === 'number') return error.result.nInserted;
+  return 0;
+};
+
+const insertManyWithCount = async (Model, docs) => {
+  if (!docs.length) return 0;
+
+  try {
+    const insertedDocs = await Model.insertMany(docs, { ordered: false });
+    return insertedDocs.length;
+  } catch (error) {
+    if (error?.name === 'BulkWriteError' || error?.name === 'MongoBulkWriteError' || Array.isArray(error?.writeErrors)) {
+      const insertedCount = getInsertedCountFromBulkError(error);
+      console.warn(`[carryForward] Partial insert for ${Model.modelName}:`, error.message);
+      return insertedCount;
+    }
+    throw error;
+  }
+};
+
+const pickBestCarryForwardCandidate = (candidates = []) => {
+  if (!candidates.length) return null;
+
+  const statusPriority = {
+    FINALIZED: 5,
+    FORWARDED_TO_BRD_MANAGER: 4,
+    FORWARDED_TO_BRD_OFFICER: 4,
+    FORWARDED_TO_BRD_ANALYST: 4,
+    FORWARDED_TO_APPROVER: 4,
+    FORWARDED_TO_REVIEWER: 4,
+    RETURNED_TO_PREPARER: 3,
+    RETURNED_TO_REVIEWER: 3,
+    RETURNED_TO_APPROVER: 3,
+    RETURNED_TO_PLANNING_ANALYST: 3,
+    RETURNED_TO_OFFICER: 3,
+    DRAFT: 1,
+    Draft: 1,
+    Finalized: 5
+  };
+
+  return [...candidates].sort((left, right) => {
+    const fiscalDiff = Number(right?.fiscalYear || 0) - Number(left?.fiscalYear || 0);
+    if (fiscalDiff !== 0) return fiscalDiff;
+
+    const statusDiff = (statusPriority[right?.status] || 0) - (statusPriority[left?.status] || 0);
+    if (statusDiff !== 0) return statusDiff;
+
+    return new Date(right?.updatedAt || 0).getTime() - new Date(left?.updatedAt || 0).getTime();
+  })[0];
+};
+
+const matchesCarryForwardScope = ({ candidate, regionName, department, division }) => {
+  const candidateRegion = normalizeComparableText(extractRegionName(candidate?.region));
+  const targetRegion = normalizeComparableText(regionName);
+  const candidateDepartment = normalizeComparableText(candidate?.department);
+  const targetDepartment = normalizeComparableText(department);
+  const candidateDivision = normalizeComparableText(candidate?.division);
+  const targetDivision = normalizeComparableText(division);
+
+  if (targetRegion && candidateRegion && candidateRegion !== targetRegion) return false;
+  if (targetDivision && candidateDivision && candidateDivision !== targetDivision) return false;
+  if (!targetDivision && targetDepartment && candidateDepartment && candidateDepartment !== targetDepartment) return false;
+
+  return true;
+};
+
+const findCarryForwardSource = async ({ fiscalYear, userId, userName, regionId, regionName, department, division }) => {
+  const identityCandidates = buildIdentityCandidates(userId, userName);
+  const normalizedRegionName = normalizeComparableText(regionName);
+
+  const workflowQuery = {
+    modelType: 'Initial',
+    fiscalYear: { $lt: Number(fiscalYear) },
+    $or: [
+      { createdBy: { $in: identityCandidates } },
+      { createdByName: { $in: identityCandidates } }
+    ]
+  };
+
+  if (regionId) {
+    workflowQuery.region = regionId;
+  }
+
+  const workflowCandidates = await NewProposalWorkflow.find(workflowQuery)
+    .sort({ fiscalYear: -1, updatedAt: -1 })
+    .limit(12)
+    .populate('region', 'Region regionName RegionName name')
+    .lean();
+
+  const matchedWorkflow = pickBestCarryForwardCandidate(
+    workflowCandidates.filter((candidate) =>
+      matchesCarryForwardScope({ candidate, regionName: normalizedRegionName, department, division })
+    )
+  );
+
+  if (matchedWorkflow) {
+    const linkedLegacy = await Proposal.findOne({ workflowRef: matchedWorkflow._id })
+      .select('_id fiscalYear status workflowRef updatedAt region department division')
+      .lean();
+
+    return {
+      sourceWorkflowId: matchedWorkflow._id,
+      sourceLegacyId: linkedLegacy?._id || null,
+      sourceFiscalYear: Number(matchedWorkflow.fiscalYear),
+      sourceStatus: matchedWorkflow.status,
+      sourceRegion: extractRegionName(matchedWorkflow.region),
+      sourceDepartment: matchedWorkflow.department || '',
+      sourceDivision: matchedWorkflow.division || ''
+    };
+  }
+
+  const legacyQuery = {
+    budgetType: 'Initial',
+    fiscalYear: { $lt: String(fiscalYear) },
+    $or: [
+      { createdByUserId: String(userId || '') },
+      { createdBy: { $in: identityCandidates } },
+      { createdByName: { $in: identityCandidates } },
+      { processBy: { $in: identityCandidates } }
+    ]
+  };
+
+  if (regionName) {
+    legacyQuery.region = regionName;
+  }
+
+  const legacyCandidates = await Proposal.find(legacyQuery)
+    .select('_id fiscalYear status workflowRef updatedAt region department division')
+    .sort({ fiscalYear: -1, updatedAt: -1 })
+    .limit(12)
+    .lean();
+
+  const matchedLegacy = pickBestCarryForwardCandidate(
+    legacyCandidates.filter((candidate) =>
+      matchesCarryForwardScope({ candidate, regionName: normalizedRegionName, department, division })
+    )
+  );
+
+  if (!matchedLegacy) return null;
+
+  return {
+    sourceWorkflowId: matchedLegacy.workflowRef || null,
+    sourceLegacyId: matchedLegacy._id,
+    sourceFiscalYear: Number(matchedLegacy.fiscalYear),
+    sourceStatus: matchedLegacy.status,
+    sourceRegion: matchedLegacy.region || '',
+    sourceDepartment: matchedLegacy.department || '',
+    sourceDivision: matchedLegacy.division || ''
+  };
+};
+
+const buildCarryForwardSourceQuery = ({ sourceWorkflowId, sourceLegacyId }) => {
+  const orConditions = [];
+
+  if (sourceWorkflowId) {
+    orConditions.push({ workflowRef: sourceWorkflowId });
+  }
+
+  if (sourceLegacyId) {
+    orConditions.push({ proposalId: sourceLegacyId });
+  }
+
+  if (orConditions.length === 0) return null;
+  if (orConditions.length === 1) return orConditions[0];
+  return { $or: orConditions };
+};
+
+const cloneIncomeEntries = async ({ sourceQuery, target }) => {
+  const rows = await Income.find(sourceQuery).lean();
+  if (!rows.length) return 0;
+
+  const docs = rows.map((row) => ({
+    particulars: row.particulars,
+    cost: Number(row.cost ?? row.amount ?? 0),
+    incomecategory: row.incomecategory,
+    subcategory: row.subcategory,
+    category: row.category,
+    amount: Number(row.amount || 0),
+    fiscalYear: target.fiscalYearString,
+    budgetType: target.budgetType,
+    region: target.regionName,
+    processBy: target.userName,
+    processDate: target.now,
+    status: 'Draft',
+    workflowLevel: 'BUDGET PREPARER',
+    department: target.department,
+    division: target.division,
+    originalLevel: row.originalLevel || null,
+    consolidatedFrom: row.consolidatedFrom || null,
+    proposalId: target.legacyProposalId,
+    workflowRef: target.workflowId,
+    createdBy: target.userId
+  }));
+
+  return insertManyWithCount(Income, docs);
+};
+
+const cloneMooeEntries = async ({ sourceQuery, target }) => {
+  const rows = await MooeProposal.find(sourceQuery).lean();
+  if (!rows.length) return 0;
+
+  const docs = rows.map((row) => ({
+    uacsCode: row.uacsCode,
+    accountingTitle: row.accountingTitle,
+    sublineItem: row.sublineItem,
+    income: Number(row.income || 0),
+    subsidy: Number(row.subsidy || 0),
+    amount: Number(row.amount || 0),
+    nis: Number(row.nis || 0),
+    cis: Number(row.cis || 0),
+    processBy: target.userName,
+    processDate: target.now,
+    region: target.regionName,
+    department: target.department,
+    division: target.division,
+    status: 'Draft',
+    workflowLevel: 'BUDGET PREPARER',
+    fiscalYear: target.fiscalYearString,
+    proposalId: target.legacyProposalId,
+    workflowRef: target.workflowId,
+    budgetType: target.budgetType,
+    originalLevel: row.originalLevel || null,
+    createdBy: target.userId
+  }));
+
+  return insertManyWithCount(MooeProposal, docs);
+};
+
+const cloneCapitalOutlayEntries = async ({ sourceQuery, target }) => {
+  const rows = await CapitalOutlay.find(sourceQuery).lean();
+  if (!rows.length) return 0;
+
+  const docs = rows.map((row) => ({
+    particulars: row.particulars,
+    cost: Number(row.cost || 0),
+    income: Number(row.income || 0),
+    subsidy: Number(row.subsidy || 0),
+    category: row.category,
+    date_process: target.now,
+    department: target.department,
+    division: target.division,
+    region: target.regionName,
+    fiscal_year: target.fiscalYearNumber,
+    budgetType: target.budgetType,
+    username_process: target.userName,
+    status: 'Draft',
+    workflowLevel: 'BUDGET PREPARER',
+    proposalId: target.legacyProposalId,
+    workflowRef: target.workflowId,
+    processBy: target.userName,
+    processDate: target.now,
+    fiscalYear: target.fiscalYearString,
+    sublineItem: row.sublineItem,
+    accountingTitle: row.accountingTitle,
+    uacsCode: row.uacsCode,
+    createdBy: target.userId
+  }));
+
+  return insertManyWithCount(CapitalOutlay, docs);
+};
+
+const carryForwardInitialProposalData = async ({ fiscalYear, userId, userName, regionId, regionName, department, division, workflowId, legacyProposalId, budgetType }) => {
+  const source = await findCarryForwardSource({
+    fiscalYear,
+    userId,
+    userName,
+    regionId,
+    regionName,
+    department,
+    division
+  });
+
+  if (!source) {
+    return {
+      carriedForward: false,
+      source: null,
+      counts: { income: 0, mooe: 0, capitalOutlay: 0 }
+    };
+  }
+
+  const sourceQuery = buildCarryForwardSourceQuery(source);
+  if (!sourceQuery) {
+    return {
+      carriedForward: false,
+      source,
+      counts: { income: 0, mooe: 0, capitalOutlay: 0 }
+    };
+  }
+
+  const targetContext = {
+    fiscalYearNumber: Number(fiscalYear),
+    fiscalYearString: String(fiscalYear),
+    budgetType,
+    regionName,
+    department,
+    division,
+    workflowId,
+    legacyProposalId,
+    userId: String(userId),
+    userName,
+    now: new Date()
+  };
+
+  const counts = {
+    income: await cloneIncomeEntries({ sourceQuery, target: targetContext }),
+    mooe: await cloneMooeEntries({ sourceQuery, target: targetContext }),
+    capitalOutlay: await cloneCapitalOutlayEntries({ sourceQuery, target: targetContext })
+  };
+
+  return {
+    carriedForward: Object.values(counts).some((count) => count > 0),
+    source,
+    counts
+  };
+};
+
+const formatCarryForwardMessage = (result) => {
+  if (!result?.source) {
+    return 'No previous Initial proposal data was found to carry forward.';
+  }
+
+  const parts = [];
+  if (result.counts.income) parts.push(`${result.counts.income} Income`);
+  if (result.counts.mooe) parts.push(`${result.counts.mooe} MOOE`);
+  if (result.counts.capitalOutlay) parts.push(`${result.counts.capitalOutlay} Capital Outlay`);
+
+  if (!parts.length) {
+    return `Matched FY ${result.source.sourceFiscalYear} as the previous Initial proposal, but there were no linked line items to carry forward.`;
+  }
+
+  return `Carried forward ${parts.join(', ')} from FY ${result.source.sourceFiscalYear}.`;
+};
+
 // Create new proposal
 exports.createProposal = async (req, res) => {
   try {
@@ -1151,7 +1502,8 @@ exports.createProposal = async (req, res) => {
       projectedSubsidy,
       region,
       department,
-      division
+      division,
+      carryForwardPreviousYear = true
     } = req.body;
 
     // Robust user identifiers (avoid undefined createdBy)
@@ -1327,6 +1679,53 @@ exports.createProposal = async (req, res) => {
     const legacyProposal = new Proposal(legacyProposalData);
     await legacyProposal.save();
 
+    let carryForwardResult = {
+      carriedForward: false,
+      source: null,
+      counts: { income: 0, mooe: 0, capitalOutlay: 0 }
+    };
+
+    const shouldCarryForward = normalizedModelType === 'Initial' && carryForwardPreviousYear !== false;
+
+    if (shouldCarryForward) {
+      try {
+        carryForwardResult = await carryForwardInitialProposalData({
+          fiscalYear,
+          userId,
+          userName,
+          regionId: finalRegionId,
+          regionName: legacyProposalData.region,
+          department: derivedDepartment || '',
+          division: derivedDivision || '',
+          workflowId: proposal._id,
+          legacyProposalId: legacyProposal._id,
+          budgetType: normalizedModelType
+        });
+
+        if (carryForwardResult.carriedForward) {
+          proposal.workflowHistory = proposal.workflowHistory || [];
+          proposal.workflowHistory.push({
+            action: 'CREATED',
+            fromStatus: 'DRAFT',
+            toStatus: 'DRAFT',
+            performedBy: String(userId),
+            performedByName: userName,
+            comment: formatCarryForwardMessage(carryForwardResult),
+            timestamp: new Date()
+          });
+          await proposal.save();
+        }
+      } catch (carryForwardError) {
+        console.error('[carryForward] Failed to clone previous fiscal year data:', carryForwardError);
+        carryForwardResult = {
+          carriedForward: false,
+          source: null,
+          counts: { income: 0, mooe: 0, capitalOutlay: 0 },
+          warning: carryForwardError.message
+        };
+      }
+    }
+
     // CRITICAL FIX: Recalculate and sync totals after creating proposal
     // This ensures NewProposalWorkflow has correct initial totals (0 if no data yet)
     try {
@@ -1337,10 +1736,19 @@ exports.createProposal = async (req, res) => {
       // Continue - don't block proposal creation if recalculation fails
     }
 
+    const messageParts = ['Proposal created successfully'];
+    if (shouldCarryForward) {
+      messageParts.push(formatCarryForwardMessage(carryForwardResult));
+      if (carryForwardResult.warning) {
+        messageParts.push('Previous-year carry-forward encountered an issue and may be incomplete.');
+      }
+    }
+
     res.status(201).json({
       success: true,
-      message: 'Proposal created successfully',
-      data: proposal
+      message: `${messageParts.join('. ')}.`,
+      data: proposal,
+      carryForward: carryForwardResult
     });
   } catch (error) {
     console.error('Error creating proposal:', error);

@@ -100,6 +100,8 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import BulkUploadModal from "../common/BulkUploadModal";
 
 const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, fiscalYear = null }) => {  // ADDED: Accept region, proposalId, fiscalYear from parent
   const { currentUser } = useUser();
@@ -108,6 +110,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
   const queryClient = useQueryClient();
   const [expandedRows, setExpandedRows] = useState([]);
   const [disableIncomeInputs, setDisableIncomeInputs] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const { workflowRef, headerConfig } = useWorkflowRef();
   const effectiveProposalId = proposalId || workflowRef;  // ADDED: Use prop first, then hook
   const hasWorkflowRef = Boolean(effectiveProposalId);
@@ -1578,6 +1581,17 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                 <EditIcon />
               </IconButton>
             </Tooltip>
+
+            {/* Bulk upload button */}
+            <Tooltip title="Bulk import MOOE data">
+              <IconButton
+                color="primary"
+                onClick={() => setShowBulkUpload(true)}
+                disabled={!isEditable}
+              >
+                <CloudUploadIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
 
@@ -2310,6 +2324,16 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
         pauseOnFocusLoss
         draggable
         pauseOnHover
+      />
+
+      <BulkUploadModal
+        open={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        tableType="mooe"
+        onUploadSuccess={() => {
+          setShowBulkUpload(false);
+          queryClient.invalidateQueries({ queryKey: ['mooe'] });
+        }}
       />
     </>
   );

@@ -1,9 +1,27 @@
 const Income = require('../models/Income');
 const IncomeCategory = require('../models/IncomeCategory');
 const IncomeSubcategory = require('../models/IncomeSubcategory');
+const Settings = require('../models/Settings');
 const xlsx = require('xlsx');
 const fs = require('fs');
 const path = require('path');
+
+const normalizeUploadHeader = (value = '') => value.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+
+const findUploadColumn = (headers, candidates) => headers.find((header) => {
+  const normalizedHeader = normalizeUploadHeader(header);
+  return candidates.some((candidate) => {
+    const normalizedCandidate = normalizeUploadHeader(candidate);
+    return normalizedHeader === normalizedCandidate || normalizedHeader.includes(normalizedCandidate);
+  });
+});
+
+const parseUploadAmount = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') return value;
+  const parsed = parseFloat(value.toString().replace(/,/g, '').replace(/₱/g, '').trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 // Helper function to get subcategories for a region
 const getSubcategoriesForRegion = async (region) => {
   try {
@@ -41,105 +59,142 @@ exports.uploadCorporateIncome = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
+
+    const activeSettings = await Settings.findOne({ isActive: true });
+    if (!activeSettings) {
+      return res.status(404).json({
+        error: 'No active settings found',
+        message: 'Please set active fiscal year and budget type before uploading'
+      });
+    }
+
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(worksheet);
+    const data = xlsx.utils.sheet_to_json(worksheet, { defval: null });
+
     if (data.length === 0) {
       return res.status(400).json({ error: 'The uploaded file contains no data' });
     }
-    // Extract fiscal year and budget type from the first row
-    const fiscalYear = data[0].FiscalYear;
-    const budgetType = data[0].BudgetType;
-    if (!fiscalYear || !budgetType) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: FiscalYear and BudgetType must be included in the first row' 
+
+    const headers = Object.keys(data[0]);
+    const categoryCol = findUploadColumn(headers, ['CATEGORIES', 'Category']);
+    const subcategoryCol = findUploadColumn(headers, ['SUB-CATEGORIES', 'Subcategory']);
+    const amountCol = findUploadColumn(headers, ['AMOUNT', 'Amount']);
+    const regionCol = findUploadColumn(headers, ['Region']);
+    const particularsCol = findUploadColumn(headers, ['Particulars']);
+
+    const missingColumns = [
+      ['CATEGORIES', categoryCol],
+      ['AMOUNT', amountCol],
+    ].filter(([, value]) => !value).map(([label]) => label);
+
+    if (missingColumns.length > 0) {
+      return res.status(400).json({
+        error: `Missing required columns: ${missingColumns.join(', ')}`
       });
     }
+
+    const workflowData = req.submissionWorkflowData || {};
+    const resolvedRegion = workflowData.region || req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName || req.user?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
     // Process the data
     const results = {
-      fiscalYear,
-      budgetType,
+      fiscalYear: activeSettings.fiscalYear,
+      budgetType: activeSettings.budgetType,
       totalRecords: data.length,
       successfullyProcessed: 0,
       failedRecords: 0,
       errors: [],
       regions: new Set()
     };
-    for (const row of data) {
+    for (const [index, row] of data.entries()) {
       try {
-        // Validate required fields
-        if (!row.Category || !row.Region || !row.Amount) {
+        const categoryName = row[categoryCol]?.toString().trim() || '';
+        const subcategoryName = subcategoryCol ? row[subcategoryCol]?.toString().trim() || '' : '';
+        const amount = parseUploadAmount(row[amountCol]);
+        const rowRegion = (regionCol ? row[regionCol] : '')?.toString()?.trim();
+        const targetRegion = resolvedRegion || rowRegion;
+        const particulars = particularsCol
+          ? row[particularsCol]?.toString().trim() || ''
+          : (subcategoryName || categoryName);
+
+        if (!categoryName && !subcategoryName && amount === 0) {
+          continue;
+        }
+
+        if (!categoryName || !targetRegion || amount <= 0) {
           results.errors.push({
-            category: row.Category,
-            region: row.Region,
-            amount: row.Amount,
-            error: 'Missing required field(s): Category, Region, or Amount'
+            row: index + 2,
+            category: categoryName,
+            region: targetRegion,
+            amount,
+            error: 'Missing required field(s): CATEGORIES, AMOUNT, or region context'
           });
           results.failedRecords++;
           continue;
         }
-        // Add region to the set of processed regions
-        results.regions.add(row.Region);
-        // Find the income category
+
+        results.regions.add(targetRegion);
+
         const category = await IncomeCategory.findOne({ 
           $or: [
-            { incomeCategoryName: row.Category },
-            { name: row.Category }
+            { incomeCategoryName: categoryName },
+            { name: categoryName }
           ]
         });
         if (!category) {
           results.errors.push({
-            category: row.Category,
-            region: row.Region,
-            amount: row.Amount,
-            error: `Income category "${row.Category}" not found`
+            row: index + 2,
+            category: categoryName,
+            region: targetRegion,
+            amount,
+            error: `Income category "${categoryName}" not found`
           });
           results.failedRecords++;
           continue;
         }
-        // Get valid subcategories for this region
-        const validSubcategories = await getSubcategoriesForRegion(row.Region);
-        // Check if subcategory is valid for this region
-        if (row.Subcategory && !validSubcategories.includes(row.Subcategory)) {
+
+        const validSubcategories = await getSubcategoriesForRegion(targetRegion);
+        if (subcategoryName && validSubcategories.length > 0 && !validSubcategories.includes(subcategoryName)) {
           results.errors.push({
-            category: row.Category,
-            subcategory: row.Subcategory,
-            region: row.Region,
-            amount: row.Amount,
-            error: `Subcategory "${row.Subcategory}" is not valid for region "${row.Region}"`
+            row: index + 2,
+            category: categoryName,
+            subcategory: subcategoryName,
+            region: targetRegion,
+            amount,
+            error: `Subcategory "${subcategoryName}" is not valid for region "${targetRegion}"`
           });
           results.failedRecords++;
           continue;
         }
-        // Create the income record
-        // Normalize via submission workflow: corporate income is region-level
-        const workflowData = req.submissionWorkflowData || {};
+
         const income = new Income({
-          particulars: row.Particulars || row.Category,
+          particulars: particulars || categoryName,
           incomecategory: category._id,
-          category: row.Category,
-          subcategory: row.Subcategory || null,
-          amount: parseFloat(row.Amount),
-          fiscalYear,
-          budgetType,
-          region: workflowData.region || row.Region,
-          department: null, // Corporate income doesn't belong to a specific department
-          division: null,   // Corporate income doesn't belong to a specific division
-          originalLevel: 'REGION', // Corporate income starts at region level
+          category: categoryName,
+          subcategory: subcategoryName || null,
+          amount,
+          fiscalYear: activeSettings.fiscalYear,
+          budgetType: activeSettings.budgetType,
+          region: targetRegion,
+          department: null,
+          division: null,
+          originalLevel: 'REGION',
           workflowLevel: 'REGION',
           processBy: req.user ? req.user.username : 'System',
           processDate: new Date(),
-          status: 'Draft' // Changed from 'Submitted' to 'Draft' for consistency
+          status: 'Draft'
         });
         await income.save();
         results.successfullyProcessed++;
       } catch (error) {
         console.error('Error processing row:', error);
         results.errors.push({
-          category: row.Category,
-          region: row.Region,
-          amount: row.Amount,
+          row: index + 2,
+          category: row[categoryCol],
+          region: resolvedRegion || row[regionCol],
+          amount: row[amountCol],
           error: error.message
         });
         results.failedRecords++;
@@ -147,6 +202,8 @@ exports.uploadCorporateIncome = async (req, res) => {
     }
     // Convert regions set to array
     results.regions = Array.from(results.regions);
+    results.success = results.successfullyProcessed;
+    results.failed = results.failedRecords;
     return res.status(200).json(results);
   } catch (error) {
     console.error('Error uploading corporate income:', error);
@@ -156,39 +213,31 @@ exports.uploadCorporateIncome = async (req, res) => {
 // Generate template for corporate income upload
 exports.generateTemplate = async (req, res) => {
   try {
-    // Create a new workbook
     const workbook = xlsx.utils.book_new();
-    // Sample data
     const sampleData = [
       {
-        FiscalYear: '2024',
-        BudgetType: 'Corporate',
-        Category: 'Water Service Fee',
-        Subcategory: 'Region 1 Water Service',
-        Particulars: 'Water Service Fee for Region 1',
-        Region: 'Region 1',
-        Amount: 1000000
+        'CATEGORIES': 'Water Service Fee',
+        'SUB-CATEGORIES': 'Irrigation Service Fee',
+        'AMOUNT': 1000000
       },
       {
-        FiscalYear: '2024',
-        BudgetType: 'Corporate',
-        Category: 'Water Service Fee',
-        Subcategory: 'Region 2 Water Service',
-        Particulars: 'Water Service Fee for Region 2',
-        Region: 'Region 2',
-        Amount: 1500000
+        'CATEGORIES': 'Sales Revenue',
+        'SUB-CATEGORIES': 'Rental Income',
+        'AMOUNT': 1500000
       }
     ];
-    // Create a worksheet
+
     const worksheet = xlsx.utils.json_to_sheet(sampleData);
-    // Add the worksheet to the workbook
+    worksheet['!cols'] = [
+      { wch: 30 },
+      { wch: 34 },
+      { wch: 18 },
+    ];
+
     xlsx.utils.book_append_sheet(workbook, worksheet, 'Corporate Income');
-    // Create a buffer
     const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    // Set headers for file download
     res.setHeader('Content-Disposition', 'attachment; filename=corporate_income_template.xlsx');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    // Send the buffer
     res.send(buffer);
   } catch (error) {
     console.error('Error generating template:', error);

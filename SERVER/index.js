@@ -195,6 +195,7 @@ const exportRoutes = require("./routers/exportRoutes");
 const medicalAllowanceRouter = require("./routers/medicalAllowanceRoutes");
 const incomeRouter = require("./routers/incomeRoutes");
 const incomeExcelUploadRouter = require("./routers/incomeExcelUploadRoutes");
+const capitalOutlayExcelUploadRoutes = require("./routers/capitalOutlayExcelUploadRoutes");
 const discountSettingsRouter = require("./routes/discountSettings");
 const retireeRouter = require("./routers/retireeRoutes");
 const budgetarySupportRoutes = require("./routers/budgetarySupportRoutes");
@@ -1019,6 +1020,7 @@ app.use(apiPrefix, departmentRouter);
 app.use(apiPrefix, require("./routers/personnelParamsRoutes"));
 app.use(apiPrefix, attachWorkflowRef, personnelServicesRouter);
 app.use(apiPrefix, excelUploadRouter); // Excel Upload Route
+app.use(`${apiPrefix}/capitaloutlay`, capitalOutlayExcelUploadRoutes); // Capital Outlay Excel Upload Route
 app.use(apiPrefix, attachWorkflowRef, capitalOutlayRouter);
 app.use(apiPrefix, capitalOutlayDetailsRouter);
 app.use(apiPrefix, categoryRouter);

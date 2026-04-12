@@ -322,6 +322,7 @@ const ProposalCustomPage = ({
     projectedCorporateIncome: "",
     projectedSubsidy: "",
     modelType: "Initial", // Will be auto-overridden by active settings
+    carryForwardPreviousYear: true,
   });
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -377,7 +378,7 @@ const ProposalCustomPage = ({
           localStorage.setItem("activeWorkflowRef", proposalId);
         }
       } catch (_) {}
-      toast.success("Proposal created successfully!");
+      toast.success(response.data?.message || "Proposal created successfully!");
       setCreateDialogOpen(false);
       setPrivacyNoticeAccepted(false);
       setNewProposalData({
@@ -386,6 +387,7 @@ const ProposalCustomPage = ({
         projectedCorporateIncome: "",
         projectedSubsidy: "",
         modelType: "Initial",
+        carryForwardPreviousYear: true,
       });
     },
     onError: (error) => {
@@ -436,6 +438,7 @@ const ProposalCustomPage = ({
       projectedCorporateIncome,
       projectedSubsidy,
       modelType,
+      carryForwardPreviousYear,
     } = newProposalData;
     if (!title) {
       toast.error("Title is required.");
@@ -466,6 +469,8 @@ const ProposalCustomPage = ({
       modelType: modelTypeNormalized,
       fiscalYear: Number(activeFiscalYear) || new Date().getFullYear(),
       region: regionPayload,
+      carryForwardPreviousYear:
+        modelTypeNormalized === "Initial" ? carryForwardPreviousYear !== false : false,
     });
   };
 
@@ -2072,6 +2077,44 @@ const ProposalCustomPage = ({
                   sx={{ fontWeight: 600 }}
                 />
               )}
+            </Box>
+
+            <Box
+              sx={{
+                mt: 2,
+                p: 1.5,
+                borderRadius: 2,
+                backgroundColor: "#f8fafc",
+                border: "1px solid #dbe4f0",
+              }}
+            >
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={newProposalData.carryForwardPreviousYear}
+                    disabled={
+                      normalizeModelType(
+                        activeBudgetType || newProposalData.modelType || "Initial"
+                      ) !== "Initial"
+                    }
+                    onChange={(e) =>
+                      setNewProposalData((prev) => ({
+                        ...prev,
+                        carryForwardPreviousYear: e.target.checked,
+                      }))
+                    }
+                  />
+                }
+                label={
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    Carry forward previous fiscal year data
+                  </Typography>
+                }
+                sx={{ alignItems: "flex-start", m: 0 }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", pl: 4.5 }}>
+                For new Initial proposals, this copies linked Income, MOOE, and Capital Outlay rows from your latest matching prior fiscal year proposal.
+              </Typography>
             </Box>
 
             {/* Privacy Notice / Certification */}

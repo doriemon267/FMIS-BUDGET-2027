@@ -50,6 +50,7 @@ import {
   Clear,
   FilterList,
   Keyboard,
+  CloudUpload as CloudUploadIcon,
 } from "@mui/icons-material";
 import PesoIcon from "../icons/PesoIcon";
 import { useUser } from "../../context/UserContext";
@@ -59,6 +60,7 @@ import CapitalOutlayDetailsModal from "./CapitalOutlayDetailsModal";
 import { useCapitalOutlayData } from "./useCapitalOutlayData";
 import CapitalOutlayFilters from "./CapitalOutlayFilters";
 import { useWorkflowRef } from "../../hooks/useWorkflowRef";
+import BulkUploadModal from "../common/BulkUploadModal";
 
 // Error Boundary Component with reset capability
 class ErrorBoundary extends React.Component {
@@ -176,8 +178,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
     emptyValues: false,
   }));
   const [showFilters, setShowFilters] = useState(false);
-
-  // Use the custom hook for data management
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const {
     capitalOutlays,
   categories,
@@ -1063,6 +1064,16 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 size="small"
               >
                 <Keyboard />
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="Bulk import capital outlay data">
+              <IconButton
+                color="primary"
+                onClick={() => setShowBulkUpload(true)}
+                size="small"
+              >
+                <CloudUploadIcon />
               </IconButton>
             </Tooltip>
           </Box>
@@ -1987,6 +1998,16 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
         } : null}
         editingDisabled={!modificationsAllowed}
         editingDisabledReason={modificationBlockedReason}
+      />
+
+      <BulkUploadModal
+        open={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        tableType="capitalOutlay"
+        onUploadSuccess={() => {
+          setShowBulkUpload(false);
+          refreshData();
+        }}
       />
     </ErrorBoundary>
   );
