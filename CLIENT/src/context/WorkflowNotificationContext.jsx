@@ -44,6 +44,10 @@ export const WorkflowNotificationProvider = ({ children }) => {
         if (!err?.response) {
           return [];
         }
+        // Gateway/proxy errors in production should fail soft to avoid noisy UI crashes.
+        if ([500, 502, 503, 504].includes(Number(err.response?.status))) {
+          return [];
+        }
         console.error('[WorkflowNotificationContext] Fetch error:', err);
         throw err;
       }

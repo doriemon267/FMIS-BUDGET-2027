@@ -129,9 +129,33 @@ router.get('/notifications', async (req, res) => {
       ? { ...baseFilter, archived: { $ne: true } }
       : { ...baseFilter, status: 'UNREAD', archived: { $ne: true } };
 
-    const list = await Notification.find(query)
+    const requestedLimit = Number(req.query?.limit);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 200)
+      : 100;
+
+    // Keep payload small and avoid expensive full-document reads for the UI inbox.
+    const projection = {
+      _id: 1,
+      type: 1,
+      title: 1,
+      message: 1,
+      status: 1,
+      createdAt: 1,
+      readAt: 1,
+      relatedLink: 1,
+      relatedEntityId: 1,
+      relatedEntityType: 1,
+      metadata: 1,
+      recipientUserId: 1,
+      recipientUserIdNormalized: 1,
+      archived: 1
+    };
+
+    const list = await Notification.find(query, projection)
       .sort({ createdAt: -1 })
-      .limit(100)
+      .limit(limit)
+      .maxTimeMS(8000)
       .lean();
 
     // DEBUG: Log first notification being returned

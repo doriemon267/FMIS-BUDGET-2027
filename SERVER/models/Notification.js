@@ -30,6 +30,12 @@ const NotificationSchema = new mongoose.Schema({
   metadata: mongoose.Schema.Types.Mixed
 });
 
+// Query performance indexes for inbox endpoints (recipient/status/archive + newest first).
+NotificationSchema.index({ recipientUserId: 1, status: 1, archived: 1, createdAt: -1 });
+NotificationSchema.index({ recipientUserIdNormalized: 1, status: 1, archived: 1, createdAt: -1 });
+NotificationSchema.index({ recipientUserId: 1, archived: 1, createdAt: -1 });
+NotificationSchema.index({ recipientUserIdNormalized: 1, archived: 1, createdAt: -1 });
+
 // Normalization helper
 const normalizeRecipientId = (val) => {
   if (!val || typeof val !== 'string') return null;
