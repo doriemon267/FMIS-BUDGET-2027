@@ -150,7 +150,10 @@ const UserProvider = ({ children }) => {
     setAuthToken(null);
     setCurrentUser(null);
     setUnauthorizedSuperAdmin(false);
-    if (IS_PRODUCTION) {
+    const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(
+      window.location.hostname
+    );
+    if (IS_PRODUCTION && !isLocalhost) {
       // Use NIA SSO logoff URL (same as LogoutDialog) - hindi lang redirect sa login
       const clientId = env("CLIENT_ID");
       const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
@@ -162,8 +165,12 @@ const UserProvider = ({ children }) => {
       const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
       window.location.href = logoffUrl;
     } else {
-      // Redirect to current server's login page — avoids broken redirect to auth server port
-      window.location.href = window.location.origin + "/login";
+      // Redirect to auth server login page (localhost:5000), not the budget server (localhost:5005)
+      const authBase =
+        env("AUTH_CLIENT_URL_DEV") ||
+        env("LOGIN_REDIRECT_URL_DEV") ||
+        window.location.origin;
+      window.location.href = authBase + "/login";
     }
   };
 
