@@ -508,6 +508,8 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   };
 
   const isLoading = consolidatedLoading;
+  const hasReportData = Array.isArray(consolidatedData) && consolidatedData.length > 0;
+  const canPreviewPdf = !pdfLoading && !isLoading && hasReportData;
 
   return (
     <ReportPageLayout
@@ -706,7 +708,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
             color="error"
             startIcon={pdfLoading ? <CircularProgress size={18} color="inherit" /> : <PictureAsPdfIcon />}
             onClick={handlePreviewPdf}
-            disabled={pdfLoading || isLoading}
+            disabled={!canPreviewPdf}
             size="small"
             sx={{ minWidth: 140 }}
           >

@@ -313,6 +313,8 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   };
 
   const isLoading = consolidatedLoading;
+  const hasReportData = Array.isArray(consolidatedData) && consolidatedData.length > 0;
+  const canPreviewPdf = !pdfLoading && !isLoading && hasReportData;
 
   const closePdfDialog = () => {
     setPdfDialogOpen(false);
@@ -497,7 +499,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 color="error"
                 startIcon={pdfLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
                 onClick={handlePreviewPdf}
-                disabled={pdfLoading || isLoading}
+                disabled={!canPreviewPdf}
                 size="small"
               >
                 PDF Preview

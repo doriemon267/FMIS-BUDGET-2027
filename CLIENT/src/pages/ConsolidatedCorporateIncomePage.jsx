@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -64,6 +64,7 @@ const ConsolidatedCorporateIncomePage = () => {
   const [showPercentages, setShowPercentages] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState(new Set());
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [lastGeneratedParamsKey, setLastGeneratedParamsKey] = useState('');
   const [organizationStructure, setOrganizationStructure] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [divisions, setDivisions] = useState([]);
@@ -75,6 +76,20 @@ const ConsolidatedCorporateIncomePage = () => {
   const selectedDivisionName = selectedDivision
     ? (divisions.find((d) => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
     : '';
+  const effectiveRegionSelection = consolidationType === 'all' ? 'all' : selectedRegions;
+  const currentParamsKey = useMemo(
+    () => JSON.stringify({
+      fiscalYear,
+      budgetType,
+      consolidationType,
+      region: effectiveRegionSelection || '',
+      department: String(selectedDepartment || ''),
+      division: String(selectedDivision || ''),
+    }),
+    [fiscalYear, budgetType, consolidationType, effectiveRegionSelection, selectedDepartment, selectedDivision]
+  );
+  const hasReportData = Boolean(reportData?.hierarchicalData?.length);
+  const canPreviewPdf = hasReportData && !loading && lastGeneratedParamsKey === currentParamsKey;
   
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -313,6 +328,7 @@ const ConsolidatedCorporateIncomePage = () => {
 
       if (response.data) {
         setReportData(response.data);
+        setLastGeneratedParamsKey(currentParamsKey);
         setLoading(false);
       } else {
         setError('No data returned from the server. The report may be empty for the selected fiscal year and budget type.');
@@ -343,7 +359,7 @@ const ConsolidatedCorporateIncomePage = () => {
   };
 
   const handleExportToPDF = () => {
-    if (!reportData) return;
+    if (!canPreviewPdf) return;
     setPdfPreviewOpen(true);
   };
 
@@ -538,13 +554,18 @@ const ConsolidatedCorporateIncomePage = () => {
                     variant="outlined"
                     color="error"
                     onClick={handleExportToPDF}
-                    disabled={!reportData || loading}
+                    disabled={!canPreviewPdf}
                     startIcon={<PictureAsPdf />}
                     sx={{ minWidth: 140, fontWeight: 600 }}
                   >
                     PDF Preview
                   </Button>
                 </Stack>
+                {hasReportData && !canPreviewPdf && (
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    Please click Refresh first to generate report data for the current filters before opening PDF Preview.
+                  </Typography>
+                )}
               </Grid>
             </Grid>
           </CardContent>
