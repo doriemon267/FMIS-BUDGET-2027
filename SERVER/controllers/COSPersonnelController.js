@@ -111,13 +111,13 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
 
       // Only apply department/division filtering if user has assignment
       if (userAssignment) {
-        if (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION') {
+        if (['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL', 'DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
           if (userDepartment) {
             employeeQuery.Department = userDepartment;
           }
         }
 
-        if (userAssignment.assignmentLevel === 'DIVISION') {
+        if (['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
           if (userDivision) {
             employeeQuery.Division = userDivision;
             console.log('🔍 [COS BULK ADD] ⚠️⚠️⚠️ DIVISION LEVEL - STRICT FILTER:', userDivision);
@@ -193,7 +193,7 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
       }
 
       // Additional validation: Check if Division user is processing employee from their division
-      if (!isSuperAdmin && userAssignment?.assignmentLevel === 'DIVISION' && employee.Division !== userDivision) {
+      if (!isSuperAdmin && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment?.assignmentLevel) && employee.Division !== userDivision) {
         console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${userDivision})`);
       }
 
@@ -803,13 +803,13 @@ exports.getCOSByParams = async (req, res) => {
           const assignedDivision = userAssignment.divisionName;
 
           const filteredCosList = cosList.filter(cos => {
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+            if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
               return cos.division === assignedDivision;
             }
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+            if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
               return (cos.department || cos.Department) === assignedDepartment;
             }
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+            if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
               return cos.region === assignedRegion;
             }
             if (userAssignment.assignmentLevel === 'FULL') {

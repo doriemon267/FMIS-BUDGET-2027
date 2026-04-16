@@ -71,10 +71,10 @@ exports.getMOOEData = async (req, res) => {
               { userId: req.user.id }
             ]
           };
-        } else if (assignment && assignment.assignmentLevel === 'DEPARTMENT') {
+        } else if (assignment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(assignment.assignmentLevel)) {
           // Get department name from assignment
-          const userDept = assignment.departments?.[0]?.departmentName;
-          const userRegion = assignment.regions?.[0]?.regionName;
+          const userDept = assignment.departments?.[0]?.departmentName || assignment.departmentName || req.user.department;
+          const userRegion = assignment.regions?.[0]?.regionName || assignment.regionName || req.user.Region;
           
           if (userDept) {
             // Department users can only see:
@@ -117,11 +117,11 @@ exports.getMOOEData = async (req, res) => {
               ]
             };
           }
-        } else if (assignment && assignment.assignmentLevel === 'DIVISION') {
+        } else if (assignment && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(assignment.assignmentLevel)) {
           // Division users see only their own division data
-          const userDept = assignment.departments?.[0]?.departmentName;
-          const userDiv = assignment.divisions?.[0];
-          const userRegion = assignment.regions?.[0]?.regionName;
+          const userDept = assignment.departments?.[0]?.departmentName || assignment.departmentName || req.user.department;
+          const userDiv = assignment.divisions?.[0] || assignment.divisionName || req.user.division;
+          const userRegion = assignment.regions?.[0]?.regionName || assignment.regionName || req.user.Region;
           
           if (userDept && userDiv) {
             filter = {
@@ -1612,17 +1612,17 @@ exports.getMooeList = async (req, res) => {
           
           const filteredProposals = mooeProposals.filter(p => {
             // CASE 1: User assigned at DIVISION level - only show proposals from that division
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+            if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
               return p.division === assignedDivision;
             }
             
             // CASE 2: User assigned at DEPARTMENT level - only show proposals from that department
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+            if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
               return p.department === assignedDepartment;
             }
             
             // CASE 3: User assigned at REGION level - only show proposals from that region
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+            if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
               return p.region === assignedRegion;
             }
             
@@ -1756,13 +1756,13 @@ exports.getMOOEByParams = async (req, res) => {
             const assignedDivision = userAssignment.divisionName;
             
             const filteredMooe = mooe.filter(m => {
-              if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
                 return m.division === assignedDivision;
               }
-              if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
                 return m.department === assignedDepartment;
               }
-              if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
                 return m.region === assignedRegion;
               }
               if (userAssignment.assignmentLevel === 'FULL') {

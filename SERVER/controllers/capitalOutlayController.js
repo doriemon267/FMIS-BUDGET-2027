@@ -545,13 +545,13 @@ exports.getCapitalOutlayList = async (req, res) => {
           const assignedDivision = userAssignment.divisionName;
           
           const filteredOutlays = capitalOutlays.filter(co => {
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+            if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
               return co.division === assignedDivision;
             }
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+            if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
               return co.department === assignedDepartment;
             }
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+            if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
               return co.region === assignedRegion;
             }
             if (userAssignment.assignmentLevel === 'FULL') {

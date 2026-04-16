@@ -424,13 +424,13 @@ exports.getAllPersonnelServices = async (req, res) => {
           const assignedDivision = userAssignment.divisionName;
           
           const filteredPersonnel = personnelServices.filter(ps => {
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+            if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
               return ps.division === assignedDivision;
             }
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+            if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
               return (ps.department || ps.Department) === assignedDepartment;
             }
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+            if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
               return ps.region === assignedRegion;
             }
             if (userAssignment.assignmentLevel === 'FULL') {
@@ -619,7 +619,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
       userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
 
-      if (!userAssignment || userAssignment.assignmentLevel === 'NONE') {
+      if (!userAssignment || ['NONE', 'NO_ACCESS'].includes(userAssignment.assignmentLevel)) {
         return res.status(403).json({
           message: 'No organizational assignment found. Cannot perform bulk add.',
           code: 'NO_ORG_ASSIGNMENT'
@@ -800,7 +800,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       });
     }
 
-    if (!isSuperAdmin && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION')) {
+    if (!isSuperAdmin && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL', 'DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
       if (userDepartment) {
         statusConditions.forEach(condition => {
           condition.Department = userDepartment;
@@ -808,7 +808,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       }
     }
 
-    if (!isSuperAdmin && userAssignment.assignmentLevel === 'DIVISION') {
+    if (!isSuperAdmin && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
       if (userDivision) {
         statusConditions.forEach(condition => {
           condition.Division = userDivision;

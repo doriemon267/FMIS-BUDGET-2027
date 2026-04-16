@@ -2178,10 +2178,10 @@ exports.getProposals = async (req, res) => {
           const assignmentLevelRaw = String(userAssignment.assignmentLevel || '').toUpperCase();
           const assignmentLevel = ({
             DIVISION_LEVEL: 'DIVISION',
-            BUDGET_AND_REVENUE_DIVISION: 'DIVISION',
+            BUDGET_AND_REVENUE_DIVISION: 'REGION',
             DEPARTMENT_LEVEL: 'DEPARTMENT',
-            DEPARTMENT_REGIONAL_LEVEL: 'REGION', // Budget Planning Analyst regional assignment
-            RESPONSIBILITY_CENTER: 'DEPARTMENT',
+            DEPARTMENT_REGIONAL_LEVEL: 'DEPARTMENT',
+            RESPONSIBILITY_CENTER: 'DIVISION',
             OFFICE_LEVEL: 'OFFICE',
             REGION_LEVEL: 'REGION',
             FULL_ACCESS: 'FULL'

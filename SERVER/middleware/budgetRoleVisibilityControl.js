@@ -278,9 +278,13 @@ const budgetRoleVisibilityControl = () => {
               { processBy: userId },
               { processBy: userName },
               // Proposals in their organizational scope
-              ...(userDivision ? [{ division: userDivision }] : []),
-              ...(userDepartment ? [{ department: userDepartment }] : []),
-              ...(userRegion ? [{ region: userRegion }] : []),
+              ...((userDivision || userDepartment || userRegion) ? [{
+                $and: [
+                  ...(userDivision ? [{ division: userDivision }] : []),
+                  ...(userDepartment ? [{ department: userDepartment }] : []),
+                  ...(userRegion ? [{ region: userRegion }] : [])
+                ]
+              }] : []),
               // Proposals assigned to them in workflow
               { 'workflowHistory.userId': userId }
             ]
@@ -300,9 +304,13 @@ const budgetRoleVisibilityControl = () => {
                 { processBy: userName }
               ]},
               // Organizational scope proposals
-              ...(userDivision ? [{ division: userDivision }] : []),
-              ...(userDepartment ? [{ department: userDepartment }] : []),
-              ...(userRegion ? [{ region: userRegion }] : [])
+              ...((userDivision || userDepartment || userRegion) ? [{
+                $and: [
+                  ...(userDivision ? [{ division: userDivision }] : []),
+                  ...(userDepartment ? [{ department: userDepartment }] : []),
+                  ...(userRegion ? [{ region: userRegion }] : [])
+                ]
+              }] : [])
             ]
           };
           break;

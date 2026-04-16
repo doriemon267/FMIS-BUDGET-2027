@@ -391,20 +391,20 @@ exports.getAllIncome = async (req, res) => {
         if (userAssignment) {
           const assignedDepartment = userAssignment.departmentId?.Department || 
                                     userAssignment.departmentId?.DepartmentName ||
-                                    userAssignment.departmentId?.department;
+                                    userAssignment.departmentId?.department || req.user?.department;
           const assignedRegion = userAssignment.regionId?.Region ||
                                 userAssignment.regionId?.RegionName ||
-                                userAssignment.regionId?.region;
-          const assignedDivision = userAssignment.divisionName;
+                                userAssignment.regionId?.region || req.user?.Region || req.user?.region;
+          const assignedDivision = userAssignment.divisionName || (userAssignment.divisions && userAssignment.divisions[0]) || req.user?.division;
           
           const filteredIncome = incomeEntries.filter(inc => {
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+            if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
               return inc.division === assignedDivision;
             }
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+            if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
               return inc.department === assignedDepartment;
             }
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+            if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
               return inc.region === assignedRegion;
             }
             if (userAssignment.assignmentLevel === 'FULL') {
@@ -569,20 +569,20 @@ exports.getIncomeByParams = async (req, res) => {
           if (userAssignment) {
             const assignedDepartment = userAssignment.departmentId?.Department || 
                                       userAssignment.departmentId?.DepartmentName ||
-                                      userAssignment.departmentId?.department;
+                                      userAssignment.departmentId?.department || req.user?.department;
             const assignedRegion = userAssignment.regionId?.Region ||
                                   userAssignment.regionId?.RegionName ||
-                                  userAssignment.regionId?.region;
-            const assignedDivision = userAssignment.divisionName;
+                                  userAssignment.regionId?.region || req.user?.Region || req.user?.region;
+            const assignedDivision = userAssignment.divisionName || (userAssignment.divisions && userAssignment.divisions[0]) || req.user?.division;
             
             const filteredIncome = income.filter(inc => {
-              if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
                 return inc.division === assignedDivision;
               }
-              if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
                 return inc.department === assignedDepartment;
               }
-              if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
                 return inc.region === assignedRegion;
               }
               if (userAssignment.assignmentLevel === 'FULL') {
