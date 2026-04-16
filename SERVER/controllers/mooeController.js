@@ -215,7 +215,7 @@ exports.getMOOEData = async (req, res) => {
           });
         }
       }
-      
+
       // Add Financial Expenses entries to the Chart of Accounts data
       const financialExpensesEntries = [
         {
@@ -247,9 +247,24 @@ exports.getMOOEData = async (req, res) => {
           uacsCode: "5-02-99-990-CIS"
         }
       ];
-      // Append the Financial Expenses and IAs O&M Cost entries to the Chart of Accounts data
-      chartOfAccounts = [...chartOfAccounts, ...financialExpensesEntries, ...iasOMCostEntries];
-      } catch (error) {
+      // Add missing Communication Expenses
+      const communicationEntries = [
+        {
+          sublineItem: "Communication Expenses",
+          accountingTitle: "Telephone Expenses-Mobile",
+          uacsCode: "5-02-05-020-2"
+        }
+      ];
+      // Append the explicitly injected entries
+      chartOfAccounts = [...chartOfAccounts, ...financialExpensesEntries, ...iasOMCostEntries, ...communicationEntries];
+      
+
+
+      // To ensure no duplication, we can filter out duplicates
+      chartOfAccounts = chartOfAccounts.filter((item, index, self) => 
+        index === self.findIndex((t) => t.uacsCode === item.uacsCode)
+      );
+    } catch (error) {
       console.error('❌ Database query error:', error);
       // Use empty arrays as fallback
       chartOfAccounts = [];
@@ -790,9 +805,14 @@ exports.getMOOEData = async (req, res) => {
     // 6. Assemble entries array, including each proposal's _id as `id`
     const entries = chartOfAccounts.map(row => {
       const proposal = mooeMap[row.uacsCode];
+      let derivedSubline = row.sublineItem;
+      if (!derivedSubline && row.uacsCode && row.uacsCode.startsWith("5-02-99-990")) {
+        derivedSubline = "Other Maintenance and Operating Expenses";
+      }
+
       return {
         id:               proposal?._id?.toString() || null,
-        sublineItem:      row.sublineItem,
+        sublineItem:      derivedSubline,
         accountingTitle:  row.accountingTitle,
         uacsCode:         row.uacsCode,
         income:           proposal?.income?.toString() || "0",
@@ -921,7 +941,7 @@ exports.getMOOEEntries = async (req, res) => {
     const [chartOfAccounts, mooeProposals, cosPersonnels] = await Promise.all([
       ChartOfAccounts.find({
         accountClass: "Expense",
-        lineItem:    "Maintenance and Other Operating Expenses"
+        lineItem: "Maintenance and Other Operating Expenses"
       }).lean(),
       MooeProposal.find(filter).lean(), // Use filtered query with submission workflow
       COSPersonnel.find({
@@ -939,9 +959,14 @@ exports.getMOOEEntries = async (req, res) => {
     // 5. Assemble the final array with `id`
     const data = chartOfAccounts.map(row => {
       const proposal = mooeMap[row.uacsCode];
+      let derivedSubline = row.sublineItem;
+      if (!derivedSubline && row.uacsCode && row.uacsCode.startsWith("5-02-99-990")) {
+        derivedSubline = "Other Maintenance and Operating Expenses";
+      }
+
       return {
         id:               proposal?._id?.toString() || null,
-        sublineItem:      row.sublineItem,
+        sublineItem:      derivedSubline,
         accountingTitle:  row.accountingTitle,
         uacsCode:         row.uacsCode,
         income:           proposal?.income?.toString() || "0",

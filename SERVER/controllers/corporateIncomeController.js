@@ -81,8 +81,13 @@ exports.uploadCorporateIncome = async (req, res) => {
     const categoryCol = findUploadColumn(headers, ['CATEGORIES', 'Category']);
     const subcategoryCol = findUploadColumn(headers, ['SUB-CATEGORIES', 'Subcategory']);
     const amountCol = findUploadColumn(headers, ['AMOUNT', 'Amount']);
-    const regionCol = findUploadColumn(headers, ['Region']);
+    const regionCol = findUploadColumn(headers, ['REGION', 'Region']);
     const particularsCol = findUploadColumn(headers, ['Particulars']);
+
+    // Identify columns including Responsibility Center
+    const departmentCol = findUploadColumn(headers, ['DEPARTMENT', 'Department']);
+    const divisionCol = findUploadColumn(headers, ['DIVISION', 'Division']);
+    const rcCol = findUploadColumn(headers, ['RESPONSIBILITY CENTER', 'Responsibility Center', 'RC']);
 
     const missingColumns = [
       ['CATEGORIES', categoryCol],
@@ -98,6 +103,40 @@ exports.uploadCorporateIncome = async (req, res) => {
     const workflowData = req.submissionWorkflowData || {};
     const resolvedRegion = workflowData.region || req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName || req.user?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 
+    // Get user assignment for department, division, workflowLevel
+    const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    let assignedDepartment = undefined;
+    let assignedDivision = undefined;
+    let originalLevel = 'DIVISION';
+
+    if (userIdString) {
+      try {
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .lean();
+        if (userAssignment) {
+          assignedDepartment = userAssignment.departmentId?.Department || 
+                               userAssignment.departmentId?.DepartmentName ||
+                               userAssignment.departmentId?.department;
+          assignedDivision = userAssignment.divisionName;
+          originalLevel = userAssignment.assignmentLevel || 'DIVISION';
+        }
+      } catch (err) {
+        console.error('Error fetching user assignment for bulk upload:', err.message);
+      }
+    }
+
+    // Fetch master data for auto-detecting Responsibility Center levels
+    const RegionModel = require('../models/Region');
+    const DepartmentModel = require('../models/Department');
+    const allRegions = await RegionModel.find({}).lean();
+    const allDepartments = await DepartmentModel.find({}).lean();
+    
+    const knownRegions = allRegions.map(r => String(r.regionName || r.Region || '').toUpperCase().trim());
+    const knownDepts = allDepartments.map(d => String(d.departmentName || d.DepartmentName || d.Department || '').toUpperCase().trim());
+
     // Process the data
     const results = {
       fiscalYear: activeSettings.fiscalYear,
@@ -108,13 +147,46 @@ exports.uploadCorporateIncome = async (req, res) => {
       errors: [],
       regions: new Set()
     };
+
+    let currentRegion = '';
+    let currentDept = '';
+    let currentRC = '';
+    let currentCategory = '';
+
     for (const [index, row] of data.entries()) {
       try {
-        const categoryName = row[categoryCol]?.toString().trim() || '';
+        let rowRegionInput = regionCol ? row[regionCol]?.toString().trim() || '' : '';
+        let rowDeptInput = departmentCol ? row[departmentCol]?.toString().trim() || '' : '';
+        let rc = rcCol ? row[rcCol]?.toString().trim() || '' : '';
+        let categoryName = row[categoryCol]?.toString().trim() || '';
         const subcategoryName = subcategoryCol ? row[subcategoryCol]?.toString().trim() || '' : '';
         const amount = parseUploadAmount(row[amountCol]);
-        const rowRegion = (regionCol ? row[regionCol] : '')?.toString()?.trim();
-        const targetRegion = resolvedRegion || rowRegion;
+        
+        // Fill-down logic for grouped formatting
+        if (rowRegionInput) currentRegion = rowRegionInput; else rowRegionInput = currentRegion;
+        if (rowDeptInput) currentDept = rowDeptInput; else rowDeptInput = currentDept;
+        if (rc) currentRC = rc; else rc = currentRC;
+        if (categoryName) currentCategory = categoryName; else categoryName = currentCategory;
+
+        // Auto-detect Regional / Department / Division level from RC
+        let targetRegion = rowRegionInput || resolvedRegion || null;
+        let targetDepartment = rowDeptInput || assignedDepartment || null;
+        let targetDivision = divisionCol ? row[divisionCol]?.toString().trim() || '' : assignedDivision || null;
+        let targetLevel = originalLevel || 'REGION';
+        
+        if (rc) {
+          const rcUpper = rc.toUpperCase();
+          if (knownRegions.includes(rcUpper) || rcUpper === 'CENTRAL OFFICE' || rcUpper === 'CO' || rcUpper.startsWith('REGION')) {
+            targetRegion = rc;
+            targetLevel = 'REGION';
+          } else if (knownDepts.includes(rcUpper) || rcUpper.includes('DEPARTMENT') || rcUpper.includes('SERVICES')) {
+            targetDepartment = rc;
+            targetLevel = 'DEPARTMENT';
+          } else {
+            targetDivision = rc;
+            targetLevel = 'DIVISION';
+          }
+        }
         const particulars = particularsCol
           ? row[particularsCol]?.toString().trim() || ''
           : (subcategoryName || categoryName);
@@ -123,19 +195,20 @@ exports.uploadCorporateIncome = async (req, res) => {
           continue;
         }
 
-        if (!categoryName || !targetRegion || amount <= 0) {
+        // Require at least category, amount, and ANY organizational context
+        if (!categoryName || (!targetRegion && !targetDepartment && !targetDivision) || amount <= 0) {
           results.errors.push({
             row: index + 2,
             category: categoryName,
-            region: targetRegion,
+            region: targetRegion || targetDepartment || targetDivision || 'Unknown',
             amount,
-            error: 'Missing required field(s): CATEGORIES, AMOUNT, or region context'
+            error: 'Missing required field(s): CATEGORIES, AMOUNT, or Responsibility Center context'
           });
           results.failedRecords++;
           continue;
         }
 
-        results.regions.add(targetRegion);
+        results.regions.add(targetRegion || targetDepartment || targetDivision || 'Unknown');
 
         const category = await IncomeCategory.findOne({ 
           $or: [
@@ -178,11 +251,12 @@ exports.uploadCorporateIncome = async (req, res) => {
           fiscalYear: activeSettings.fiscalYear,
           budgetType: activeSettings.budgetType,
           region: targetRegion,
-          department: null,
-          division: null,
-          originalLevel: 'REGION',
-          workflowLevel: 'REGION',
-          processBy: req.user ? req.user.username : 'System',
+          department: targetDepartment,
+          division: targetDivision,
+          originalLevel: targetLevel,
+          workflowLevel: targetLevel,
+          createdBy: userIdString,
+          processBy: req.user?.userName || req.user?.username || req.user?.id || 'System Upload',
           processDate: new Date(),
           status: 'Draft'
         });
@@ -216,22 +290,63 @@ exports.generateTemplate = async (req, res) => {
     const workbook = xlsx.utils.book_new();
     const sampleData = [
       {
-        'CATEGORIES': 'Water Service Fee',
-        'SUB-CATEGORIES': 'Irrigation Service Fee',
+        'REGION': 'CENTRAL OFFICE',
+        'DEPARTMENT': 'OFFICE OF THE ADMINISTRATOR',
+        'RESPONSIBILITY CENTER': 'MANAGEMENT INFORMATION DIVISION',
+        'CATEGORIES': 'Irrigation Service Fees',
+        'SUB-CATEGORIES': 'Current Account',
         'AMOUNT': 1000000
       },
       {
-        'CATEGORIES': 'Sales Revenue',
-        'SUB-CATEGORIES': 'Rental Income',
+        'REGION': '',
+        'DEPARTMENT': '',
+        'RESPONSIBILITY CENTER': '',
+        'CATEGORIES': '',
+        'SUB-CATEGORIES': 'Back Accounts',
         'AMOUNT': 1500000
+      },
+      {
+        'REGION': '',
+        'DEPARTMENT': 'CORPORATE PLANNING SERVICES',
+        'RESPONSIBILITY CENTER': '',
+        'CATEGORIES': 'Rent Income',
+        'SUB-CATEGORIES': 'Rent Income',
+        'AMOUNT': 1500000
+      },
+      {
+        'REGION': 'REGION 1',
+        'DEPARTMENT': '',
+        'RESPONSIBILITY CENTER': '',
+        'CATEGORIES': 'Irrigation Service Fees',
+        'SUB-CATEGORIES': 'Current Account',
+        'AMOUNT': 2000000
+      },
+      {
+        'REGION': '',
+        'DEPARTMENT': '',
+        'RESPONSIBILITY CENTER': '',
+        'CATEGORIES': '',
+        'SUB-CATEGORIES': 'Back Accounts',
+        'AMOUNT': 1000000
+      },
+      {
+        'REGION': '',
+        'DEPARTMENT': '',
+        'RESPONSIBILITY CENTER': '',
+        'CATEGORIES': 'Miscellaneous Income',
+        'SUB-CATEGORIES': 'Bid Forms',
+        'AMOUNT': 2000000
       }
     ];
 
     const worksheet = xlsx.utils.json_to_sheet(sampleData);
     worksheet['!cols'] = [
-      { wch: 30 },
-      { wch: 34 },
-      { wch: 18 },
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 35 },
+      { wch: 25 },
+      { wch: 25 },
+      { wch: 18 }
     ];
 
     xlsx.utils.book_append_sheet(workbook, worksheet, 'Corporate Income');

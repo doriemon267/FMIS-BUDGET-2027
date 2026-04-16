@@ -227,10 +227,15 @@ export const BulkUploadModal = ({
           <Divider sx={{ mb: 3 }} />
 
           {/* Stepper */}
-          <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-            {steps.map((label) => (
+          <Stepper nonLinear activeStep={activeStep} sx={{ mb: 4 }}>
+            {steps.map((label, index) => (
               <Step key={label}>
-                <StepLabel>{label}</StepLabel>
+                <StepLabel 
+                  onClick={() => setActiveStep(index)}
+                  sx={{ cursor: "pointer" }}
+                >
+                  {label}
+                </StepLabel>
               </Step>
             ))}
           </Stepper>
@@ -252,15 +257,22 @@ export const BulkUploadModal = ({
               <Typography variant="body2" color="textSecondary" paragraph>
                 Download the Excel template to see the required format and field names. Fill it with your data and then upload it.
               </Typography>
-              <Button
-                variant="contained"
-                color="success"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadTemplate}
-                sx={{ mt: 2 }}
-              >
-                Download Template
-              </Button>
+              <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleDownloadTemplate}
+                >
+                  Download Template
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => setActiveStep(2)}
+                >
+                  Skip to Upload
+                </Button>
+              </Box>
             </Paper>
           )}
 
@@ -290,6 +302,15 @@ export const BulkUploadModal = ({
               <Typography variant="body2" color="textSecondary" sx={{ mt: 2, fontStyle: "italic" }}>
                 💡 Tip: You can copy existing data from the system and paste it into this template to make updates faster!
               </Typography>
+
+              <Box sx={{ display: "flex", gap: 2, mt: 3, justifyContent: "space-between" }}>
+                <Button variant="outlined" onClick={() => setActiveStep(0)}>
+                  Back
+                </Button>
+                <Button variant="contained" color="primary" onClick={() => setActiveStep(2)}>
+                  Proceed to Upload
+                </Button>
+              </Box>
             </Paper>
           )}
 
@@ -333,6 +354,14 @@ export const BulkUploadModal = ({
                 </label>
               </Box>
 
+              {!selectedFile && (
+                <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
+                  <Button variant="outlined" onClick={() => setActiveStep(1)}>
+                    Back
+                  </Button>
+                </Box>
+              )}
+
               {selectedFile && (
                 <Box sx={{ mt: 3 }}>
                   <Chip
@@ -353,6 +382,14 @@ export const BulkUploadModal = ({
                   )}
 
                   <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
+                    <Button
+                      variant="outlined"
+                      onClick={() => setActiveStep(1)}
+                      disabled={isUploading}
+                    >
+                      Back
+                    </Button>
+                    <Box sx={{ flexGrow: 1 }} />
                     <Button
                       variant="contained"
                       color="primary"

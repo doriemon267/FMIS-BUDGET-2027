@@ -12,6 +12,31 @@ exports.uploadCorporateIncome = async (req, res) => {
         error: "No active settings found",
         message: "Please set active fiscal year and budget type before uploading" 
       });
+    }
+
+    // Get user assignment for department and division
+    const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    let assignedDepartment = undefined;
+    let assignedDivision = undefined;
+    let originalLevel = 'DIVISION';
+
+    if (userIdString) {
+      try {
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .lean();
+        if (userAssignment) {
+          assignedDepartment = userAssignment.departmentId?.Department || 
+                               userAssignment.departmentId?.DepartmentName ||
+                               userAssignment.departmentId?.department;
+          assignedDivision = userAssignment.divisionName;
+          originalLevel = userAssignment.assignmentLevel || 'DIVISION';
+        }
+      } catch (err) {
+        console.error('Error fetching user assignment for bulk upload:', err.message);
+      }
     }    // Read the Excel file
     const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
@@ -183,7 +208,14 @@ exports.uploadCorporateIncome = async (req, res) => {
               particulars,
               region: standardRegion,
               fiscalYear: activeSettings.fiscalYear,
-              budgetType: activeSettings.budgetType
+              budgetType: activeSettings.budgetType,
+              department: assignedDepartment,
+              division: assignedDivision,
+              originalLevel: originalLevel,
+              workflowLevel: originalLevel,
+              createdBy: userIdString,
+              processBy: req.user?.userName || userIdString || "System Upload",
+              processDate: new Date()
             });
             // Track what was processed
             results.processedData.push({

@@ -133,12 +133,16 @@ exports.uploadCapitalOutlay = async (req, res) => {
     const incomeCol = findColumn(headers, ["INCOME", "Income"]);
     const subsidyCol = findColumn(headers, ["SUBSIDY", "Subsidy"]);
 
+    // Hierarchy Identifiers
+    const regionCol = findColumn(headers, ["REGION", "Region"]);
+    const departmentCol = findColumn(headers, ["DEPARTMENT", "Department"]);
+    const divisionCol = findColumn(headers, ["DIVISION", "Division"]);
+    const rcCol = findColumn(headers, ["RESPONSIBILITY CENTER", "Responsibility Center", "RC"]);
+
     const missingColumns = [
       ["TITLE", titleCol],
       ["Subline Item", sublineCol],
       ["Accounting Title", accountingCol],
-      ["INCOME", incomeCol],
-      ["SUBSIDY", subsidyCol],
     ]
       .filter(([, column]) => !column)
       .map(([label]) => label);
@@ -150,24 +154,44 @@ exports.uploadCapitalOutlay = async (req, res) => {
       });
     }
 
-    const org = await getUploadOrgContext(req);
-    if (!org.region) {
-      return res.status(400).json({
-        error: "Missing region context",
-        message: "Unable to determine the target region for this upload. Open the proposal in the correct scope and try again."
-      });
-    }
+    // Fetch master data for auto-detecting Responsibility Center levels
+    const RegionModel = require('../models/Region');
+    const DepartmentModel = require('../models/Department');
+    const allRegions = await RegionModel.find({}).lean();
+    const allDepartments = await DepartmentModel.find({}).lean();
+    
+    const knownRegions = allRegions.map(r => String(r.regionName || r.Region || '').toUpperCase().trim());
+    const knownDepts = allDepartments.map(d => String(d.departmentName || d.DepartmentName || d.Department || '').toUpperCase().trim());
 
+    const org = await getUploadOrgContext(req);
     let success = 0, failed = 0, errors = [];
+    let currentRegion = '';
+    let currentDept = '';
+    let currentRC = '';
+    let currentTitle = '';
+    let currentSubline = '';
+    let currentAccountingTitle = '';
 
     for (const [index, row] of sheetData.entries()) {
-      const title = row[titleCol]?.toString().trim() || "";
-      const sublineItem = row[sublineCol]?.toString().trim() || "";
-      const accountingTitle = row[accountingCol]?.toString().trim() || "";
+      let rowRegionInput = regionCol ? row[regionCol]?.toString().trim() || '' : '';
+      let rowDeptInput = departmentCol ? row[departmentCol]?.toString().trim() || '' : '';
+      let rc = rcCol ? row[rcCol]?.toString().trim() || '' : '';
+      
+      let title = row[titleCol]?.toString().trim() || "";
+      let sublineItem = row[sublineCol]?.toString().trim() || "";
+      let accountingTitle = row[accountingCol]?.toString().trim() || "";
       const particulars = particularsCol ? row[particularsCol]?.toString().trim() || "" : "";
       const income = parseAmount(row[incomeCol]);
       const subsidy = parseAmount(row[subsidyCol]);
       const cost = income + subsidy;
+
+      // Fill-down logic for grouped formatting
+      if (rowRegionInput) currentRegion = rowRegionInput; else rowRegionInput = currentRegion;
+      if (rowDeptInput) currentDept = rowDeptInput; else rowDeptInput = currentDept;
+      if (rc) currentRC = rc; else rc = currentRC;
+      if (title) currentTitle = title; else title = currentTitle;
+      if (sublineItem) currentSubline = sublineItem; else sublineItem = currentSubline;
+      if (accountingTitle) currentAccountingTitle = accountingTitle; else accountingTitle = currentAccountingTitle;
 
       if (!title && !sublineItem && !accountingTitle && income === 0 && subsidy === 0) {
         continue;
@@ -193,23 +217,48 @@ exports.uploadCapitalOutlay = async (req, res) => {
           throw new Error(`Unable to determine UACS code automatically for TITLE \"${title}\"`);
         }
 
+        let targetRegion = rowRegionInput || org.region || null;
+        let targetDepartment = rowDeptInput || org.department || null;
+        let targetDivision = divisionCol ? row[divisionCol]?.toString().trim() || '' : org.division || null;
+        let targetLevel = 'REGION';
+
+        if (rc) {
+          const rcUpper = rc.toUpperCase();
+          if (knownRegions.includes(rcUpper) || rcUpper === 'CENTRAL OFFICE' || rcUpper === 'CO' || rcUpper.startsWith('REGION')) {
+            targetRegion = rc;
+            targetLevel = 'REGION';
+          } else if (knownDepts.includes(rcUpper) || rcUpper.includes('DEPARTMENT') || rcUpper.includes('SERVICES')) {
+            targetDepartment = rc;
+            targetLevel = 'DEPARTMENT';
+          } else {
+            targetDivision = rc;
+            targetLevel = 'DIVISION';
+          }
+        }
+
+        if (!targetRegion && !targetDepartment && !targetDivision) {
+          throw new Error('Mission region/organizational context. Please specify REGION or RESPONSIBILITY CENTER.');
+        }
+
         await CapitalOutlay.create({
           category: categoryDoc._id,
           particulars,
           sublineItem,
           accountingTitle,
           uacsCode: resolvedUacsCode,
-          region: org.region,
-          department: org.department,
-          division: org.division,
+          region: targetRegion,
+          department: targetDepartment,
+          division: targetDivision,
+          originalLevel: targetLevel,
           income,
           subsidy,
           cost,
           fiscalYear: activeSettings.fiscalYear,
+          fiscal_year: Number(activeSettings.fiscalYear),
           budgetType: activeSettings.budgetType,
-          processBy: req.user?.username || req.user?.name || "System",
+          processBy: req.user?.username || req.user?.name || req.user?.id || "System",
           processDate: new Date(),
-          createdBy: req.user?.id || "system",
+          createdBy: req.user?.id || req.user?.userId || "system",
         });
 
         success++;
@@ -250,6 +299,9 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
   try {
     const sampleData = [
       {
+        "REGION": "CENTRAL OFFICE",
+        "DEPARTMENT": "ADMINISTRATIVE DEPARTMENT",
+        "RESPONSIBILITY CENTER": "MANAGEMENT INFORMATION DIVISION",
         "TITLE": "ACQUISITION OF MACHINERY AND EQUIPMENT",
         "Subline Item": "Service Vehicles",
         "Accounting Title": "Motor Vehicles",
@@ -259,6 +311,9 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "TOTAL": 750000
       },
       {
+        "REGION": "",
+        "DEPARTMENT": "",
+        "RESPONSIBILITY CENTER": "",
         "TITLE": "ACQUISITION OF MACHINERY AND EQUIPMENT",
         "Subline Item": "Office Equipment",
         "Accounting Title": "Furniture and Fixtures",
@@ -268,6 +323,9 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "TOTAL": 450000
       },
       {
+        "REGION": "",
+        "DEPARTMENT": "",
+        "RESPONSIBILITY CENTER": "",
         "TITLE": "ACQUISITION OF TRANSPORTATION EQUIPMENT",
         "Subline Item": "Motorcycles",
         "Accounting Title": "Transportation Equipment",
@@ -281,6 +339,9 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
     const worksheet = xlsx.utils.json_to_sheet(sampleData);
     
     worksheet["!cols"] = [
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 35 },
       { wch: 40 },
       { wch: 24 },
       { wch: 28 },

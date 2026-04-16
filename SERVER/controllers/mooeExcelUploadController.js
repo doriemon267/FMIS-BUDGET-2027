@@ -28,10 +28,19 @@ const resolveMooeMapping = async ({ sublineItem, accountingTitle }) => {
   const exactAccountingTitle = accountingTitle ? new RegExp(`^${escapeRegex(accountingTitle)}$`, "i") : null;
 
   if (exactSubline && exactAccountingTitle) {
-    const chartAccount = await ChartOfAccounts.findOne({
+    let chartAccount = await ChartOfAccounts.findOne({
       sublineItem: exactSubline,
       accountingTitle: exactAccountingTitle,
     }).lean();
+
+    // Special case: "Other Maintenance and Operating Expenses" in Excel vs blank in DB
+    if (!chartAccount && sublineItem.toLowerCase() === "other maintenance and operating expenses") {
+      chartAccount = await ChartOfAccounts.findOne({
+        $or: [{ sublineItem: null }, { sublineItem: "" }],
+        accountingTitle: exactAccountingTitle,
+        uacsCode: { $regex: /^5-02-99-990/ }
+      }).lean();
+    }
 
     if (chartAccount?.uacsCode) {
       return {
@@ -116,11 +125,15 @@ exports.uploadMooe = async (req, res) => {
     const incomeCol = findColumn(headers, ["INCOME", "Income"]);
     const subsidyCol = findColumn(headers, ["SUBSIDY", "Subsidy"]);
 
+    // Hierarchy Identifiers
+    const regionCol = findColumn(headers, ["REGION", "Region"]);
+    const departmentCol = findColumn(headers, ["DEPARTMENT", "Department"]);
+    const divisionCol = findColumn(headers, ["DIVISION", "Division"]);
+    const rcCol = findColumn(headers, ["RESPONSIBILITY CENTER", "Responsibility Center", "RC"]);
+
     const missingColumns = [
       ["SUBLINE ITEM", sublineCol],
       ["ACCOUNTING TITLE", accountingCol],
-      ["INCOME", incomeCol],
-      ["SUBSIDY", subsidyCol],
     ].filter(([, value]) => !value).map(([label]) => label);
 
     if (missingColumns.length > 0) {
@@ -130,22 +143,40 @@ exports.uploadMooe = async (req, res) => {
       });
     }
 
-    const org = await getUploadOrgContext(req);
-    if (!org.region) {
-      return res.status(400).json({
-        error: "Missing region context",
-        message: "Unable to determine the target region for this upload. Open the proposal in the correct scope and try again."
-      });
-    }
+    // Fetch master data for auto-detecting Responsibility Center levels
+    const RegionModel = require('../models/Region');
+    const DepartmentModel = require('../models/Department');
+    const allRegions = await RegionModel.find({}).lean();
+    const allDepartments = await DepartmentModel.find({}).lean();
+    
+    const knownRegions = allRegions.map(r => String(r.regionName || r.Region || '').toUpperCase().trim());
+    const knownDepts = allDepartments.map(d => String(d.departmentName || d.DepartmentName || d.Department || '').toUpperCase().trim());
 
+    const org = await getUploadOrgContext(req);
     let success = 0, failed = 0, errors = [];
+    let currentRegion = '';
+    let currentDept = '';
+    let currentRC = '';
+    let currentSubline = '';
+    let currentAccountingTitle = '';
 
     for (const [index, row] of sheetData.entries()) {
-      const sublineItem = row[sublineCol]?.toString().trim() || '';
-      const accountingTitle = row[accountingCol]?.toString().trim() || '';
+      let rowRegionInput = regionCol ? row[regionCol]?.toString().trim() || '' : '';
+      let rowDeptInput = departmentCol ? row[departmentCol]?.toString().trim() || '' : '';
+      let rc = rcCol ? row[rcCol]?.toString().trim() || '' : '';
+      
+      let sublineItem = row[sublineCol]?.toString().trim() || '';
+      let accountingTitle = row[accountingCol]?.toString().trim() || '';
       const income = parseAmount(row[incomeCol]);
       const subsidy = parseAmount(row[subsidyCol]);
       const amount = income + subsidy;
+
+      // Fill-down logic for grouped formatting
+      if (rowRegionInput) currentRegion = rowRegionInput; else rowRegionInput = currentRegion;
+      if (rowDeptInput) currentDept = rowDeptInput; else rowDeptInput = currentDept;
+      if (rc) currentRC = rc; else rc = currentRC;
+      if (sublineItem) currentSubline = sublineItem; else sublineItem = currentSubline;
+      if (accountingTitle) currentAccountingTitle = accountingTitle; else accountingTitle = currentAccountingTitle;
 
       if (!sublineItem && !accountingTitle && amount === 0) continue;
 
@@ -159,21 +190,45 @@ exports.uploadMooe = async (req, res) => {
           throw new Error(`Unable to determine UACS code automatically for subline item \"${sublineItem}\"`);
         }
 
+        let targetRegion = rowRegionInput || org.region || null;
+        let targetDepartment = rowDeptInput || org.department || null;
+        let targetDivision = divisionCol ? row[divisionCol]?.toString().trim() || '' : org.division || null;
+        let targetLevel = 'REGION';
+
+        if (rc) {
+          const rcUpper = rc.toUpperCase();
+          if (knownRegions.includes(rcUpper) || rcUpper === 'CENTRAL OFFICE' || rcUpper === 'CO' || rcUpper.startsWith('REGION')) {
+            targetRegion = rc;
+            targetLevel = 'REGION';
+          } else if (knownDepts.includes(rcUpper) || rcUpper.includes('DEPARTMENT') || rcUpper.includes('SERVICES')) {
+            targetDepartment = rc;
+            targetLevel = 'DEPARTMENT';
+          } else {
+            targetDivision = rc;
+            targetLevel = 'DIVISION';
+          }
+        }
+
+        if (!targetRegion && !targetDepartment && !targetDivision) {
+          throw new Error('Mission region/organizational context. Please specify REGION or RESPONSIBILITY CENTER.');
+        }
+
         await MooeProposal.create({
           sublineItem,
           accountingTitle: resolvedMapping.accountingTitle || accountingTitle,
           uacsCode: resolvedMapping.uacsCode,
-          region: org.region,
-          department: org.department,
-          division: org.division,
+          region: targetRegion,
+          department: targetDepartment,
+          division: targetDivision,
+          originalLevel: targetLevel,
           income,
           subsidy,
           amount,
           fiscalYear: activeSettings.fiscalYear,
           budgetType: activeSettings.budgetType,
-          processBy: req.user?.username || req.user?.name || 'System',
+          processBy: req.user?.username || req.user?.name || req.user?.id || 'System',
           processDate: new Date(),
-          createdBy: req.user?.id || 'system'
+          createdBy: req.user?.id || req.user?.userId || 'system'
         });
         success++;
       } catch (error) {
@@ -193,22 +248,41 @@ exports.getSampleMooeTemplate = async (req, res) => {
   try {
     const sampleData = [
       { 
+        "REGION": "CENTRAL OFFICE",
+        "DEPARTMENT": "ADMINISTRATIVE DEPARTMENT",
+        "RESPONSIBILITY CENTER": "MEDICAL AND DENTAL SERVICES",
         "SUBLINE ITEM": "Office Supplies",
-        "ACCOUNTING TITLE": "Supplies Expenses",
+        "ACCOUNTING TITLE": "Office Supplies Expenses",
         "INCOME": 10000,
         "SUBSIDY": 5000,
         "AMOUNT": 15000
       },
       { 
+        "REGION": "",
+        "DEPARTMENT": "",
+        "RESPONSIBILITY CENTER": "",
         "SUBLINE ITEM": "Travel Expenses",
-        "ACCOUNTING TITLE": "Traveling Expenses",
+        "ACCOUNTING TITLE": "Traveling Expenses - Local",
         "INCOME": 20000,
         "SUBSIDY": 8000,
         "AMOUNT": 28000
+      },
+      { 
+        "REGION": "",
+        "DEPARTMENT": "",
+        "RESPONSIBILITY CENTER": "",
+        "SUBLINE ITEM": "Other Maintenance and Operating Expenses",
+        "ACCOUNTING TITLE": "Representation Expenses",
+        "INCOME": 5000,
+        "SUBSIDY": 2000,
+        "AMOUNT": 7000
       }
     ];
     const worksheet = xlsx.utils.json_to_sheet(sampleData);
     const wscols = [
+      { wch: 20 },
+      { wch: 35 },
+      { wch: 35 },
       { wch: 28 },
       { wch: 32 },
       { wch: 16 },

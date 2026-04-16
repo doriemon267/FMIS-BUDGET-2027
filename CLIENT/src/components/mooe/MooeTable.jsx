@@ -389,6 +389,16 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
         return a.uacsCode.localeCompare(b.uacsCode, undefined, { numeric: true, sensitivity: 'base' });
       })
     })).sort((a, b) => {
+      // Special logic: Put IAs O&M Cost at the very bottom, and Financial Expenses right before it
+      const aTitle = a.sublineItem || '';
+      const bTitle = b.sublineItem || '';
+      
+      if (aTitle === "Irrigators' Associations (IAs) Operation & Maintenance Cost" && bTitle !== "Irrigators' Associations (IAs) Operation & Maintenance Cost") return 1;
+      if (bTitle === "Irrigators' Associations (IAs) Operation & Maintenance Cost" && aTitle !== "Irrigators' Associations (IAs) Operation & Maintenance Cost") return -1;
+      
+      if (aTitle === "Financial Expenses" && bTitle !== "Financial Expenses") return 1;
+      if (bTitle === "Financial Expenses" && aTitle !== "Financial Expenses") return -1;
+
       const aUacs = a.children[0]?.uacsCode || '';
       const bUacs = b.children[0]?.uacsCode || '';
       return aUacs.localeCompare(bUacs, undefined, { numeric: true, sensitivity: 'base' });
