@@ -10,6 +10,10 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;  // 15 minutes
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes lockout
 
+// Throttle SSO resolution logging to avoid log inflation from repeated /get-user calls.
+const _ssoResolvedLogCache = new Map(); // userId -> lastTimestampMs
+const SSO_RESOLVED_LOG_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
 function _recordFailedAttempt(username) {
   const now = Date.now();
   const entry = _loginAttempts.get(username) || { count: 0, firstAttempt: now, lockedUntil: 0 };
@@ -35,6 +39,20 @@ function _isLockedOut(username) {
 
 function _clearAttempts(username) {
   _loginAttempts.delete(username);
+}
+
+function _shouldLogSsoResolved(userId) {
+  const key = String(userId || '').trim();
+  if (!key) return false;
+
+  const now = Date.now();
+  const last = _ssoResolvedLogCache.get(key) || 0;
+  if (now - last < SSO_RESOLVED_LOG_WINDOW_MS) {
+    return false;
+  }
+
+  _ssoResolvedLogCache.set(key, now);
+  return true;
 }
 
 exports.login = async (req, res) => {
@@ -217,6 +235,30 @@ exports.getUser = async (req, res) => {
       // Profile picture is needed for the avatar UI — kept but not logged
       ProfilePicture: user.ProfilePicture ?? null,
     };
+
+    const displayName = [
+      `${user.FirstName || ''} ${user.LastName || ''}`.trim(),
+      user.name,
+      user.UserName,
+      user.userName,
+      primaryUsername,
+      resolvedId,
+    ].find((value) => value && String(value).trim().length > 0);
+
+    // Record SSO-based auth resolution so auth logs don't appear as logout-only.
+    if (_shouldLogSsoResolved(resolvedId)) {
+      await createUserActivityLog(req, {
+        action: "SSO_LOGIN_RESOLVED",
+        resource: "Auth",
+        userId: String(resolvedId || primaryUsername || 'unknown'),
+        userName: String(displayName || 'unknown'),
+        details: {
+          source: "get-user",
+          via: "sso-session",
+          hasRoles: Array.isArray(roles) && roles.length > 0,
+        },
+      }).catch(() => {});
+    }
 
     // Sync NIA Email to User collection so workflow notifications use user.Email (NIA) instead of HUA email
     // and also keep HierarchicalUserAssignment email in sync whenever the user logs in.

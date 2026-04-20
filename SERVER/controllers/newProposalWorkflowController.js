@@ -822,6 +822,49 @@ exports.getPreparerCreateProposalAccess = async (req, res) => {
       .map((value) => String(value || '').trim())
       .filter(Boolean);
 
+    // Constrain lock checks to the user's current assignment scope so in-process
+    // proposals from a different division/office do not block proposal creation.
+    const orgScopeFilter = {};
+    if (userIdString) {
+      try {
+        const assignment = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
+          .populate('departmentId', 'Department departmentName DepartmentName')
+          .populate('regionId', '_id')
+          .lean();
+
+        if (assignment) {
+          const assignmentLevelRaw = String(assignment.assignmentLevel || '').toUpperCase();
+          const assignmentLevel = ({
+            DIVISION_LEVEL: 'DIVISION',
+            RESPONSIBILITY_CENTER: 'DIVISION',
+            DEPARTMENT_LEVEL: 'DEPARTMENT',
+            DEPARTMENT_REGIONAL_LEVEL: 'DEPARTMENT',
+            OFFICE_LEVEL: 'DEPARTMENT',
+            REGION_LEVEL: 'REGION',
+          })[assignmentLevelRaw] || assignmentLevelRaw;
+
+          const assignedDivision = String(assignment.divisionName || '').trim();
+          const assignedDepartment = String(
+            assignment.departmentId?.Department ||
+            assignment.departmentId?.departmentName ||
+            assignment.departmentId?.DepartmentName ||
+            ''
+          ).trim();
+          const assignedRegionId = assignment.regionId?._id || assignment.regionId || null;
+
+          if (assignmentLevel === 'DIVISION' && assignedDivision) {
+            orgScopeFilter.division = assignedDivision;
+          } else if ((assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'OFFICE') && assignedDepartment) {
+            orgScopeFilter.department = assignedDepartment;
+          } else if (assignmentLevel === 'REGION' && assignedRegionId) {
+            orgScopeFilter.region = assignedRegionId;
+          }
+        }
+      } catch (scopeError) {
+        console.warn('[getPreparerCreateProposalAccess] Failed to resolve assignment scope:', scopeError.message);
+      }
+    }
+
     if (identityCandidates.length === 0) {
       return res.json({
         success: true,
@@ -836,15 +879,16 @@ exports.getPreparerCreateProposalAccess = async (req, res) => {
           { createdBy: { $in: identityCandidates } },
           { createdByName: { $in: identityCandidates } },
         ],
+        ...orgScopeFilter,
       },
-      'status createdBy createdByName'
+      'status createdBy createdByName division department region'
     ).lean();
 
     // Legacy fallback: only if strict identifiers have no hit, try displayName.
     if ((!proposals || proposals.length === 0) && displayName) {
       proposals = await NewProposalWorkflow.find(
-        { createdByName: displayName },
-        'status createdBy createdByName'
+        { createdByName: displayName, ...orgScopeFilter },
+        'status createdBy createdByName division department region'
       ).lean();
     }
 
@@ -1878,10 +1922,15 @@ exports.getProposals = async (req, res) => {
   try {
   const userRole = getUserRole(req);
   const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+  const usernameField = Array.isArray(req.user?.Username) ? req.user.Username[0] : req.user?.Username;
   const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
   const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
   // Normalize userId to string to avoid mismatches
   const userIdString = userId ? String(userId) : undefined;
+  const strictIdentityCandidates = [userIdString, usernameField]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  let myProposalOrgScope = {};
 
     let query = {};
 
@@ -1909,12 +1958,58 @@ exports.getProposals = async (req, res) => {
     // Apply view-based and role-based filtering
     switch (view) {
       case 'my-proposals':
-        // Allow matching either stored userId or userName (in case earlier records used name)
-        query.$or = [
-          { createdBy: userIdString },
-          { createdBy: userName },
-          { createdByName: userName }
-        ];
+        // Strict identity matching first to avoid cross-user collisions on display names.
+        if (strictIdentityCandidates.length > 0) {
+          query.$or = [
+            { createdBy: { $in: strictIdentityCandidates } },
+            { createdByName: { $in: strictIdentityCandidates } }
+          ];
+        } else {
+          query.$or = [{ createdByName: userName }];
+        }
+
+        // Keep "my-proposals" aligned to the user's current organizational scope.
+        // This prevents drafts from another division/office from appearing on /proposal.
+        try {
+          const myAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
+            .populate('departmentId', 'Department departmentName DepartmentName')
+            .populate('regionId', '_id')
+            .lean();
+
+          if (myAssignment) {
+            const assignmentLevelRaw = String(myAssignment.assignmentLevel || '').toUpperCase();
+            const assignmentLevel = ({
+              DIVISION_LEVEL: 'DIVISION',
+              RESPONSIBILITY_CENTER: 'DIVISION',
+              DEPARTMENT_LEVEL: 'DEPARTMENT',
+              DEPARTMENT_REGIONAL_LEVEL: 'DEPARTMENT',
+              OFFICE_LEVEL: 'DEPARTMENT',
+              REGION_LEVEL: 'REGION',
+            })[assignmentLevelRaw] || assignmentLevelRaw;
+
+            const assignedDivision = String(myAssignment.divisionName || '').trim();
+            const assignedDepartment = String(
+              myAssignment.departmentId?.Department ||
+              myAssignment.departmentId?.departmentName ||
+              myAssignment.departmentId?.DepartmentName ||
+              ''
+            ).trim();
+            const assignedRegionId = myAssignment.regionId?._id || myAssignment.regionId || null;
+
+            if (assignmentLevel === 'DIVISION' && assignedDivision) {
+              myProposalOrgScope.division = assignedDivision;
+            } else if ((assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'OFFICE') && assignedDepartment) {
+              myProposalOrgScope.department = assignedDepartment;
+            } else if (assignmentLevel === 'REGION' && assignedRegionId) {
+              myProposalOrgScope.region = assignedRegionId;
+            }
+
+            query = { ...query, ...myProposalOrgScope };
+          }
+        } catch (scopeError) {
+          console.warn('[getProposals] Failed to resolve my-proposals org scope:', scopeError.message);
+        }
+
         query.status = 'DRAFT';     // Use DRAFT enum value
         break;
       case 'pending-review':
@@ -2123,22 +2218,22 @@ exports.getProposals = async (req, res) => {
     // Fallback: if my-proposals view returned none, broaden search to createdBy only (no status) then re-filter
     if (view === 'my-proposals' && newProposals.length === 0) {
       // First fallback: direct createdBy match (string cast)
-      const fallbackQuery = { createdBy: userIdString };
+      const fallbackQuery = { createdBy: userIdString, ...myProposalOrgScope };
   const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
       newProposals = fallbackAll.filter(p => p.status === 'DRAFT');
       // Second fallback: try createdByName if still empty
       if (newProposals.length === 0) {
-  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT' }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...myProposalOrgScope }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
         newProposals = nameFallback;
       }
       // Final fallback: only return user-specific drafts. Do NOT return ALL drafts to avoid exposure.
       if (newProposals.length === 0) {
-        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: 'DRAFT' }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
+        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: 'DRAFT', ...myProposalOrgScope }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
         // Also try createdByName fallback, but do not broaden to all drafts
         if (allUserDrafts.length > 0) {
           newProposals = allUserDrafts;
         } else {
-          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT' }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...myProposalOrgScope }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
           newProposals = nameFallback;
         }
       }

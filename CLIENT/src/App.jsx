@@ -54,7 +54,6 @@ import ComprehensiveReportsPage from "./components/reports/ComprehensiveReportsP
 import DatabaseBackupPage from "./pages/DatabaseBackupPage";
 import HierarchicalUserAssignmentPage from "./pages/HierarchicalUserAssignmentPage";
 import NewProposalWorkflowPage from "./pages/NewProposalWorkflowPage";
-import AuditLogsPage from "./pages/AuditLogsPage";
 import ProposalDetailsPage from "./components/workflow/ProposalDetailsPage";
 import BRDConsolidationPage from "./pages/BRDConsolidationPage";
 import TierComparisonPage from "./pages/TierComparisonPage";
@@ -62,6 +61,7 @@ import ComparativeReportPage from "./pages/ComparativeReportPage";
 import NEPCeilingPage from "./pages/NEPCeilingPage";
 import TierPage from "./pages/TierPage";
 import UserActivityLogsPage from "./pages/UserActivityLogsPage";
+import NotFoundPage from "./pages/NotFoundPage";
 const App = () => {
   return (
     <Routes>
@@ -180,11 +180,8 @@ const App = () => {
         <Route
           path="/audit-logs"
           element={
-            <ProtectedRoute
-              requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin", "overallBudgetApprover"]}
-            >
-              <AuditLogsPage />
+            <ProtectedRoute requiredWorkflowRoles={["superAdmin"]}>
+              <UserActivityLogsPage />
             </ProtectedRoute>
           }
         />
@@ -480,7 +477,10 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
+
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 };
