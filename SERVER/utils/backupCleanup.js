@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const { getBackupStoragePath } = require('./backupPaths');
+let cleanupTasks = [];
 /**
  * Clean up expired backups based on retention policy
  */
@@ -193,18 +194,35 @@ const formatBytes = (bytes) => {
  * Runs daily at 3:00 AM
  */
 const initializeCleanupScheduler = () => {
+  // Prevent duplicate schedules when init is called multiple times
+  if (cleanupTasks.length > 0) return cleanupTasks;
+
   // Daily cleanup at 3:00 AM
-  cron.schedule('0 3 * * *', async () => {
+  const dailyTask = cron.schedule('0 3 * * *', async () => {
     const expiredCleanup = await cleanupExpiredBackups();
     const orphanedCleanup = await cleanupOrphanedFiles();
     const healthCheck = await checkBackupHealth();
     console.log(`[Backup Cleanup] Daily task completed: ${expiredCleanup.deletedCount} expired, ${orphanedCleanup.deletedCount} orphaned`);
   });
   // Weekly health check report (Sundays at 6:00 AM)
-  cron.schedule('0 6 * * 0', async () => {
+  const weeklyTask = cron.schedule('0 6 * * 0', async () => {
     await checkBackupHealth();
   });
-  };
+  cleanupTasks = [dailyTask, weeklyTask];
+  return cleanupTasks;
+};
+
+const stopCleanupScheduler = () => {
+  for (const task of cleanupTasks) {
+    try {
+      task.stop();
+      if (typeof task.destroy === 'function') task.destroy();
+    } catch (_) {
+      // ignore stop errors during shutdown
+    }
+  }
+  cleanupTasks = [];
+};
 /**
  * Manual cleanup function that can be called from API
  */
@@ -223,6 +241,7 @@ module.exports = {
   checkBackupHealth,
   getStorageStats,
   initializeCleanupScheduler,
+  stopCleanupScheduler,
   runManualCleanup,
   formatBytes
 };

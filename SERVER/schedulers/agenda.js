@@ -10,7 +10,11 @@ const initAgenda = async ({ mongoConnection } = {}) => {
   // If agenda already initialized, reuse
   if (agenda) return agenda;
   // Accept either a mongoose connection or a mongo connection string
-  const mongo = (mongoConnection && mongoConnection.client) ? mongoConnection.client.s.url : process.env.MONGODB_URI;
+  const mongo =
+    process.env.MONGODB_BUDGET_URL ||
+    process.env.MONGODB_URI ||
+    process.env.MONGODB_URL ||
+    (mongoConnection && mongoConnection.client && mongoConnection.client.s && mongoConnection.client.s.url);
   agenda = new Agenda({ db: { address: mongo || process.env.MONGODB_URI, collection: 'agendaJobs' }, processEvery: '1 minute' });
 
   // Define job: send main notification
@@ -115,6 +119,15 @@ const initAgenda = async ({ mongoConnection } = {}) => {
   return agenda;
 };
 
+const stopAgenda = async () => {
+  if (!agenda) return;
+  try {
+    await agenda.stop();
+  } finally {
+    agenda = null;
+  }
+};
+
 const scheduleEventJobs = async (event) => {
   if (!agenda) await initAgenda({ mongoConnection: mongoose.connection });
   const jobIds = [];
@@ -158,4 +171,4 @@ const cancelEventJobs = async (eventId, jobIds = []) => {
   }
 };
 
-module.exports = { initAgenda, scheduleEventJobs, cancelEventJobs };
+module.exports = { initAgenda, stopAgenda, scheduleEventJobs, cancelEventJobs };

@@ -588,6 +588,18 @@ const initializeScheduledJobs = async () => {
   }
 };
 
+const stopScheduledJobs = () => {
+  for (const [jobId, task] of scheduledJobs.entries()) {
+    try {
+      task.stop();
+      if (typeof task.destroy === 'function') task.destroy();
+    } catch (_) {
+      // ignore stop errors during shutdown
+    }
+    scheduledJobs.delete(jobId);
+  }
+};
+
 /**
  * Verify backup integrity and return report with recommendations (data/API only).
  * GET /backup/verify/:id returns report.summary.recommendations for clients to display or log.
@@ -647,5 +659,6 @@ module.exports = {
   cleanupBackups,
   getStorageStatistics,
   verifyBackup,
-  initializeScheduledJobs
+  initializeScheduledJobs,
+  stopScheduledJobs
 };

@@ -58,6 +58,7 @@ if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
 // Global error handlers to prevent crashes from unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exitCode = 1;
 });
 
 process.on('uncaughtException', (err) => {
@@ -70,59 +71,15 @@ process.on('uncaughtException', (err) => {
     console.error('   Error keys:', Object.keys(err));
     console.error('   Error details:', JSON.stringify(err, null, 2));
   }
-  // Optional: process.exit(1) if you want it to restart, but for now let's just log
+  gracefulShutdown('uncaughtException', err, 1);
 });
 // Note: No re-declaration of SUPPRESS_NODE_DEPRECATION_WARNINGS here; handled above
 // Removed console silencing - we want essential startup messages to show
 
-// Apply log redaction and debug mode globally
-const { logger: redactLogger } = require("./utils/logRedactor");
-const debugLogger = require("./utils/debugLogger");
-
-// Store original console methods before replacing
-const originalConsole = {
-  log: console.log,
-  error: console.error,
-  warn: console.warn,
-  info: console.info,
-  debug: console.debug,
-};
-
-// Replace console methods with combined redaction + debug filtering
-const shouldRedact = process.env.REDACT_LOGS === "true";
+// Apply centralized logging with redaction support
+const { logger, wireConsoleToWinston } = require("./utils/winstonLogger");
+wireConsoleToWinston();
 const debugMode = process.env.DEBUG_MODE === "true";
-
-console.log = (...args) => {
-  if (debugMode) {
-    if (shouldRedact) redactLogger.log(...args);
-    else originalConsole.log(...args);
-  }
-};
-
-console.info = (...args) => {
-  if (debugMode) {
-    if (shouldRedact) redactLogger.info?.(...args);
-    else originalConsole.info?.(...args);
-  }
-};
-
-console.debug = (...args) => {
-  if (debugMode) {
-    if (shouldRedact) redactLogger.debug?.(...args);
-    else originalConsole.debug?.(...args);
-  }
-};
-
-// Errors and warnings always show (but still get redacted)
-console.error = (...args) => {
-  if (shouldRedact) redactLogger.error(...args);
-  else originalConsole.error(...args);
-};
-
-console.warn = (...args) => {
-  if (shouldRedact) redactLogger.warn(...args);
-  else originalConsole.warn(...args);
-};
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
@@ -133,9 +90,7 @@ const helmet = require('helmet');
 const mongoSanitize = require('express-mongo-sanitize');
 const csurf = require('csurf');
 const http = require("http");
-const socketIo = require("socket.io");
-const jwt = require("jsonwebtoken");
-const { resolveUserIdentity } = require("./utils/requestContext");
+const { initializeSocket } = require("./socket");
 const personnelRoutes = require("./routers/personnel");
 const positionTitleRoutes = require("./routers/PositionTitle");
 const departmentRouter = require("./routers/Department");
@@ -215,131 +170,33 @@ const checkToken = require("./middleware/checkToken");
 const authRouter = require("./routers/auth_router");
 
 const enforceOrgAccess = require("./middleware/enforceOrgAccess");
-const { initializeCleanupScheduler } = require("./utils/backupCleanup");
+const {
+  initializeCleanupScheduler,
+  stopCleanupScheduler,
+} = require("./utils/backupCleanup");
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
-const { initializeScheduledJobs } = require("./controllers/databaseBackupController");
+const {
+  initializeScheduledJobs,
+  stopScheduledJobs,
+} = require("./controllers/databaseBackupController");
 const income_categories = require("./routers/income_categories");
 
 const myProposalsRoutes = require("./routes/myProposalsRoutes");
-require("./config/mongo_db")();
-// Fix database index for region isolation
+const connectMongo = require("./config/mongo_db");
+const { mainConnection } = connectMongo;
 const mongoose = require("mongoose");
-const { initAgenda } = require("./schedulers/agenda");
+const { initAgenda, stopAgenda } = require("./schedulers/agenda");
+const { ensureDatabaseIndexes } = require("./config/dbIndexes");
+connectMongo();
 // Load UserOrganizationalAssignment model to ensure it's registered with mongoose
 require("./models/UserOrganizationalAssignment");
 mongoose.connection.once("open", async () => {
-  try {
-    const db = mongoose.connection.db;
-    const dropMatchingUniqueIndexes = async (collectionName, shouldDrop) => {
-      const collection = db.collection(collectionName);
-      const indexes = await collection.indexes();
+  await ensureDatabaseIndexes(mongoose, logger);
 
-      for (const index of indexes) {
-        if (!index?.unique || !shouldDrop(index)) continue;
-
-        try {
-          await collection.dropIndex(index.name);
-        } catch (error) {}
-      }
-
-      return collection;
-    };
-
-    const mooeCollection = await dropMatchingUniqueIndexes("mooeproposals", (index) => {
-      const key = index?.key || {};
-      return (
-        key.uacsCode === 1 &&
-        key.fiscalYear === 1 &&
-        (!key.proposalId || key.proposalId !== 1)
-      );
-    });
-
-    try {
-      await mooeCollection.createIndex(
-        { proposalId: 1, uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 },
-        {
-          unique: true,
-          background: true,
-          partialFilterExpression: {
-            proposalId: { $exists: true },
-            uacsCode: { $exists: true },
-            fiscalYear: { $exists: true },
-            region: { $exists: true }
-          }
-        }
-      );
-    } catch (error) {
-      if (error.code !== 85) {
-        console.error("Failed to ensure MOOE proposal-scoped unique index:", error.message);
-      }
-    }
-
-    const capitalOutlayCollection = await dropMatchingUniqueIndexes("capitaloutlays", (index) => {
-      const key = index?.key || {};
-      return (
-        key.uacsCode === 1 &&
-        key.region === 1 &&
-        key.fiscalYear === 1 &&
-        key.sublineItem === 1 &&
-        (!key.proposalId || key.proposalId !== 1)
-      );
-    });
-
-    try {
-      await capitalOutlayCollection.createIndex(
-        { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1 },
-        {
-          unique: true,
-          background: true,
-          partialFilterExpression: {
-            proposalId: { $exists: true },
-            uacsCode: { $exists: true },
-            region: { $exists: true },
-            fiscalYear: { $exists: true },
-            sublineItem: { $exists: true }
-          }
-        }
-      );
-    } catch (error) {
-      if (error.code !== 85) {
-        console.error("Failed to ensure Capital Outlay proposal-scoped unique index:", error.message);
-      }
-    }
-
-    // Ensure Settings collection has compound unique index (fiscalYear, budgetType) and drop old unique FY index if present
-    try {
-      const settingsCol = mongoose.connection.db.collection("settings");
-      const settingsIndexes = await settingsCol.indexes();
-      const hasUniqueFYOnly = settingsIndexes.some(
-        (idx) =>
-          idx.key &&
-          idx.key.fiscalYear === 1 &&
-          idx.unique &&
-          !idx.key.budgetType
-      );
-      if (hasUniqueFYOnly) {
-        try {
-          await settingsCol.dropIndex("fiscalYear_1");
-        } catch (e) {}
-      }
-      try {
-        await settingsCol.createIndex(
-          { fiscalYear: 1, budgetType: 1 },
-          { unique: true, background: true }
-        );
-      } catch (e) {
-        if (e.code !== 85) {
-        }
-      }
-    } catch (e) {}
-  } catch (error) {
-    // Database index check failed
-  }
   // Initialize Agenda scheduler after DB connection
   try {
     await initAgenda({ mongoConnection: mongoose.connection });
-    // console.log('Agenda scheduler initialized');
-    
+
     // Initialize backup system and scheduled jobs
     initializeCleanupScheduler();
     await initializeScheduledJobs();
@@ -402,320 +259,7 @@ const attachWorkflowRef = require("./middleware/attachWorkflowRef");
 const server = http.createServer(app);
 // Ensure default port uses .env but provide safe default
 process.env.APP_PORT = process.env.APP_PORT || process.env.PORT || "5005";
-// Socket.IO setup with explicit allowed origins (separate from Express CORS)
-const allowedSocketOrigins = [
-  process.env.CLIENT1,
-  process.env.CLIENT2,
-  process.env.CLIENT3,
-  "http://localhost:3005",
-  "http://budget.fmis.local:3005",
-  "https://budget.nia.gov.ph",
-  "https://budget-server.nia.gov.ph"
-].filter(Boolean);
-
-const io = socketIo(server, {
-  cors: {
-    origin: allowedSocketOrigins,
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-  path: "/socket.io/",
-});
-const Message = require("./models/Message");
-
-// Socket authentication middleware
-io.use(async (socket, next) => {
-  try {
-    const normalizeSocketId = (value) => {
-      if (value === undefined || value === null) return "";
-      return String(value).trim();
-    };
-    const pickSocketUserId = (...values) => {
-      for (const value of values) {
-        if (Array.isArray(value)) {
-          for (const nested of value) {
-            const normalizedNested = normalizeSocketId(nested);
-            if (normalizedNested) return normalizedNested;
-          }
-          continue;
-        }
-        const normalized = normalizeSocketId(value);
-        if (normalized) return normalized;
-      }
-      return "";
-    };
-
-    // DEVELOPMENT: allow dev-only mock auth using X-Dev-User-Id header
-    const allowMockAuth =
-      process.env.ALLOW_MOCK_AUTH === "true" ||
-      process.env.DEBUG_MODE === "true";
-    if (allowMockAuth && process.env.DEBUG_MODE === "true") {
-      // console.debug('[SocketAuth] DEBUG_MODE is on; allowMockAuth enabled for local testing');
-    }
-    const devUserIdHeader =
-      socket.handshake.headers["x-dev-user-id"] ||
-      socket.handshake.headers["X-Dev-User-Id"];
-    const devUserIdAuth =
-      socket.handshake.auth &&
-      (socket.handshake.auth.devUserId || socket.handshake.auth.xDevUserId);
-    const userIdAuth =
-      socket.handshake.auth &&
-      pickSocketUserId(
-        socket.handshake.auth.userId,
-        socket.handshake.auth.userid,
-        socket.handshake.auth.Id,
-        socket.handshake.auth.id,
-        socket.handshake.auth.particularID,
-        socket.handshake.auth.particularId,
-        socket.handshake.auth.Username,
-        socket.handshake.auth.UserName,
-        socket.handshake.auth.username,
-        socket.handshake.auth.nameid,
-        socket.handshake.auth.NameIdentifier,
-        socket.handshake.auth.employeeId,
-        socket.handshake.auth.employeeID,
-        socket.handshake.auth.employeeNo,
-        socket.handshake.auth?.user?.userId,
-        socket.handshake.auth?.user?.id,
-        socket.handshake.auth?.user?.Id,
-        socket.handshake.auth?.user?.Username,
-        socket.handshake.auth?.user?.UserName,
-        socket.handshake.auth?.user?.username
-      );
-    if (allowMockAuth && (devUserIdHeader || devUserIdAuth || userIdAuth)) {
-      const uid = pickSocketUserId(devUserIdHeader, devUserIdAuth, userIdAuth);
-      const user = {
-        Id: uid,
-        id: uid,
-        userId: uid,
-        Username: [uid],
-        Roles: ["DEVELOPER"],
-        name: uid,
-      };
-      const identity = await resolveUserIdentity({
-        user,
-        headers: socket.handshake.headers,
-      });
-      socket.user = user;
-      socket.identity = identity;
-      // console.debug('[SocketAuth] Mock auth via devUserId:', uid);
-      return next();
-    }
-    // Extract token from handshake auth, query params or Authorization header
-    const tokenFromAuth = socket.handshake.auth && socket.handshake.auth.token;
-    const tokenFromQuery =
-      socket.handshake.query &&
-      (socket.handshake.query.token || socket.handshake.query.t);
-    const authHeader =
-      socket.handshake.headers &&
-      (socket.handshake.headers.authorization ||
-        socket.handshake.headers.Authorization);
-    let token =
-      tokenFromAuth ||
-      tokenFromQuery ||
-      (authHeader && authHeader.startsWith("Bearer ")
-        ? authHeader.split(" ")[1]
-        : null);
-
-    // Fallback: check auth cookie in handshake headers (authToken/jwtToken)
-    if (!token && socket.handshake.headers && socket.handshake.headers.cookie) {
-      const cookieStr = socket.handshake.headers.cookie;
-      const match =
-        cookieStr.match(/(?:^|; )authToken=([^;]+)/) ||
-        cookieStr.match(/(?:^|; )jwtToken=([^;]+)/) ||
-        cookieStr.match(/(?:^|; )jwt=([^;]+)/);
-      if (match && match[1]) {
-        token = decodeURIComponent(match[1]);
-      }
-    }
-    if (debugMode || process.env.ALLOW_MOCK_AUTH === "true") {
-      // console.debug('[SocketAuth] tokenFromAuthPresent:', !!tokenFromAuth, 'authHeaderPresent:', !!authHeader, 'tokenPresent:', !!token);
-      if (
-        socket.handshake.auth &&
-        (socket.handshake.auth.devUserId || socket.handshake.auth.xDevUserId)
-      ) {
-        // console.debug('[SocketAuth] handshake.auth contains devUserId');
-      }
-    }
-
-    if (!token) {
-      if (allowMockAuth && (devUserIdHeader || devUserIdAuth || userIdAuth)) {
-        // Should have taken the mock path earlier, but just in case, allow it here
-        const uid = String(
-          devUserIdHeader || devUserIdAuth || userIdAuth
-        ).trim();
-        const user = {
-          Id: uid,
-          id: uid,
-          userId: uid,
-          Username: [uid],
-          Roles: ["DEVELOPER"],
-          name: uid,
-        };
-        socket.user = user;
-        const identity = await resolveUserIdentity({
-          user,
-          headers: socket.handshake.headers,
-        });
-        socket.identity = identity;
-        // console.debug('[SocketAuth] Fallback: mock auth from devUserId in handshake');
-      } else {
-        console.warn(
-          "[SocketAuth] No token in handshake and no devUserId available, refusing connection"
-        );
-        return next(new Error("Authentication error: token missing"));
-      }
-    }
-
-    const jwtSecrets = [
-      process.env.JWT_SECRET_KEY,
-      process.env.JWT_CLIENT_SECRET_PROD,
-      process.env.JWT_SECRET
-    ].filter(Boolean);
-    let payload = null;
-    for (const secret of jwtSecrets) {
-      try {
-        payload = jwt.verify(token, secret);
-        break;
-      } catch (e) {
-        // try next secret
-      }
-    }
-    if (!payload) {
-      return next(new Error("Authentication error: token invalid"));
-    }
-
-    // Build a minimal user object similar to checkToken middleware
-    let userId = pickSocketUserId(
-      payload.Username,
-      payload.UserName,
-      payload.userId,
-      payload.userid,
-      payload.particularID,
-      payload.particularId,
-      payload.Id,
-      payload.id,
-      payload.sub,
-      payload.user_id,
-      payload.username,
-      payload.preferred_username,
-      payload.nameid,
-      payload.NameIdentifier,
-      payload.uid,
-      payload.employeeId,
-      payload.employeeID,
-      payload.employeeNo
-    );
-
-    if (!userId && payload.accessToken && process.env.ACCOUNT_USER_API_URL) {
-      // In production, we might fetch user details from account API. Keep this async call optional and guarded.
-      try {
-        const res = await fetch(process.env.ACCOUNT_USER_API_URL, {
-          headers: { Authorization: `Bearer ${payload.accessToken}` },
-        });
-        if (res.ok) {
-          const u = await res.json();
-          userId = pickSocketUserId(
-            u.userId,
-            u.userid,
-            u.id,
-            u.Id,
-            u.Username,
-            u.UserName,
-            u.username,
-            u.particularID,
-            u.particularId,
-            u.nameid,
-            u.NameIdentifier,
-            u.employeeId,
-            u.employeeID,
-            u.employeeNo
-          );
-        }
-      } catch (err) {
-        // ignore; proceed to fail if userId still not found
-      }
-    }
-
-    if (!userId && payload.accessToken) {
-      try {
-        const decoded = jwt.decode(payload.accessToken) || {};
-        userId = pickSocketUserId(
-          decoded.Username,
-          decoded.UserName,
-          decoded.userId,
-          decoded.userid,
-          decoded.particularID,
-          decoded.particularId,
-          decoded.id,
-          decoded.Id,
-          decoded.sub,
-          decoded.user_id,
-          decoded.username,
-          decoded.preferred_username,
-          decoded.nameid,
-          decoded.NameIdentifier,
-          decoded.uid,
-          decoded.employeeId,
-          decoded.employeeID,
-          decoded.employeeNo,
-          decoded.email
-        );
-      } catch (err) {
-        // ignore decode errors
-      }
-    }
-
-    if (!userId && userIdAuth) {
-      userId = userIdAuth;
-    }
-
-    if (!userId) {
-      return next(new Error('Authentication error: cannot determine user id'));
-    }
-
-    // Normalize roles
-    let roles = payload.roles || payload.role || payload.Roles;
-    const devRolesHeader =
-      socket.handshake.headers["x-dev-roles"] ||
-      socket.handshake.headers["X-Dev-Roles"];
-    if (devRolesHeader) roles = devRolesHeader.split(",").map((r) => r.trim());
-    if (typeof roles === "string") roles = [roles];
-
-    const normalizedRoles = (roles || []).map((r) =>
-      typeof r === "string" ? r.replace(/\s+/g, "_").toUpperCase() : r
-    );
-
-    const user = {
-      Id: String(userId),
-      id: String(userId),
-      userId: String(userId),
-      Username: Array.isArray(payload.Username)
-        ? payload.Username
-        : payload.Username
-        ? [payload.Username]
-        : [String(userId)],
-      Roles: normalizedRoles,
-      name: payload.name || payload.username || String(userId),
-    };
-
-    // Enrich identity from DB or assignment if available
-    const identity = await resolveUserIdentity({
-      user,
-      headers: socket.handshake.headers,
-    });
-    socket.user = user;
-    socket.identity = identity;
-    return next();
-  } catch (err) {
-    // In debug mode we include the underlying error message to assist with local development
-    console.warn("Socket authentication failed", err.message || err);
-    const msg = debugMode
-      ? `Authentication error: ${err.message || err}`
-      : "Authentication error";
-    return next(new Error(msg));
-  }
-});
+const io = initializeSocket(server, { debugMode });
 // MIDDLEWARE
 // app.use(
 //   cors({
@@ -1199,183 +743,80 @@ app.use(apiPrefix, employeeMasterRouter);
 const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
 app.use(`${apiPrefix}/income`, mooeExcelUploadRouter); // Mount under /income prefix
 
-// Presence map for online users: Map<userId, count>
-// global.onlineUsers maps userId => { count: number, lastConnectedAt: number }
-global.onlineUsers = global.onlineUsers || new Map();
+let isShuttingDown = false;
 
-// WebSocket connection handling
-io.on("connection", (socket) => {
-  // console.log('User connected:', socket.id);
-  if (debugMode || process.env.ALLOW_MOCK_AUTH === "true") {
+async function gracefulShutdown(signal = 'unknown', error = null, exitCode = 0) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  try {
+    logger.warn(`[Shutdown] Received ${signal}. Starting graceful shutdown...`);
+    if (error) {
+      logger.error('[Shutdown] Error context', { error: error?.message || String(error) });
+    }
+
+    // Stop cron-based backup schedules first to avoid new jobs during shutdown.
     try {
-      // console.debug(
-      //   `[Socket] connected: ${socket.id} user=${JSON.stringify(
-      //     socket.user
-      //   )} onlineCount=${global.onlineUsers?.size || 0}`
-      // );
-    } catch (e) {}
-  }
-  const uid =
-    socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
-  if (uid) {
-    const normalizedUid = String(uid);
-    const existing = global.onlineUsers.get(normalizedUid) || {
-      count: 0,
-      lastConnectedAt: null,
-    };
-    const updated = { count: existing.count + 1, lastConnectedAt: Date.now() };
-    global.onlineUsers.set(normalizedUid, updated);
-    // Notify all clients about who is online (filtered client-side)
+      stopCleanupScheduler();
+      stopScheduledJobs();
+    } catch (stopError) {
+      logger.warn('[Shutdown] Failed stopping cron schedulers', { error: stopError?.message || stopError });
+    }
+
+    // Stop agenda workers.
     try {
-      io.emit("presence-update", { userId: normalizedUid, status: "online" });
-    } catch (e) {}
-  }
+      await stopAgenda();
+    } catch (agendaError) {
+      logger.warn('[Shutdown] Failed stopping agenda', { error: agendaError?.message || agendaError });
+    }
 
-  // Join user-specific room for targeted updates
-  socket.on("join-user-room", (userId) => {
-    const authUserId =
-      socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
-    // Admins may request to join arbitrary user rooms; otherwise default to authenticated user
-    const allowAdminJoin =
-      socket.user?.Roles?.includes("SUPER_ADMIN") ||
-      socket.user?.Roles?.includes("ADMIN");
-    const targetUserId = allowAdminJoin && userId ? userId : authUserId;
-    if (!targetUserId) return;
-    socket.join(`user_${targetUserId}`);
-    if (debugMode || process.env.ALLOW_MOCK_AUTH === "true");
-      // console.debug(`Socket ${socket.id} joined user_${targetUserId}`);
-  });
-
-  // Join admin room for broadcasting permission updates
-  socket.on("join-admin-room", () => {
-    socket.join("admin_room");
-    console.log("User joined admin room");
-  });
-
-  // Handle permission updates
-  socket.on("permission-updated", (data) => {
-    console.log("Permission update received:", data);
-
-    // Broadcast to all connected clients except sender
-    // socket.broadcast.emit('permission-changed', {
-    //   userId: data.userId,
-    //   updatedBy: data.updatedBy,
-    //   timestamp: new Date(),
-    //   changes: data.changes
-    // });
-
-    // Also broadcast to admin room for admin dashboard updates
-    // io.to('admin_room').emit('admin-permission-updated', data);
-  });
-
-  // Handle disconnect
-  socket.on("disconnect", () => {
-    // console.log("User disconnected:", socket.id);
-    if (debugMode || process.env.ALLOW_MOCK_AUTH === "true") {
+    // Stop accepting HTTP/socket traffic.
+    await new Promise((resolve) => {
       try {
-        // console.debug(
-        //   `[Socket] disconnected: ${socket.id} user=${JSON.stringify(
-        //     socket.user
-        //   )} onlineCount=${global.onlineUsers?.size || 0}`
-        // );
-      } catch (e) {}
-    }
-    const uid =
-      socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
-    if (uid) {
-      const normalizedUid = String(uid);
-      const existing = global.onlineUsers.get(normalizedUid) || {
-        count: 0,
-        lastConnectedAt: null,
-      };
-      const current = existing.count;
-      if (current <= 1) {
-        global.onlineUsers.delete(normalizedUid);
-        try {
-          io.emit("presence-update", {
-            userId: normalizedUid,
-            status: "offline",
-          });
-        } catch (e) {}
-      } else {
-        global.onlineUsers.set(normalizedUid, {
-          count: current - 1,
-          lastConnectedAt: existing.lastConnectedAt,
-        });
+        io.close(() => resolve());
+      } catch (_) {
+        resolve();
       }
-    }
-  });
+    });
 
-  // Chat message sent from a client via socket
-  socket.on("chat-send", async (data) => {
-    try {
-      // Data should contain { to, text, metadata }
-      const from =
-        socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
-      const to = data.to;
-      const text = data.text;
-      const metadata = data.metadata || {};
-      if (!from || !to || !text) return;
-      const saved = await Message.create({ from, to, text, metadata });
-      // Enrich message metadata with sender toast-friendly name for client notifications (dev & prod)
+    await new Promise((resolve) => {
       try {
-        const HierarchicalUserAssignment = require("./models/HierarchicalUserAssignment");
-        const User = require("./models/User");
-        let fromName = null;
-        const assign = await HierarchicalUserAssignment.findOne({
-          userId: String(from),
-        }).lean();
-        if (assign?.userName) fromName = assign.userName;
-        if (!fromName) {
-          const u = await User.findOne({ userId: String(from) }).lean();
-          fromName = u?.name || null;
-        }
-        if (fromName) {
-          saved.metadata = saved.metadata || {};
-          saved.metadata.fromName = fromName;
-        }
-      } catch (err) {
-        // ignore enrich errors
+        server.close(() => resolve());
+      } catch (_) {
+        resolve();
       }
-      // Emit to the recipient and sender rooms
-      global.io.to(`user_${to}`).emit("chat-message", saved);
-      global.io.to(`user_${from}`).emit("chat-message", saved);
-    } catch (e) {
-      console.error(
-        "Error handling chat-send socket event:",
-        e.stack || e.message
-      );
-    }
-  });
+    });
 
-  // Typing indicator events
-  socket.on("typing-start", (data) => {
+    // Close database connections last.
     try {
-      const from =
-        socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
-      const to = data?.to;
-      if (!from || !to) return;
-      global.io.to(`user_${to}`).emit("typing-start", { from, to });
-    } catch (e) {
-      console.error("typing-start handler error", e.message);
+      await mongoose.connection.close(false);
+    } catch (mongoError) {
+      logger.warn('[Shutdown] Failed closing mongoose default connection', {
+        error: mongoError?.message || mongoError,
+      });
     }
-  });
 
-  socket.on("typing-stop", (data) => {
     try {
-      const from =
-        socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
-      const to = data?.to;
-      if (!from || !to) return;
-      global.io.to(`user_${to}`).emit("typing-stop", { from, to });
-    } catch (e) {
-      console.error("typing-stop handler error", e.message);
+      if (mainConnection && mainConnection.readyState === 1) {
+        await mainConnection.close(false);
+      }
+    } catch (mainMongoError) {
+      logger.warn('[Shutdown] Failed closing main Mongo connection', {
+        error: mainMongoError?.message || mainMongoError,
+      });
     }
-  });
-});
 
-// Export io for use in other modules
-global.io = io;
+    logger.info('[Shutdown] Completed.');
+  } catch (shutdownError) {
+    logger.error('[Shutdown] Unexpected failure', { error: shutdownError?.message || shutdownError });
+    exitCode = 1;
+  } finally {
+    process.exit(exitCode);
+  }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 if (require.main === module) {
   server.listen(process.env.APP_PORT, () => {
