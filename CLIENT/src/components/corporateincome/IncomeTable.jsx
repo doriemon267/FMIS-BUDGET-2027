@@ -969,7 +969,7 @@ const IncomeTable = ({
     if (onGrandTotalUpdate) {
       onGrandTotalUpdate(grandTotal); // Always update, even if 0
     }
-  }, [grandTotal, onGrandTotalUpdate, regionFilter]);
+  }, [grandTotal, onGrandTotalUpdate]);
 
   useEffect(() => {
     if (typeof onGroupedItemsUpdate === 'function') {

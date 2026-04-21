@@ -12,6 +12,25 @@ const tokenMiddleware = require('../utils/IS_PRODUCTION')
 
 router.use(tokenMiddleware);
 
+function normalizeRole(role) {
+  return String(role || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function isSuperAdminUser(req) {
+  const roles = Array.isArray(req.user?.Roles) ? req.user.Roles : [];
+  const normalized = roles.map(normalizeRole);
+  const roleBased = normalized.includes('SUPERADMIN');
+
+  const currentUserId = String(req.user?.id ?? req.user?.userId ?? req.user?.Id ?? '').trim();
+  const envSuperAdminIds = String(process.env.SUPER_ADMIN_IDS || '')
+    .split(',')
+    .map((v) => String(v || '').trim())
+    .filter(Boolean);
+  const idBased = currentUserId && envSuperAdminIds.includes(currentUserId);
+
+  return roleBased || idBased;
+}
+
 /**
  * GET /api/user-activity-logs
  * Query: userId, resource, action, resourceId, startDate, endDate, limit, page
@@ -22,8 +41,7 @@ router.get(
   async (req, res) => {
     try {
       const currentUserId = req.user?.id ?? req.user?.userId ?? req.user?.Id ?? '';
-      const roles = (req.user?.Roles || []).map(String);
-      const isSuperAdmin = roles.some((r) => /SUPER\s*ADMIN|SUPERADMIN/i.test(r.replace(/\s/g, '')));
+      const isSuperAdmin = isSuperAdminUser(req);
 
       const { userId, resource, action, resourceId, startDate, endDate, limit = 50, page = 1 } = req.query;
 
@@ -70,8 +88,7 @@ router.get(
   async (req, res) => {
     try {
       const currentUserId = req.user?.id ?? req.user?.userId ?? req.user?.Id ?? '';
-      const roles = (req.user?.Roles || []).map(String);
-      const isSuperAdmin = roles.some((r) => /SUPER\s*ADMIN|SUPERADMIN/i.test(r.replace(/\s/g, '')));
+      const isSuperAdmin = isSuperAdminUser(req);
 
       const doc = await UserActivityLog.findById(req.params.id).lean();
       if (!doc) return res.status(404).json({ success: false, message: 'Log entry not found' });

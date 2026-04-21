@@ -110,6 +110,15 @@ const ProposalCustomPage = ({
     activeRegion?.Region ||
     activeRegion?.id ||
     "";
+  const activeRegionName =
+    activeRegion?.name ||
+    activeRegion?.regionName ||
+    activeRegion?.Region ||
+    null;
+  const primaryAccessibleDivision =
+    currentUser?.hierarchicalAccess?.accessibleDivisions?.[0]?.name || null;
+  const primaryAccessibleDepartment =
+    currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.name || null;
   const [regionFilter, setRegionFilter] = useState("");
   const [personnelData, setPersonnelData] = useState([]);
   const [mooeData, setMooeData] = useState([]);
@@ -156,11 +165,7 @@ const ProposalCustomPage = ({
   // Also fetch division/department-specific ceiling if proposal exists
   const fetchRegionCeiling = useCallback(async () => {
     try {
-      const regionName =
-        activeRegion?.name ||
-        activeRegion?.regionName ||
-        activeRegion?.Region ||
-        null;
+      const regionName = activeRegionName;
       const fy = selectedFiscalYear || activeFiscalYear;
       // Only relevant when budget type is NEP and region/fiscalYear are known
       if (!regionName || !fy || (activeBudgetType || "").toUpperCase() !== "NEP") {
@@ -203,11 +208,11 @@ const ProposalCustomPage = ({
           }
         }
         // Fallback: use user's hierarchical access division/department
-        if (!proposalDivision && currentUser?.hierarchicalAccess?.accessibleDivisions?.length > 0) {
-          proposalDivision = currentUser.hierarchicalAccess.accessibleDivisions[0]?.name || null;
+        if (!proposalDivision && primaryAccessibleDivision) {
+          proposalDivision = primaryAccessibleDivision;
         }
-        if (!proposalDepartment && currentUser?.hierarchicalAccess?.accessibleDepartments?.length > 0) {
-          proposalDepartment = currentUser.hierarchicalAccess.accessibleDepartments[0]?.name || null;
+        if (!proposalDepartment && primaryAccessibleDepartment) {
+          proposalDepartment = primaryAccessibleDepartment;
         }
 
         // Match allocation by division (preferred) or department
@@ -249,7 +254,15 @@ const ProposalCustomPage = ({
       setDivisionCeilingAmount(null);
       setDivisionCeilingInfo(null);
     }
-  }, [activeRegion, activeFiscalYear, selectedFiscalYear, activeBudgetType, currentProposalId, currentUser]);
+  }, [
+    activeRegionName,
+    activeFiscalYear,
+    selectedFiscalYear,
+    activeBudgetType,
+    currentProposalId,
+    primaryAccessibleDivision,
+    primaryAccessibleDepartment,
+  ]);
 
   // Fetch all budget data for the active/selected filters
   async function fetchAllData() {
@@ -509,6 +522,18 @@ const ProposalCustomPage = ({
   const [chargedToIncomeAmount, setChargedToIncomeAmount] = useState(0);
   const [nonChargedPersonnelServices, setNonChargedPersonnelServices] =
     useState(0);
+
+  const handleIncomeGrandTotalUpdate = useCallback((grandTotal) => {
+    setIncomeGrandTotal((prev) => {
+      const next = grandTotal || 0;
+      return prev === next ? prev : next;
+    });
+  }, []);
+
+  const handleGroupedItemsUpdate = useCallback((items) => {
+    const nextItems = items || {};
+    setGroupedItems((prev) => (prev === nextItems ? prev : nextItems));
+  }, []);
 
   // Enhanced UX state
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -3098,12 +3123,8 @@ const ProposalCustomPage = ({
                 region={activeRegion}
                 fiscalYear={resolvedFiscalYear}
                 budgetType={resolvedBudgetType}
-                onGrandTotalUpdate={(grandTotal) => {
-                  setIncomeGrandTotal(grandTotal || 0);
-                }}
-                onGroupedItemsUpdate={(items) => {
-                  setGroupedItems(items || {});
-                }}
+                onGrandTotalUpdate={handleIncomeGrandTotalUpdate}
+                onGroupedItemsUpdate={handleGroupedItemsUpdate}
               />
             )}
 

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "dev": "nodemon server.js",
     "start": "nodemon .",
     "start:quiet": "cross-env NODE_OPTIONS=--no-deprecation nodemon .",
     "test": "jest --runInBand",

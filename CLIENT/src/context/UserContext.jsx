@@ -133,46 +133,48 @@ const UserProvider = ({ children }) => {
     }
   };
 
-  const handleLogout = async () => {
-    // Always clear the budget server's own cookie first (same origin)
-    try {
-      await api.get("/api/logout");
-    } catch (e) {
-      console.warn("Budget server logout error:", e);
-    }
-    // Also call auth server logout when it is a different origin (production or separate auth server)
-    try {
-      await authApi.get("/logout");
-    } catch (e) {
-      // Auth server may not be running in dev — not fatal
-      console.warn("Auth server logout error (non-fatal in dev):", e?.message);
-    }
-    setAuthToken(null);
-    setCurrentUser(null);
-    setUnauthorizedSuperAdmin(false);
-    const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(
-      window.location.hostname
-    );
-    if (IS_PRODUCTION && !isLocalhost) {
-      // Use NIA SSO logoff URL (same as LogoutDialog) - hindi lang redirect sa login
-      const clientId = env("CLIENT_ID");
-      const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
-      const currentUrl = `${budgetUrl}/dashboard`;
-      const returnUrl = encodeURIComponent(
-        `https://accounts.nia.gov.ph/Account/Login?ReturnUrl=${encodeURIComponent(currentUrl)}`
-      );
-      const particularID = currentUser?.particularID || "";
-      const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
-      window.location.href = logoffUrl;
-    } else {
-      // Redirect to auth server login page (localhost:5000), not the budget server (localhost:5005)
-      const authBase =
-        env("AUTH_CLIENT_URL_DEV") ||
-        env("LOGIN_REDIRECT_URL_DEV") ||
-        window.location.origin;
-      window.location.href = authBase + "/login";
-    }
-  };
+const handleLogout = async () => {
+  // 1. Clear sessions
+  try {
+    await api.get("/api/logout");
+    await authApi.get("/logout");
+  } catch (e) {
+    console.warn("Logout error:", e.message);
+  }
+
+  // 2. Clear local states
+  setAuthToken(null);
+  setCurrentUser(null);
+  setUnauthorizedSuperAdmin(false);
+
+  // 3. EKSPLISITONG PAGHIWALAY (Dev vs Prod)
+  const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+
+  if (isLocalhost) {
+    // DEV REDIRECT: Kunin ang URL mula sa .env gamit ang tamang keys
+    // Ginagamit natin ang AUTH_SERVER_URL_DEV o AUTH_CLIENT_URL_DEV kung alin ang meron ka
+    const authBase = env("AUTH_SERVER_URL_DEV") || env("AUTH_CLIENT_URL_DEV") || "http://localhost:5000";
+    const returnUrl = encodeURIComponent("http://localhost:3005/dashboard");
+    
+    console.log("Dev Logout: Redirecting to", authBase);
+    window.location.href = `${authBase}/login?redirect=${returnUrl}`;
+    return; // Siguradong titigil dito
+  }
+
+  // 4. PRODUCTION REDIRECT (NIA SSO)
+  // Ito lang ang matitira para sa NIA SSO
+  const clientId = env("CLIENT_ID");
+  const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
+  const currentUrl = `${budgetUrl}/dashboard`;
+  const returnUrl = encodeURIComponent(
+    `https://accounts.nia.gov.ph/Account/Login?ReturnUrl=${encodeURIComponent(currentUrl)}`
+  );
+  
+  const particularID = currentUser?.particularID || "";
+  const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
+  
+  window.location.href = logoffUrl;
+};
 
   // Allow api interceptor to send Super Admin unauthorized -> show AccessGuard page
   useEffect(() => {
