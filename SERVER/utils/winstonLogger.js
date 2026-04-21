@@ -75,14 +75,17 @@ const logger = winston.createLogger({
   format: winston.format.combine(
     winston.format.timestamp(),
     redactionFormat(),
-    process.env.STRUCTURED_LOGGING === "true"
-      ? winston.format.json()
-      : winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          const suffix = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : "";
-          return `[${timestamp}] [${level.toUpperCase()}] ${message}${suffix}`;
-        })
+    winston.format.json() // Mas maganda ang JSON format para sa file logs
   ),
-  transports: [new winston.transports.Console()],
+  transports: [
+    new winston.transports.Console(), // Lalabas pa rin sa terminal
+    
+    // BAGONG DAGDAG: I-save ang lahat ng errors sa error.log
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    
+    // BAGONG DAGDAG: I-save lahat (info, warn, error) sa combined.log
+    new winston.transports.File({ filename: 'logs/combined.log' }),
+  ],
 });
 
 function normalizeArgs(args) {
