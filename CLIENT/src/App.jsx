@@ -380,7 +380,8 @@ const App = () => {
           element={
             <ProtectedRoute 
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={[]}
+              excludeRoles={["preparer", "reviewer", "approver"]}
             >
               <OrganizationSetupPage />
             </ProtectedRoute>

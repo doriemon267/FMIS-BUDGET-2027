@@ -387,7 +387,7 @@ const CustomDrawer = () => {
               { link: "/income-management", name: "Income Management", isAllow: true, icon: <TbCategory /> },
               { link: "/employee-salary-table", name: "Permanent & Casual Salary Table", isAllow: true, icon: <FaPesoSign /> },
               { link: "/cos-salary-table", name: "COS Salary Table (SSL4)", isAllow: true, icon: <FaPesoSign /> },
-              { link: "/setup/organization", name: "Organization Structure Setup", isAllow: isSuperAdmin(currentUser), icon: <IoSettingsOutline /> },
+              { link: "/setup/organization", name: "Organization Structure Setup", isAllow: hasPermission(currentUser, "ManageSettings") || isSuperAdmin(currentUser), icon: <IoSettingsOutline /> },
               { link: "/hierarchical-user-assignments", name: "Hierarchical User Assignments", isAllow: hasPermission(currentUser, "ManageSettings"), icon: <IoSettingsOutline /> },
               { link: "/user-activity-logs", name: "User Activity Logs", isAllow: isSuperAdmin(currentUser), icon: <MdHistory /> },
             ]}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -27,13 +27,16 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Chip
+  Chip,
+  TablePagination,
+  InputAdornment
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  ExpandMore as ExpandMoreIcon
+  ExpandMore as ExpandMoreIcon,
+  Search as SearchIcon
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../config/api';
@@ -70,6 +73,19 @@ const OrganizationSetupPage = () => {
   const [mappingDialog, setMappingDialog] = useState({ open: false, data: null });
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null, type: '' });
 
+  // Pagination & Search States
+  const [regionPage, setRegionPage] = useState(0);
+  const [regionRowsPerPage, setRegionRowsPerPage] = useState(10);
+  const [regionSearch, setRegionSearch] = useState('');
+
+  const [deptPage, setDeptPage] = useState(0);
+  const [deptRowsPerPage, setDeptRowsPerPage] = useState(10);
+  const [deptSearch, setDeptSearch] = useState('');
+
+  const [mappingPage, setMappingPage] = useState(0);
+  const [mappingRowsPerPage, setMappingRowsPerPage] = useState(10);
+  const [mappingSearch, setMappingSearch] = useState('');
+
   // Fetching Data
   const { data: regions = [], isLoading: loadingRegions } = useQuery({
     queryKey: ['regions'],
@@ -94,6 +110,39 @@ const OrganizationSetupPage = () => {
       return res.data;
     }
   });
+
+  // Filter and Paginate Regions
+  const filteredRegions = useMemo(() => {
+    return regions.filter(r => r.Region?.toLowerCase().includes(regionSearch.toLowerCase()));
+  }, [regions, regionSearch]);
+  
+  const paginatedRegions = useMemo(() => {
+    return filteredRegions.slice(regionPage * regionRowsPerPage, regionPage * regionRowsPerPage + regionRowsPerPage);
+  }, [filteredRegions, regionPage, regionRowsPerPage]);
+
+  // Filter and Paginate Departments
+  const filteredDepartments = useMemo(() => {
+    return departments.filter(d => d.Department?.toLowerCase().includes(deptSearch.toLowerCase()));
+  }, [departments, deptSearch]);
+
+  const paginatedDepartments = useMemo(() => {
+    return filteredDepartments.slice(deptPage * deptRowsPerPage, deptPage * deptRowsPerPage + deptRowsPerPage);
+  }, [filteredDepartments, deptPage, deptRowsPerPage]);
+
+  // Filter and Paginate Mappings
+  const filteredMappings = useMemo(() => {
+    const searchLower = mappingSearch.toLowerCase();
+    return mappings.filter(m => {
+      const deptMatch = (m.departmentName || m.departmentId?.Department || '').toLowerCase().includes(searchLower);
+      const regionMatch = (m.regionId?.Region || '').toLowerCase().includes(searchLower);
+      return deptMatch || regionMatch;
+    });
+  }, [mappings, mappingSearch]);
+
+  const paginatedMappings = useMemo(() => {
+    return filteredMappings.slice(mappingPage * mappingRowsPerPage, mappingPage * mappingRowsPerPage + mappingRowsPerPage);
+  }, [filteredMappings, mappingPage, mappingRowsPerPage]);
+
 
   // Mutations
   const saveRegion = useMutation({
@@ -402,94 +451,164 @@ const OrganizationSetupPage = () => {
 
         {/* REGIONS TAB */}
         <TabPanel value={tabValue} index={0}>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            <TextField
+              size="small"
+              placeholder="Search Regions..."
+              value={regionSearch}
+              onChange={(e) => { setRegionSearch(e.target.value); setRegionPage(0); }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ width: 300 }}
+            />
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => setRegionDialog({ open: true, data: null })}>
               Add Region
             </Button>
           </Box>
           {loadingRegions ? <CircularProgress /> : (
-            <TableContainer component={Paper} elevation={0} variant="outlined">
-              <Table size="small">
-                <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                  <TableRow>
-                    <TableCell>Region Name</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {regions.map((row) => (
-                    <TableRow key={row._id} hover>
-                      <TableCell>{row.Region}</TableCell>
-                      <TableCell align="right">
-                        <IconButton color="primary" onClick={() => setRegionDialog({ open: true, data: row })}>
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton color="error" onClick={() => setDeleteDialog({ open: true, id: row._id, type: 'region' })}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
+            <Paper elevation={0} variant="outlined">
+              <TableContainer>
+                <Table size="small">
+                  <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+                    <TableRow>
+                      <TableCell>Region Name</TableCell>
+                      <TableCell align="right">Actions</TableCell>
                     </TableRow>
-                  ))}
-                  {regions.length === 0 && (
-                    <TableRow><TableCell colSpan={2} align="center">No regions found</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {paginatedRegions.map((row) => (
+                      <TableRow key={row._id} hover>
+                        <TableCell>{row.Region}</TableCell>
+                        <TableCell align="right">
+                          <IconButton color="primary" onClick={() => setRegionDialog({ open: true, data: row })}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton color="error" onClick={() => setDeleteDialog({ open: true, id: row._id, type: 'region' })}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {paginatedRegions.length === 0 && (
+                      <TableRow><TableCell colSpan={2} align="center">No regions found</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                rowsPerPageOptions={[5, 10, 25]}
+                component="div"
+                count={filteredRegions.length}
+                rowsPerPage={regionRowsPerPage}
+                page={regionPage}
+                onPageChange={(e, newPage) => setRegionPage(newPage)}
+                onRowsPerPageChange={(e) => {
+                  setRegionRowsPerPage(parseInt(e.target.value, 10));
+                  setRegionPage(0);
+                }}
+              />
+            </Paper>
           )}
         </TabPanel>
 
         {/* DEPARTMENTS TAB */}
         <TabPanel value={tabValue} index={1}>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            <TextField
+              size="small"
+              placeholder="Search Departments..."
+              value={deptSearch}
+              onChange={(e) => { setDeptSearch(e.target.value); setDeptPage(0); }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ width: 300 }}
+            />
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDepartmentDialog({ open: true, data: null })}>
               Add Department
             </Button>
           </Box>
           {loadingDepartments ? <CircularProgress /> : (
-            <TableContainer component={Paper} elevation={0} variant="outlined">
-              <Table size="small">
-                <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                  <TableRow>
-                    <TableCell>Department Name</TableCell>
-                    <TableCell>Display Order</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {departments.map((row) => (
-                    <TableRow key={row._id} hover>
-                      <TableCell>{row.Department}</TableCell>
-                      <TableCell>{row.displayOrder}</TableCell>
-                      <TableCell align="right">
-                        <IconButton color="primary" onClick={() => setDepartmentDialog({ open: true, data: row })}>
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton color="error" onClick={() => setDeleteDialog({ open: true, id: row._id, type: 'department' })}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
+            <Paper elevation={0} variant="outlined">
+              <TableContainer>
+                <Table size="small">
+                  <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+                    <TableRow>
+                      <TableCell>Department Name</TableCell>
+                      <TableCell>Display Order</TableCell>
+                      <TableCell align="right">Actions</TableCell>
                     </TableRow>
-                  ))}
-                  {departments.length === 0 && (
-                    <TableRow><TableCell colSpan={3} align="center">No departments found</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                  </TableHead>
+                  <TableBody>
+                    {paginatedDepartments.map((row) => (
+                      <TableRow key={row._id} hover>
+                        <TableCell>{row.Department}</TableCell>
+                        <TableCell>{row.displayOrder}</TableCell>
+                        <TableCell align="right">
+                          <IconButton color="primary" onClick={() => setDepartmentDialog({ open: true, data: row })}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton color="error" onClick={() => setDeleteDialog({ open: true, id: row._id, type: 'department' })}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {paginatedDepartments.length === 0 && (
+                      <TableRow><TableCell colSpan={3} align="center">No departments found</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                rowsPerPageOptions={[5, 10, 25]}
+                component="div"
+                count={filteredDepartments.length}
+                rowsPerPage={deptRowsPerPage}
+                page={deptPage}
+                onPageChange={(e, newPage) => setDeptPage(newPage)}
+                onRowsPerPageChange={(e) => {
+                  setDeptRowsPerPage(parseInt(e.target.value, 10));
+                  setDeptPage(0);
+                }}
+              />
+            </Paper>
           )}
         </TabPanel>
 
         {/* MAPPINGS TAB */}
         <TabPanel value={tabValue} index={2}>
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            <TextField
+              size="small"
+              placeholder="Search Mappings..."
+              value={mappingSearch}
+              onChange={(e) => { setMappingSearch(e.target.value); setMappingPage(0); }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ width: 300 }}
+            />
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => setMappingDialog({ open: true, data: null })}>
               Add Mapping
             </Button>
           </Box>
           {loadingMappings ? <CircularProgress /> : (
             <Box>
-              {mappings.map((mapping) => (
+              {paginatedMappings.map((mapping) => (
                 <Accordion key={mapping._id} sx={{ mb: 1, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ backgroundColor: '#fafafa' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
@@ -535,9 +654,22 @@ const OrganizationSetupPage = () => {
                   </AccordionDetails>
                 </Accordion>
               ))}
-              {mappings.length === 0 && (
+              {paginatedMappings.length === 0 && (
                 <Alert severity="info">No organization structure mappings found. Create one to get started.</Alert>
               )}
+              
+              <TablePagination
+                rowsPerPageOptions={[5, 10, 25]}
+                component="div"
+                count={filteredMappings.length}
+                rowsPerPage={mappingRowsPerPage}
+                page={mappingPage}
+                onPageChange={(e, newPage) => setMappingPage(newPage)}
+                onRowsPerPageChange={(e) => {
+                  setMappingRowsPerPage(parseInt(e.target.value, 10));
+                  setMappingPage(0);
+                }}
+              />
             </Box>
           )}
         </TabPanel>
