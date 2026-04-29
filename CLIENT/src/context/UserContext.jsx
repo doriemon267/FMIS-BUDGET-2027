@@ -74,8 +74,22 @@ const UserProvider = ({ children }) => {
           Region: r.regionName || r.Region || r.name,
         }));
 
+        // Fetch full profile from auth server if current user object is thin (e.g. missing FirstName)
+        let fullProfile = {};
+        if (!user.FirstName || !user.ProfilePicture) {
+          try {
+            const profileRes = await authApi.get("/get-user");
+            if (profileRes.data?.user) {
+              fullProfile = profileRes.data.user;
+            }
+          } catch (e) {
+            console.warn("Could not fetch full profile:", e.message);
+          }
+        }
+
         return {
-          ...user,
+          ...fullProfile, // Prioritize full profile data
+          ...user,        // Merge with session user (roles, etc.)
           hierarchicalAccess: {
             ...accessInfo,
             workflowRoles: accessInfo.workflowRoles || userWorkflowRoles
@@ -133,48 +147,43 @@ const UserProvider = ({ children }) => {
     }
   };
 
-const handleLogout = async () => {
-  // 1. Clear sessions
-  try {
-    await api.get("/api/logout");
-    await authApi.get("/logout");
-  } catch (e) {
-    console.warn("Logout error:", e.message);
-  }
+  const handleLogout = async () => {
+    // 1. Clear sessions
+    try {
+      await api.get("/api/logout");
+      await authApi.get("/logout");
+    } catch (e) {
+      console.warn("Logout error:", e.message);
+    }
 
-  // 2. Clear local states
-  setAuthToken(null);
-  setCurrentUser(null);
-  setUnauthorizedSuperAdmin(false);
+    // 2. Clear local states
+    setAuthToken(null);
+    setCurrentUser(null);
+    setUnauthorizedSuperAdmin(false);
 
-  // 3. EKSPLISITONG PAGHIWALAY (Dev vs Prod)
-  const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+    // 3. LOGOUT REDIRECT
+    if (!IS_PRODUCTION) {
+      // DEV REDIRECT
+      const authBase = env("AUTH_SERVER_URL_DEV") || env("AUTH_CLIENT_URL_DEV") || "http://localhost:5000";
+      const budgetUrl = env("CLIENT_URL_DEV") || "http://localhost:3005";
+      const returnUrl = encodeURIComponent(`${budgetUrl}/dashboard`);
 
-  if (isLocalhost) {
-    // DEV REDIRECT: Kunin ang URL mula sa .env gamit ang tamang keys
-    // Ginagamit natin ang AUTH_SERVER_URL_DEV o AUTH_CLIENT_URL_DEV kung alin ang meron ka
-    const authBase = env("AUTH_SERVER_URL_DEV") || env("AUTH_CLIENT_URL_DEV") || "http://localhost:5000";
-    const returnUrl = encodeURIComponent("http://localhost:3005/dashboard");
-    
-    console.log("Dev Logout: Redirecting to", authBase);
-    window.location.href = `${authBase}/login?redirect=${returnUrl}`;
-    return; // Siguradong titigil dito
-  }
+      window.location.href = `${authBase}/login?redirect=${returnUrl}`;
+    } else {
+      // PRODUCTION REDIRECT (NIA SSO)
+      const clientId = env("CLIENT_ID");
+      const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
+      const currentUrl = `${budgetUrl}/dashboard`;
+      const returnUrl = encodeURIComponent(
+        `https://accounts.nia.gov.ph/Account/Login?ReturnUrl=${encodeURIComponent(currentUrl)}`
+      );
 
-  // 4. PRODUCTION REDIRECT (NIA SSO)
-  // Ito lang ang matitira para sa NIA SSO
-  const clientId = env("CLIENT_ID");
-  const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
-  const currentUrl = `${budgetUrl}/dashboard`;
-  const returnUrl = encodeURIComponent(
-    `https://accounts.nia.gov.ph/Account/Login?ReturnUrl=${encodeURIComponent(currentUrl)}`
-  );
-  
-  const particularID = currentUser?.particularID || "";
-  const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
-  
-  window.location.href = logoffUrl;
-};
+      const particularID = currentUser?.particularID || "";
+      const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
+
+      window.location.href = logoffUrl;
+    }
+  };
 
   // Allow api interceptor to send Super Admin unauthorized -> show AccessGuard page
   useEffect(() => {
@@ -215,11 +224,30 @@ const handleLogout = async () => {
       try {
         setUnauthorizedSuperAdmin(false);
         const res = await api.get("/api/get-user");
-        if (res.data.user) {
+        
+        let user = res.data?.user;
+        
+        // --- DETECT MOCK USER ---
+        // If the budget server returns a mock "Dev User", try to get the real one from Auth Server
+        const isMock = !user || (user.Username === "909549") || (user.DisplayName && user.DisplayName.toLowerCase().includes("dev user"));
+        
+        if (isMock) {
+          try {
+            const authRes = await authApi.get("/get-user");
+            if (authRes.data?.user) {
+              user = authRes.data.user;
+            }
+          } catch (e) {
+            console.warn("Could not fetch real user from auth server:", e.message);
+          }
+        }
+
+        if (user) {
           const headerToken = res.headers?.["x-auth-token"] || res.headers?.["X-Auth-Token"];
           if (headerToken) setAuthToken(headerToken);
+          
           try {
-            const fullUser = await enrichUserWithRoles(res.data.user);
+            const fullUser = await enrichUserWithRoles(user);
             setDevUser(fullUser);
             setCurrentUser(fullUser);
           } catch (enrichErr) {
@@ -251,7 +279,7 @@ const handleLogout = async () => {
       }
     };
     fetchUser();
-  }, [nav]);
+  }, []);
 
   // --- UI HELPERS ---
   const hierarchical = currentUser?.hierarchicalAccess || {};

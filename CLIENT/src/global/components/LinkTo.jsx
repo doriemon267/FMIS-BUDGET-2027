@@ -66,11 +66,52 @@ const LinkTo = ({
   if (!shouldRender) return null;
 
   const itemSx = {
-    bgcolor: "transparent",
-    borderTop: "1px solid rgba(250,250,250,0.1)",
-    borderBottom: "1px solid rgba(250,250,250,0.1)",
-    "&:hover": { bgcolor: "rgba(250,250,250,.2)" },
-    ...(collapsed && { justifyContent: "center", minHeight: 48 }),
+    borderRadius: "12px",
+    mb: 0.5,
+    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+    color: "rgba(255,255,255,0.6)",
+    px: collapsed ? 0 : 2,
+    py: 1,
+    minHeight: 48,
+    cursor: "pointer",
+    "& .MuiListItemIcon-root": {
+      color: "inherit",
+      minWidth: collapsed ? 0 : 38,
+      display: "flex",
+      justifyContent: "center",
+      transition: "all 0.3s ease",
+    },
+    "& .MuiTypography-root": {
+      fontWeight: 500,
+      fontSize: "0.875rem",
+      whiteSpace: "nowrap",
+    },
+    "&:hover": { 
+      bgcolor: "rgba(255,255,255,0.05)",
+      color: "white",
+      "& .MuiListItemIcon-root": { color: "white" }
+    },
+    ...(isActive && {
+      bgcolor: "rgba(255,255,255,0.1) !important",
+      color: "#4ade80",
+      fontWeight: 600,
+      "&::before": {
+        content: '""',
+        position: "absolute",
+        left: 0,
+        height: "60%",
+        width: 4,
+        bgcolor: "#4ade80",
+        borderRadius: "0 4px 4px 0",
+      },
+      "& .MuiListItemIcon-root": { color: "#4ade80" }
+    }),
+    ...(collapsed && { 
+      justifyContent: "center", 
+      width: 44,
+      mx: "auto",
+      borderRadius: "12px",
+    }),
   };
 
   const tooltipSx = {
@@ -115,12 +156,19 @@ const LinkTo = ({
         aria-label={ariaLabel || (hasSubMenu ? `Expand ${label} menu` : `Go to ${label}`)}
         sx={{
           ...itemSx,
-          bgcolor: active ? "rgba(250,250,250,.2)" : "transparent",
-          cursor: hasSubMenu ? "pointer" : undefined,
+          bgcolor: active ? "#2d5a3f" : "transparent",
+          color: active ? "white" : "rgba(255,255,255,0.7)",
+          cursor: "pointer",
           position: "relative",
+          px: 0,
+          width: 44,
+          mx: "auto",
+          display: "flex",
+          justifyContent: "center",
+          minHeight: 44,
         }}
       >
-        <ListItemIcon sx={{ color: "white", minWidth: 0, justifyContent: "center" }}>
+        <ListItemIcon sx={{ minWidth: 0, display: "flex", justifyContent: "center" }}>
           {promoteChild && promotedLink ? promotedLink.icon || icon : icon}
         </ListItemIcon>
         {hasSubMenu && (
@@ -146,12 +194,12 @@ const LinkTo = ({
     );
     return (
       <Tooltip
-        title={hasSubMenu ? `${label}` : label}
+        title={label}
         placement="right"
         arrow
-        componentsProps={tooltipSx}
+        slotProps={tooltipSx}
       >
-        <span style={{ display: "block" }}>{content}</span>
+        {content}
       </Tooltip>
     );
   }
@@ -160,6 +208,7 @@ const LinkTo = ({
      SINGLE CHILD BECOMES PARENT
      =============================== */
   if (promoteChild && promotedLink) {
+    const active = location.pathname === promotedLink.link;
     return (
       <ListItem
         component={Link}
@@ -168,16 +217,14 @@ const LinkTo = ({
         aria-label={ariaLabel || `Go to ${promotedLink.name}`}
         sx={{
           ...itemSx,
-          bgcolor:
-            location.pathname === promotedLink.link
-              ? "rgba(250,250,250,.2)"
-              : "transparent",
+          bgcolor: active ? "#2d5a3f !important" : "transparent",
+          color: active ? "white" : "rgba(255,255,255,0.7)",
         }}
       >
-        <ListItemIcon sx={{ color: "white" }}>
+        <ListItemIcon>
           {promotedLink.icon || icon}
         </ListItemIcon>
-        <ListItemText primary={promotedLink.name} sx={{ color: "white" }} />
+        <ListItemText primary={promotedLink.name} />
 
         {notificationValue > 0 && (
           <Badge
@@ -211,11 +258,12 @@ const LinkTo = ({
         }}
         sx={{
           ...itemSx,
-          bgcolor: isActive ? "rgba(250,250,250,.2)" : "transparent",
+          bgcolor: isActive ? "#2d5a3f !important" : "transparent",
+          color: isActive ? "white" : "rgba(255,255,255,0.7)",
         }}
       >
-        <ListItemIcon sx={{ color: "white" }}>{icon}</ListItemIcon>
-        <ListItemText primary={name} sx={{ color: "white" }} />
+        <ListItemIcon>{icon}</ListItemIcon>
+        <ListItemText primary={name} />
 
         {notificationValue > 0 && (
           <Badge
@@ -227,40 +275,55 @@ const LinkTo = ({
 
         {subLinks.length > 0 &&
           (effectiveOpen ? (
-            <IoMdArrowDropup style={{ color: "white" }} />
+            <IoMdArrowDropup />
           ) : (
-            <IoMdArrowDropdown style={{ color: "white" }} />
+            <IoMdArrowDropdown />
           ))}
       </ListItem>
 
       {subLinks.length > 0 && (
-        <Collapse in={effectiveOpen} timeout="auto" unmountOnExit sx={{ ml: 3 }}>
+        <Collapse in={effectiveOpen} timeout="auto" unmountOnExit sx={{ ml: 2 }}>
           <List component="div" disablePadding>
-            {allowedSubLinks.map((subLink) => (
-              <ListItem
-                key={subLink.link}
-                component={Link}
-                to={subLink.link}
-                onClick={() => {
-                  setExpandedMenuKey?.(null);
-                  isMdScreen && setTimeout(() => toggleDrawer(), 300);
-                }}
-                sx={{
-                  borderTop: "1px solid rgba(250,250,250,0.1)",
-                  borderLeft: "1px solid rgba(250,250,250,0.1)",
-                  "&:hover": { bgcolor: "rgba(250,250,250,.2)" },
-                  bgcolor:
-                    location.pathname === subLink.link
-                      ? "rgba(250,250,250,.2)"
-                      : "transparent",
-                }}
-              >
-                <ListItemIcon sx={{ color: "white" }}>
-                  {subLink.icon}
-                </ListItemIcon>
-                <ListItemText primary={subLink.name} sx={{ color: "white" }} />
-              </ListItem>
-            ))}
+            {allowedSubLinks.map((subLink) => {
+              const subActive = location.pathname === subLink.link;
+              return (
+                <ListItem
+                  key={subLink.link}
+                  component={Link}
+                  to={subLink.link}
+                  onClick={() => {
+                    setExpandedMenuKey?.(null);
+                    isMdScreen && setTimeout(() => toggleDrawer(), 300);
+                  }}
+                  sx={{
+                    borderRadius: "10px",
+                    mb: 0.5,
+                    transition: "all 0.2s ease",
+                    color: subActive ? "white" : "rgba(255,255,255,0.6)",
+                    bgcolor: subActive ? "rgba(255,255,255,0.1)" : "transparent",
+                    cursor: "pointer",
+                    "& .MuiListItemIcon-root": {
+                      color: "inherit",
+                      minWidth: 35,
+                    },
+                    "& .MuiTypography-root": {
+                      fontSize: "0.85rem",
+                      fontWeight: subActive ? 600 : 400,
+                    },
+                    "&:hover": {
+                      bgcolor: "rgba(255,255,255,0.05)",
+                      color: "white",
+                    },
+                    pl: 2,
+                  }}
+                >
+                  <ListItemIcon>
+                    {subLink.icon}
+                  </ListItemIcon>
+                  <ListItemText primary={subLink.name} />
+                </ListItem>
+              );
+            })}
           </List>
         </Collapse>
       )}

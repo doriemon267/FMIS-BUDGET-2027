@@ -53,6 +53,7 @@ import ConsolidatedPersonnelServicesReportsPage from "./components/reports/Conso
 import ComprehensiveReportsPage from "./components/reports/ComprehensiveReportsPage";
 import DatabaseBackupPage from "./pages/DatabaseBackupPage";
 import HierarchicalUserAssignmentPage from "./pages/HierarchicalUserAssignmentPage";
+import OrganizationSetupPage from "./pages/OrganizationSetupPage";
 import NewProposalWorkflowPage from "./pages/NewProposalWorkflowPage";
 import ProposalDetailsPage from "./components/workflow/ProposalDetailsPage";
 import BRDConsolidationPage from "./pages/BRDConsolidationPage";
@@ -371,6 +372,17 @@ const App = () => {
               excludeRoles={["preparer", "reviewer", "approver"]}
             >
               <HierarchicalUserAssignmentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/setup/organization"
+          element={
+            <ProtectedRoute 
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["superAdmin"]}
+            >
+              <OrganizationSetupPage />
             </ProtectedRoute>
           }
         />

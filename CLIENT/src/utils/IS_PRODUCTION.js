@@ -1,3 +1,3 @@
 import env from "./env";
 
-export default !!env("PRODUCTION_MODE");
+export default env("PRODUCTION_MODE") === "true";

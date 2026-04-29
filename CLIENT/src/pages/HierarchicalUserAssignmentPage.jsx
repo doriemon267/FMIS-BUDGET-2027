@@ -1580,14 +1580,18 @@ const HierarchicalUserAssignmentPage = () => {
                     options={organizationStructure?.availableUnits?.offices || []}
                     getOptionLabel={(option) => {
                       if (typeof option === 'string') return option;
-                      // Prefer Office name over Region in the RC label to reflect the selected office (e.g., MARIIS)
+                      const name = option.name || '';
+                      // Only append office name or region if it's not already part of the name to avoid duplicates
+                      // (e.g. avoid "REGIONAL OFFICE - CAR - CAR")
                       if (option.officeName && option.officeName.trim().length > 0) {
-                        return `${option.name} - ${option.officeName}`;
+                        if (name.includes(option.officeName)) return name;
+                        return `${name} - ${option.officeName}`;
                       }
                       if (option.region && option.region !== 'All Regions') {
-                        return `${option.name} - ${option.region}`;
+                        if (name.includes(option.region)) return name;
+                        return `${name} - ${option.region}`;
                       }
-                      return option.name || '';
+                      return name;
                     }}
                     value={(() => {
                       // ✅ Better matching: try different ID field combinations
@@ -1631,12 +1635,20 @@ const HierarchicalUserAssignmentPage = () => {
                     )}
                     renderOption={(props, option) => {
                       const { key, ...otherProps } = props;
-                      // Prefer Office name over Region in the option display for clarity (e.g., MARIIS)
-                      const displayName = (option.officeName && option.officeName.trim().length > 0)
-                        ? `${option.name} - ${option.officeName}`
-                        : (option.region && option.region !== 'All Regions' 
-                          ? `${option.name} - ${option.region}` 
-                          : option.name);
+                      const name = option.name || '';
+                      let displayName = name;
+                      
+                      // Avoid duplicates in display name
+                      if (option.officeName && option.officeName.trim().length > 0) {
+                        if (!name.includes(option.officeName)) {
+                          displayName = `${name} - ${option.officeName}`;
+                        }
+                      } else if (option.region && option.region !== 'All Regions') {
+                        if (!name.includes(option.region)) {
+                          displayName = `${name} - ${option.region}`;
+                        }
+                      }
+
                       return (
                         <Box component="li" key={key} {...otherProps}>
                           <Box>
@@ -1672,14 +1684,17 @@ const HierarchicalUserAssignmentPage = () => {
                       }) || []}
                     getOptionLabel={(option) => {
                       if (typeof option === 'string') return option;
-                      // Prefer Office name over Region in the RC label, especially when editing
+                      const name = option.name || '';
+                      // Only append office name or region if it's not already part of the name to avoid duplicates
                       if (option.officeName && option.officeName.trim().length > 0) {
-                        return `${option.name} - ${option.officeName}`;
+                        if (name.includes(option.officeName)) return name;
+                        return `${name} - ${option.officeName}`;
                       }
                       if (option.region && option.region !== 'All Regions') {
-                        return `${option.name} - ${option.region}`;
+                        if (name.includes(option.region)) return name;
+                        return `${name} - ${option.region}`;
                       }
-                      return option.name || '';
+                      return name;
                     }}
                     value={(() => {
                       const centers = organizationStructure?.availableUnits?.responsibilityCenters || [];
@@ -1726,12 +1741,20 @@ const HierarchicalUserAssignmentPage = () => {
                     )}
                     renderOption={(props, option) => {
                       const { key, ...otherProps } = props;
-                      // Prefer Office name over Region in the option display
-                      const displayName = option.officeName && option.officeName.trim().length > 0
-                        ? `${option.name} - ${option.officeName}`
-                        : (option.region && option.region !== 'All Regions' 
-                          ? `${option.name} - ${option.region}` 
-                          : option.name);
+                      const name = option.name || '';
+                      let displayName = name;
+                      
+                      // Avoid duplicates in display name
+                      if (option.officeName && option.officeName.trim().length > 0) {
+                        if (!name.includes(option.officeName)) {
+                          displayName = `${name} - ${option.officeName}`;
+                        }
+                      } else if (option.region && option.region !== 'All Regions') {
+                        if (!name.includes(option.region)) {
+                          displayName = `${name} - ${option.region}`;
+                        }
+                      }
+
                       return (
                         <Box component="li" key={key} {...otherProps}>
                           <Box>

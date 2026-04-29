@@ -1775,7 +1775,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     // VACANT positions - search in employeeFullName field for "VACANT"
     const vacantCount = await PersonnelServices.countDocuments({ 
       ...baseFilter,
-      employeeFullName: { $regex: 'VACANT', $options: 'i' }
+      employeeFullName: { $regex: 'VACANT|To-Be-Filled', $options: 'i' }
     });
 
     const filledPositions = filledPositionCount > 0 ? filledPositionCount : 0;

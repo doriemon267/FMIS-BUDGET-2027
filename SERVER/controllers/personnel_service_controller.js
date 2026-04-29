@@ -786,12 +786,15 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       fiscalYear: fiscalYear
     };
 
-    // Include both Active and Inactive employees to ensure VACANT positions are included
-    // VACANT positions may be marked as Inactive but should still be available for bulk add
-    let statusConditions = [
-      { employeeStatus: "Active" },
-      { employeeStatus: "Inactive", EmployeeFullName: { $regex: /^VACANT$/i } }
-    ];
+   // Include both Active and Inactive employees to ensure VACANT positions are included
+// VACANT and TO-BE-FILLED positions may be marked as Inactive but should still be available for bulk add
+let statusConditions = [
+  { employeeStatus: "Active" },
+  { 
+    employeeStatus: "Inactive", 
+    EmployeeFullName: { $regex: /^VACANT$|^TO-BE-FILLED$/i } 
+  }
+];
 
     // Apply hierarchical filtering based on user's DIRECT assignment level
     if (userRegion) {
@@ -886,14 +889,17 @@ exports.bulkAddPersonnelServices = async (req, res) => {
 
     existingServices.forEach(s => {
       const empNum = s.employeeNumber != null ? String(s.employeeNumber).trim() : '';
-      if (empNum && empNum !== 'VACANT') {
-        existingByEmployeeNumber.set(empNum, s);
-      }
+      // Ginawa nating array ang mga "invalid" numbers para mas madaling basahin
+if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim())) {
+    existingByEmployeeNumber.set(empNum, s);
+}
       const itemNum = s.itemNumber != null ? String(s.itemNumber).trim() : '';
       if (itemNum) {
         existingByItemNumber.set(itemNum, s);
       }
-      const isVacant = s.employeeFullName && String(s.employeeFullName).toUpperCase() === 'VACANT';
+      const isVacant = s.employeeFullName && 
+                 (String(s.employeeFullName).toUpperCase().trim() === 'VACANT' || 
+                  String(s.employeeFullName).toUpperCase().trim() === 'TO-BE-FILLED');
       if (isVacant) {
         const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.section || ''}|${s.gradelevel_SG || ''}`;
         existingVacantByDetails.add(vacantKey);
@@ -902,7 +908,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
 
     for (const employee of employees) {
       let existingPersonnelService = null;
-      const isVacant = employee.EmployeeFullName && String(employee.EmployeeFullName).toUpperCase().trim() === 'VACANT';
+      const isVacant = employee.EmployeeFullName && 
+                 ['VACANT', 'TO-BE-FILLED'].includes(String(employee.EmployeeFullName).toUpperCase().trim());
 
       if (isVacant) {
         if (employee.ItemNumber && String(employee.ItemNumber).trim() !== '') {

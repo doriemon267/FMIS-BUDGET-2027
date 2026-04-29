@@ -115,3 +115,43 @@ exports.getDepartmentById = async (req, res) => {
     res.status(500).json({ error: 'An error occurred while fetching the department.' });
   }
 };
+
+// Create a new Department
+exports.createDepartment = async (req, res) => {
+  try {
+    const newDepartment = new Department(req.body);
+    const savedDepartment = await newDepartment.save();
+    res.status(201).json(savedDepartment);
+  } catch (error) {
+    console.error('Error creating department:', error);
+    res.status(500).json({ error: 'An error occurred while creating the department.' });
+  }
+};
+
+// Update a Department by ID
+exports.updateDepartment = async (req, res) => {
+  try {
+    const updatedDepartment = await Department.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!updatedDepartment) {
+      return res.status(404).json({ error: 'Department not found' });
+    }
+    res.status(200).json(updatedDepartment);
+  } catch (error) {
+    console.error('Error updating department:', error);
+    res.status(500).json({ error: 'An error occurred while updating the department.' });
+  }
+};
+
+// Delete a Department by ID
+exports.deleteDepartment = async (req, res) => {
+  try {
+    const deletedDepartment = await Department.findByIdAndDelete(req.params.id);
+    if (!deletedDepartment) {
+      return res.status(404).json({ error: 'Department not found' });
+    }
+    res.status(200).json({ message: 'Department deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting department:', error);
+    res.status(500).json({ error: 'An error occurred while deleting the department.' });
+  }
+};

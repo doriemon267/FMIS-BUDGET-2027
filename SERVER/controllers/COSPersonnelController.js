@@ -171,19 +171,28 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
       .select('employeeNumber itemNumber positionTitle department division gradelevel_SG employeeFullName').lean();
     const existingByEmployeeNumber = new Map();
     const existingVacantByDetails = new Set();
-    existingCOS.forEach((s) => {
-      if (s.employeeNumber && s.employeeNumber !== 'VACANT' && String(s.employeeNumber).trim() !== '') {
-        existingByEmployeeNumber.set(s.employeeNumber, s);
-      }
-      if (s.itemNumber && String(s.itemNumber).trim() !== '') {
-        existingByEmployeeNumber.set(s.itemNumber.trim(), s);
-      }
-      const isVacant = s.employeeFullName && String(s.employeeFullName).toUpperCase() === 'VACANT';
-      if (isVacant) {
-        const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.gradelevel_SG || ''}`;
-        existingVacantByDetails.add(vacantKey);
-      }
-    });
+ existingCOS.forEach((s) => {
+  // 1. Update sa Employee Number check
+  const empNum = String(s.employeeNumber || '').trim().toUpperCase();
+  const isInvalidEmpNum = empNum === '' || empNum === 'VACANT' || empNum === 'TO-BE-FILLED';
+
+  if (s.employeeNumber && !isInvalidEmpNum) {
+    existingByEmployeeNumber.set(s.employeeNumber, s);
+  }
+
+  if (s.itemNumber && String(s.itemNumber).trim() !== '') {
+    existingByEmployeeNumber.set(s.itemNumber.trim(), s);
+  }
+
+  // 2. Update sa isVacant logic (Case-insensitive check para sa dalawang terms)
+  const fullName = String(s.employeeFullName || '').trim().toUpperCase();
+  const isVacant = fullName === 'VACANT' || fullName === 'TO-BE-FILLED';
+
+  if (isVacant) {
+    const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.gradelevel_SG || ''}`;
+    existingVacantByDetails.add(vacantKey);
+  }
+});
 
     const checks = employees.map((employee, idx) => {
       // For non-SUPER_ADMIN: Double-check that employee belongs to user's assigned region
@@ -197,8 +206,9 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
         console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${userDivision})`);
       }
 
-      const isVacant = employee.EmployeeFullName &&
-                        employee.EmployeeFullName.toString().toUpperCase() === 'VACANT';
+      const fullName = (employee.EmployeeFullName || '').toString().toUpperCase();
+
+const isVacant = fullName === 'VACANT' || fullName === 'TO-BE-FILLED';
       let isDuplicate = false;
       if (isVacant) {
         if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {

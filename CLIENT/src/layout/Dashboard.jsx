@@ -1,59 +1,78 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AppBar,
   Box,
   CssBaseline,
   Drawer,
   IconButton,
+  InputBase,
+  List,
+  ListItemButton,
+  ListItemText,
+  Paper,
   Toolbar,
   Typography,
   useMediaQuery,
-  Badge,
-  Menu,
-  MenuItem,
-  ListItemText,
+  useTheme,
   Divider,
   Tooltip,
-  CircularProgress,
+  Menu,
+  MenuItem,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
-import React, { useContext, useEffect, useState } from "react";
-import { FaCaretLeft } from "react-icons/fa6";
+import { FaCaretLeft, FaSearch, FaClock, FaTimes, FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import { GiHamburgerMenu } from "react-icons/gi";
-import { GrNotification } from "react-icons/gr";
+import { DateRange as DateRangeIcon } from "@mui/icons-material";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import UserAvatarMenu from "../global/components/UserAvatarMenu";
-import env from "../utils/env";
-import CustomDrawer from "./CustomDrawer";
-import api from "../config/api";
-import { DateRange as DateRangeIcon, Notifications as NotificationsIcon } from "@mui/icons-material";
-import { WorkflowNotificationProvider } from "../context/WorkflowNotificationContext";
-import WorkflowNotifications from "../components/workflow/WorkflowNotifications";
-import ActiveRegionDisplay from "../components/common/ActiveRegionDisplay";
-import { useRegion } from "../context/RegionContext";
-import AppTrayLauncher from "../global/components/floating_apps/AppTrayLauncher";
 import { ErrorBoundary } from 'react-error-boundary';
-import { DrawerProvider, useDrawer } from "../context/DrawerContext";
-import ThemeSync from "../components/common/ThemeSync";
-import OfflineBanner from "../components/common/OfflineBanner";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const drawerWidth = 280;
-const collapsedDrawerWidth = 80;
+// Project Imports
+import env from "../utils/env";
+import api from "../config/api";
+import CustomDrawer from "./CustomDrawer";
+import UserAvatarMenu from "../global/components/UserAvatarMenu";
+import WorkflowNotifications from "../components/workflow/WorkflowNotifications";
+import { WorkflowNotificationProvider } from "../context/WorkflowNotificationContext";
+import ActiveRegionDisplay from "../components/common/ActiveRegionDisplay";
+import AppTrayLauncher from "../global/components/floating_apps/AppTrayLauncher";
+import { DrawerProvider, useDrawer } from "../context/DrawerContext";
+import ThemeSync from "../components/common/ThemeSync";
+import OfflineBanner from "../components/common/OfflineBanner";
+import logger from "../utils/logger";
 
-// blink keyframes
+const drawerWidth = 260;
+const collapsedDrawerWidth = 70;
+
 const blink = keyframes`
   0%, 50% { opacity: 1; }
   50%, 100% { opacity: 0; }
 `;
 
+// Mapped search routes from based code
+const searchableRoutes = [
+  { title: "Dashboard", path: "/dashboard", category: "Main" },
+  { title: "All Proposals", path: "/allproposal", category: "Budget" },
+  { title: "Create Proposal", path: "/proposal", category: "Budget" },
+  { title: "Employee List", path: "/employee", category: "Records" },
+  { title: "BRD Consolidation", path: "/brd-consolidation", category: "Reports" },
+];
+
 const DashboardContent = () => {
   const nav = useNavigate();
-  const { open, setOpen, toggleDrawer, collapsed, toggleCollapsed } = useDrawer();
-  const isMdScreen = useMediaQuery((theme) => theme.breakpoints.down("lg"));
+  const theme = useTheme();
+  const { open, toggleDrawer, collapsed, toggleCollapsed } = useDrawer();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-  // fetch active settings
+  // --- Logic States ---
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchRef = useRef(null);
+  const [anchorFiscalEl, setAnchorFiscalEl] = useState(null);
+
+  // --- Original Logic: Fiscal Settings ---
   const { data: activeSettings, isLoading } = useQuery({
     queryKey: ["activeSettings"],
     queryFn: async () => {
@@ -62,20 +81,11 @@ const DashboardContent = () => {
     },
   });
 
-  // extract fiscalYear & dueDate
   const activeFiscalYear = activeSettings?.fiscalYear ?? null;
   const dueDateRaw = activeSettings?.dueDate ?? null;
-  const dueDate = dueDateRaw
-    ? new Date(dueDateRaw).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : null;
+  const dueDate = dueDateRaw ? new Date(dueDateRaw).toLocaleDateString() : null;
 
-  // determine if we should blink: 1 day before up to due date
   const [blinkActive, setBlinkActive] = useState(false);
-  // Remove NotificationsContext usage, keep blink logic for calendar icon
   useEffect(() => {
     if (!dueDateRaw) return;
     const check = () => {
@@ -85,235 +95,187 @@ const DashboardContent = () => {
       setBlinkActive(now >= oneDayBefore && now <= due);
     };
     check();
-    const iv = setInterval(check, 60 * 1000);
+    const iv = setInterval(check, 60000);
     return () => clearInterval(iv);
   }, [dueDateRaw]);
 
-  const handleFiscalInfoClick = (event) => {
-    handleFiscalClick(event);
-  };
+  // --- Based Code: Search Logic ---
+  const filteredResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return searchableRoutes.filter(r => 
+      r.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [searchQuery]);
 
-  // Remove old notification logic, will use WorkflowNotifications instead
-  
-  // Get active region
-  const { activeRegion } = useRegion();
-
-  // fiscal-year menu
-  const [anchorFiscalEl, setAnchorFiscalEl] = useState(null);
-  const openFiscal = Boolean(anchorFiscalEl);
-  const handleFiscalClick = (e) => setAnchorFiscalEl(e.currentTarget);
-  const handleFiscalClose = () => setAnchorFiscalEl(null);
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) setIsSearchOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
-    <Box sx={{ display: "flex" }}>
+    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden", bgcolor: "#f1f5f9" }}>
       <ThemeSync />
       <OfflineBanner />
       <CssBaseline />
+      
       <AppBar
         position="fixed"
         sx={{
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-          bgcolor: "primary.main",
-          boxShadow: 0,
-          borderBottom: 1,
-          borderColor: "secondary.main",
+          zIndex: 1100, // Explicitly below Drawer (1200)
+          bgcolor: "rgba(255, 255, 255, 0.85)",
+          backdropFilter: "blur(12px)",
+          color: "text.primary",
+          boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
+          borderBottom: "1px solid",
+          borderColor: "rgba(0,0,0,0.05)",
+          width: { md: `calc(100% - ${collapsed ? collapsedDrawerWidth : drawerWidth}px)` },
+          ml: { md: `${collapsed ? collapsedDrawerWidth : drawerWidth}px` },
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
-
-
-
-        <Toolbar sx={{ gap: 1.5 }}>
-          <IconButton
-            color="inherit"
-            aria-label="toggle drawer"
-            onClick={isMdScreen ? toggleDrawer : toggleCollapsed}
-            edge="start"
-            sx={{ mr: { xs: 0, md: 2 } }}
-          >
-            {isMdScreen ? (
-              open ? <FaCaretLeft /> : <GiHamburgerMenu />
-            ) : (
-              collapsed ? <GiHamburgerMenu /> : <FaCaretLeft />
+        <Toolbar sx={{ gap: 1.5, justifyContent: "space-between", minHeight: 64 }}>
+          <Box display="flex" alignItems="center" gap={1}>
+            {isMobile && (
+              <IconButton
+                color="inherit"
+                onClick={toggleDrawer}
+                sx={{ color: "text.secondary", ml: -1 }}
+              >
+                {open ? <FaTimes /> : <GiHamburgerMenu />}
+              </IconButton>
             )}
-          </IconButton>
-          <img
-            src="/2020-nia-logo.svg"
-            alt="Logo"
-            style={{ height: 40, marginRight: 10, cursor: "pointer" }}
-            onClick={() => nav("/")}
-          />
-           <Typography
-            variant="h6"
-            noWrap
-            flexGrow={1}
-            sx={{
-              display: { xs: "none", sm: "block" },
-              fontWeight: "bold",
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-              fontFamily: '"Merriweather", "Georgia", serif', // ← example
-            }}
-          >
-            {env("APP_FULL_TITLE")}
-          </Typography>
-
-          <Typography
-            variant="h6"
-            noWrap
-            flexGrow={1}
-            sx={{
-              display: { xs: "block", sm: "none" },
-              fontWeight: "bold",
-              letterSpacing: 1.2,
-              textTransform: "uppercase",
-              fontFamily: '"Merriweather", "Georgia", serif', // ← same here
-            }}
-          >
-            {env("APP_TITLE")}
-          </Typography>
-
-          {/* Active Region Display */}
-          <Box sx={{ mr: 1.5, display: "flex", alignItems: "center" }}>
-            <ActiveRegionDisplay variant="compact" showButton={false} />
+            
+            {/* Modern Search Bar */}
+            <Box ref={searchRef} sx={{ position: "relative", ml: isMobile ? 0 : 2, display: { xs: "none", sm: "block" } }}>
+              <Box sx={{
+                display: "flex", alignItems: "center", bgcolor: "white",
+                border: "1px solid", borderColor: "rgba(0,0,0,0.08)", borderRadius: 2, px: 2, py: 0.75, width: 350,
+                transition: "all 0.2s ease",
+                "&:focus-within": { borderColor: "#4ade80", boxShadow: "0 0 0 3px rgba(74, 222, 128, 0.1)" }
+              }}>
+                <FaSearch size={14} color="#64748b" />
+                <InputBase
+                  placeholder="Search resources..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchOpen(true)}
+                  sx={{ ml: 1.5, flex: 1, fontSize: "0.875rem" }}
+                />
+              </Box>
+              {isSearchOpen && filteredResults.length > 0 && (
+                <Paper elevation={12} sx={{ position: "absolute", top: "115%", width: "100%", borderRadius: 2, zIndex: 1000, overflow: "hidden", border: "1px solid rgba(0,0,0,0.05)" }}>
+                  <List disablePadding>
+                    {filteredResults.map((r, i) => (
+                      <ListItemButton key={i} onClick={() => { nav(r.path); setIsSearchOpen(false); }} sx={{ py: 1.5 }}>
+                        <ListItemText primary={r.title} secondary={r.category} primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} secondaryTypographyProps={{ fontSize: "0.75rem" }} />
+                      </ListItemButton>
+                    ))}
+                  </List>
+                </Paper>
+              )}
+            </Box>
           </Box>
-          
-          {/* Calendar icon: white by default, blinking red when within 1 day of due date */}
-          <Tooltip title="Fiscal year info">
-            <IconButton
-              onClick={handleFiscalInfoClick}
-              aria-label="Active Fiscal Year"
-              sx={{
-                mr: 1,
-                color: blinkActive ? "error.main" : "inherit",
-                ...(blinkActive && {
-                  animation: `${blink} 1s infinite`,
-                }),
-              }}
-            >
-              <DateRangeIcon />
-            </IconButton>
-          </Tooltip>
-          <Menu
-            anchorEl={anchorFiscalEl}
-            open={openFiscal}
-            onClose={handleFiscalClose}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            transformOrigin={{ vertical: "top", horizontal: "right" }}
-          >
-            <MenuItem onClick={handleFiscalClose}>
-              <ListItemText
-                primary={
-                  isLoading
-                    ? "Loading Fiscal Year..."
-                    : activeFiscalYear
-                    ? `Active Fiscal Year: ${activeFiscalYear}`
-                    : "No Active Fiscal Year"
-                }
-              />
-            </MenuItem>
-            <MenuItem onClick={handleFiscalClose}>
-              <ListItemText
-                primary={
-                  isLoading
-                    ? ""
-                    : dueDate
-                    ? `Due Date: ${dueDate}`
-                    : "No Due Date"
-                }
-              />
-            </MenuItem>
-          </Menu>
 
+          <Box display="flex" alignItems="center" gap={1}>
+            <ActiveRegionDisplay variant="compact" showButton={false} />
+            
+            <Tooltip title="Fiscal info">
+              <IconButton 
+                onClick={(e) => setAnchorFiscalEl(e.currentTarget)}
+                sx={{ color: blinkActive ? "error.main" : "text.secondary", animation: blinkActive ? `${blink} 1s infinite` : "none" }}
+              >
+                <DateRangeIcon />
+              </IconButton>
+            </Tooltip>
 
-          {/* Notifications Bell - ProposalNotifications Style */}
-          {/* New Notification Bell - WorkflowNotifications */}
-          <WorkflowNotificationProvider>
-            <WorkflowNotifications />
-          </WorkflowNotificationProvider>
+            <WorkflowNotificationProvider>
+              <WorkflowNotifications />
+            </WorkflowNotificationProvider>
 
-          <UserAvatarMenu />
+            <Box sx={{ ml: 1, borderLeft: "1px solid", borderColor: "divider", pl: 2 }}>
+              <UserAvatarMenu />
+            </Box>
+          </Box>
         </Toolbar>
       </AppBar>
 
       <Drawer
-        sx={{
-          flexShrink: 0,
-          "& .MuiDrawer-paper": {
-            width: collapsed && !isMdScreen ? collapsedDrawerWidth : drawerWidth,
-            boxSizing: "border-box",
-            background:
-              "linear-gradient(169deg, rgba(55,94,56,0.98) 10%, rgba(0,0,0,0.92) 100%)",
-            transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            overflowX: "hidden",
-            boxShadow: "2px 0 8px rgba(0,0,0,0.15)",
-          },
-        }}
-        variant={isMdScreen ? "temporary" : "persistent"}
-        anchor="left"
+        variant={isMobile ? "temporary" : "permanent"}
         open={open}
         onClose={toggleDrawer}
+        sx={{
+          width: collapsed && !isMobile ? collapsedDrawerWidth : drawerWidth,
+          flexShrink: 0,
+          zIndex: 1300, // Explicitly above AppBar (1100)
+          "& .MuiDrawer-paper": {
+            width: collapsed && !isMobile ? collapsedDrawerWidth : drawerWidth,
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            overflowX: "hidden",
+            background: "#061a11", // Dark forest green
+            borderRight: "none",
+            boxShadow: "10px 0 30px rgba(0,0,0,0.1)",
+          },
+        }}
       >
-        <CustomDrawer collapsed={collapsed && !isMdScreen} />
+        <CustomDrawer />
       </Drawer>
 
-        <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover theme="colored" />
-        <Box
-          component="main"
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            flexGrow: 1,
-            bgcolor: "background.default",
-            transition: "margin 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            marginLeft:
-              open && !isMdScreen
-                ? collapsed
-                  ? `${collapsedDrawerWidth}px`
-                  : `${drawerWidth}px`
-                : 0,
-            minHeight: "100vh",
-            overflowX: "hidden",
-          }}
-        >
-          <Toolbar />
-          <Box
+      {/* Floating Toggle Button */}
+      {!isMobile && (
+        <Tooltip title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"} placement="right">
+          <IconButton
+            onClick={toggleCollapsed}
             sx={{
-              flex: 1,
-              minHeight: 0,
-              maxWidth: "100%",
-              overflowX: "auto",
-              px: { xs: 1.5, md: 2.5 },
-              pb: 2,
+              position: "fixed",
+              left: (collapsed ? collapsedDrawerWidth : drawerWidth) - 14,
+              top: 28, // Move up slightly
+              zIndex: 1500, // Even higher z-index to stay on top
+              bgcolor: "#1a3b2a",
+              color: "#4ade80", // Greenish icon
+              width: 28,
+              height: 28,
+              border: "2px solid #061a11",
+              "&:hover": { bgcolor: "#4ade80", color: "#061a11" },
+              boxShadow: "0 4px 10px rgba(0,0,0,0.3)",
+              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             }}
           >
-            <Outlet />
-            <ErrorBoundary
-              FallbackComponent={({ error }) => (
-                <div style={{ padding: 12, color: "red" }}>
-                  <strong>AppTrayLauncher failed to render:</strong>
-                  <pre style={{ whiteSpace: "pre-wrap" }}>{error?.message}</pre>
-                </div>
-              )}
-              onError={(error, info) => {
-                console.error(
-                  "[ErrorBoundary] AppTrayLauncher render error",
-                  error,
-                  info
-                );
-              }}
-            >
-              <AppTrayLauncher />
-            </ErrorBoundary>
-          </Box>
-          <Divider sx={{ borderColor: "divider" }} />
-          <Typography
-            variant="body2"
-            align="center"
-            sx={{ px: 1.5, py: 2, color: "text.secondary" }}
-          >
+            {collapsed ? <FaChevronRight size={12} /> : <FaChevronLeft size={12} />}
+          </IconButton>
+        </Tooltip>
+      )}
+
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100vh",
+          bgcolor: "#f8fafc",
+          overflowY: "auto",
+          pt: "64px", // Matches Toolbar minHeight
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
+        <ToastContainer position="top-right" />
+        
+        <Box sx={{ flex: 1, p: { xs: 2, md: 4 } }}>
+          <ErrorBoundary FallbackComponent={({ error }) => <Typography color="error">Error: {error.message}</Typography>}>
+            <AppTrayLauncher />
+          </ErrorBoundary>
+          <Outlet />
+        </Box>
+
+        <Box sx={{ py: 2, borderTop: "1px solid", borderColor: "divider" }}>
+          <Typography variant="body2" align="center" color="text.secondary">
             &copy; {new Date().getFullYear()} NIA – {env("APP_TITLE")}
           </Typography>
         </Box>
+      </Box>
     </Box>
   );
 };

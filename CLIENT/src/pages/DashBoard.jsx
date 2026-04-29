@@ -44,6 +44,36 @@ import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 // --- ENHANCED REUSABLE COMPONENTS ---
 
+const formatDisplayName = (user) => {
+  if (!user) return "User";
+  
+  // 1. Try real name components first
+  const first = user.FirstName || user.firstName || "";
+  const last = user.LastName || user.lastName || "";
+  if (first && last) {
+    return `${first} ${last}`;
+  }
+  if (first) return first;
+
+  // 2. Try DisplayName or Username but strictly ignore "Dev User"
+  const rawFallback = user.DisplayName || user.displayName || user.Username || user.username;
+  const fallback = Array.isArray(rawFallback) ? rawFallback[0] : rawFallback;
+
+  if (fallback && typeof fallback === "string" && !fallback.toLowerCase().includes("dev user")) {
+    return fallback;
+  }
+
+  // 3. Fallback to Role
+  const roles = user.Roles || [];
+  if (roles.length > 0) {
+    const primary = roles[0];
+    if (primary.toLowerCase().includes("super")) return "Super Admin";
+    return primary.replace(/_/g, " ");
+  }
+
+  return "User";
+};
+
 const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle }) => {
   const { mode } = useThemeContext();
   const isDarkMode = mode === 'dark';
@@ -229,14 +259,14 @@ const HomePage = () => {
   const isDarkMode = mode === 'dark';
 
   const THEME_COLORS = {
-    primary: '#2d6a4f',
-    secondary: '#40916c',
+    primary: '#60a561',   // Brighter, fresher green
+    secondary: '#386641', // Refined forest green
     deepGreen: '#1b4332',
-    success: '#52b788',
-    warning: '#f79009',
-    error: '#f04438',
-    info: '#0086ff',
-    accent: '#95d5b2'
+    success: '#6a994e',
+    warning: '#f48c06',
+    error: '#d00000',
+    info: '#0077b6',
+    accent: '#a7c957'
   };
 
   const userRoles = Array.isArray(currentUser?.Roles) ? currentUser.Roles : currentUser?.Roles ? [currentUser.Roles] : [];
@@ -370,48 +400,56 @@ const HomePage = () => {
         <Stack spacing={4}>
           
         {/* --- HERO SECTION --- */}
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 4, md: 5 },
-              borderRadius: 6,
-              position: 'relative',
-              overflow: 'hidden',
-              // Updated gradient base sa request mo
-              background: isDarkMode
-                ? `linear-gradient(135deg, #264524 0%, #0f172a 100%)`
-                : `linear-gradient(135deg, #264524 0%, #375e38 100%)`,
-              color: 'white',
-              boxShadow: '0 20px 40px -8px rgba(0,0,0,0.3)',
-            }}
-          >
-            {/* Background Decorations */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 2.5, md: 3 },
+            mb: 4,
+            borderRadius: 5,
+            position: 'relative',
+            overflow: 'hidden',
+            bgcolor: isDarkMode ? alpha('#fff', 0.02) : '#fff',
+            border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : alpha('#000', 0.06)}`,
+            boxShadow: '0 4px 20px -10px rgba(0,0,0,0.05)',
+          }}
+        >
+            {/* Subtle Gradient Background Decorations */}
             <Box sx={{
               position: 'absolute',
-              top: -120,
-              right: -120,
-              width: 350,
-              height: 350,
+              top: -100,
+              right: -50,
+              width: 400,
+              height: 400,
               borderRadius: '50%',
-              background: `radial-gradient(circle, ${alpha('#fff', 0.1)} 0%, transparent 70%)`,
+              background: `radial-gradient(circle, ${alpha(THEME_COLORS.primary, 0.03)} 0%, transparent 70%)`,
+              zIndex: 0
+            }} />
+            <Box sx={{
+              position: 'absolute',
+              bottom: -50,
+              left: -50,
+              width: 300,
+              height: 300,
+              borderRadius: '50%',
+              background: `radial-gradient(circle, ${alpha(THEME_COLORS.accent, 0.05)} 0%, transparent 70%)`,
               zIndex: 0
             }} />
 
             <Grid container spacing={4} alignItems="center" sx={{ position: 'relative', zIndex: 1 }}>
-              <Grid item xs={12} lg={8.5}>
-                <Stack spacing={0.5} sx={{ mb: 2.5 }}>
-                  <Typography variant='overline' sx={{ letterSpacing: 3, opacity: 0.9, fontWeight: 800, color: THEME_COLORS.accent, fontSize: '0.75rem' }}>
-                    OFFICIAL DASHBOARD
+              <Grid item xs={12} lg={8}>
+                <Stack spacing={1} sx={{ mb: 3 }}>
+                  <Typography variant='overline' sx={{ letterSpacing: 3, fontWeight: 800, color: THEME_COLORS.primary, fontSize: '0.75rem' }}>
+                    OFFICIAL BUDGET SYSTEM
                   </Typography>
-                  <Typography variant='h3' fontWeight={900} sx={{ mt: 0.5, letterSpacing: -1, fontSize: { xs: '2rem', md: '2.8rem' }, lineHeight: 1.2 }}>
-                    Mabuhay, {currentUser?.FirstName || 'User'}!
+                  <Typography variant='h3' fontWeight={900} sx={{ mt: 0.5, letterSpacing: -1.2, fontSize: { xs: '1.75rem', md: '2.2rem' }, lineHeight: 1.2, color: isDarkMode ? '#fff' : '#1a1a1a' }}>
+                    Mabuhay, {formatDisplayName(currentUser)}!
                   </Typography>
                 </Stack>
                 
-                <Typography variant='body1' sx={{ opacity: 0.85, maxWidth: 580, mb: 4, lineHeight: 1.6, fontSize: '1rem', fontWeight: 500 }}>
+                <Typography variant='body1' sx={{ color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', maxWidth: 600, mb: 4, lineHeight: 1.7, fontSize: '1.05rem', fontWeight: 500 }}>
                   {isPreparer
-                    ? `Streamline your budget management for ${displayInfo.name}. Your central hub for submissions and compliance tracking for FY ${fiscalYear}.`
-                    : `Comprehensive overview of all budget submissions for ${displayInfo.name}. Monitor progress and review pending items in real-time.`}
+                    ? `Welcome back to your central hub for FMIS budget management. You can now manage your budget proposals and track compliance for FY ${fiscalYear}.`
+                    : `Welcome back! Here is an overview of budget submissions for ${displayInfo.name}. You can monitor progress and review pending items in real-time.`}
                 </Typography>
                 
                 <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap sx={{ mb: 4 }}>
@@ -421,18 +459,16 @@ const HomePage = () => {
                       label={chip.label}
                       icon={<span style={{ fontSize: '1rem' }}>{chip.icon}</span>}
                       sx={{
-                        bgcolor: alpha('#fff', 0.06),
-                        color: '#fff',
-                        backdropFilter: 'blur(8px)',
-                        border: `1px solid ${alpha('#fff', 0.1)}`,
+                        bgcolor: isDarkMode ? alpha('#fff', 0.05) : alpha(THEME_COLORS.primary, 0.05),
+                        color: isDarkMode ? '#fff' : THEME_COLORS.secondary,
+                        border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : alpha(THEME_COLORS.primary, 0.1)}`,
                         fontWeight: 700,
                         px: 1,
-                        py: 2,
                         borderRadius: 2.5,
                         height: 32,
                         fontSize: '0.85rem',
-                        transition: 'all 0.3s',
-                        '&:hover': { bgcolor: alpha('#fff', 0.12), transform: 'translateY(-1px)' }
+                        transition: 'all 0.2s',
+                        '&:hover': { bgcolor: isDarkMode ? alpha('#fff', 0.1) : alpha(THEME_COLORS.primary, 0.1) }
                       }}
                     />
                   ))}
@@ -446,15 +482,15 @@ const HomePage = () => {
                       onClick={handleCreateProposal}
                       startIcon={<AddCircleOutlineIcon />}
                       sx={{
-                        bgcolor: '#fff',
-                        color: '#264524', // Match sa deep green para cohesive
+                        bgcolor: THEME_COLORS.primary,
+                        color: '#fff',
                         fontWeight: 800,
                         px: 4,
                         py: 1.5,
                         borderRadius: 3,
                         fontSize: '0.95rem',
-                        boxShadow: '0 8px 16px -4px rgba(0,0,0,0.2)',
-                        '&:hover': { bgcolor: alpha('#fff', 0.95), transform: 'translateY(-2px)' },
+                        boxShadow: `0 8px 20px -6px ${alpha(THEME_COLORS.primary, 0.4)}`,
+                        '&:hover': { bgcolor: THEME_COLORS.secondary, transform: 'translateY(-2px)' },
                         transition: 'all 0.2s'
                       }}
                     >
@@ -466,16 +502,15 @@ const HomePage = () => {
                     size="large"
                     onClick={handleRefreshStats}
                     sx={{
-                      color: '#fff',
-                      borderColor: alpha('#fff', 0.3),
-                      borderWidth: 1.5,
+                      color: THEME_COLORS.primary,
+                      borderColor: alpha(THEME_COLORS.primary, 0.3),
+                      borderWidth: 2,
                       fontWeight: 700,
                       px: 3.5,
                       py: 1.5,
                       borderRadius: 3,
                       fontSize: '0.9rem',
-                      backdropFilter: 'blur(4px)',
-                      '&:hover': { borderColor: '#fff', bgcolor: alpha('#fff', 0.08), borderWidth: 1.5, transform: 'translateY(-2px)' },
+                      '&:hover': { borderColor: THEME_COLORS.primary, bgcolor: alpha(THEME_COLORS.primary, 0.05), borderWidth: 2, transform: 'translateY(-2px)' },
                       transition: 'all 0.2s'
                     }}
                   >
@@ -484,36 +519,37 @@ const HomePage = () => {
                 </Stack>
               </Grid>
 
-              <Grid item xs={12} lg={3.5}>
+              <Grid item xs={12} lg={4}>
                 <Box sx={{ 
                   display: 'flex', 
                   flexDirection: 'column',
                   alignItems: 'center',
-                  bgcolor: alpha('#fff', 0.05),
-                  p: 3.5,
+                  bgcolor: isDarkMode ? alpha('#fff', 0.03) : '#f8fafc',
+                  p: 3,
                   borderRadius: 5,
-                  border: `1px solid ${alpha('#fff', 0.1)}`,
+                  border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : 'rgba(0,0,0,0.04)'}`,
                   textAlign: 'center',
-                  backdropFilter: 'blur(8px)',
+                  boxShadow: isDarkMode ? 'none' : 'inset 0 2px 4px rgba(0,0,0,0.02)'
                 }}>
-                   <Box sx={{ position: 'relative', display: 'inline-flex', mb: 2.5 }}>
+                   <Box sx={{ position: 'relative', display: 'inline-flex', mb: 3 }}>
                       <CircularProgress
                         variant="determinate"
                         value={100}
                         size={120}
-                        thickness={4.5}
-                        sx={{ color: alpha('#fff', 0.1) }}
+                        thickness={5}
+                        sx={{ color: isDarkMode ? alpha('#fff', 0.05) : alpha(THEME_COLORS.primary, 0.08) }}
                       />
                       <CircularProgress
                         variant="determinate"
                         value={Number(completionRate)}
                         size={120}
-                        thickness={4.5}
+                        thickness={5}
                         sx={{ 
-                          color: THEME_COLORS.accent, 
+                          color: THEME_COLORS.primary, 
                           position: 'absolute', 
                           left: 0, 
                           strokeLinecap: 'round',
+                          filter: `drop-shadow(0 0 10px ${alpha(THEME_COLORS.primary, 0.3)})`
                         }}
                       />
                       <Box sx={{
@@ -521,11 +557,11 @@ const HomePage = () => {
                         position: 'absolute', display: 'flex',
                         flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Typography variant="h4" fontWeight="900" sx={{ letterSpacing: -0.5 }}>{completionRate}%</Typography>
+                        <Typography variant="h3" fontWeight="900" sx={{ letterSpacing: -1, color: isDarkMode ? '#fff' : THEME_COLORS.secondary }}>{completionRate}%</Typography>
                       </Box>
                    </Box>
-                   <Typography variant="h6" fontWeight="800" sx={{ mb: 0.5, fontSize: '1.1rem' }}>Submission Health</Typography>
-                   <Typography variant="caption" sx={{ opacity: 0.8, fontWeight: 600, maxWidth: 180, display: 'block' }}>Approved vs Total Submissions for FY {fiscalYear}</Typography>
+                   <Typography variant="h6" fontWeight="900" sx={{ mb: 0.5, fontSize: '1.1rem', color: isDarkMode ? '#fff' : '#1a1a1a' }}>Submission Health</Typography>
+                   <Typography variant="caption" sx={{ color: isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)', fontWeight: 700, maxWidth: 200, display: 'block' }}>Approved vs Total for FY {fiscalYear}</Typography>
                 </Box>
               </Grid>
             </Grid>

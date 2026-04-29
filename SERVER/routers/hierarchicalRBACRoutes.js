@@ -615,7 +615,10 @@ router.get(
             );
 
             // Check if this is a central office (displayOrder < 100)
-            const isCentralOffice = deptMappings.length > 1 && (dept.displayOrder < 100);
+            // PMO is excluded because it should be treated per Project/Region
+            const deptName = dept.Department || dept.name || '';
+            const isPMO = deptName.toUpperCase().includes('PROJECT MANAGEMENT OFFICE');
+            const isCentralOffice = deptMappings.length > 1 && (dept.displayOrder < 100) && !isPMO;
 
             if (isCentralOffice) {
               // Central offices that serve multiple regions → Create ONE office with "All Regions"
@@ -637,7 +640,7 @@ router.get(
 
                   officesMap.set(officeId, {
                     id: officeId,
-                    name: dept.Department,
+                    name: `${dept.Department} - ${regionName}`,
                     code: dept.DepartmentCode || `${dept.Department.substring(0, 2)}${mappingIndex + 1}`,
                     region: regionName,
                     regionId: region._id,
@@ -660,7 +663,7 @@ router.get(
 
               officesMap.set(officeId.toString(), {
                 id: officeId,
-                name: dept.Department || dept.name || `Office ${index + 1}`,
+                name: regionName ? `${dept.Department || dept.name} - ${regionName}` : (dept.Department || dept.name || `Office ${index + 1}`),
                 code: dept.DepartmentCode || dept.code || `O${index + 1}`,
                 region: regionName,
                 regionId: regionId,
@@ -681,7 +684,9 @@ router.get(
                       const dept = departments.find(d => d._id.toString() === mapping.departmentId.toString());
                       const deptMappings = mappings.filter(m => m.departmentId.toString() === mapping.departmentId.toString());
                       
-                      let isCentralOffice = deptMappings.length > 1 && dept && (dept.displayOrder < 100);
+                      const deptName = dept ? (dept.Department || dept.name || '') : '';
+                      const isPMO = deptName.toUpperCase().includes('PROJECT MANAGEMENT OFFICE');
+                      let isCentralOffice = deptMappings.length > 1 && dept && (dept.displayOrder < 100) && !isPMO;
                       const shouldSplitByRegion = deptMappings.length > 1 && !isCentralOffice;
                       
                       // For departments with multiple regions (except central offices), use composite officeId; otherwise use departmentId
@@ -809,38 +814,68 @@ router.get(
 
                         const regionIMOs = provincialIMOs[regionName] || [];
 
-                        regionIMOs.forEach((provincialIMO, imoIndex) => {
-                          // Skip if office is not found (prevents "Unknown Office" entries)
-                          if (!officeForRC || !officeForRC.name) {
-                            return;
-                          }
+                        if (regionIMOs.length > 0) {
+                          regionIMOs.forEach((provincialIMO, imoIndex) => {
+                            // Skip if office is not found (prevents "Unknown Office" entries)
+                            if (!officeForRC || !officeForRC.name) {
+                              return;
+                            }
 
-                          const rcId = `rc_${officeId}_${mapping.regionId}_${imoIndex}`;
-                          const rcName = provincialIMO.name;
+                            const rcId = `rc_${officeId}_${mapping.regionId}_${imoIndex}`;
+                            const rcName = provincialIMO.name;
 
-                          const rcData = {
-                            id: rcId,
-                            name: rcName,
-                            code: `RC${imoIndex + 1}`,
-                            officeId: officeId,
-                            officeName: officeForRC.name,
-                            region: regionName,
-                            regionId: mapping.regionId,
-                            departmentId: mapping.departmentId,
-                            departmentName: mapping.departmentName,
-                            provincialIMO: provincialIMO.name
-                          };
-                          
-                          console.log('📍 Creating RC for central office (Provincial IMO):', {
-                            rcName: rcData.name,
-                            officeId: rcData.officeId,
-                            officeName: rcData.officeName,
-                            region: rcData.region,
-                            isCentral: true
+                            const rcData = {
+                              id: rcId,
+                              name: rcName,
+                              code: `RC${imoIndex + 1}`,
+                              officeId: officeId,
+                              officeName: officeForRC.name,
+                              region: regionName,
+                              regionId: mapping.regionId,
+                              departmentId: mapping.departmentId,
+                              departmentName: mapping.departmentName,
+                              provincialIMO: provincialIMO.name
+                            };
+                            
+                            console.log('📍 Creating RC for central office (Provincial IMO):', {
+                              rcName: rcData.name,
+                              officeId: rcData.officeId,
+                              officeName: rcData.officeName,
+                              region: rcData.region,
+                              isCentral: true
+                            });
+                            
+                            responsibilityCentersMap.set(rcId, rcData);
                           });
-                          
-                          responsibilityCentersMap.set(rcId, rcData);
-                        });
+                        } else if (mapping.divisions && mapping.divisions.length > 0) {
+                          // Fallback for non-standard regions (e.g. PMO Projects)
+                          mapping.divisions.forEach((division, divIndex) => {
+                            if (!officeForRC || !officeForRC.name) return;
+
+                            const rcId = `rc_${mapping._id || mapping.regionId}_${divIndex}`;
+                            const rcData = {
+                              id: rcId,
+                              name: division.name || `Responsibility Center ${divIndex + 1}`,
+                              code: division.code || `RC${divIndex + 1}`,
+                              officeId: officeId,
+                              officeName: officeForRC.name,
+                              region: regionName,
+                              regionId: mapping.regionId,
+                              departmentId: mapping.departmentId,
+                              departmentName: mapping.departmentName
+                            };
+
+                            console.log('📍 Creating RC for central office (Mapping Division Fallback):', {
+                              rcName: rcData.name,
+                              officeId: rcData.officeId,
+                              officeName: rcData.officeName,
+                              region: rcData.region,
+                              isCentral: true
+                            });
+
+                            responsibilityCentersMap.set(rcId, rcData);
+                          });
+                        }
                       } else {
                         // For regular offices, create responsibility centers as before
                         mapping.divisions.forEach((division, divIndex) => {

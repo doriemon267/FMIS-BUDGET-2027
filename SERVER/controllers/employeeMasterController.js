@@ -6,7 +6,9 @@ const { getNextVacantEmployeeNumber, getNextRegularEmployeeNumber } = require(".
 const createEmployee = async (req, res) => {
   try {
     const { EmployeeFullName, fiscalYear, Region, EmployeeID } = req.body;
-    const isVacant = EmployeeFullName && String(EmployeeFullName).toUpperCase().trim() === 'VACANT';
+    const isVacant = EmployeeFullName && 
+  (String(EmployeeFullName).toUpperCase().trim() === 'VACANT' || 
+   String(EmployeeFullName).toUpperCase().trim() === 'TO-BE-FILLED');
     let body = { ...req.body };
     if (!EmployeeID || String(EmployeeID).trim() === '') {
       if (isVacant) {

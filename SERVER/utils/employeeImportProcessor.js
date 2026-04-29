@@ -223,7 +223,8 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
   ];
 
   const isCOS = record.StatusOfAppointment && record.StatusOfAppointment.toString().toUpperCase() === 'COS';
-  const isVacant = record.EmployeeFullName && record.EmployeeFullName.toString().toUpperCase() === 'VACANT';
+  const isVacant = record.EmployeeFullName && 
+                 ['VACANT', 'TO-BE-FILLED'].includes(record.EmployeeFullName.toString().toUpperCase().trim());
 
   const vacantRequiredFields = [
     'EmployeeFullName',

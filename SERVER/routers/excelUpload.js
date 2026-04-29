@@ -138,7 +138,8 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
       try {
         const rec = result.record;
-        const isVacant = rec.EmployeeFullName && String(rec.EmployeeFullName).toUpperCase().trim() === 'VACANT';
+        const isVacant = rec.EmployeeFullName && 
+                 ['VACANT', 'TO-BE-FILLED'].includes(String(rec.EmployeeFullName).toUpperCase().trim());
         const regionRegex = new RegExp(`^${String(activeRegion).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
         const fiscalYearVal = activeSettings.fiscalYear;
 
@@ -157,26 +158,30 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         // For VACANT: each position is a separate record — match by ItemNumber or by position details so we don't overwrite one VACANT for all
         let matchQuery;
         if (isVacant) {
-          const itemNo = (rec.itemNumber || rec.ItemNumber || '').toString().trim();
-          if (itemNo) {
-            matchQuery = {
-              EmployeeFullName: /^VACANT$/i,
-              fiscalYear: fiscalYearVal,
-              Region: regionRegex,
-              itemNumber: itemNo
-            };
-          } else {
-            matchQuery = {
-              EmployeeFullName: /^VACANT$/i,
-              fiscalYear: fiscalYearVal,
-              Region: regionRegex,
-              PositionTitle: rec.PositionTitle,
-              Department: rec.Department,
-              Division: (rec.Division || ''),
-              Section: (rec.Section || '')
-            };
-          }
-        } else {
+  const itemNo = (rec.itemNumber || rec.ItemNumber || '').toString().trim();
+  
+  // Regex pattern na tatanggap sa VACANT o TO-BE-FILLED
+  const vacantRegex = /^VACANT$|^TO-BE-FILLED$/i;
+
+  if (itemNo) {
+    matchQuery = {
+      EmployeeFullName: vacantRegex,
+      fiscalYear: fiscalYearVal,
+      Region: regionRegex,
+      itemNumber: itemNo
+    };
+  } else {
+    matchQuery = {
+      EmployeeFullName: vacantRegex,
+      fiscalYear: fiscalYearVal,
+      Region: regionRegex,
+      PositionTitle: rec.PositionTitle,
+      Department: rec.Department,
+      Division: (rec.Division || ''),
+      Section: (rec.Section || '')
+    };
+  }
+} else {
           matchQuery = {
             EmployeeFullName: new RegExp(`^${String(rec.EmployeeFullName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
             fiscalYear: fiscalYearVal,

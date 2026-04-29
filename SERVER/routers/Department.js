@@ -1,4 +1,4 @@
-const { getAllDepartment, getDepartmentById } = require('../controllers/DepartmentController');
+const { getAllDepartment, getDepartmentById, createDepartment, updateDepartment, deleteDepartment } = require('../controllers/DepartmentController');
 const Router = require("express").Router;
 const checkToken = require('../middleware/check_token');
 
@@ -13,4 +13,7 @@ const departmentRouter = Router();
 departmentRouter.use(tokenMiddleware);
 departmentRouter.get('/departments', getAllDepartment);
 departmentRouter.get('/departments/:id', getDepartmentById);
+departmentRouter.post('/departments', createDepartment);
+departmentRouter.put('/departments/:id', updateDepartment);
+departmentRouter.delete('/departments/:id', deleteDepartment);
 module.exports = departmentRouter;

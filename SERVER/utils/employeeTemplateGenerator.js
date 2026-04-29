@@ -392,7 +392,7 @@ const generateEmployeeTemplate = (options = {}) => {
     { 'Instructions': 'Employee Import Template Instructions' },
     { 'Instructions': '' },
     { 'Instructions': 'REQUIRED FIELDS (marked with *):' },
-    { 'Instructions': '- EmployeeFullName*: Full name of the employee (use VACANT for vacant positions)' },
+    { 'Instructions': '- EmployeeFullName*: Full name of the employee (use VACANT or To-Be-Filled for vacant positions)' },
     { 'Instructions': '- Employee Number: Optional. For VACANT leave blank to auto-generate (e.g. V00001)' },
     { 'Instructions': '- Region*: Must match the currently selected region' },
     { 'Instructions': '- Department*: Department name' },

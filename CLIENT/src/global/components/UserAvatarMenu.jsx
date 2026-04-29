@@ -26,7 +26,27 @@ const formatDisplayName = (user) => {
   const middleInitial = user.MiddleName ? ` ${user.MiddleName.charAt(0)}.` : "";
   const last = user.LastName || "";
   const suffix = user.Suffix ? ` ${user.Suffix}` : "";
-  return `${first}${middleInitial} ${last}${suffix}`.trim().replace(/\s+/g, " ");
+  
+  const full = `${first}${middleInitial} ${last}${suffix}`.trim().replace(/\s+/g, " ");
+  
+  if (full && !full.toLowerCase().includes("dev user")) return full;
+  
+  const rawFallback = user.DisplayName || user.displayName || user.Username || user.username;
+  const fallback = Array.isArray(rawFallback) ? rawFallback[0] : rawFallback;
+
+  if (fallback && typeof fallback === "string" && !fallback.toLowerCase().includes("dev user")) {
+    return fallback;
+  }
+
+  // Last resort: show role
+  const roles = user.Roles || [];
+  if (roles.length > 0) {
+    const primary = roles[0];
+    if (primary.toLowerCase().includes("super")) return "Admin";
+    return primary.replace(/_/g, " ");
+  }
+
+  return "";
 };
 
 const SETTINGS_HREF = "https://accounts.nia.gov.ph/Manage";
@@ -57,9 +77,6 @@ const UserAvatarMenu = () => {
   return (
     <Box sx={{ flexGrow: 0 }}>
       <Box display="flex" alignItems="center" gap={2}>
-        <Typography sx={{ display: { xs: "none", md: "block" } }}>
-          {displayName}
-        </Typography>
         <Tooltip title={`${displayName}'s settings`}>
           <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
             <Avatar
@@ -97,13 +114,13 @@ const UserAvatarMenu = () => {
             minWidth: 200,
           }}
         >
-          <Typography variant="subtitle1" fontWeight={500} noWrap>
-            {displayName || "User"}
+          <Typography variant="subtitle1" fontWeight={600} noWrap>
+            {displayName || "Admin"}
           </Typography>
           <Avatar
             alt={displayName}
             src={currentUser?.ProfilePicture}
-            sx={{ width: 36, height: 36 }}
+            sx={{ width: 40, height: 40 }}
           />
         </Box>
         <Divider />

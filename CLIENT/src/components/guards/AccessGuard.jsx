@@ -152,7 +152,7 @@ const NoBudgetRolePage = ({ onLogout, message }) => {
           </Stack>
         </Paper>
 
-        <Typography
+        {/* <Typography
           variant="caption"
           sx={{
             display: 'block',
@@ -162,7 +162,7 @@ const NoBudgetRolePage = ({ onLogout, message }) => {
           }}
         >
           © 2026 NIA – OSBPIS
-        </Typography>
+        </Typography> */}
       </Container>
     </Box>
   );

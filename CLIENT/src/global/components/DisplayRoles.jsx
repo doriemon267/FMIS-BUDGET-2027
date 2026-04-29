@@ -20,8 +20,8 @@ const DisplayRoles = ({ collapsed = false }) => {
 
   const isOneRole = displayList.length === 1;
   const displayRole = displayList[0]?.toLowerCase()?.includes("super")
-    ? "ADMIN"
-    : toDisplay(displayList[0]) || "User";
+    ? "SUPER ADMIN"
+    : toDisplay(displayList[0]) || "ADMIN";
 
   const renderContent = () => (
     <Box

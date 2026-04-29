@@ -101,8 +101,8 @@ api.interceptors.request.use(
       }
     }
 
-    // Dev-only header to tell the backend which userId to use when ACCOUNT_USER_API_URL is not set
-    if (!IS_PRODUCTION) {
+    // Dev-only header: Only inject if we DON'T have a real auth token already
+    if (!IS_PRODUCTION && !authToken) {
       try {
         const currentUser = _devUser;
         if (currentUser) {

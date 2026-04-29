@@ -1,16 +1,13 @@
 import {
   Box,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   ListItemIcon,
   MenuItem,
   Typography,
 } from "@mui/material";
 import { useState } from "react";
-import { toast } from "react-hot-toast";
+import { toast } from "react-toastify";
 import { LuLogOut } from "react-icons/lu";
+import Swal from "sweetalert2";
 import { useUser } from "../context/UserContext";
 import CustomButton from "../global/components/CustomButton";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
@@ -48,8 +45,6 @@ const parseParticularIdAndEmail = (particularID, emailFromUser) => {
 
 const LogoutDialog = ({ handleCloseMenu, compact = false }) => {
   const { logout, currentUser } = useUser();
-  const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   // Kunin ang email mula sa posibleng casing (Email o email)
   const email = currentUser?.email ?? currentUser?.Email;
@@ -59,16 +54,25 @@ const LogoutDialog = ({ handleCloseMenu, compact = false }) => {
     email
   );
 
-  const handleOpen = () => setIsOpen(true);
-  
-  const handleClose = () => {
-    setIsOpen(false);
-    // Safety check: tatawagin lang kung existing ang function
-    handleCloseMenu?.(); 
-  };
+  const handleOpen = async () => {
+    handleCloseMenu?.();
+    const result = await Swal.fire({
+      title: "Logout?",
+      text: "Are you sure you want to sign out?",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonColor: "#386641",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Yes, logout",
+      allowOutsideClick: false,
+    });
 
+    if (result.isConfirmed) {
+      handleLogout();
+    }
+  };
+  
   const handleLogout = async () => {
-    setLoading(true);
     try {
       if (IS_PRODUCTION) {
         // NIA Production Logoff Logic
@@ -85,93 +89,42 @@ const LogoutDialog = ({ handleCloseMenu, compact = false }) => {
       } else {
         // Local/Dev Logout
         await logout();
-        toast.success("Logged out successfully", { duration: 4000 });
+        toast.success("Logged out successfully");
       }
     } catch (error) {
-      toast.error("Logout failed!", { duration: 4000 });
+      toast.error("Logout failed!");
       console.error("Logout Error:", error);
-    } finally {
-      setLoading(false);
-      // Hindi na kailangan i-close kung nag-redirect (Production), 
-      // pero para sa Dev mode, kailangan ito.
-      setIsOpen(false);
     }
   };
 
   return (
-    <>
-      <MenuItem onClick={handleOpen} sx={{ py: 1.5 }}>
-        <ListItemIcon sx={{ color: "error.main" }}>
-          <LuLogOut size={20} />
-        </ListItemIcon>
-        
-        {compact ? (
-          <Typography variant="body2" fontWeight={500}>Logout</Typography>
-        ) : (
-          <Box sx={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <Typography 
-              variant="body2" 
-              sx={{ fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
-            >
-              Logout: {idPart}
-            </Typography>
-            {emailPart && (
-              <Typography 
-                variant="caption" 
-                color="text.secondary"
-                sx={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
-              >
-                {emailPart}
-              </Typography>
-            )}
-          </Box>
-        )}
-      </MenuItem>
-
-      <Dialog
-        open={isOpen}
-        onClose={loading ? undefined : handleClose}
-        aria-labelledby="logout-dialog-title"
-        BackdropProps={{
-          sx: {
-            backgroundColor: "rgba(0, 0, 0, 0.4)",
-            backdropFilter: "blur(4px)", // Mas malinaw na blur para sa focus
-          },
-        }}
-      >
-        <DialogTitle id="logout-dialog-title" sx={{ fontWeight: 700 }}>
-          Confirm Logout
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body1" color="text.secondary">
-            Are you sure you want to log out? Any unsaved changes might be lost.
+    <MenuItem onClick={handleOpen} sx={{ py: 1.5 }}>
+      <ListItemIcon sx={{ color: "error.main" }}>
+        <LuLogOut size={20} />
+      </ListItemIcon>
+      
+      {compact ? (
+        <Typography variant="body2" fontWeight={500}>Logout</Typography>
+      ) : (
+        <Box sx={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <Typography 
+            variant="body2" 
+            sx={{ fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
+          >
+            Logout: {idPart}
           </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <CustomButton
-            size="medium"
-            plain
-            disabled={loading}
-            onClick={handleClose}
-            color="inherit"
-          >
-            Cancel
-          </CustomButton>
-          <CustomButton
-            size="medium"
-            loading={loading}
-            onClick={handleLogout}
-            sx={{ 
-              bgcolor: "#1a1a1a", 
-              color: "white",
-              "&:hover": { bgcolor: "#333" } 
-            }}
-          >
-            Proceed
-          </CustomButton>
-        </DialogActions>
-      </Dialog>
-    </>
+          {emailPart && (
+            <Typography 
+              variant="caption" 
+              color="text.secondary"
+              sx={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
+            >
+              {emailPart}
+            </Typography>
+          )}
+        </Box>
+      )}
+    </MenuItem>
   );
 };
 
