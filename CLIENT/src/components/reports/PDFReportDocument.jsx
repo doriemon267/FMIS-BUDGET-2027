@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
 });
 
 // Main PDF document component
-const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [] }) => {
+const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [], preparedByName, notedByName, approvedByName }) => {
   function formatCurrency(amount, noSign = false) {
     const amountNumber = parseFloat(amount) || 0;
     const formatted = amountNumber.toLocaleString("en-US", {
@@ -102,6 +102,29 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [] }) =
     acc[key].push(item);
     return acc;
   }, {});
+
+  const renderSignatories = () => (
+    <View style={{ flexDirection: 'row', marginTop: 40, justifyContent: 'space-between', paddingHorizontal: 20 }}>
+      <View style={{ width: '30%', alignItems: 'flex-start' }}>
+        <Text style={{ fontSize: 10, marginBottom: 25 }}>Prepared by:</Text>
+        <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', width: '100%', marginBottom: 5 }} />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center', width: '100%' }}>{preparedByName || '________________________'}</Text>
+        <Text style={{ fontSize: 9, textAlign: 'center', width: '100%' }}>Budget Preparer</Text>
+      </View>
+      <View style={{ width: '30%', alignItems: 'center' }}>
+        <Text style={{ fontSize: 10, marginBottom: 25, width: '100%', textAlign: 'left' }}>Noted by:</Text>
+        <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', width: '100%', marginBottom: 5 }} />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center', width: '100%' }}>{notedByName || '________________________'}</Text>
+        <Text style={{ fontSize: 9, textAlign: 'center', width: '100%' }}>Budget Reviewer</Text>
+      </View>
+      <View style={{ width: '30%', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 10, marginBottom: 25, width: '100%', textAlign: 'left' }}>Approved by:</Text>
+        <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', width: '100%', marginBottom: 5 }} />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center', width: '100%' }}>{approvedByName || '________________________'}</Text>
+        <Text style={{ fontSize: 9, textAlign: 'center', width: '100%' }}>Budget Approver</Text>
+      </View>
+    </View>
+  );
 
   return (
     <Document>
@@ -377,6 +400,9 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [] }) =
           <Text style={{ width: "70%" }}>GRAND TOTAL</Text>
           <Text style={{ width: "30%", textAlign: "right" }}>{formatCurrency(grandTotal, true)}</Text>
         </View>
+
+        {/* Signatories Area */}
+        {renderSignatories()}
       </Page>
     </Document>
   );

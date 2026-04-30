@@ -63,10 +63,12 @@ import NEPCeilingPage from "./pages/NEPCeilingPage";
 import TierPage from "./pages/TierPage";
 import UserActivityLogsPage from "./pages/UserActivityLogsPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import VerifyDocumentPage from "./pages/VerifyDocumentPage";
 const App = () => {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
+      <Route path="/verify-document" element={<VerifyDocumentPage />} />
      
 
       <Route

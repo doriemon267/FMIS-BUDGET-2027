@@ -26,6 +26,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  AppBar,
+  Toolbar,
   Checkbox,
   FormGroup,
   Divider,
@@ -976,12 +978,21 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
 
       {/* ── PDF Preview Dialog ─────────────────────────────────────────────── */}
       <Dialog
+        fullScreen
         open={pdfDialogOpen}
         onClose={closePdfDialog}
-        fullScreen
       >
-        <DialogTitle>Consolidated Capital Outlay PDF Preview</DialogTitle>
-        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
+        <AppBar sx={{ position: "relative" }}>
+          <Toolbar>
+            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
+              <CloseIcon />
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              Consolidated Capital Outlay PDF Preview
+            </Typography>
+          </Toolbar>
+        </AppBar>
+        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
           {pdfPreviewUrl ? (
             <iframe
               src={pdfPreviewUrl}
@@ -994,9 +1005,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={closePdfDialog}>Close</Button>
-        </DialogActions>
       </Dialog>
     </ReportPageLayout>
   );

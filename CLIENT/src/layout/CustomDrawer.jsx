@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Box,
   Divider,
+  IconButton,
   List,
   Tooltip,
   Typography,
@@ -24,6 +25,8 @@ import {
   FaRegChartBar,
   FaArrowLeft,
   FaBriefcase,
+  FaChevronLeft,
+  FaChevronRight,
 } from "react-icons/fa";
 import { FaPesoSign } from "react-icons/fa6";
 import { useNavigate } from "react-router-dom";
@@ -47,9 +50,10 @@ import Swal from "sweetalert2";
 
 const CustomDrawer = () => {
   const { currentUser, logout } = useUser();
-  const { open, collapsed: isCollapsed, toggleDrawer } = useDrawer(); 
+  const { open, collapsed: isCollapsed, toggleDrawer, toggleCollapsed } = useDrawer(); 
   const theme = useTheme();
   const isMdScreen = useMediaQuery(theme.breakpoints.down("lg"));
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const collapsed = isMdScreen ? !open : isCollapsed;
   const navigate = useNavigate();
 
@@ -233,8 +237,37 @@ const CustomDrawer = () => {
                 FMIS
               </Typography>
             )}
+            {!isMobile && (
+              <IconButton 
+                onClick={toggleCollapsed} 
+                size="small"
+                sx={{ 
+                  ml: "auto", 
+                  color: "rgba(255,255,255,0.5)",
+                  "&:hover": { color: "#4ade80", bgcolor: "rgba(74, 222, 128, 0.1)" },
+                  display: collapsed ? "none" : "flex"
+                }}
+              >
+                <FaChevronLeft size={14} />
+              </IconButton>
+            )}
           </Box>
         </Tooltip>
+
+        {collapsed && !isMobile && (
+           <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
+             <IconButton 
+                onClick={toggleCollapsed} 
+                size="small"
+                sx={{ 
+                  color: "rgba(255,255,255,0.5)",
+                  "&:hover": { color: "#4ade80", bgcolor: "rgba(74, 222, 128, 0.1)" }
+                }}
+              >
+                <FaChevronRight size={14} />
+              </IconButton>
+           </Box>
+        )}
 
         {/* Current Role Section */}
         <Tooltip title={collapsed ? `Role: ${displayRole}` : ""} placement="right" slotProps={tooltipSx}>

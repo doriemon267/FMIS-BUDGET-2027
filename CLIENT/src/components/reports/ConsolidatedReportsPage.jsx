@@ -26,6 +26,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  AppBar,
+  Toolbar,
   Checkbox,
   FormGroup,
   Divider,
@@ -56,6 +58,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import HomeIcon from "@mui/icons-material/Home";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import CloseIcon from "@mui/icons-material/Close";
 
 // Custom component for numeric input formatting
 const NumberFormatCustom = React.memo(React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -1135,9 +1138,22 @@ const ConsolidatedReportsPage = () => {
         </Fade>
       </Paper>
 
-      <Dialog open={pdfDialogOpen} onClose={closePdfDialog} fullScreen>
-        <DialogTitle>Consolidated MOOE PDF Preview</DialogTitle>
-        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
+      <Dialog
+        fullScreen
+        open={pdfDialogOpen}
+        onClose={closePdfDialog}
+      >
+        <AppBar sx={{ position: "relative" }}>
+          <Toolbar>
+            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
+              <CloseIcon />
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              Consolidated MOOE PDF Preview
+            </Typography>
+          </Toolbar>
+        </AppBar>
+        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
           {pdfPreviewUrl ? (
             <iframe
               title="Consolidated MOOE PDF Preview"
@@ -1145,14 +1161,11 @@ const ConsolidatedReportsPage = () => {
               style={{ width: "100%", height: "100%", border: "none" }}
             />
           ) : (
-            <Box sx={{ p: 3 }}>
-              <Typography variant="body2">No PDF preview available.</Typography>
+            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
+              <CircularProgress />
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={closePdfDialog}>Close</Button>
-        </DialogActions>
       </Dialog>
 
     </ReportPageLayout>

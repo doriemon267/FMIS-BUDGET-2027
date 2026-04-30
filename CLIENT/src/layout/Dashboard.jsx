@@ -223,31 +223,6 @@ const DashboardContent = () => {
         <CustomDrawer />
       </Drawer>
 
-      {/* Floating Toggle Button */}
-      {!isMobile && (
-        <Tooltip title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"} placement="right">
-          <IconButton
-            onClick={toggleCollapsed}
-            sx={{
-              position: "fixed",
-              left: (collapsed ? collapsedDrawerWidth : drawerWidth) - 14,
-              top: 28, // Move up slightly
-              zIndex: 1500, // Even higher z-index to stay on top
-              bgcolor: "#1a3b2a",
-              color: "#4ade80", // Greenish icon
-              width: 28,
-              height: 28,
-              border: "2px solid #061a11",
-              "&:hover": { bgcolor: "#4ade80", color: "#061a11" },
-              boxShadow: "0 4px 10px rgba(0,0,0,0.3)",
-              transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            }}
-          >
-            {collapsed ? <FaChevronRight size={12} /> : <FaChevronLeft size={12} />}
-          </IconButton>
-        </Tooltip>
-      )}
-
       <Box
         component="main"
         sx={{

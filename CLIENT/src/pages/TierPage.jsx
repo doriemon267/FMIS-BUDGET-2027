@@ -22,6 +22,8 @@ import {
   DialogActions,
   DialogContentText,
   IconButton,
+  AppBar,
+  Toolbar,
   List,
   ListItem,
   ListItemText,
@@ -911,24 +913,18 @@ const TierPage = () => {
       )}
 
       <Dialog
+        fullScreen
         open={pdfViewerOpen}
         onClose={handleClosePdfViewer}
-        maxWidth={false}
-        fullWidth
-        PaperProps={{
-          sx: {
-            width: '95vw',
-            maxWidth: '95vw',
-            height: '92vh',
-            maxHeight: '92vh',
-            borderRadius: 2,
-            margin: 0,
-          },
-        }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', py: 1.5, backgroundColor: '#1976d2', color: 'white' }}>
-          <Typography variant="h6" component="span">Tier Report (PDF)</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <AppBar sx={{ position: "relative" }}>
+          <Toolbar>
+            <IconButton edge="start" color="inherit" onClick={handleClosePdfViewer} aria-label="close">
+              <CloseIcon />
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              Tier Report (PDF Preview)
+            </Typography>
             <Button
               size="small"
               variant="outlined"
@@ -938,18 +934,19 @@ const TierPage = () => {
             >
               Buksan sa bagong tab
             </Button>
-            <IconButton aria-label="close" onClick={handleClosePdfViewer} size="small" sx={{ color: 'white' }}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {pdfBlobUrl && (
+          </Toolbar>
+        </AppBar>
+        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%", overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {pdfBlobUrl ? (
             <iframe
               title="Tier Report PDF"
               src={pdfBlobUrl}
-              style={{ width: '100%', height: '100%', border: 'none', minHeight: 480 }}
+              style={{ width: '100%', height: '100%', border: 'none' }}
             />
+          ) : (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <CircularProgress />
+            </Box>
           )}
         </DialogContent>
       </Dialog>

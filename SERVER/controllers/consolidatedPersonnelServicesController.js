@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
 
 let MuhammaraRecipe;
 try {
@@ -338,20 +339,14 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     const psData = await PersonnelServices.find(query).lean();
 
-    let preparedByName = '';
-    let notedByName = '';
-    let approvedByName = '';
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
     const workflowRefId = psData.map((m) => m.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
       const workflow = await NewProposalWorkflow.findById(workflowRefId)
         .select('createdByName workflowHistory')
         .lean();
       if (workflow) {
-        preparedByName = workflow.createdByName || '';
-        const notedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FORWARDED_TO_APPROVER');
-        if (notedEntry) notedByName = notedEntry.performedByName || '';
-        const approvedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FINALIZED');
-        if (approvedEntry) approvedByName = approvedEntry.performedByName || '';
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
       }
     }
 
@@ -385,6 +380,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     });
 
     const tmpFilePath = path.join(os.tmpdir(), `ps_report_${Date.now()}.pdf`);
+    const tempSignatureImagePaths = [];
     const recipeOptions = { version: 1.6, author: 'FMIS-BUDGET', title: 'Consolidated Personnel Services Report' };
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
@@ -518,25 +514,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     ensureSpace(8);
     curY += LINE_H * 2;
-    const sigLineW = 140;
-    const leftSig = CONTENT_LEFT + 10;
-    const centerSig = (CONTENT_LEFT + CONTENT_RIGHT) / 2 - sigLineW / 2;
-    const rightSig = CONTENT_RIGHT - sigLineW - 10;
-    pdfDoc.text('Prepared by:', leftSig, curY, textOpt({ fontSize: 8 }));
-    pdfDoc.text('Noted by:', centerSig, curY, textOpt({ fontSize: 8 }));
-    pdfDoc.text('Approved by:', rightSig, curY, textOpt({ fontSize: 8 }));
-    curY += LINE_H * 3;
-    pdfDoc.rectangle(leftSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    pdfDoc.rectangle(centerSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    pdfDoc.rectangle(rightSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    curY += LINE_H * 0.6;
-    pdfDoc.text(preparedByName || '________________________', leftSig, curY, textOpt({ fontSize: 8, bold: !!preparedByName }));
-    pdfDoc.text(notedByName || '________________________', centerSig, curY, textOpt({ fontSize: 8, bold: !!notedByName }));
-    pdfDoc.text(approvedByName || '________________________', rightSig, curY, textOpt({ fontSize: 8, bold: !!approvedByName }));
-    curY += LINE_H;
-    pdfDoc.text('Budget Preparer', leftSig, curY, textOpt({ fontSize: 7 }));
-    pdfDoc.text('Budget Reviewer', centerSig, curY, textOpt({ fontSize: 7 }));
-    pdfDoc.text('Budget Approver', rightSig, curY, textOpt({ fontSize: 7 }));
+    curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, PAGE_WIDTH - (MARGIN * 2), tempSignatureImagePaths);
 
     pdfDoc.endPage().endPDF((err) => {
       if (err) {
@@ -548,7 +526,10 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       res.setHeader('Content-Disposition', `inline; filename=Consolidated_PS_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
       const stream = fs.createReadStream(tmpFilePath);
       stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
-      res.on('finish', () => fs.unlink(tmpFilePath, () => {}));
+      res.on('finish', () => {
+        cleanupTempImages(tempSignatureImagePaths);
+        fs.unlink(tmpFilePath, () => {});
+      });
       stream.pipe(res);
     });
   } catch (error) {

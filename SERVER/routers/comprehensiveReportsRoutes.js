@@ -14,9 +14,19 @@ const {
   getAvailableFiscalYears,
   getAvailableBudgetTypes,
   getActiveSettings,
-  getComprehensiveReportPdf
+  getComprehensiveReportPdf,
+  verifyDocument,
+  verifyDocumentUpload
 } = require('../controllers/comprehensiveReportsController');
-// Apply authentication middleware to all routes in this router
+
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Public route for verifying documents
+router.get('/verify/:documentId', verifyDocument);
+router.post('/verify-upload', upload.single('pdfFile'), verifyDocumentUpload);
+
+// Apply authentication middleware to all routes below in this router
 router.use(tokenMiddleware);
 // Routes for comprehensive reports
 router.get('/comprehensive-data', getComprehensiveReportData);

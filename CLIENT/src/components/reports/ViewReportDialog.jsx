@@ -8,7 +8,10 @@ import {
   useMediaQuery,
   CircularProgress,
   Box,
-  IconButton
+  IconButton,
+  AppBar,
+  Toolbar,
+  Typography
 } from '@mui/material';
 import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
 import PDFReportDocument from './PDFReportDocument';
@@ -45,33 +48,46 @@ export default function ViewReportDialog({ open, onClose, data }) {
 
   return (
     <Dialog
+      fullScreen
       open={open}
       onClose={onClose}
-      fullScreen={fullScreen}
-      maxWidth={false}
-      PaperProps={{
-        sx: {
-          width: '100vw',
-          height: '100vh',
-          maxWidth: '100vw',
-          maxHeight: '100vh',
-        },
-      }}
     >
-      <DialogTitle sx={{ 
-        backgroundColor: theme.palette.primary.main, 
-        color: 'white',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        Consolidated Report Preview
-        <IconButton color="inherit" onClick={onClose} aria-label="close">
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
+      <AppBar sx={{ position: "relative" }}>
+        <Toolbar>
+          <IconButton edge="start" color="inherit" onClick={onClose} aria-label="close">
+            <CloseIcon />
+          </IconButton>
+          <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+            Consolidated Report Preview
+          </Typography>
+          <PDFDownloadLink
+            document={
+              <PDFReportDocument
+                fiscalYear={fiscalYear}
+                psSummary={psSummary}
+                mooe={mooe}
+                co={co}
+              />
+            }
+            fileName={`NIA_Budget_Report_FY${fiscalYear}.pdf`}
+            style={{ textDecoration: 'none' }}
+          >
+            {({ loading: downloadLoading }) => (
+              <Button
+                variant="outlined"
+                color="inherit"
+                startIcon={<DownloadIcon />}
+                disabled={downloadLoading}
+                sx={{ borderColor: 'rgba(255,255,255,0.7)', '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' } }}
+              >
+                {downloadLoading ? 'Preparing...' : 'Download PDF'}
+              </Button>
+            )}
+          </PDFDownloadLink>
+        </Toolbar>
+      </AppBar>
 
-      <DialogContent dividers style={{ height: 'calc(100vh - 140px)', padding: 0, position: 'relative' }}>
+      <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%", position: 'relative', overflow: 'hidden' }}>
         {loading && (
           <Box sx={{ 
             position: 'absolute', 
@@ -81,9 +97,10 @@ export default function ViewReportDialog({ open, onClose, data }) {
             zIndex: 1,
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center'
+            alignItems: 'center',
+            color: 'white'
           }}>
-            <CircularProgress />
+            <CircularProgress color="inherit" />
             <Box sx={{ mt: 2 }}>Loading PDF...</Box>
           </Box>
         )}
@@ -91,6 +108,7 @@ export default function ViewReportDialog({ open, onClose, data }) {
         <PDFViewer 
           width="100%" 
           height="100%" 
+          style={{ border: 'none' }}
           onRender={handlePDFLoadSuccess}
         >
           <PDFReportDocument
@@ -101,32 +119,6 @@ export default function ViewReportDialog({ open, onClose, data }) {
           />
         </PDFViewer>
       </DialogContent>
-
-      <DialogActions sx={{ justifyContent: 'space-between', padding: 2, backgroundColor: theme.palette.grey[100] }}>
-        <PDFDownloadLink
-          document={
-            <PDFReportDocument
-              fiscalYear={fiscalYear}
-              psSummary={psSummary}
-              mooe={mooe}
-              co={co}
-            />
-          }
-          fileName={`NIA_Budget_Report_FY${fiscalYear}.pdf`}
-        >
-          {({ loading: downloadLoading, blob, url, error }) => (
-            <Button 
-              variant="contained" 
-              color="primary" 
-              startIcon={<DownloadIcon />}
-              disabled={downloadLoading}
-            >
-              {downloadLoading ? 'Preparing Download...' : 'Download PDF'}
-            </Button>
-          )}
-        </PDFDownloadLink>
-        <Button onClick={onClose} variant="outlined">Close</Button>
-      </DialogActions>
     </Dialog>
   );
 }

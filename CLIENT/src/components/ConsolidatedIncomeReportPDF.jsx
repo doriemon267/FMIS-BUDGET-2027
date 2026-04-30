@@ -403,6 +403,29 @@ const ConsolidatedIncomeReportPDF = ({ reportData, activeTab, selectedRegions, s
     </View>
   );
 
+  const renderSignatories = () => (
+    <View style={{ flexDirection: 'row', marginTop: 40, justifyContent: 'space-between', paddingHorizontal: 20 }}>
+      <View style={{ width: '30%', alignItems: 'flex-start' }}>
+        <Text style={{ fontSize: 10, marginBottom: 25 }}>Prepared by:</Text>
+        <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', width: '100%', marginBottom: 5 }} />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center', width: '100%' }}>{reportData.preparedByName || '________________________'}</Text>
+        <Text style={{ fontSize: 9, textAlign: 'center', width: '100%' }}>Budget Preparer</Text>
+      </View>
+      <View style={{ width: '30%', alignItems: 'center' }}>
+        <Text style={{ fontSize: 10, marginBottom: 25, width: '100%', textAlign: 'left' }}>Noted by:</Text>
+        <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', width: '100%', marginBottom: 5 }} />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center', width: '100%' }}>{reportData.notedByName || '________________________'}</Text>
+        <Text style={{ fontSize: 9, textAlign: 'center', width: '100%' }}>Budget Reviewer</Text>
+      </View>
+      <View style={{ width: '30%', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 10, marginBottom: 25, width: '100%', textAlign: 'left' }}>Approved by:</Text>
+        <View style={{ borderBottomWidth: 1, borderBottomColor: '#000', width: '100%', marginBottom: 5 }} />
+        <Text style={{ fontSize: 10, fontWeight: 'bold', textAlign: 'center', width: '100%' }}>{reportData.approvedByName || '________________________'}</Text>
+        <Text style={{ fontSize: 9, textAlign: 'center', width: '100%' }}>Budget Approver</Text>
+      </View>
+    </View>
+  );
+
   const getTabName = () => {
     switch (activeTab) {
       case 0: return 'Executive Summary';
@@ -435,6 +458,8 @@ const ConsolidatedIncomeReportPDF = ({ reportData, activeTab, selectedRegions, s
           
           {/* Summary */}
           {renderSummary()}
+          {/* Signatories Area */}
+          {renderSignatories()}
         </View>
 
         {/* Page Number */}

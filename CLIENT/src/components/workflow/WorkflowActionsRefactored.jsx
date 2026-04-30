@@ -327,7 +327,9 @@ const WorkflowActionsRefactored = ({
   const [commentDialog, setCommentDialog] = useState({
     open: false,
     action: null,
-    comment: ''
+    comment: '',
+    p12File: null,
+    p12Password: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -376,7 +378,9 @@ const WorkflowActionsRefactored = ({
           proposal,
           workflowAction: action.workflowAction,
           comment: comment || '',
-          userInfo
+          userInfo,
+          p12File: commentDialog.p12File,
+          p12Password: commentDialog.p12Password
         });
 
         if (digitalSignature) {
@@ -387,7 +391,13 @@ const WorkflowActionsRefactored = ({
       const response = await api.post(endpoint, requestBody);
 
       toast.success('Action completed successfully');
-      setCommentDialog({ open: false, action: null, comment: '' });
+      setCommentDialog({ 
+        open: false, 
+        action: null, 
+        comment: '',
+        p12File: null,
+        p12Password: ''
+      });
 
       if (effectiveOnComplete) {
         effectiveOnComplete(response.data);
@@ -405,7 +415,9 @@ const WorkflowActionsRefactored = ({
     setCommentDialog({
       open: true,
       action,
-      comment: ''
+      comment: '',
+      p12File: null,
+      p12Password: ''
     });
     setError(null);
   };
@@ -544,7 +556,7 @@ const WorkflowActionsRefactored = ({
       {/* Comment Dialog */}
       <Dialog
         open={commentDialog.open}
-        onClose={() => setCommentDialog({ open: false, action: null, comment: '' })}
+        onClose={() => setCommentDialog({ open: false, action: null, comment: '', p12File: null, p12Password: '' })}
         maxWidth="sm"
         fullWidth
       >
@@ -576,9 +588,47 @@ const WorkflowActionsRefactored = ({
             )}
 
             {commentDialog.action?.workflowAction && actionRequiresDigitalSignature(commentDialog.action.workflowAction) && (
-              <Alert severity="warning" icon={<InfoIcon />}>
-                This action requires a digital signature. Signer mode: <strong>{signerMode}</strong>.
-              </Alert>
+              <>
+                <Alert severity="warning" icon={<InfoIcon />}>
+                  This action requires a digital signature. Signer mode: <strong>{signerMode}</strong>.
+                </Alert>
+
+                {signerMode === 'p12' && (
+                  <Box sx={{ p: 2, border: '1px solid #ddd', borderRadius: 1, bgcolor: '#fafafa' }}>
+                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                      Digital Signature (P12 Mode)
+                    </Typography>
+                    
+                    <Stack spacing={2}>
+                      <Box>
+                        <Typography variant="caption" display="block" sx={{ mb: 0.5 }}>
+                          Select your .p12 or .pfx certificate file:
+                        </Typography>
+                        <input
+                          type="file"
+                          accept=".p12,.pfx"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            setCommentDialog(prev => ({ ...prev, p12File: file }));
+                          }}
+                          style={{ width: '100%' }}
+                        />
+                      </Box>
+
+                      <TextField
+                        fullWidth
+                        type="password"
+                        label="Certificate Password"
+                        size="small"
+                        value={commentDialog.p12Password}
+                        onChange={(e) => setCommentDialog(prev => ({ ...prev, p12Password: e.target.value }))}
+                        placeholder="Enter password..."
+                        disabled={loading}
+                      />
+                    </Stack>
+                  </Box>
+                )}
+              </>
             )}
 
             <Alert severity="info" icon={<InfoIcon />}>
@@ -588,7 +638,7 @@ const WorkflowActionsRefactored = ({
         </DialogContent>
         <DialogActions>
           <Button
-            onClick={() => setCommentDialog({ open: false, action: null, comment: '' })}
+            onClick={() => setCommentDialog({ open: false, action: null, comment: '', p12File: null, p12Password: '' })}
             disabled={loading}
           >
             Cancel
@@ -596,7 +646,11 @@ const WorkflowActionsRefactored = ({
           <Button
             onClick={handleCommentSubmit}
             variant="contained"
-            disabled={loading || (commentDialog.action?.requiresComment && !commentDialog.comment.trim())}
+            disabled={
+              loading || 
+              (commentDialog.action?.requiresComment && !commentDialog.comment.trim()) ||
+              (signerMode === 'p12' && commentDialog.action?.workflowAction && actionRequiresDigitalSignature(commentDialog.action.workflowAction) && (!commentDialog.p12File || !commentDialog.p12Password))
+            }
           >
             {loading ? <CircularProgress size={24} /> : 'Confirm'}
           </Button>

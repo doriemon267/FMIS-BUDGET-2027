@@ -5,6 +5,7 @@ const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const Region = require('../models/Region');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
 
 let MuhammaraRecipe;
 try {
@@ -213,22 +214,14 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const allDetails = await CapitalOutlayDetails.find({ capital_outlay_id: { $in: parentIds } }).sort({ createdAt: 1 }).lean();
 
     // Resolve workflow signatories from the first linked NewProposalWorkflow
-    let preparedByName = '';
-    let notedByName = '';
-    let approvedByName = '';
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
     const workflowRefId = coData.map((c) => c.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
       const workflow = await NewProposalWorkflow.findById(workflowRefId)
         .select('createdByName workflowHistory')
         .lean();
       if (workflow) {
-        preparedByName = workflow.createdByName || '';
-        const notedEntry = (workflow.workflowHistory || [])
-          .find((h) => h.toStatus === 'FORWARDED_TO_APPROVER');
-        if (notedEntry) notedByName = notedEntry.performedByName || '';
-        const approvedEntry = (workflow.workflowHistory || [])
-          .find((h) => h.toStatus === 'FINALIZED');
-        if (approvedEntry) approvedByName = approvedEntry.performedByName || '';
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
       }
     }
 
@@ -272,6 +265,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
     // ── Build PDF ─────────────────────────────────────────────────────────────
     const tmpFilePath = path.join(os.tmpdir(), `co_report_${Date.now()}.pdf`);
+    const tempSignatureImagePaths = [];
 
     const pdfSecurityEnabled = String(process.env.COMPREHENSIVE_PDF_SECURITY_ENABLED || 'true').toLowerCase() !== 'false';
     const pdfOwnerPassword = process.env.COMPREHENSIVE_PDF_OWNER_PASSWORD || `FMIS-CO-${String(fiscalYear || 'ALL')}`;
@@ -461,32 +455,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     // Prepared by / Noted by / Approved by — 3-column signature block
     ensureSpace(8);
     curY += LINE_H * 2;
-    const sigLineW  = 140;
-    const leftSig   = CONTENT_LEFT + 10;
-    const centerSig = (CONTENT_LEFT + CONTENT_RIGHT) / 2 - sigLineW / 2;
-    const rightSig  = CONTENT_RIGHT - sigLineW - 10;
-
-    pdfDoc.text('Prepared by:',  leftSig,   curY, textOpt({ fontSize: 8 }));
-    pdfDoc.text('Noted by:',     centerSig, curY, textOpt({ fontSize: 8 }));
-    pdfDoc.text('Approved by:',  rightSig,  curY, textOpt({ fontSize: 8 }));
-    curY += LINE_H * 3;
-
-    pdfDoc.rectangle(leftSig,   curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    pdfDoc.rectangle(centerSig, curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    pdfDoc.rectangle(rightSig,  curY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    curY += LINE_H * 0.6;
-
-    pdfDoc.text(preparedByName  || '________________________', leftSig,   curY, textOpt({ fontSize: 8, bold: !!preparedByName }));
-    pdfDoc.text(notedByName     || '________________________', centerSig, curY, textOpt({ fontSize: 8, bold: !!notedByName }));
-    pdfDoc.text(approvedByName  || '________________________', rightSig,  curY, textOpt({ fontSize: 8, bold: !!approvedByName }));
-    curY += LINE_H;
-
-    pdfDoc.text('Budget Preparer',  leftSig,   curY, textOpt({ fontSize: 7, color: '#666666' }));
-    pdfDoc.text('Budget Reviewer',  centerSig, curY, textOpt({ fontSize: 7, color: '#666666' }));
-    pdfDoc.text('Budget Approver',  rightSig,  curY, textOpt({ fontSize: 7, color: '#666666' }));
-    curY += LINE_H;
-
-    pdfDoc.text(new Date().toLocaleDateString('en-PH'), leftSig, curY, textOpt({ fontSize: 7, color: '#666666' }));
+    curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, PAGE_WIDTH - (MARGIN * 2), tempSignatureImagePaths);
 
     // Finalize
     pdfDoc.endPage().endPDF((err) => {
@@ -500,7 +469,10 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       res.setHeader('Content-Disposition', `inline; filename=Capital_Outlay_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
       const stream = fs.createReadStream(tmpFilePath);
       stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
-      res.on('finish', () => fs.unlink(tmpFilePath, () => {}));
+      res.on('finish', () => {
+        cleanupTempImages(tempSignatureImagePaths);
+        fs.unlink(tmpFilePath, () => {});
+      });
       stream.pipe(res);
     });
   } catch (error) {

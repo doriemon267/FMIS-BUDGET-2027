@@ -180,6 +180,27 @@ exports.exportCourtAppearancePDF = async (req, res) => {
     currentY += lineHeight;
     pdfDoc.text('This report shows court appearances for LEGAL SERVICES personnel only.', pageWidth / 2, currentY, { fontSize: 8, italic: true, align: 'center', color: '#4a6741', width: contentWidth });
 
+    // Signatories Area
+    ensureSpace(80);
+    currentY += 30;
+    
+    const sigWidth = 140;
+    const sigSpacing = (contentWidth - (sigWidth * 3)) / 2;
+    const sig1X = margin;
+    const sig2X = sig1X + sigWidth + sigSpacing;
+    const sig3X = sig2X + sigWidth + sigSpacing;
+    
+    const drawSigBlock = (x, label, name, title) => {
+      pdfDoc.text(`${label}:`, x, currentY, { fontSize: 8, color: '#000000' });
+      pdfDoc.text(name || '________________________', x, currentY + 15, { fontSize: 9, bold: true, color: '#000000' });
+      pdfDoc.text(title, x, currentY + 25, { fontSize: 8, color: '#000000' });
+    };
+
+    const requesterLabel = (req.user && (req.user.name || req.user.UserName || req.user.FirstName || req.user.id)) || '';
+    drawSigBlock(sig1X, 'Prepared by', requesterLabel, 'Budget Preparer');
+    drawSigBlock(sig2X, 'Noted by', '', 'Budget Reviewer');
+    drawSigBlock(sig3X, 'Approved by', '', 'Budget Approver');
+
     // Finalize
     pdfDoc.endPage().endPDF();
 

@@ -14,6 +14,7 @@ const COSPersonnel = require('../models/COSPersonnel');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
 // Export Budget Summary as PDF
 const exportBudgetSummaryPDF = async (req, res) => {
   try {
@@ -71,6 +72,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
     const filename = `Budget_Summary_${fiscalYear}_${region}.pdf`;
 
     const tmpFilePath = path.join(os.tmpdir(), `budget_summary_${Date.now()}.pdf`);
+    const tempSignatureImagePaths = [];
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
       version: 1.6,
       author: 'FMIS-BUDGET',
@@ -187,79 +189,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
                            (Number(String(budgetSummary.capitalOutlayTotal || 0).replace(/[₱$,+\-\s]/g, '')) || 0) + 
                            (Number(String(budgetSummary.budgetarySupportTotal || 0).replace(/[₱$,+\-\s]/g, '')) || 0);
     const cleanGrandTotal = formatCurrency(grandTotalValue);
-    // Helper function to draw tables
-    const drawTable = (startX, startY, headers, rows, columnWidths) => {
-      const rowHeight = 25;
-      const headerHeight = 30;
-      let currentY = startY;
-      // Draw header
-      doc.rect(startX, currentY, columnWidths.reduce((a, b) => a + b, 0), headerHeight)
-         .fillAndStroke('#4472C4', '#000000');
-      doc.fillColor('white')
-         .fontSize(10)
-         .font('Helvetica-Bold');
-      let currentX = startX;
-      headers.forEach((header, i) => {
-        doc.text(header, currentX + 5, currentY + 8, {
-          width: columnWidths[i] - 10,
-          align: 'center'
-        });
-        currentX += columnWidths[i];
-      });
-      currentY += headerHeight;
-      // Draw rows
-      doc.fillColor('black').font('Helvetica');
-      rows.forEach((row, rowIndex) => {
-        const fillColor = rowIndex % 2 === 0 ? '#F2F2F2' : 'white';
-        doc.rect(startX, currentY, columnWidths.reduce((a, b) => a + b, 0), rowHeight)
-           .fill(fillColor);
-        currentX = startX;
-        row.forEach((cell, cellIndex) => {
-          const isNumeric = cellIndex > 0 && typeof cell === 'string' && cell.includes('₱');
-          doc.text(String(cell), currentX + 5, currentY + 6, {
-            width: columnWidths[cellIndex] - 10,
-            align: isNumeric ? 'right' : 'left'
-          });
-          currentX += columnWidths[cellIndex];
-        });
-        currentY += rowHeight;
-      });
-      // Draw table borders
-      doc.strokeColor('#000000').lineWidth(1);
-      for (let i = 0; i <= headers.length; i++) {
-        const x = startX + columnWidths.slice(0, i).reduce((a, b) => a + b, 0);
-        doc.moveTo(x, startY)
-           .lineTo(x, currentY)
-           .stroke();
-      }
-      for (let i = 0; i <= rows.length + 1; i++) {
-        const y = startY + (i === 0 ? 0 : headerHeight + (i - 1) * rowHeight);
-        doc.moveTo(startX, y)
-           .lineTo(startX + columnWidths.reduce((a, b) => a + b, 0), y)
-           .stroke();
-      }
-      return currentY + 10;
-    };
-    // PDF Header with Logo Space
-    doc.fillColor('#1f4e79')
-       .fontSize(24)
-       .font('Helvetica-Bold')
-       .text('BUDGET PROPOSAL SUMMARY', { align: 'center' });
-    doc.fillColor('#666666')
-       .fontSize(12)
-       .font('Helvetica')
-       .moveDown(0.5);
-    doc.text(`Fiscal Year: ${fiscalYear}`, { align: 'center' });
-    doc.text(`Budget Type: ${budgetType}`, { align: 'center' });
-    doc.text(`Region: ${region}`, { align: 'center' });
-    doc.text(`Generated: ${new Date().toLocaleDateString('en-PH', {
-      year: 'numeric',
-      month: 'long', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })}`, { align: 'center' });
-    doc.moveDown(2);
+    
     const drawSectionTitle = (title) => {
       ensureSpace(2);
       pdfDoc.text(title, CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true, underline: true }));
@@ -324,6 +254,24 @@ const exportBudgetSummaryPDF = async (req, res) => {
     drawStatusSummary('Capital Outlay Summary', capitalOutlayData);
     drawStatusSummary('Income Summary', incomeData);
 
+    // Fetch workflow data to get signatories
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
+    const workflowRefId = (mooeData.find(m => m.workflowRef)?.workflowRef) || 
+                          (capitalOutlayData.find(c => c.workflowRef)?.workflowRef) || 
+                          (personnelData.find(p => p.workflowRef)?.workflowRef);
+    if (workflowRefId) {
+      const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+      const workflow = await NewProposalWorkflow.findById(workflowRefId).lean();
+      if (workflow) {
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
+      }
+    }
+
+    ensureSpace(4);
+    currentY += 10;
+    
+    currentY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, currentY, MARGIN, PAGE_WIDTH - (MARGIN * 2), tempSignatureImagePaths);
+
     drawFooter();
 
     pdfDoc.endPage().endPDF((err) => {
@@ -332,8 +280,12 @@ const exportBudgetSummaryPDF = async (req, res) => {
         return res.status(500).json({ error: 'Failed to generate PDF report', details: err.message || String(err) });
       }
 
-      res.setHeader('Content-type', 'application/pdf');
-      res.setHeader('Content-disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Budget-Summary-Report-${Date.now()}.pdf"`);
+      
+      res.on('finish', () => {
+        cleanupTempImages(tempSignatureImagePaths);
+      });
 
       const readStream = fs.createReadStream(tmpFilePath);
       readStream.on('error', (streamErr) => {

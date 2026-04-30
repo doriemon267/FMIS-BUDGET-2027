@@ -891,6 +891,8 @@ const generateTierPDF = async (req, res) => {
     const divisionDisplay = divisionName || (!division ? 'All' : division);
     const version = versionFromBody != null ? Number(versionFromBody) : (await getCurrentVersionForScope(fiscalYear, region, department, division));
 
+    const requesterLabel = (req.user && (req.user.name || req.user.UserName || req.user.FirstName || req.user.id)) || '';
+
     const { sourcesOfFunds = {}, usesOfFunds = {}, usesCorporateIncome = {}, surplusDeficit = 0, lineItems: rawLineItems = [] } = reportSummary;
     // MOOE and Capital Outlay: show only line items with total value > 0
     const lineItems = rawLineItems.filter((item) => {
@@ -1052,6 +1054,25 @@ const generateTierPDF = async (req, res) => {
     currentY += 8;
     ensureSpace(1);
     pdfDoc.text(`Surplus/(Deficit): ${formatTierCurrency(surplusDeficit)}`, CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
+
+    ensureSpace(6);
+    currentY += 30;
+    
+    const sigWidth = 140;
+    const sigSpacing = (pageW - (sigWidth * 3)) / 2;
+    const sig1X = CONTENT_LEFT;
+    const sig2X = sig1X + sigWidth + sigSpacing;
+    const sig3X = sig2X + sigWidth + sigSpacing;
+    
+    const drawSigBlock = (x, label, name, title) => {
+      pdfDoc.text(`${label}:`, x, currentY, textOpt({ fontSize: 8 }));
+      pdfDoc.text(name || '________________________', x, currentY + 15, textOpt({ fontSize: 9, bold: true }));
+      pdfDoc.text(title, x, currentY + 25, textOpt({ fontSize: 8 }));
+    };
+
+    drawSigBlock(sig1X, 'Prepared by', requesterLabel, 'Budget Planning Analyst');
+    drawSigBlock(sig2X, 'Noted by', '', 'Budget Officer');
+    drawSigBlock(sig3X, 'Approved by', '', 'Budget Manager');
 
     drawFooter();
     pdfDoc.endPage().endPDF((err) => {

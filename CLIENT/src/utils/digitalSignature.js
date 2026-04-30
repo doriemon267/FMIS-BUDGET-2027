@@ -112,7 +112,7 @@ const buildWorkflowSigningPayload = ({
   });
 };
 
-const requestPnpkiSignature = async ({ payload, signedAt, workflowAction, proposalId }) => {
+const requestPnpkiSignature = async ({ payload, signedAt, workflowAction, proposalId, p12File, p12Password }) => {
   const signer = typeof window !== 'undefined' ? window.PNPKISigner : null;
 
   if (!signer || typeof signer.signWorkflowPayload !== 'function') {
@@ -122,7 +122,9 @@ const requestPnpkiSignature = async ({ payload, signedAt, workflowAction, propos
   const signatureResult = await signer.signWorkflowPayload(payload, {
     signedAt,
     action: workflowAction,
-    proposalId
+    proposalId,
+    p12File,
+    p12Password
   });
 
   if (!signatureResult?.signature || !signatureResult?.certificatePem) {
@@ -144,7 +146,9 @@ export const createWorkflowDigitalSignature = async ({
   proposal,
   workflowAction,
   comment,
-  userInfo
+  userInfo,
+  p12File,
+  p12Password
 }) => {
   if (!actionRequiresDigitalSignature(workflowAction)) {
     return null;
@@ -165,7 +169,9 @@ export const createWorkflowDigitalSignature = async ({
     payload: signedPayload,
     signedAt,
     workflowAction,
-    proposalId: proposal?._id || proposal?.id
+    proposalId: proposal?._id || proposal?.id,
+    p12File,
+    p12Password
   });
 
   return {

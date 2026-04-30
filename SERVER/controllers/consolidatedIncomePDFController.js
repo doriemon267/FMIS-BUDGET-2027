@@ -25,6 +25,8 @@ const Income = require('../models/Income');
 const IncomeCategory = require('../models/IncomeCategory');
 const IncomeSubCategory = require('../models/IncomeSubcategory');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
 
 // Constants for PDF styling
 const COLORS = {
@@ -655,20 +657,14 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
 
     // Resolve workflow signatories from linked NewProposalWorkflow
-    let preparedByName = '';
-    let notedByName = '';
-    let approvedByName = '';
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
     const workflowRefId = incomeEntries.map((e) => e.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
       const workflow = await NewProposalWorkflow.findById(workflowRefId)
         .select('createdByName workflowHistory')
         .lean();
       if (workflow) {
-        preparedByName = workflow.createdByName || '';
-        const notedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FORWARDED_TO_APPROVER');
-        if (notedEntry) notedByName = notedEntry.performedByName || '';
-        const approvedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FINALIZED');
-        if (approvedEntry) approvedByName = approvedEntry.performedByName || '';
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
       }
     }
     
@@ -722,9 +718,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       }),
       documentId: generateDocumentId()
     };
-    reportData.preparedByName = preparedByName;
-    reportData.notedByName = notedByName;
-    reportData.approvedByName = approvedByName;
+    reportData.signatoriesInfo = signatoriesInfo;
     
     // Initialize structures
     regions.forEach(region => {
@@ -826,8 +820,9 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     });
     reportData.hierarchicalData.sort((a, b) => a.name.localeCompare(b.name));
     
-    const filename = `Consolidated_Corporate_Income_${fiscalYear}_${queryBudgetType}_${reportData.documentId}.pdf`;
-    const tmpFilePath = path.join(os.tmpdir(), `consolidated_income_${Date.now()}.pdf`);
+    const filename = `Consolidated_Income_${fiscalYear}_${queryBudgetType}.pdf`;
+    const tmpFilePath = path.join(os.tmpdir(), `cons_income_${Date.now()}.pdf`);
+    const tempSignatureImagePaths = [];
 
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
       version: 1.6,
@@ -996,26 +991,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     }
 
     // Signature block (workflow-based)
-    const sigY = PAGE_HEIGHT - MARGIN_BOTTOM - 62;
-    const sigLineW = 140;
-    const leftSig = CONTENT_LEFT + 8;
-    const centerSig = (CONTENT_LEFT + CONTENT_RIGHT) / 2 - sigLineW / 2;
-    const rightSig = CONTENT_RIGHT - sigLineW - 8;
-    pdfDoc.text('Prepared by:', leftSig, sigY, textOpt({ fontSize: 7 }));
-    pdfDoc.text('Noted by:', centerSig, sigY, textOpt({ fontSize: 7 }));
-    pdfDoc.text('Approved by:', rightSig, sigY, textOpt({ fontSize: 7 }));
-
-    const lineY = sigY + 20;
-    pdfDoc.rectangle(leftSig, lineY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    pdfDoc.rectangle(centerSig, lineY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-    pdfDoc.rectangle(rightSig, lineY, sigLineW, 0.5, { fill: '#000000', stroke: '#000000' });
-
-    pdfDoc.text(reportData.preparedByName || '________________________', leftSig, lineY + 4, textOpt({ fontSize: 7, bold: !!reportData.preparedByName }));
-    pdfDoc.text(reportData.notedByName || '________________________', centerSig, lineY + 4, textOpt({ fontSize: 7, bold: !!reportData.notedByName }));
-    pdfDoc.text(reportData.approvedByName || '________________________', rightSig, lineY + 4, textOpt({ fontSize: 7, bold: !!reportData.approvedByName }));
-    pdfDoc.text('Budget Preparer', leftSig, lineY + 12, textOpt({ fontSize: 6.5 }));
-    pdfDoc.text('Budget Reviewer', centerSig, lineY + 12, textOpt({ fontSize: 6.5 }));
-    pdfDoc.text('Budget Approver', rightSig, lineY + 12, textOpt({ fontSize: 6.5 }));
+    const sigY = PAGE_HEIGHT - MARGIN_BOTTOM - 80;
+    drawWorkflowSignatureBlock(pdfDoc, reportData.signatoriesInfo || extractSignatoriesFromWorkflow(null), sigY, CONTENT_LEFT, TABLE_WIDTH, tempSignatureImagePaths);
 
     // Log audit trail
     console.log(`[AUDIT] PDF Generated: ${reportData.documentId} | User: ${reportData.generatedBy} | FY: ${fiscalYear} | Type: ${queryBudgetType}`);
@@ -1038,6 +1015,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
         }
       });
       res.on('finish', () => {
+        cleanupTempImages(tempSignatureImagePaths);
         fs.unlink(tmpFilePath, () => {});
       });
       readStream.pipe(res);

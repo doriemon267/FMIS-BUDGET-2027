@@ -4,6 +4,36 @@ const os = require('os');
 const PersonnelServices = require('../models/PersonnelServices');
 const COSPersonnel = require('../models/COSPersonnel');
 const { Recipe: MuhammaraRecipe } = require('muhammara');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
+
+const globalTempImagePaths = [];
+
+const addSignatoriesToPage = async (pdfDoc, currentPage, currentY, data, pageWidth, pageHeight, margin, drawHeader, pageNumber) => {
+  currentY += 30;
+
+  let signatoriesInfo = extractSignatoriesFromWorkflow(null);
+  const workflowRefId = data.map(m => m.workflowRef).filter(Boolean)[0];
+  if (workflowRefId) {
+    const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+    const workflow = await NewProposalWorkflow.findById(workflowRefId).lean();
+    if (workflow) {
+      signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
+    }
+  }
+
+  if (currentY + 60 > pageHeight - margin) {
+    pdfDoc.endPage();
+    pageNumber++;
+    currentPage = pdfDoc.createPage(pageWidth, pageHeight);
+    currentY = drawHeader(currentPage, true);
+    currentY += 20;
+  }
+
+  const contentWidth = pageWidth - (margin * 2);
+  currentY = drawWorkflowSignatureBlock(currentPage, signatoriesInfo, currentY, margin, contentWidth, globalTempImagePaths);
+
+  return { currentPage, pageNumber, currentY };
+};
 
 /**
  * Generate PDF Report for Permanent Personnel Services
@@ -347,6 +377,11 @@ const exportPermanentPersonnelPDF = async (req, res) => {
     
     drawTotalsRow(currentPage, columns, result.totals, tableX, currentY);
 
+    const sigResult = await addSignatoriesToPage(pdfDoc, currentPage, currentY, personnelData, pageWidth, pageHeight, margin, drawHeader, pageNumber);
+    currentPage = sigResult.currentPage;
+    pageNumber = sigResult.pageNumber;
+    currentY = sigResult.currentY;
+
     // Add footer with page number
     currentY = pageHeight - margin + 10;
     currentPage.text(`Page ${pageNumber}`, pageWidth / 2, currentY, {
@@ -361,7 +396,8 @@ const exportPermanentPersonnelPDF = async (req, res) => {
 
     // Send PDF file
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Personnel_Permanent_FY${fiscalYear || 'N_A'}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Personnel-Services-Permanent-Report-${Date.now()}.pdf"`);
+    res.on('finish', () => cleanupTempImages(globalTempImagePaths));
 
     const fileStream = fs.createReadStream(tmpFilePath);
     fileStream.pipe(res);
@@ -739,6 +775,11 @@ const exportCasualPersonnelPDF = async (req, res) => {
     
     drawTotalsRow(currentPage, columns, result.totals, tableX, currentY);
 
+    const sigResult = await addSignatoriesToPage(pdfDoc, currentPage, currentY, casualData, pageWidth, pageHeight, margin, drawHeader, pageNumber);
+    currentPage = sigResult.currentPage;
+    pageNumber = sigResult.pageNumber;
+    currentY = sigResult.currentY;
+
     // Add footer with page number
     currentY = pageHeight - margin + 10;
     currentPage.text(`Page ${pageNumber}`, pageWidth / 2, currentY, {
@@ -753,7 +794,8 @@ const exportCasualPersonnelPDF = async (req, res) => {
 
     // Send PDF file
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Personnel_Casual_FY${fiscalYear || 'N_A'}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Personnel-Services-Casual-Report-${Date.now()}.pdf"`);
+    res.on('finish', () => cleanupTempImages(globalTempImagePaths));
 
     const fileStream = fs.createReadStream(tmpFilePath);
     fileStream.pipe(res);
@@ -1129,6 +1171,11 @@ const exportCOSPersonnelPDF = async (req, res) => {
     
     drawTotalsRow(currentPage, columns, result.totals, tableX, currentY);
 
+    const sigResult = await addSignatoriesToPage(pdfDoc, currentPage, currentY, cosData, pageWidth, pageHeight, margin, drawHeader, pageNumber);
+    currentPage = sigResult.currentPage;
+    pageNumber = sigResult.pageNumber;
+    currentY = sigResult.currentY;
+
     // Add footer with page number
     currentY = pageHeight - margin + 10;
     currentPage.text(`Page ${pageNumber}`, pageWidth / 2, currentY, {
@@ -1143,7 +1190,8 @@ const exportCOSPersonnelPDF = async (req, res) => {
 
     // Send PDF file
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Personnel_COS_FY${fiscalYear || 'N_A'}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Personnel-Services-COS-Report-${Date.now()}.pdf"`);
+    res.on('finish', () => cleanupTempImages(globalTempImagePaths));
 
     const fileStream = fs.createReadStream(tmpFilePath);
     fileStream.pipe(res);

@@ -4,6 +4,8 @@ const path = require('path');
 const MooeProposal = require('../models/mooeProposals');
 const Region = require('../models/Region');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
 
 let MuhammaraRecipe;
 try {
@@ -260,30 +262,14 @@ const consolidatedReportsController = {
       const mooeData = await MooeProposal.find(mooeQuery).lean();
 
       // --- Resolve signatories from workflow ---
-      let preparedByName = '';
-      let preparedByTitle = '';
-      let notedByName = '';
-      let notedByTitle = '';
-      let approvedByName = '';
-      let approvedByTitle = '';
+      let signatoriesInfo = extractSignatoriesFromWorkflow(null);
       const workflowRefId = mooeData.map((m) => m.workflowRef).filter(Boolean)[0];
       if (workflowRefId) {
         const workflow = await NewProposalWorkflow.findById(workflowRefId)
           .select('createdByName createdByTitle workflowHistory')
           .lean();
         if (workflow) {
-          preparedByName = workflow.createdByName || '';
-          preparedByTitle = workflow.createdByTitle || 'Budget Preparer';
-          const notedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FORWARDED_TO_APPROVER');
-          if (notedEntry) {
-            notedByName = notedEntry.performedByName || '';
-            notedByTitle = notedEntry.performedByTitle || 'Budget Reviewer';
-          }
-          const approvedEntry = (workflow.workflowHistory || []).find((h) => h.toStatus === 'FINALIZED');
-          if (approvedEntry) {
-            approvedByName = approvedEntry.performedByName || '';
-            approvedByTitle = approvedEntry.performedByTitle || 'Budget Approver';
-          }
+          signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
         }
       }
 
@@ -320,7 +306,8 @@ const consolidatedReportsController = {
       // ============================================================
       // PAGE SETUP
       // ============================================================
-      const tmpFilePath = path.join(os.tmpdir(), `mooe_report_${Date.now()}.pdf`);
+      const tmpFilePath = path.join(os.tmpdir(), `consolidated_mooe_${Date.now()}.pdf`);
+      const tempSignatureImagePaths = [];
 
       // A4 Landscape — more horizontal space for columns
       const PAGE_WIDTH  = 841.89;
@@ -691,39 +678,7 @@ const consolidatedReportsController = {
       // Plain lines — no boxes, no fills
       // ============================================================
       ensureSpace(10);
-      curY += ROW_H * 2;
-
-      const sigLineW = 160;
-      const sigGap   = (CONTENT_WIDTH - sigLineW * 3) / 4;
-      const sig1X    = CONTENT_LEFT + sigGap;
-      const sig2X    = sig1X + sigLineW + sigGap;
-      const sig3X    = sig2X + sigLineW + sigGap;
-
-      const drawSigBlock = (x, label, name, title) => {
-        // Small label above the line
-        pdfDoc.text(label + ':', x, curY, { color: MID, fontSize: 7 });
-        // Signature line
-        const lineY = curY + ROW_H * 2.5;
-        pdfDoc.rectangle(x, lineY, sigLineW, 0.6, { fill: BLACK, stroke: BLACK, lineWidth: 0 });
-        // Name — centered on line
-        const nameX = x + sigLineW / 2;
-        pdfDoc.text(
-          name || '____________________________',
-          nameX, lineY + 4,
-          { color: name ? BLACK : MID, fontSize: 8, bold: !!name, align: 'center' }
-        );
-        // Title below name
-        pdfDoc.text(
-          title || '',
-          nameX, lineY + 14,
-          { color: MID, fontSize: 6.5, align: 'center' }
-        );
-      };
-
-      drawSigBlock(sig1X, 'Prepared by',  preparedByName,  preparedByTitle  || 'Budget Preparer');
-      drawSigBlock(sig2X, 'Noted by',     notedByName,     notedByTitle     || 'Budget Reviewer');
-      drawSigBlock(sig3X, 'Approved by',  approvedByName,  approvedByTitle  || 'Budget Approver');
-
+      curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, CONTENT_WIDTH, tempSignatureImagePaths);
       curY += ROW_H * 2.5 + ROW_H + 20;
 
       // Confidentiality notice — small gray text
@@ -751,7 +706,10 @@ const consolidatedReportsController = {
         stream.on('error', (e) => {
           if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message });
         });
-        res.on('finish', () => fs.unlink(tmpFilePath, () => {}));
+        res.on('finish', () => {
+          cleanupTempImages(tempSignatureImagePaths);
+          fs.unlink(tmpFilePath, () => {});
+        });
         stream.pipe(res);
       });
     } catch (error) {
