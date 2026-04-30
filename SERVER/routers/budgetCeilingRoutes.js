@@ -7,15 +7,9 @@ const PersonnelService = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
-const checkToken = require('../middleware/checkToken');
+const authMiddleware = require('../middleware/authMiddleware');
 const mongoose = require('mongoose');
 
-
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 /**
  * Budget Ceiling Management Routes
  * 
@@ -49,7 +43,7 @@ const isBRDStaff = (req, res, next) => {
  * GET /api/budget-ceiling/finalized-initial
  * Get all finalized Initial proposals for a region (for ceiling setting)
  */
-router.get('/finalized-initial', tokenMiddleware, isBRDStaff, async (req, res) => {
+router.get('/finalized-initial', authMiddleware, isBRDStaff, async (req, res) => {
   try {
     const { region, fiscalYear } = req.query;
     
@@ -139,7 +133,7 @@ router.get('/finalized-initial', tokenMiddleware, isBRDStaff, async (req, res) =
  * GET /api/budget-ceiling/:fiscalYear/:region
  * Get budget ceiling for specific fiscal year and region
  */
-router.get('/:fiscalYear/:region', tokenMiddleware, async (req, res) => {
+router.get('/:fiscalYear/:region', authMiddleware, async (req, res) => {
   try {
     const { fiscalYear, region } = req.params;
     const { budgetPhase = 'NEP' } = req.query;
@@ -176,7 +170,7 @@ router.get('/:fiscalYear/:region', tokenMiddleware, async (req, res) => {
  * POST /api/budget-ceiling/initialize
  * Initialize ceiling from finalized Initial proposals
  */
-router.post('/initialize', tokenMiddleware, isBRDStaff, async (req, res) => {
+router.post('/initialize', authMiddleware, isBRDStaff, async (req, res) => {
   try {
     const { fiscalYear, region, budgetPhase = 'NEP', totalBudgetPool = 0 } = req.body;
     const user = req.user;
@@ -324,7 +318,7 @@ router.post('/initialize', tokenMiddleware, isBRDStaff, async (req, res) => {
  * PUT /api/budget-ceiling/:id/allocation
  * Update a specific allocation's ceiling
  */
-router.put('/:id/allocation', tokenMiddleware, isBRDStaff, async (req, res) => {
+router.put('/:id/allocation', authMiddleware, isBRDStaff, async (req, res) => {
   try {
     const { id } = req.params;
     const { division, ceilingAmount, ceilingSubsidy, ceilingIncome, priority, remarks } = req.body;
@@ -398,7 +392,7 @@ router.put('/:id/allocation', tokenMiddleware, isBRDStaff, async (req, res) => {
  * PUT /api/budget-ceiling/:id/budget-pool
  * Update the total budget pool
  */
-router.put('/:id/budget-pool', tokenMiddleware, isBRDStaff, async (req, res) => {
+router.put('/:id/budget-pool', authMiddleware, isBRDStaff, async (req, res) => {
   try {
     const { id } = req.params;
     const { totalBudgetPool } = req.body;
@@ -447,7 +441,7 @@ router.put('/:id/budget-pool', tokenMiddleware, isBRDStaff, async (req, res) => 
  * POST /api/budget-ceiling/:id/publish
  * Publish the ceiling (make visible to divisions)
  */
-router.post('/:id/publish', tokenMiddleware, isBRDStaff, async (req, res) => {
+router.post('/:id/publish', authMiddleware, isBRDStaff, async (req, res) => {
   try {
     const { id } = req.params;
     const user = req.user;
@@ -507,7 +501,7 @@ router.post('/:id/publish', tokenMiddleware, isBRDStaff, async (req, res) => {
  * POST /api/budget-ceiling/:id/generate-nep
  * Generate NEP proposals from finalized Initial proposals with ceiling
  */
-router.post('/:id/generate-nep', tokenMiddleware, isBRDStaff, async (req, res) => {
+router.post('/:id/generate-nep', authMiddleware, isBRDStaff, async (req, res) => {
   try {
     const { id } = req.params;
     const { divisionFilter } = req.body; // Optional: generate for specific division only
@@ -666,7 +660,7 @@ router.post('/:id/generate-nep', tokenMiddleware, isBRDStaff, async (req, res) =
  * GET /api/budget-ceiling/comparison/:fiscalYear/:region
  * Get Initial vs NEP comparison data
  */
-router.get('/comparison/:fiscalYear/:region', tokenMiddleware, async (req, res) => {
+router.get('/comparison/:fiscalYear/:region', authMiddleware, async (req, res) => {
   try {
     const { fiscalYear, region } = req.params;
 

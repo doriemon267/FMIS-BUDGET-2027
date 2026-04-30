@@ -6,11 +6,9 @@
 const express = require('express');
 const router = express.Router();
 const UserActivityLog = require('../models/UserActivityLog');
-const tokenMiddleware = require('../utils/IS_PRODUCTION')
-  ? require('../middleware/check_token_prod')
-  : require('../middleware/check_token_dev');
+const authMiddleware = require("../middleware/authMiddleware");
 
-router.use(tokenMiddleware);
+router.use(authMiddleware);
 
 function normalizeRole(role) {
   return String(role || '').toUpperCase().replace(/[^A-Z0-9]/g, '');

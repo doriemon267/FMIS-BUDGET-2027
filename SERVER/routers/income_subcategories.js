@@ -1,12 +1,8 @@
 const { getAllIncomeSubcategories } = require('../controllers/incomeSubcategoryController');
 const router = require('express').Router();
-const checkToken = require("../middleware/check_token");
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const authMiddleware = require("../middleware/authMiddleware");
 
 const incomeSubcategoryRoutes = router;
-incomeSubcategoryRoutes.use(tokenMiddleware);
+incomeSubcategoryRoutes.use(authMiddleware);
 incomeSubcategoryRoutes.get('/getAllIncomeSubcategories', getAllIncomeSubcategories);
 module.exports = incomeSubcategoryRoutes;

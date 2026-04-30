@@ -8,17 +8,13 @@ const {
 } = require("../controllers/cospersonnelController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
-const checkToken = require("../middleware/check_token");
+const authMiddleware = require("../middleware/authMiddleware");
 
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
 const cosPersonnelRouter = Router();
 // Apply authentication middleware to all routes in this router
-cosPersonnelRouter.use(tokenMiddleware);
+cosPersonnelRouter.use(authMiddleware);
 
 // Enforce submission-based visibility for reads
 cosPersonnelRouter.get(

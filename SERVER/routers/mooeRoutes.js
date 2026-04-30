@@ -1,10 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const checkToken = require('../middleware/check_token');
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const authMiddleware = require("../middleware/authMiddleware");
 
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
@@ -12,7 +8,7 @@ const { submissionWorkflowControl } = require('../middleware/submissionWorkflowC
 const mooeController = require('../controllers/mooeController');
 const MooeProposal = require('../models/mooeProposals');
 // Apply authentication to all MOOE routes
-router.use(tokenMiddleware);
+router.use(authMiddleware);
 // Define routes to match the front-end requests with SUBMISSION WORKFLOW CONTROL
 router.get('/mooe-data', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), mooeController.getMOOEData);
 router.get('/mooe-entries', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), mooeController.getMOOEEntries);

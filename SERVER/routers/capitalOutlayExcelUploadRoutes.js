@@ -1,12 +1,9 @@
 const express = require("express");
 const multer = require("multer");
 const capitalOutlayExcelUploadController = require("../controllers/capitalOutlayExcelUploadController");
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
@@ -28,7 +25,7 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-router.use(tokenMiddleware);
+router.use(authMiddleware);
 
 /**
  * POST /capitaloutlay/upload

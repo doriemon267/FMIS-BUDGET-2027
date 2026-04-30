@@ -6,13 +6,10 @@
 
 const express = require('express');
 const router = express.Router();
-const check_token_dev = require('../middleware/check_token_dev');
-const check_token_prod = require('../middleware/check_token_prod');
-const IS_PRODUCTION = require('../utils/IS_PRODUCTION');
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const authMiddleware = require("../middleware/authMiddleware");
 
 // Apply authentication to all routes
-router.use(tokenMiddleware);
+router.use(authMiddleware);
 
 const UserPreferences = require('../models/UserPreferences');
 

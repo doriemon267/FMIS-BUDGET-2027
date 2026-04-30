@@ -1,11 +1,8 @@
 const express = require("express");
 const router = express.Router();
 // 🔒 SECURITY: Import authentication middleware
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const authMiddleware = require("../middleware/authMiddleware");
 
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const {
   getAllChartOfAccounts,
@@ -18,7 +15,7 @@ const {
 } = require("../controllers/chartOfAccountsController");
 
 // 🔒 ALL ROUTES NOW REQUIRE AUTHENTICATION
-router.use(tokenMiddleware);
+router.use(authMiddleware);
 
 // Get all chart of accounts
 router.get("/chart-of-accounts", getAllChartOfAccounts);

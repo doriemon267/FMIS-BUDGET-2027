@@ -1,63 +1,68 @@
 const jwt = require("jsonwebtoken");
 const mongoose = require('mongoose');
+const { mainConnection } = require('../config/mongo_db');
 const AuditLog = require("../models/AuditLog");
 const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
-const { mainConnection } = require('../config/mongo_db');
 const { requireBudgetRole } = require('./requireBudgetRole');
 const { syncUserEmailFromRequest } = require('../utils/syncUserEmailFromRequest');
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
 
-// --- HELPER FUNCTIONS ---
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
-
-const pickEmail = (payload) => {
-  const emailFields = [
-    payload.email, payload.Email, payload.userEmail, 
-    payload.UserEmail, payload.mail
-  ];
-  const found = emailFields.find(isValidEmail);
-  if (found) return found;
-  
-  const username = payload.Username || payload.username;
-  if (Array.isArray(username)) {
-    return username.map(i => String(i).trim()).find(isValidEmail) || null;
-  }
-  return null;
+const pickEmailFromUsernameArray = (value) => {
+  if (!Array.isArray(value)) return null;
+  const fromIndexOne = String(value?.[1] || '').trim();
+  if (fromIndexOne && isValidEmail(fromIndexOne)) return fromIndexOne;
+  const anyEmail = value.map((item) => String(item || '').trim()).find((item) => isValidEmail(item));
+  return anyEmail || null;
 };
 
 /**
- * UNIFIED AUTH MIDDLEWARE
- * Handles: Mock Auth (Dev), JWT Verification, Role Resolution, and Audit Logging
+ * UNIFIED AUTHENTICATION MIDDLEWARE
+ * Handles development mock auth, production JWT verification, role resolution, and audit logging.
  */
 module.exports = async (req, res, next) => {
-  req.clientIp = getClientIp ? getClientIp(req) : (req.ip || req.connection?.remoteAddress);
-  const isProduction = process.env.NODE_ENV === 'production';
-
   try {
     if (req.method === 'OPTIONS') return next();
 
+    req.clientIp = getClientIp ? getClientIp(req) : (req.ip || req.connection?.remoteAddress);
+    
     // 1. DEVELOPMENT MOCK AUTH (Backdoor for local testing)
-    const allowMockAuth = !isProduction && (process.env.ALLOW_MOCK_AUTH === 'true' || process.env.DEBUG_MODE === 'true');
+    const allowMockAuth = !IS_PRODUCTION && (process.env.ALLOW_MOCK_AUTH === 'true' || process.env.DEBUG_MODE === 'true');
     const devUserId = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
 
     if (allowMockAuth && devUserId) {
       const uid = String(devUserId).trim();
-      const devRoles = (req.headers['x-dev-roles'] || 'BUDGET_PREPARER,DEVELOPER')
-                        .split(',').map(r => r.trim().toUpperCase());
+      const devRolesHeader = req.headers['x-dev-roles'] || req.headers['X-Dev-Roles'];
+      const devEmailHeader = req.headers['x-dev-email'] || req.headers['X-Dev-Email'];
+      let rolesArr = [];
+      if (typeof devRolesHeader === 'string' && devRolesHeader.trim()) {
+        rolesArr = devRolesHeader.split(',').map(r => String(r || '').trim()).filter(Boolean).map(r => r.replace(/\s+/g, '_').toUpperCase());
+      }
+      if (rolesArr.length === 0) rolesArr = ['BUDGET_PREPARER', 'DEVELOPER'];
+      const devName = `Dev User (${uid})`;
       
       req.user = {
         id: uid, userId: uid, particularID: uid,
-        particular: `Dev User (${uid})`,
-        Roles: devRoles,
-        email: req.headers['x-dev-email'] || null,
+        particular: devName, userName: devName,
+        Roles: rolesArr,
+        email: devEmailHeader ? String(devEmailHeader).trim() : null,
         isDev: true
       };
       
       await syncUserEmailFromRequest(req).catch(() => {});
-      console.log(`[AUTH] Mock access granted for: ${uid}`);
+      if (resolveUserIdentity) req.identity = await resolveUserIdentity({ req });
+
+      AuditLog.create({
+        userId: uid, userName: devName, userRoles: rolesArr,
+        action: "DEV_MOCK_AUTH", resource: "SYSTEM_ACCESS",
+        method: req.method, ipAddress: req.clientIp,
+        details: { mode: 'development_mock', autoAdmin: true }
+      }).catch(() => {});
+
       return requireBudgetRole(req, res, next);
     }
 
-    // 2. TOKEN EXTRACTION (Cookies or Authorization Header)
+    // 2. TOKEN EXTRACTION
     const authHeader = req.headers.authorization || req.headers.Authorization;
     const jwtToken = req.cookies?.jwtToken || req.cookies?.authToken || req.cookies?.jwt || 
                      (authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null);
@@ -66,7 +71,7 @@ module.exports = async (req, res, next) => {
       return res.status(401).json({ error: "Access denied. No token provided." });
     }
 
-    // 3. STRICT VERIFICATION (Support multiple secret keys)
+    // 3. VERIFICATION (Support multiple secrets)
     const secrets = [
       process.env.JWT_CLIENT_SECRET_PROD, 
       process.env.JWT_SECRET_KEY, 
@@ -87,28 +92,23 @@ module.exports = async (req, res, next) => {
     req.authToken = jwtToken;
 
     // 4. IDENTITY EXTRACTION
-    const userId = String(
-      payload.userId || payload.id || payload.UserName || 
-      (Array.isArray(payload.Username) ? payload.Username[0] : payload.Username) || ""
-    );
-
-    if (!userId) {
-      return res.status(401).json({ error: "User identity not found in token." });
+    const rawUserId = payload.userId || payload.id || payload.UserName || (Array.isArray(payload.Username) ? payload.Username[0] : payload.Username);
+    if (!rawUserId) {
+      return res.status(401).json({ error: "Access denied. User identity not found in token." });
     }
+    const userId = String(rawUserId);
 
-    // 5. ROLE RESOLUTION (Database Fallback)
+    // 5. ROLE RESOLUTION
     let roles = payload.roles || payload.Roles || [];
-    if (!Array.isArray(roles)) roles = [roles];
+    if (!Array.isArray(roles)) roles = roles ? [roles] : [];
 
-    // If roles are empty, lookup from main database
     if (roles.length === 0 && mainConnection?.readyState === 1) {
       try {
         const arDoc = await mainConnection.db.collection('assigned_roles').findOne({ 
           $or: [{ user: userId }, { user: Number(userId) }, { user: userId.toUpperCase() }] 
         });
         if (arDoc?.roles?.length > 0) {
-          const roleDocs = await mainConnection.db.collection('roles')
-                                .find({ _id: { $in: arDoc.roles } }).toArray();
+          const roleDocs = await mainConnection.db.collection('roles').find({ _id: { $in: arDoc.roles } }).toArray();
           roles = roleDocs.map(r => r.name);
         }
       } catch (e) {
@@ -122,7 +122,7 @@ module.exports = async (req, res, next) => {
     const isSuper = normalizedRoles.some(r => /SUPER.?ADMIN/i.test(r));
     const allowedSuperIds = (process.env.SUPER_ADMIN_IDS || "").split(',').map(id => id.trim());
     
-    if (isProduction && isSuper && !allowedSuperIds.includes(userId)) {
+    if (IS_PRODUCTION && isSuper && !allowedSuperIds.includes(userId)) {
       AuditLog.create({ 
         userId, action: "BLOCKED_SUPERADMIN", 
         details: { error: "ID not whitelisted in production" },
@@ -131,20 +131,18 @@ module.exports = async (req, res, next) => {
       return res.status(403).json({ error: "Access denied. Admin ID not authorized." });
     }
 
-    // 7. DATA FORMATTING & ATTACHING TO REQUEST
+    // 7. DATA FORMATTING
     const middleInitial = payload.MiddleName ? `${payload.MiddleName.charAt(0)}.` : "";
     const particular = `${payload.FirstName ?? ""} ${middleInitial} ${payload.LastName ?? ""} ${payload.Suffix ?? ""}`
                         .replace(/\s+/g, " ").trim() || userId;
 
     req.user = {
       ...payload,
-      id: userId,
-      userId: userId,
-      particularID: userId,
-      particular: particular,
-      userName: particular,
+      id: userId, userId: userId, particularID: userId,
+      particular: particular, userName: particular,
       Roles: normalizedRoles,
-      email: pickEmail(payload)
+      email: payload.email || payload.Email || payload.userEmail || payload.UserEmail || payload.mail || 
+             pickEmailFromUsernameArray(payload.Username) || pickEmailFromUsernameArray(payload.username) || null
     };
 
     // 8. FINAL SYNC & AUDIT LOG
@@ -152,15 +150,10 @@ module.exports = async (req, res, next) => {
     if (resolveUserIdentity) req.identity = await resolveUserIdentity({ req });
 
     AuditLog.create({
-      userId,
-      userName: particular,
-      action: "AUTH_SUCCESS",
-      userRoles: normalizedRoles,
-      ipAddress: req.clientIp,
-      method: req.method
+      userId, userName: particular, action: "AUTH_SUCCESS",
+      userRoles: normalizedRoles, ipAddress: req.clientIp, method: req.method
     }).catch(() => {});
 
-    // Proceed to role-based access control
     return requireBudgetRole(req, res, next);
 
   } catch (error) {
@@ -168,10 +161,8 @@ module.exports = async (req, res, next) => {
     const isExpired = error.name === 'TokenExpiredError';
     
     AuditLog.create({
-      userId: "SYSTEM",
-      action: isExpired ? "TOKEN_EXPIRED" : "AUTH_EXCEPTION",
-      ipAddress: req.clientIp,
-      details: { error: error.message }
+      userId: "SYSTEM", action: isExpired ? "TOKEN_EXPIRED" : "AUTH_EXCEPTION",
+      ipAddress: req.clientIp, details: { error: error.message }
     }).catch(() => {});
 
     return res.status(401).json({ 
