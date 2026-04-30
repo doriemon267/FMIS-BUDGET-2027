@@ -13,7 +13,7 @@ const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const Proposal = require('../models/Proposal');
 const User = require('../models/User');
-const { decryptESignatureDataUrl } = require('../utils/eSignatureCrypto');
+const ReportAuditLog = require('../models/ReportAuditLog');
 const formatFullName = require('../utils/formatFullName');
 let MuhammaraRecipe;
 try {
@@ -1670,13 +1670,13 @@ const getComprehensiveReportPdf = async (req, res) => {
 
       // Header text (centered) - align higher near top section
       const headerTextY = logoY + 8;
-      pdfDoc.text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 10, align: 'center' }));
+      pdfDoc.text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 9, align: 'center' }));
       
       let headerLineY = headerTextY + LINE_HEIGHT * 0.95;
-      pdfDoc.text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+      pdfDoc.text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 9, bold: true, align: 'center' }));
       
       headerLineY += LINE_HEIGHT * 0.95;
-      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 10, bold: true, align: 'center', color: '#292e2a' }));
+      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 9, bold: true, align: 'center', color: '#292e2a' }));
       
       // Department/Division or Region
       const departmentName = safeStr(reportData.summary.department || '');
@@ -1699,20 +1699,20 @@ const getComprehensiveReportPdf = async (req, res) => {
       }
       
       headerLineY += LINE_HEIGHT * 0.95;
-      pdfDoc.text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 10, align: 'center' }));
+      pdfDoc.text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 9, align: 'center' }));
       
       // ANNEX A (place directly below Bagong Pilipinas logo)
       const annexAY = hasBagong ? (logoY + logoHeight + 2) : (logoY + 6);
-      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 56, annexAY, textOpt({ fontSize: 13, bold: true }));
+      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 56, annexAY, textOpt({ fontSize: 11, bold: true }));
       
       // Set currentY below all header text
       currentY = headerLineY + LINE_HEIGHT * 1.1;
 
       // Title section (only on first page or if explicitly requested)
       if (includeTitleSection) {
-        pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 16, bold: true, align: 'center' }));
+        pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 12, bold: true, align: 'center' }));
         currentY += LINE_HEIGHT * 1.2;
-        pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 13, bold: true, align: 'center' }));
+        pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
         currentY += LINE_HEIGHT * 1.5;
       } else {
         // Continuation page - add simple note
@@ -1806,7 +1806,7 @@ const getComprehensiveReportPdf = async (req, res) => {
 
     // USES OF FUNDS section header
     ensureSpace(3);
-    pdfDoc.text('USES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 12, bold: true, underline: true }));
+    pdfDoc.text('USES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true, underline: true }));
     currentY += LINE_HEIGHT * 1;
 
     // Render sections with Annex-style hierarchy
@@ -1986,120 +1986,135 @@ const getComprehensiveReportPdf = async (req, res) => {
     const preparedByName = preparedByInfo?.name || 'Budget Preparer';
     const preparedByDesignation = preparedByInfo?.position || 'Budget Preparer';
     const preparedByUserId = preparedByInfo?.userId || '';
-    let preparedByESignatureImage = preparedByInfo?.eSignatureImageDataUrl || null;
-    if (preparedByESignatureImage) {
-      try {
-        preparedByESignatureImage = decryptESignatureDataUrl(preparedByESignatureImage);
-      } catch (decryptErr) {
-        console.warn('Prepared-by e-signature decrypt failed:', decryptErr.message);
-        preparedByESignatureImage = null;
-      }
-    }
+    
     const preparedBySignatureLine = preparedByInfo?.hasDigitalSignature
       ? `E-signature: ${preparedByInfo.signatureAlgorithm || 'Digitally Signed'}${preparedByInfo?.signedAt ? ` • ${new Date(preparedByInfo.signedAt).toLocaleString('en-US')}` : ''}`
-      : (preparedByESignatureImage ? 'E-signature: Captured in workflow submission' : 'E-signature: Not available');
+      : 'E-signature: Not available';
     const preparedByAuthLine = preparedByUserId
       ? `Authentication: Verified User ID ${preparedByUserId}`
       : 'Authentication: Verified Budget Preparer account';
     
-    // Prepared by
-    pdfDoc.text('Prepared by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
-    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, sigY, textOpt({ fontSize: 10 }));
-
-    if (preparedByESignatureImage && /^data:image\/(png|jpeg|jpg);base64,/.test(preparedByESignatureImage)) {
-      try {
-        const base64Payload = preparedByESignatureImage.split(',')[1] || '';
-        const fileExt = preparedByESignatureImage.includes('image/jpeg') || preparedByESignatureImage.includes('image/jpg') ? 'jpg' : 'png';
-        const preparedSignatureImagePath = path.join(os.tmpdir(), `prepared_by_esign_${Date.now()}.${fileExt}`);
-        fs.writeFileSync(preparedSignatureImagePath, Buffer.from(base64Payload, 'base64'));
-        tempSignatureImagePaths.push(preparedSignatureImagePath);
-        pdfDoc.image(preparedSignatureImagePath, CONTENT_LEFT + 22, sigY - 30, { width: 180, height: 40, keepAspectRatio: true });
-      } catch (sigRenderErr) {
-        console.warn('Prepared-by e-signature render failed:', sigRenderErr.message);
-      }
-    }
-
-    pdfDoc.text(preparedByName, CONTENT_LEFT + 20, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
-    pdfDoc.text(`Designation: ${preparedByDesignation}`, CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
-    pdfDoc.text(preparedBySignatureLine, CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 3, textOpt({ fontSize: 8 }));
-    pdfDoc.text(preparedByAuthLine, CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 4, textOpt({ fontSize: 8 }));
-    
-    currentY += LINE_HEIGHT * 9;
-
     const signatories = Array.isArray(reportData?.summary?.signatories) ? reportData.summary.signatories : [];
     const normalizeRoleKey = (value) => String(value || '').replace(/\s+/g, '_').toUpperCase();
     const reviewerSignatory = signatories.find((item) => normalizeRoleKey(item?.workflowRole) === 'BUDGET_REVIEWER');
+    const approverSignatory = signatories.find((item) => normalizeRoleKey(item?.workflowRole) === 'BUDGET_APPROVER' || normalizeRoleKey(item?.workflowRole) === 'APPROVER');
 
+    const sigWidth = 140;
+    const sigSpacing = (PAGE_WIDTH - (MARGIN_SIDE * 2) - (sigWidth * 3)) / 2;
+    const sig1X = CONTENT_LEFT;
+    const sig2X = sig1X + sigWidth + sigSpacing;
+    const sig3X = sig2X + sigWidth + sigSpacing;
+
+    pdfDoc.text('Prepared by:', sig1X, currentY, textOpt({ fontSize: 8 }));
+    pdfDoc.text('Noted by:', sig2X, currentY, textOpt({ fontSize: 8 }));
+    pdfDoc.text('Approved by:', sig3X, currentY, textOpt({ fontSize: 8 }));
+
+    pdfDoc.text('_____________________________', sig1X, sigY, textOpt({ fontSize: 9 }));
+    pdfDoc.text('_____________________________', sig2X, sigY, textOpt({ fontSize: 9 }));
+    pdfDoc.text('_____________________________', sig3X, sigY, textOpt({ fontSize: 9 }));
+
+    // Prepared by Block (No visual signature, just text)
+    pdfDoc.text(preparedByName, sig1X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text(preparedByDesignation, sig1X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+
+    // Render Reviewer (Noted by) Block (No visual signature, just text)
     if (reviewerSignatory) {
       const reviewerName = reviewerSignatory?.fullName || 'Budget Reviewer';
       const reviewerDesignation = reviewerSignatory?.position || 'Budget Reviewer';
-      const reviewerSignedDate = reviewerSignatory?.signedAt
-        ? new Date(reviewerSignatory.signedAt).toLocaleString('en-US')
-        : 'N/A';
-      const reviewerSignatureLine = `Signature: ${reviewerSignatory?.signatureType || 'N/A'} • Date: ${reviewerSignedDate}`;
-      const reviewerVerificationLine = `Verification: ${reviewerSignatory?.verificationStatus || 'Unverifiable'}`;
 
-      let reviewerESignatureImage = reviewerSignatory?.eSignatureImageDataUrl || null;
-      if (reviewerESignatureImage) {
-        try {
-          reviewerESignatureImage = decryptESignatureDataUrl(reviewerESignatureImage);
-        } catch (decryptErr) {
-          console.warn('Reviewer e-signature decrypt failed:', decryptErr.message);
-          reviewerESignatureImage = null;
-        }
-      }
-
-      const reviewSigY = currentY + 45;
-      pdfDoc.text('Reviewed by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
-      pdfDoc.text('_____________________________', CONTENT_LEFT + 20, reviewSigY, textOpt({ fontSize: 10 }));
-
-      if (reviewerESignatureImage && /^data:image\/(png|jpeg|jpg);base64,/.test(reviewerESignatureImage)) {
-        try {
-          const reviewerPayload = reviewerESignatureImage.split(',')[1] || '';
-          const reviewerExt = reviewerESignatureImage.includes('image/jpeg') || reviewerESignatureImage.includes('image/jpg') ? 'jpg' : 'png';
-          const reviewerSignatureImagePath = path.join(os.tmpdir(), `reviewed_by_esign_${Date.now()}.${reviewerExt}`);
-          fs.writeFileSync(reviewerSignatureImagePath, Buffer.from(reviewerPayload, 'base64'));
-          tempSignatureImagePaths.push(reviewerSignatureImagePath);
-          pdfDoc.image(reviewerSignatureImagePath, CONTENT_LEFT + 22, reviewSigY - 30, { width: 180, height: 40, keepAspectRatio: true });
-        } catch (renderErr) {
-          console.warn('Reviewed-by e-signature render failed:', renderErr.message);
-        }
-      }
-
-      pdfDoc.text(reviewerName, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
-      pdfDoc.text(`Designation: ${reviewerDesignation}`, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
-      pdfDoc.text(reviewerSignatureLine, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT * 3, textOpt({ fontSize: 8 }));
-      pdfDoc.text(reviewerVerificationLine, CONTENT_LEFT + 20, reviewSigY + LINE_HEIGHT * 4, textOpt({ fontSize: 8 }));
-
-      currentY += LINE_HEIGHT * 8;
+      pdfDoc.text(reviewerName, sig2X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
+      pdfDoc.text(reviewerDesignation, sig2X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+    } else {
+      pdfDoc.text('Budget Reviewer', sig2X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
     }
 
+    // Render Approver (Approved by) Block (No visual signature, just text)
+    if (approverSignatory) {
+      const approverName = approverSignatory?.fullName || 'Budget Approver';
+      const approverDesignation = approverSignatory?.position || 'Budget Approver';
+
+      pdfDoc.text(approverName, sig3X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
+      pdfDoc.text(approverDesignation, sig3X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+    } else {
+      pdfDoc.text('Budget Approver', sig3X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+    }
+
+    currentY = sigY + LINE_HEIGHT * 5;
+
     if (signatories.length > 0) {
-      currentY += LINE_HEIGHT * 2;
-      pdfDoc.text('Workflow Signatories:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10, bold: true }));
-      currentY += LINE_HEIGHT * 1.1;
+      // Fetch QR Code
+      let qrImagePath = null;
+      const docId = reportData?.summary?.documentId || reportData?.documentId || `COMP-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
+      reportData.summary.documentId = docId; // ensure it's saved in the object
+
+      try {
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5005';
+        const verifyUrl = `${frontendUrl}/verify-document?id=${docId}`;
+        
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verifyUrl)}`;
+        qrImagePath = path.join(os.tmpdir(), `qr_${Date.now()}.png`);
+        
+        await new Promise((resolve, reject) => {
+          require('https').get(qrUrl, (response) => {
+            if (response.statusCode === 200) {
+              const file = fs.createWriteStream(qrImagePath);
+              response.pipe(file);
+              file.on('finish', () => { file.close(); resolve(); });
+            } else {
+              reject(new Error(`Failed to fetch QR: ${response.statusCode}`));
+            }
+          }).on('error', reject);
+        });
+        tempSignatureImagePaths.push(qrImagePath);
+      } catch (err) {
+        console.warn('Failed to generate QR code:', err.message);
+        qrImagePath = null;
+      }
+
+      const neededHeight = Math.max((signatories.length + 1.5) * LINE_HEIGHT + 10, 70);
+      if (currentY + neededHeight > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+        startNewPage();
+      }
+
+      const boxTop = currentY;
+      pdfDoc.rectangle(CONTENT_LEFT + 10, boxTop, CONTENT_RIGHT - CONTENT_LEFT - 20, neededHeight, {
+        stroke: '#888888',
+        lineWidth: 0.5,
+        fill: '#fcfcfc'
+      });
+      
+      if (qrImagePath) {
+        pdfDoc.image(qrImagePath, CONTENT_LEFT + 20, boxTop + 5, { width: 60, height: 60, keepAspectRatio: true });
+      }
+
+      const textStartX = qrImagePath ? CONTENT_LEFT + 95 : CONTENT_LEFT + 20;
+      currentY = boxTop + 10;
+
+      pdfDoc.text('Workflow Digital Signatures Audit:', textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#333333' }));
+      currentY += LINE_HEIGHT;
+      pdfDoc.text(`Document ID: ${docId}`, textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#2a52be' }));
+      currentY += LINE_HEIGHT;
 
       signatories.forEach((signatory, index) => {
-        if (currentY + (LINE_HEIGHT * 3.8) > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-          startNewPage();
-        }
         const roleLabel = roleToPositionLabel(signatory.workflowRole || '');
         const signedDate = signatory?.signedAt ? new Date(signatory.signedAt).toLocaleString('en-US') : 'N/A';
-        const verificationStatus = signatory?.verificationStatus || 'Unverifiable';
-        const verificationReason = signatory?.verificationReason || 'Verification details unavailable.';
-        pdfDoc.text(`${index + 1}. ${signatory.fullName || 'Unknown Signatory'}`, CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9, bold: true }));
-        pdfDoc.text(`Position: ${signatory.position || roleLabel}`, CONTENT_LEFT + 28, currentY + LINE_HEIGHT * 0.85, textOpt({ fontSize: 8 }));
-        pdfDoc.text(`Role: ${roleLabel} • Signature: ${signatory.signatureType || 'N/A'} • Date: ${signedDate}`, CONTENT_LEFT + 28, currentY + LINE_HEIGHT * 1.7, textOpt({ fontSize: 8 }));
-        pdfDoc.text(`Verification: ${verificationStatus} • ${verificationReason}`, CONTENT_LEFT + 28, currentY + LINE_HEIGHT * 2.55, textOpt({ fontSize: 8 }));
-        currentY += LINE_HEIGHT * 3.8;
+        const name = signatory.fullName || 'Unknown Signatory';
+        const verifyStatus = signatory?.verificationStatus || 'Unverifiable';
+        
+        pdfDoc.text(`${index + 1}. ${name} (${signatory.position || roleLabel})`, textStartX, currentY, textOpt({ fontSize: 7, bold: true }));
+        pdfDoc.text(`Date: ${signedDate}   |   Status: ${verifyStatus}`, textStartX + 200, currentY, textOpt({ fontSize: 7, color: '#444444' }));
+        
+        currentY += LINE_HEIGHT;
       });
+      
+      currentY = boxTop + neededHeight + LINE_HEIGHT;
     }
     
     // Final page footer
     drawFooter();
 
     // Close last page and finalize PDF, then stream file to response
-    pdfDoc.endPage().endPDF((err) => {
+    pdfDoc.endPage().endPDF(async (err) => {
       if (err) {
         console.error('Error finalizing PDF:', err);
         return res.status(500).json({
@@ -2108,6 +2123,42 @@ const getComprehensiveReportPdf = async (req, res) => {
           error: err.message || String(err),
         });
       }
+      
+      // Calculate file hash and save audit log
+      try {
+        let fileHash = null;
+        if (fs.existsSync(tmpFilePath)) {
+          const crypto = require('crypto');
+          const fileBuffer = fs.readFileSync(tmpFilePath);
+          const hashSum = crypto.createHash('sha256');
+          hashSum.update(fileBuffer);
+          fileHash = hashSum.digest('hex');
+        }
+
+        if (reportData.summary.documentId && signatories.length > 0) {
+          await ReportAuditLog.create({
+            documentId: reportData.summary.documentId,
+            reportType: 'Comprehensive Report',
+            fiscalYear: String(reportData.summary.fiscalYear || ''),
+            budgetType: String(reportData.summary.budgetType || ''),
+            regions: Array.isArray(reportData.summary.regions) ? reportData.summary.regions : [reportData.summary.regions],
+            generatedBy: safeStr(req.user?.name || req.user?.UserName || req.user?.FirstName || req.user?.id || 'System'),
+            fileHash: fileHash,
+            signatories: signatories.map(sig => ({
+              fullName: sig.fullName,
+              position: sig.position || roleToPositionLabel(sig.workflowRole),
+              workflowRole: sig.workflowRole,
+              signedAt: sig.signedAt,
+              verificationStatus: sig.verificationStatus,
+              verificationReason: sig.verificationReason,
+              signatureType: sig.signatureType
+            }))
+          });
+        }
+      } catch (auditErr) {
+        console.error('Failed to save Report Audit Log with file hash:', auditErr);
+      }
+
       if (res.headersSent) return;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
@@ -2279,6 +2330,48 @@ const getAvailableResponsibilityCentersComprehensive = async (req, res) => {
   }
 };
 
+const verifyDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    if (!documentId) {
+      return res.status(400).json({ success: false, message: 'Document ID is required' });
+    }
+    const auditLog = await ReportAuditLog.findOne({ documentId }).lean();
+    if (!auditLog) {
+      return res.status(404).json({ success: false, message: 'Document not found or invalid' });
+    }
+    return res.status(200).json({ success: true, auditLog });
+  } catch (error) {
+    console.error('Error verifying document:', error);
+    return res.status(500).json({ success: false, message: 'Server error during verification' });
+  }
+};
+
+const verifyDocumentUpload = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+    
+    // Calculate SHA-256 hash of the uploaded file
+    const crypto = require('crypto');
+    const hashSum = crypto.createHash('sha256');
+    hashSum.update(req.file.buffer);
+    const fileHash = hashSum.digest('hex');
+
+    // Find the document in the audit log using the hash
+    const auditLog = await ReportAuditLog.findOne({ fileHash }).lean();
+    if (!auditLog) {
+      return res.status(404).json({ success: false, message: 'Document is altered or invalid. File hash mismatch.' });
+    }
+
+    return res.status(200).json({ success: true, auditLog });
+  } catch (error) {
+    console.error('Error verifying uploaded document:', error);
+    return res.status(500).json({ success: false, message: 'Server error during file verification' });
+  }
+};
+
 module.exports = {
   getComprehensiveReportData,
   getAvailableRegionsComprehensive,
@@ -2287,5 +2380,7 @@ module.exports = {
   getAvailableFiscalYears,
   getAvailableBudgetTypes,
   getActiveSettings,
-  getComprehensiveReportPdf
+  getComprehensiveReportPdf,
+  verifyDocument,
+  verifyDocumentUpload
 };
