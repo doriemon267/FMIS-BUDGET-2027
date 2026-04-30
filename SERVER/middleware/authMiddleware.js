@@ -119,6 +119,7 @@ module.exports = async (req, res, next) => {
     // 4. IDENTITY EXTRACTION
     const rawUserId = payload.userId || payload.id || payload.UserName || (Array.isArray(payload.Username) ? payload.Username[0] : payload.Username);
     if (!rawUserId) {
+      if (exempted) return next();
       return res.status(401).json({ error: "Access denied. User identity not found in token." });
     }
     const userId = String(rawUserId);

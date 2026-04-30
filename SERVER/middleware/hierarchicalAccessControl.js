@@ -363,6 +363,16 @@ const strictHierarchicalControl = (operation, options = {}) => {
 const getHierarchicalAccessInfo = async (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   try {
+    if (!req.user) {
+      req.hierarchicalAccessInfo = {
+        scope: 'NONE',
+        accessibleRegions: [],
+        accessibleDepartments: [],
+        accessibleDivisions: [],
+        workflowRoles: []
+      };
+      return next();
+    }
     const userId = req.user.id;
     const userRoles = req.user.Roles;
 
