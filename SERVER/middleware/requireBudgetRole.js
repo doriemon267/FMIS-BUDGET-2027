@@ -18,15 +18,7 @@ const VALID_BUDGET_ROLES = new Set([
 ]);
 
 /** Paths that skip the check - Gamit ang exact starts-with logic */
-const EXEMPT_PATHS = [
-  '/get-user', 
-  '/login', 
-  '/logout', 
-  '/health', 
-  '/hierarchical-rbac/my-access',
-  '/user/profile',
-  '/user/preferences'
-];
+const EXEMPT_PATHS = ['/get-user', '/login', '/logout'];
 
 /**
  * Helper to normalize any role string to internal format
