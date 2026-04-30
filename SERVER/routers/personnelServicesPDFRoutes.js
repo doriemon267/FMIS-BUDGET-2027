@@ -6,13 +6,16 @@ const {
   exportCOSPersonnelPDF
 } = require('../controllers/personnelServicesPDFController');
 
-const authMiddleware = require("../middleware/authMiddleware");
+const check_token_dev = require('../middleware/check_token_dev');
+const check_token_prod = require('../middleware/check_token_prod');
+const IS_PRODUCTION = require('../utils/IS_PRODUCTION');
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const { hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { logUserActivity } = require('../middleware/userLogs');
 
 // Apply authentication middleware to all routes in this router
-router.use(authMiddleware);
+router.use(tokenMiddleware);
 
 /**
  * @route   POST /api/personnel-services-pdf/export-permanent

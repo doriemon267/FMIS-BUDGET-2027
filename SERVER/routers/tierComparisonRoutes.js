@@ -6,7 +6,11 @@ const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const BudgetarySupport = require('../models/BudgetarySupport');
-const authMiddleware = require("../middleware/authMiddleware");
+const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middleware/check_token_dev");
+const check_token_prod = require("../middleware/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 
 /**
@@ -15,7 +19,7 @@ const authMiddleware = require("../middleware/authMiddleware");
  */
 
 
-router.get('/tier1/finalized', authMiddleware, async (req, res) => {
+router.get('/tier1/finalized', tokenMiddleware, async (req, res) => {
   try {
     const { region, fiscalYear, budgetType } = req.query;
 
@@ -108,7 +112,7 @@ router.get('/tier1/finalized', authMiddleware, async (req, res) => {
  * GET /api/tier-comparison/tier2
  * Fetch all Tier 2 proposals for a specific region
  */
-router.get('/tier2', authMiddleware, async (req, res) => {
+router.get('/tier2', tokenMiddleware, async (req, res) => {
   try {
     const { region, fiscalYear, tier2Status } = req.query;
 
@@ -173,7 +177,7 @@ router.get('/tier2', authMiddleware, async (req, res) => {
  * POST /api/tier-comparison/tier2/copy-from-tier1
  * Copy finalized Tier 1 proposals to Tier 2 for editing
  */
-router.post('/tier2/copy-from-tier1', authMiddleware, async (req, res) => {
+router.post('/tier2/copy-from-tier1', tokenMiddleware, async (req, res) => {
   try {
     const { region, fiscalYear } = req.body;
     const user = req.user;
@@ -320,7 +324,7 @@ router.post('/tier2/copy-from-tier1', authMiddleware, async (req, res) => {
  * PUT /api/tier-comparison/tier2/:id
  * Update a specific Tier 2 proposal
  */
-router.put('/tier2/:id', authMiddleware, async (req, res) => {
+router.put('/tier2/:id', tokenMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
@@ -396,7 +400,7 @@ router.put('/tier2/:id', authMiddleware, async (req, res) => {
  * DELETE /api/tier-comparison/tier2/:id
  * Delete a specific Tier 2 proposal
  */
-router.delete('/tier2/:id', authMiddleware, async (req, res) => {
+router.delete('/tier2/:id', tokenMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -438,7 +442,7 @@ router.delete('/tier2/:id', authMiddleware, async (req, res) => {
  * GET /api/tier-comparison/regions
  * Get list of regions with finalized Tier 1 proposals
  */
-router.get('/regions', authMiddleware, async (req, res) => {
+router.get('/regions', tokenMiddleware, async (req, res) => {
   try {
     const { fiscalYear } = req.query;
     
@@ -497,7 +501,7 @@ router.get('/regions', authMiddleware, async (req, res) => {
  * GET /api/tier-comparison/fiscal-years
  * Get list of available fiscal years with finalized Tier 1 proposals
  */
-router.get('/fiscal-years', authMiddleware, async (req, res) => {
+router.get('/fiscal-years', tokenMiddleware, async (req, res) => {
   try {
     const { region } = req.query;
     
@@ -553,7 +557,7 @@ router.get('/fiscal-years', authMiddleware, async (req, res) => {
  * GET /api/tier-comparison/comparative-report
  * Get comparative report data for a region showing current proposals vs historical GAA
  */
-router.get('/comparative-report', authMiddleware, async (req, res) => {
+router.get('/comparative-report', tokenMiddleware, async (req, res) => {
   try {
     const { region, currentFiscalYear } = req.query;
 

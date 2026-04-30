@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const auth = require('../middleware/authMiddleware');
+const auth = require('../middleware/checkToken');
 const { loadHierarchicalAssignment } = require('../middleware/hierarchicalAssignmentMiddleware');
 const { budgetRoleVisibilityControl } = require('../middleware/budgetRoleVisibilityControl');
 const myProposalsController = require('../controllers/myProposalsController');

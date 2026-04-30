@@ -6,11 +6,15 @@ const {
   getPersonnelHiredBeforeJune1988,
 } = require("../controllers/personnel_service_controller_case_sensitive");
 const Router = require("express").Router;
-const authMiddleware = require("../middleware/authMiddleware");
+const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middleware/check_token_dev");
+const check_token_prod = require("../middleware/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const personnelServicesRouter = Router();
 // Apply authentication to all personnel services routes
-personnelServicesRouter.use(authMiddleware);
+personnelServicesRouter.use(tokenMiddleware);
 // Basic routes
 personnelServicesRouter.get("/personnelServices", getAllPersonnelServices);
 personnelServicesRouter.get("/getpersonnels", getAllPerServices);

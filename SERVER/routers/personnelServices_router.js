@@ -19,13 +19,17 @@ const {
 // Import the model directly to ensure it's available
 const PersonnelService = require('../models/PersonnelServices');
 const checkDueDate = require("../middleware/checkDueDate");
-const authMiddleware = require("../middleware/authMiddleware");
+const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middleware/check_token_dev");
+const check_token_prod = require("../middleware/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const Router = require("express").Router;
 const personnelServicesRouter = Router();
 // Apply authentication to all personnel services routes
-personnelServicesRouter.use(authMiddleware);
+personnelServicesRouter.use(tokenMiddleware);
 // Apply submission workflow control middleware for read operations
 personnelServicesRouter.use('/personnelServices', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));

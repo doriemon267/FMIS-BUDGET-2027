@@ -23,7 +23,11 @@ const {
   recalculateProposalTotals
 } = require("../controllers/proposalController");
 const Router = require("express").Router;
-const authMiddleware = require("../middleware/authMiddleware");
+const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middleware/check_token_dev");
+const check_token_prod = require("../middleware/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const {
   loadHierarchicalAssignment,
@@ -38,7 +42,7 @@ const Proposal = require("../models/Proposal");
 const DraftProposal = require("../models/DraftProposal");
 const proposalRouter = Router();
 // Apply authentication to all proposal routes
-proposalRouter.use(authMiddleware);
+proposalRouter.use(tokenMiddleware);
 // Load hierarchical assignments for all routes
 proposalRouter.use(loadHierarchicalAssignment);
 // Get all proposals summary (with submission workflow control)

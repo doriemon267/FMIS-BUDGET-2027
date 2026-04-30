@@ -167,8 +167,7 @@ const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes
 const databaseBackupRouter = require("./routers/databaseBackupRoutes");
 const budgetOfficerEditRouter = require("./routers/budgetOfficerEditRoutes");
 const personnelServicesPDFRouter = require("./routers/personnelServicesPDFRoutes");
-const authMiddleware = require("./middleware/authMiddleware");
-const checkToken = authMiddleware;
+const checkToken = require("./middleware/checkToken");
 const authRouter = require("./routers/auth_router");
 
 const enforceOrgAccess = require("./middleware/enforceOrgAccess");

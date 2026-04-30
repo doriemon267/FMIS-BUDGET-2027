@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 
 
-const authMiddleware = require("../middleware/authMiddleware");
+const check_token_dev = require("../middleware/check_token_dev");
+const check_token_prod = require("../middleware/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 
 const {
@@ -15,7 +18,7 @@ const {
   getSublineItems
 } = require("../controllers/chartOfAccountsController");
 // Apply authentication to all chart of accounts routes
-router.use(authMiddleware);
+router.use(tokenMiddleware);
 // Get all chart of accounts
 router.get("/chart-of-accounts", getAllChartOfAccounts);
 // Get a single chart of account by ID

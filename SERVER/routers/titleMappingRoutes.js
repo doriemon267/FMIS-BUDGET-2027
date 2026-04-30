@@ -1,6 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/authMiddleware");
+const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middleware/check_token_dev");
+const check_token_prod = require("../middleware/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const {
   getAllTitleMappings,
@@ -13,7 +17,7 @@ const {
   syncFromChartOfAccounts
 } = require("../controllers/titleMappingController");
 // Apply authentication middleware to all routes in this router
-router.use(authMiddleware);
+router.use(tokenMiddleware);
 // Get all title mappings
 router.get("/title-mappings", getAllTitleMappings);
 // Get capital outlay title mappings only
