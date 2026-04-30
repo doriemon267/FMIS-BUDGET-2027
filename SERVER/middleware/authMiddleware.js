@@ -7,6 +7,22 @@ const { requireBudgetRole } = require('./requireBudgetRole');
 const { syncUserEmailFromRequest } = require('../utils/syncUserEmailFromRequest');
 const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
 
+const EXEMPT_PATHS = [
+  '/get-user', 
+  '/login', 
+  '/logout', 
+  '/health', 
+  '/hierarchical-rbac/my-access',
+  '/user/profile',
+  '/user/preferences'
+];
+
+const isExemptPath = (req) => {
+  const url = (req.originalUrl || req.url || '').split('?')[0];
+  const cleanUrl = url.replace(/^\/api/, '') || '/';
+  return EXEMPT_PATHS.some((p) => cleanUrl === p || cleanUrl.startsWith(`${p}/`));
+};
+
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 const pickEmailFromUsernameArray = (value) => {
   if (!Array.isArray(value)) return null;
@@ -24,9 +40,10 @@ module.exports = async (req, res, next) => {
   try {
     if (req.method === 'OPTIONS') return next();
 
+    const exempted = isExemptPath(req);
     req.clientIp = getClientIp ? getClientIp(req) : (req.ip || req.connection?.remoteAddress);
     
-    // 1. DEVELOPMENT MOCK AUTH (Backdoor for local testing)
+    // 1. DEVELOPMENT MOCK AUTH
     const allowMockAuth = !IS_PRODUCTION && (process.env.ALLOW_MOCK_AUTH === 'true' || process.env.DEBUG_MODE === 'true');
     const devUserId = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
 
@@ -56,9 +73,10 @@ module.exports = async (req, res, next) => {
         userId: uid, userName: devName, userRoles: rolesArr,
         action: "DEV_MOCK_AUTH", resource: "SYSTEM_ACCESS",
         method: req.method, ipAddress: req.clientIp,
-        details: { mode: 'development_mock', autoAdmin: true }
+        details: { mode: 'development_mock', autoAdmin: true, path: req.originalUrl }
       }).catch(() => {});
 
+      if (exempted) return next();
       return requireBudgetRole(req, res, next);
     }
 
@@ -68,10 +86,12 @@ module.exports = async (req, res, next) => {
                      (authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null);
 
     if (!jwtToken) {
+      if (exempted) return next();
+      console.log(`[AUTH] Access denied (No token) for: ${req.method} ${req.originalUrl}`);
       return res.status(401).json({ error: "Access denied. No token provided." });
     }
 
-    // 3. VERIFICATION (Support multiple secrets)
+    // 3. VERIFICATION
     const secrets = [
       process.env.JWT_CLIENT_SECRET_PROD, 
       process.env.JWT_SECRET_KEY, 
@@ -79,15 +99,20 @@ module.exports = async (req, res, next) => {
     ].filter(Boolean);
 
     let payload = null;
+    let verifyError = null;
     for (const secret of secrets) {
       try {
         payload = jwt.verify(jwtToken, secret, { algorithms: ['HS256'] });
         if (payload) break;
-      } catch (err) { /* try next secret */ }
+      } catch (err) { 
+        verifyError = err;
+      }
     }
 
     if (!payload) {
-      return res.status(401).json({ error: "Invalid or expired token." });
+      if (exempted) return next();
+      console.log(`[AUTH] Access denied (Invalid token) for: ${req.method} ${req.originalUrl} - ${verifyError?.message}`);
+      return res.status(401).json({ error: "Invalid or expired token.", detail: verifyError?.message });
     }
     req.authToken = jwtToken;
 
@@ -154,6 +179,7 @@ module.exports = async (req, res, next) => {
       userRoles: normalizedRoles, ipAddress: req.clientIp, method: req.method
     }).catch(() => {});
 
+    if (exempted) return next();
     return requireBudgetRole(req, res, next);
 
   } catch (error) {
@@ -162,8 +188,10 @@ module.exports = async (req, res, next) => {
     
     AuditLog.create({
       userId: "SYSTEM", action: isExpired ? "TOKEN_EXPIRED" : "AUTH_EXCEPTION",
-      ipAddress: req.clientIp, details: { error: error.message }
+      ipAddress: req.clientIp, details: { error: error.message, path: req.originalUrl }
     }).catch(() => {});
+
+    if (isExemptPath(req)) return next();
 
     return res.status(401).json({ 
       error: isExpired ? "Session expired. Please login again." : "Access denied.",
