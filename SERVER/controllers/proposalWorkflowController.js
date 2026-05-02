@@ -125,23 +125,52 @@ const budgetRoleAccessControl = (operation = 'read') => {
         // Extract hierarchical assignment once so multiple roles can reuse it
         const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
         const userDivision = assignment.divisionName || req.user?.division || null;
-        const userDepartment = assignment.departmentId || req.user?.department || null;
-        const userRegion = assignment.regionId || req.user?.region || null;
+        let userDepartment = null;
+        let userRegion = null;
+
+        // Resolve Department and Region names from IDs if necessary
+        if (assignment.departmentId) {
+          try {
+            const dept = await Department.findById(assignment.departmentId);
+            userDepartment = dept ? (dept.Department || dept.departmentName) : null;
+          } catch (e) {
+            console.error('Error fetching department name:', e.message);
+          }
+        }
+        if (!userDepartment && req.user?.department) userDepartment = req.user.department;
+
+        if (assignment.regionId) {
+          try {
+            const reg = await Region.findById(assignment.regionId);
+            userRegion = reg ? (reg.Region || reg.regionName) : null;
+          } catch (e) {
+            console.error('Error fetching region name:', e.message);
+          }
+        }
+        if (!userRegion && req.user?.region) userRegion = req.user.region;
+
+        // Build organizational scope filter (intersection of all assigned levels)
+        const orgScope = {};
+        if (userRegion) orgScope.region = userRegion;
+        if (userDepartment) orgScope.department = userDepartment;
+        if (userDivision) orgScope.division = userDivision;
 
         // 6-STEP WORKFLOW ROLES
         if (isPreparer) {
           // Preparers can see their own proposals and proposals within their organizational scope
           visibilityFilter.$or = [
             { createdByUserId: userId },
-            { processBy: userId },
-            ...(userDivision ? [{ division: userDivision }] : []),
-            ...(userDepartment ? [{ department: userDepartment }] : []),
-            ...(userRegion ? [{ region: userRegion }] : [])
+            { processBy: userId }
           ];
+          // Add organizational scope as a single filter object (so it acts as AND for region/dept/div)
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter.$or.push(orgScope);
+          }
         } else if (isReviewer) {
           // Reviewers can see only proposals pending their review or in reviewer-specific statuses
+          // AND restricted to their organizational scope
           // IMPORTANT: Exclude Drafts from reviewer view to avoid showing unsubmitted items
-          visibilityFilter = {
+          const reviewerBaseFilter = {
             $and: [
               { status: { $ne: 'Draft' } },
               {
@@ -161,26 +190,66 @@ const budgetRoleAccessControl = (operation = 'read') => {
               }
             ]
           };
+
+          // Apply organizational restriction if available
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter = {
+              $and: [reviewerBaseFilter, orgScope]
+            };
+          } else {
+            visibilityFilter = reviewerBaseFilter;
+          }
         } else if (isApprover) {
-          // Approvers can see proposals pending approval
-          visibilityFilter.status = { $in: ['Reviewed', 'Pending Approval', 'Approved', 'Forwarded to Approver', 'Approver Approved'] };
+          // Approvers can see proposals pending approval within their organizational scope
+          const approverBaseFilter = { status: { $in: ['Reviewed', 'Pending Approval', 'Approved', 'Forwarded to Approver', 'Approver Approved'] } };
+          
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter = { $and: [approverBaseFilter, orgScope] };
+          } else {
+            visibilityFilter = approverBaseFilter;
+          }
         } else if (isBudgetPlanningAnalyst) {
           // Budget Planning Analysts can see proposals forwarded by approver
-          visibilityFilter.status = { $in: ['Approver Approved'] };
-        } else if (isOverallBudgetApprover) {
-          // Overall Budget Approvers can see all proposals
-          visibilityFilter.status = { $in: ['Division Submitted', 'Under Review', 'Reviewed', 'Pending Approval', 'Approved', 'Finalized', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager'] };
-        } else if (isPreparer) {
-          // Preparers: prefer to show only own proposals, but also include other proposals
-          // from the same division so that approvals by the Officer don't make them disappear.
-          if (userDivision) {
-            visibilityFilter.$or = [
-              { createdByUserId: userId },
-              { division: userDivision }
-            ];
+          // For Analysts, we often use Region-level filtering
+          const analystBaseFilter = { status: { $in: ['Approver Approved'] } };
+          
+          // Budget Planning Analyst might have multiple regions (NIA-Wide vs specific)
+          const isNIAWide = assignment.isNIAWide === true;
+          const assignedRegions = assignment.assignedRegions || [];
+          
+          if (isNIAWide) {
+            visibilityFilter = analystBaseFilter;
+          } else if (assignedRegions.length > 0) {
+            visibilityFilter = {
+              $and: [analystBaseFilter, { region: { $in: assignedRegions } }]
+            };
+          } else if (userRegion) {
+            visibilityFilter = { $and: [analystBaseFilter, { region: userRegion }] };
           } else {
-            // Fallback: only show own proposals
-            visibilityFilter.createdByUserId = userId;
+            visibilityFilter = analystBaseFilter;
+          }
+        } else if (isOverallBudgetApprover) {
+          // Overall Budget Approvers can see all proposals within their organizational scope
+          const overallBaseFilter = { 
+            status: { 
+              $in: [
+                'Division Submitted', 'Under Review', 'Reviewed', 
+                'Pending Approval', 'Approved', 'Finalized', 
+                'Officer Approved', 'Forwarded to Overall Budget Approver', 
+                'Forwarded to Manager'
+              ] 
+            } 
+          };
+          
+          if (Object.keys(orgScope).length > 0) {
+            // For managers, we usually restrict by region if they are regional managers
+            // but allow them to see all departments/divisions within that region
+            const managerOrgFilter = {};
+            if (userRegion) managerOrgFilter.region = userRegion;
+            
+            visibilityFilter = { $and: [overallBaseFilter, managerOrgFilter] };
+          } else {
+            visibilityFilter = overallBaseFilter;
           }
         } else if (isBudgetCoordinator) {
           // Budget Coordinators can see:
@@ -188,29 +257,35 @@ const budgetRoleAccessControl = (operation = 'read') => {
           // 2. Proposals they have forwarded to officer (Forwarded to Officer)
           // 3. Finalized proposals for reference
           // 4. Their own proposals
-          if (userDivision) {
-            visibilityFilter.$or = [
-              { createdByUserId: userId },
-              { division: userDivision, status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'] } }
-            ];
-          } else {
-            // Fallback: show proposals needing coordinator action
-            visibilityFilter.$or = [
-              { createdByUserId: userId },
-              { status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager'] } }
-            ];
-          }
+          const coordinatorBaseFilter = { status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'] } };
+          
+          visibilityFilter.$or = [
+            { createdByUserId: userId },
+            { $and: [coordinatorBaseFilter, orgScope] }
+          ];
         } else if (isBudgetOfficer) {
           // Budget Officers can see:
           // 1. Proposals forwarded to them by coordinators (Forwarded to Officer)
           // 2. Proposals they have approved (Officer Approved)
           // 3. Proposals they have forwarded to manager (Forwarded to Manager)
           // 4. Finalized proposals for reference
-          visibilityFilter.status = { $in: ['Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'] };
+          const officerBaseFilter = { status: { $in: ['Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'] } };
+          
+          if (userRegion) {
+            visibilityFilter = { $and: [officerBaseFilter, { region: userRegion }] };
+          } else {
+            visibilityFilter = officerBaseFilter;
+          }
         } else if (isOverallApprover) {
           // Budget Managers: primarily see items forwarded to them (Forwarded to Manager)
           // Also allow viewing of items that reached 'Officer Approved' or 'Finalized' so managers can review completed items
-          visibilityFilter.status = { $in: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Officer Approved', 'Finalized'] };
+          const managerBaseFilter = { status: { $in: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Officer Approved', 'Finalized'] } };
+          
+          if (userRegion) {
+            visibilityFilter = { $and: [managerBaseFilter, { region: userRegion }] };
+          } else {
+            visibilityFilter = managerBaseFilter;
+          }
         }
 
         // Apply the filter to the query
@@ -227,7 +302,7 @@ const budgetRoleAccessControl = (operation = 'read') => {
         if (req.params.id) {
           const proposal = await Proposal.findById(req.params.id);
           if (proposal) {
-            const canAccess = checkProposalAccess(proposal, userId, userRoles);
+            const canAccess = checkProposalAccess(proposal, userId, userRoles, orgScope, assignment);
             if (!canAccess) {
               return res.status(403).json({
                 success: false,
@@ -251,19 +326,19 @@ const budgetRoleAccessControl = (operation = 'read') => {
 };
 
 // Helper function to check if user can access a specific proposal
-function checkProposalAccess(proposal, userId, userRoles) {
+function checkProposalAccess(proposal, userId, userRoles, orgScope = {}, assignment = {}) {
   // 6-step workflow roles
-  const isPreparer = userRoles.includes('PREPARER');
-  const isReviewer = userRoles.includes('REVIEWER');
-  const isApprover = userRoles.includes('BUDGET APPROVER');
-  const isBudgetPlanningAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
-  const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER');
+  const isPreparer = userRoles.includes('PREPARER') || (assignment.workflowRoles || []).includes('PREPARER');
+  const isReviewer = userRoles.includes('REVIEWER') || (assignment.workflowRoles || []).includes('REVIEWER') || (assignment.workflowRoles || []).includes('divisionReviewer');
+  const isApprover = userRoles.includes('BUDGET APPROVER') || (assignment.workflowRoles || []).includes('APPROVER') || (assignment.workflowRoles || []).includes('divisionApprover') || (assignment.workflowRoles || []).includes('officeApprover');
+  const isBudgetPlanningAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST') || (assignment.workflowRoles || []).includes('BUDGET_PLANNING_ANALYST');
+  const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER') || (assignment.workflowRoles || []).includes('OVERALL_BUDGET_APPROVER');
+  
   // Legacy budget roles
-  // No literal BUDGET_ANALYST role; use BUDGET_PLANNING_ANALYST
-  const isBudgetAnalyst = false;
   const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
-  const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-  const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('SUPER_ADMIN');
+  const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER') || (assignment.workflowRoles || []).includes('BUDGET_OFFICER');
+  const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('SUPER_ADMIN') || (assignment.workflowRoles || []).includes('SUPER_ADMIN');
+  
   // Check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space) from database
   const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN');
 
@@ -272,37 +347,68 @@ function checkProposalAccess(proposal, userId, userRoles) {
     return true;
   }
 
+  // Helper to check if proposal matches user's organizational scope
+  const matchesOrgScope = () => {
+    if (Object.keys(orgScope).length === 0) return true; // No scope defined
+    
+    // Check intersection
+    if (orgScope.region && proposal.region !== orgScope.region) return false;
+    if (orgScope.department && proposal.department !== orgScope.department) return false;
+    if (orgScope.division && proposal.division !== orgScope.division) return false;
+    
+    return true;
+  };
+
   // Users can always access their own proposals
-  if (proposal.createdByUserId === userId) {
+  if (proposal.createdByUserId === userId || proposal.processBy === userId) {
     return true;
   }
 
   // 6-STEP WORKFLOW ROLE ACCESS
-  if (isReviewer && ['Draft', 'Division Submitted', 'Under Review', 'Reviewed'].includes(proposal.status)) {
-    return true;
+  if (isReviewer && ['Draft', 'Division Submitted', 'Under Review', 'Reviewed', 'Under Review by Reviewer', 'Division Submitted'].includes(proposal.status)) {
+    return matchesOrgScope();
   }
 
-  if (isApprover && ['Reviewed', 'Pending Approval', 'Approved', 'Forwarded to Approver', 'Approver Approved'].includes(proposal.status)) {
-    return true;
+  if (isApprover && ['Reviewed', 'Pending Approval', 'Approved', 'Forwarded to Approver', 'Approver Approved', 'Department Verified', 'Department Submitted'].includes(proposal.status)) {
+    return matchesOrgScope();
   }
 
-  if (isBudgetPlanningAnalyst && ['Approver Approved'].includes(proposal.status)) {
-    return true;
+  if (isBudgetPlanningAnalyst && ['Approver Approved', 'Forwarded to Budget Planning Analyst'].includes(proposal.status)) {
+    // Analyst might have region-specific access
+    const isNIAWide = assignment.isNIAWide === true;
+    const assignedRegions = assignment.assignedRegions || [];
+    
+    if (isNIAWide) return true;
+    if (assignedRegions.includes(proposal.region)) return true;
+    if (orgScope.region && proposal.region === orgScope.region) return true;
+    
+    return false;
   }
 
   if (isOverallBudgetApprover) {
-    return true;  // Executives can see everything
+    // If restricted by region (regional manager), check region
+    if (orgScope.region && proposal.region !== orgScope.region) return false;
+    return true; 
   }
 
   // LEGACY BUDGET ROLE ACCESS
   if (isBudgetOfficer && ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'].includes(proposal.status)) {
+    if (orgScope.region && proposal.region !== orgScope.region) return false;
     return true;
   }
 
   if (isOverallApprover) {
     // Managers only have access when the proposal has been forwarded to them
-  if (['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Officer Approved', 'Finalized'].includes(proposal.status)) return true;
+    if (['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Officer Approved', 'Finalized'].includes(proposal.status)) {
+      if (orgScope.region && proposal.region !== orgScope.region) return false;
+      return true;
+    }
     return false;
+  }
+
+  // Even if roles don't match, if it's in their org scope and they are a preparer, they might have access
+  if (isPreparer) {
+    return matchesOrgScope();
   }
 
   return false;

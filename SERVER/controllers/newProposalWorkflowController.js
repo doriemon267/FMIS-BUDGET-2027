@@ -1917,20 +1917,101 @@ exports.createProposal = async (req, res) => {
   }
 };
 
+/**
+ * Helper to check if a user has organizational access to a specific proposal.
+ * Ensures users can only modify/view proposals within their assigned region/dept/division.
+ * @param {Object} proposal - The proposal document
+ * @param {string} userId - Current user ID
+ * @param {string} userRole - Current user's primary role
+ * @returns {Promise<boolean>}
+ */
+const checkProposalOrgAccess = async (proposal, userId, userRole) => {
+  if (userRole === 'SUPER ADMIN') return true;
+  
+  // Ownership always grants access
+  if (String(proposal.createdBy) === String(userId)) return true;
+
+  try {
+    const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId), isActive: true })
+      .populate('departmentId')
+      .populate('regionId')
+      .lean();
+
+    if (!assignment) {
+      // Fallback: If no hierarchical assignment, check if proposal region matches user's region (legacy)
+      // This is a safety fallback and might be less restrictive than intended.
+      return true; 
+    }
+
+    const userDivision = assignment.divisionName || null;
+    let userDepartment = null;
+    let userRegion = null;
+
+    if (assignment.departmentId) {
+      userDepartment = assignment.departmentId.Department || assignment.departmentId.departmentName || null;
+    }
+    if (assignment.regionId) {
+      userRegion = assignment.regionId.Region || assignment.regionId.regionName || null;
+    }
+
+    // Restrictive check (Intersection)
+    if (userRegion && proposal.regionName !== userRegion && proposal.region !== userRegion) {
+      // Handle cases where region might be stored as name string or object
+      const propRegion = proposal.regionName || proposal.region;
+      if (propRegion && String(propRegion) !== userRegion) return false;
+    }
+    
+    if (userDepartment && proposal.department !== userDepartment) return false;
+    if (userDivision && proposal.division !== userDivision) return false;
+
+    return true;
+  } catch (err) {
+    console.error('[checkProposalOrgAccess] Error:', err.message);
+    return false;
+  }
+};
+
 // Get proposals based on user role and filters
 exports.getProposals = async (req, res) => {
   try {
-  const userRole = getUserRole(req);
-  const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
-  const usernameField = Array.isArray(req.user?.Username) ? req.user.Username[0] : req.user?.Username;
-  const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
-  const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
-  // Normalize userId to string to avoid mismatches
-  const userIdString = userId ? String(userId) : undefined;
-  const strictIdentityCandidates = [userIdString, usernameField]
-    .map((value) => String(value || '').trim())
-    .filter(Boolean);
-  let myProposalOrgScope = {};
+    const userRole = getUserRole(req);
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const usernameField = Array.isArray(req.user?.Username) ? req.user.Username[0] : req.user?.Username;
+    const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
+    const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
+    // Normalize userId to string to avoid mismatches
+    const userIdString = userId ? String(userId) : undefined;
+    const strictIdentityCandidates = [userIdString, usernameField]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    
+    // Resolve Organizational Scope
+    let orgScope = {};
+    try {
+      const assignment = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
+        .populate('departmentId')
+        .populate('regionId')
+        .lean();
+
+      if (assignment) {
+        if (assignment.divisionName) orgScope.division = assignment.divisionName.trim();
+        if (assignment.departmentId) {
+          orgScope.department = (assignment.departmentId.Department || assignment.departmentId.departmentName || '').trim();
+        }
+        if (assignment.regionId) {
+          orgScope.region = (assignment.regionId.Region || assignment.regionId.regionName || '').trim();
+        }
+      }
+    } catch (err) {
+      console.warn('[getProposals] Org scope error:', err.message);
+    }
+    
+    // Fallback to legacy fields
+    if (Object.keys(orgScope).length === 0) {
+      if (req.user?.region) orgScope.region = req.user.region;
+      if (req.user?.department) orgScope.department = req.user.department;
+      if (req.user?.division) orgScope.division = req.user.division;
+    }
 
     let query = {};
 
@@ -1956,6 +2037,8 @@ exports.getProposals = async (req, res) => {
     if (fiscalYear) query.fiscalYear = parseInt(fiscalYear);
 
     // Apply view-based and role-based filtering
+    const isSuperAdmin = userRole === 'SUPER ADMIN';
+    
     switch (view) {
       case 'my-proposals':
         // Strict identity matching first to avoid cross-user collisions on display names.
@@ -1968,46 +2051,9 @@ exports.getProposals = async (req, res) => {
           query.$or = [{ createdByName: userName }];
         }
 
-        // Keep "my-proposals" aligned to the user's current organizational scope.
-        // This prevents drafts from another division/office from appearing on /proposal.
-        try {
-          const myAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
-            .populate('departmentId', 'Department departmentName DepartmentName')
-            .populate('regionId', '_id')
-            .lean();
-
-          if (myAssignment) {
-            const assignmentLevelRaw = String(myAssignment.assignmentLevel || '').toUpperCase();
-            const assignmentLevel = ({
-              DIVISION_LEVEL: 'DIVISION',
-              RESPONSIBILITY_CENTER: 'DIVISION',
-              DEPARTMENT_LEVEL: 'DEPARTMENT',
-              DEPARTMENT_REGIONAL_LEVEL: 'DEPARTMENT',
-              OFFICE_LEVEL: 'DEPARTMENT',
-              REGION_LEVEL: 'REGION',
-            })[assignmentLevelRaw] || assignmentLevelRaw;
-
-            const assignedDivision = String(myAssignment.divisionName || '').trim();
-            const assignedDepartment = String(
-              myAssignment.departmentId?.Department ||
-              myAssignment.departmentId?.departmentName ||
-              myAssignment.departmentId?.DepartmentName ||
-              ''
-            ).trim();
-            const assignedRegionId = myAssignment.regionId?._id || myAssignment.regionId || null;
-
-            if (assignmentLevel === 'DIVISION' && assignedDivision) {
-              myProposalOrgScope.division = assignedDivision;
-            } else if ((assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'OFFICE') && assignedDepartment) {
-              myProposalOrgScope.department = assignedDepartment;
-            } else if (assignmentLevel === 'REGION' && assignedRegionId) {
-              myProposalOrgScope.region = assignedRegionId;
-            }
-
-            query = { ...query, ...myProposalOrgScope };
-          }
-        } catch (scopeError) {
-          console.warn('[getProposals] Failed to resolve my-proposals org scope:', scopeError.message);
+        // Apply organizational scope restriction (intersection)
+        if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
+          query = { ...query, ...orgScope };
         }
 
         query.status = 'DRAFT';     // Use DRAFT enum value
@@ -2065,6 +2111,11 @@ exports.getProposals = async (req, res) => {
           
           query.status = { $in: Array.from(allStatuses) };
           
+          // Apply Organizational Scope Restriction
+          if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
+            query = { ...query, ...orgScope };
+          }
+
           if (!query.status.$in || query.status.$in.length === 0) {
             return res.json({
               success: true,
@@ -2102,13 +2153,23 @@ exports.getProposals = async (req, res) => {
         } else {
           query.status = { $ne: 'DRAFT' };  // Use DRAFT enum
         }
+
+        // Apply Organizational Scope Restriction (intersection) for ALL non-Super Admins
+        if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
+          query = { ...query, ...orgScope };
+        }
         break;
       case 'monitoring':
-          // Monitoring tab for Budget Manager and SUPER ADMIN: show all proposals except drafts
-          if (userRole === 'BUDGET MANAGER' || userRole === 'SUPER ADMIN') {
-                  // Show all non-DRAFT statuses. SUPER ADMIN sees same view as Budget Manager.
-                  query.status = { $ne: 'DRAFT' };
-          } else {
+        // Monitoring tab for Budget Manager and SUPER ADMIN: show all proposals except drafts
+        if (userRole === 'BUDGET MANAGER' || isSuperAdmin) {
+          // Show all non-DRAFT statuses. SUPER ADMIN sees same view as Budget Manager.
+          query.status = { $ne: 'DRAFT' };
+          
+          // Apply Organizational Scope Restriction for Managers
+          if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
+            query = { ...query, ...orgScope };
+          }
+        } else {
             return res.json({
               success: true,
               proposals: [],
@@ -2650,6 +2711,15 @@ exports.getProposalById = async (req, res) => {
     let proposal = await Proposal.findById(id).lean();
     
     if (proposal) {
+      // Check organizational access for legacy proposal lookup
+      const hasOrgAccess = await checkProposalOrgAccess(proposal, userId, userRole);
+      if (!hasOrgAccess) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access Denied: You do not have permission to view this proposal'
+        });
+      }
+
       console.log('[getProposalById] Found Proposal with ID:', id, '- returning with projectedSubsidy:', proposal.projectedSubsidy);
       return res.json({
         success: true,
@@ -2668,7 +2738,16 @@ exports.getProposalById = async (req, res) => {
       });
     }
 
-    // Check if user can access this proposal
+    // Organizational Access Security Check
+    const hasOrgAccess = await checkProposalOrgAccess(proposal, userId, userRole);
+    if (!hasOrgAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: You do not have permission to view proposals outside your assigned organizational scope'
+      });
+    }
+
+    // Check if user can access this proposal based on role/status
     if (userRole !== 'SUPER ADMIN' && userRole === 'BUDGET PREPARER' && proposal.createdBy !== userId) {
       const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole] || []);
       if (!allowedStatuses.includes(proposal.status)) {
@@ -3198,6 +3277,15 @@ exports.updateProposal = async (req, res) => {
       });
     }
 
+    // Additional Organizational Security Check
+    const hasOrgAccess = await checkProposalOrgAccess(proposal, userId, userRole);
+    if (!hasOrgAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: You can only edit proposals within your assigned organizational scope (Region/Department/Division)'
+      });
+    }
+
     // Optimistic locking: if client sent __v, ensure it matches (prevents overwriting concurrent edits)
     const clientVersion = req.body.__v;
     if (clientVersion !== undefined && proposal.__v !== clientVersion) {
@@ -3352,6 +3440,15 @@ exports.deleteProposal = async (req, res) => {
           message: 'You can only delete your own draft proposals'
         });
       }
+    }
+
+    // Additional Organizational Security Check
+    const hasOrgAccess = await checkProposalOrgAccess(proposal, userId, userRole);
+    if (!hasOrgAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: You can only delete proposals within your assigned organizational scope'
+      });
     }
 
     // Delete proposal and all related records that reference this workflowRef or proposalId

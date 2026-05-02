@@ -133,6 +133,12 @@ const budgetRoleVisibilityControl = () => {
         assignmentLoaded: !!assignment.userId
       }));
 
+      // Build organizational scope filter (intersection of all assigned levels)
+      const orgScope = {};
+      if (userRegion) orgScope.region = userRegion;
+      if (userDepartment) orgScope.department = userDepartment;
+      if (userDivision) orgScope.division = userDivision;
+
       // Declare userName once for use in multiple cases
       const userName = req.user?.name || req.user?.Username || req.user?.displayName || req.user?.fullName;
 
@@ -215,7 +221,7 @@ const budgetRoleVisibilityControl = () => {
           // STEP 5 of 6-step workflow: PREPARER → BUDGET REVIEWER → BUDGET APPROVER → BUDGET_ANALYST → [BUDGET_OFFICER] → OVERALL_APPROVER
           // BUDGET_OFFICER can see proposals forwarded by BUDGET_ANALYST AND proposals they've worked on
           // BUT: Cannot see Draft proposals (must be submitted first)
-          visibilityFilter = {
+          const officerBaseFilter = {
             $or: [
               // Proposals currently assigned to BUDGET_OFFICER
               {
@@ -237,7 +243,7 @@ const budgetRoleVisibilityControl = () => {
                 $and: [
                   { $or: [
                     { currentAssigneeRole: 'BUDGET_OFFICER' },
-                    { pendingWithRoles: 'BUDGET_OFFICER' }
+                    { pendingWithRoles: 'BUDGET_OFF_ICER' }
                   ]},
                   { status: { $ne: 'Draft' } }
                 ]
@@ -261,15 +267,19 @@ const budgetRoleVisibilityControl = () => {
               }
             ]
           };
+
+          // Apply organizational restriction
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter = { $and: [officerBaseFilter, orgScope] };
+          } else {
+            visibilityFilter = officerBaseFilter;
+          }
           break;
 
         case 'SUPER ADMIN':
         case 'SUPER_ADMIN':
           // ADMIN: Can see only proposals they created, processed, or are assigned to
           // This prevents SUPER ADMIN from seeing proposals from other users/departments unless involved
-          // NOTE: Different models use different field names:
-          // - Proposal model uses: createdByUserId, processBy
-          // - Entity models (PersonnelService, MooeProposal, etc.) use: processBy
           visibilityFilter = {
             $or: [
               // Proposals created by this user (Proposal model)
@@ -303,14 +313,8 @@ const budgetRoleVisibilityControl = () => {
                 { processBy: userId },
                 { processBy: userName }
               ]},
-              // Organizational scope proposals
-              ...((userDivision || userDepartment || userRegion) ? [{
-                $and: [
-                  ...(userDivision ? [{ division: userDivision }] : []),
-                  ...(userDepartment ? [{ department: userDepartment }] : []),
-                  ...(userRegion ? [{ region: userRegion }] : [])
-                ]
-              }] : [])
+              // Organizational scope proposals (Acts as intersection)
+              ...(Object.keys(orgScope).length > 0 ? [orgScope] : [])
             ]
           };
           break;
@@ -319,8 +323,7 @@ const budgetRoleVisibilityControl = () => {
           // STEP 2 of 6-step workflow: PREPARER → [BUDGET REVIEWER] → BUDGET APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // BUDGET REVIEWER can see proposals forwarded to them AND proposals they've previously worked on
           // CRITICAL: Cannot see Draft proposals AT ALL (must be submitted first)
-          // This ensures clear role separation between PREPARER (creates) and REVIEWER (reviews submitted)
-          visibilityFilter = {
+          const reviewerBaseFilter = {
             $or: [
               // Proposals currently assigned to BUDGET REVIEWER
               {
@@ -365,13 +368,20 @@ const budgetRoleVisibilityControl = () => {
               }
             ]
           };
+
+          // Apply organizational restriction
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter = { $and: [reviewerBaseFilter, orgScope] };
+          } else {
+            visibilityFilter = reviewerBaseFilter;
+          }
           break;
 
         case 'BUDGET APPROVER':
           // STEP 3 of 6-step workflow: PREPARER → BUDGET REVIEWER → [BUDGET APPROVER] → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // APPROVER can see proposals forwarded to them AND proposals they've previously worked on
           // BUT: Cannot see Draft proposals (must be submitted first)
-          visibilityFilter = {
+          const approverBaseFilter = {
             $or: [
               // Proposals currently assigned to APPROVER
               {
@@ -418,13 +428,20 @@ const budgetRoleVisibilityControl = () => {
               }
             ]
           };
+
+          // Apply organizational restriction
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter = { $and: [approverBaseFilter, orgScope] };
+          } else {
+            visibilityFilter = approverBaseFilter;
+          }
           break;
 
         case 'BUDGET MANAGER':
           // STEP 6 of 6-step workflow: PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [BUDGET MANAGER]
           // Final approval step - sees proposals forwarded by BUDGET_OFFICER AND proposals they've worked on
           // BUT: Cannot see Draft proposals (must be submitted first)
-          visibilityFilter = {
+          const managerBaseFilter = {
             $or: [
               // Proposals currently assigned to OVERALL_BUDGET_APPROVER
               {
@@ -478,6 +495,13 @@ const budgetRoleVisibilityControl = () => {
               }
             ]
           };
+
+          // Apply organizational restriction
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter = { $and: [managerBaseFilter, orgScope] };
+          } else {
+            visibilityFilter = managerBaseFilter;
+          }
           break;
 
         default:
