@@ -1,15 +1,11 @@
 const express = require('express');
 const salaryRouter = express.Router();
-const checkToken = require('../middleware/check_token');
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const isAuth = require('../middleware/is_auth');
 
 const salaryController = require('../controllers/salaryController');
 
 // Apply authentication to all salary routes
-salaryRouter.use(tokenMiddleware);
+salaryRouter.use(isAuth);
 
 // ==================== Existing Salary Routes ====================
 salaryRouter.get('/salary-grades/table', salaryController.getSalaryTableList);
@@ -35,3 +31,4 @@ salaryRouter.put('/salary-grades/:id', salaryController.updateSalaryGrade);
 salaryRouter.delete('/salary-grades/:id', salaryController.deleteSalaryGrade);
 
 module.exports = salaryRouter;
+

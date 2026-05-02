@@ -7,17 +7,13 @@ const {
   clearCompleted,
 } = require("../controllers/todo_controller");
 const Router = require("express").Router;
-const checkToken = require('../middleware/check_token');
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const isAuth = require('../middleware/is_auth');
 
 
 const todoRouter = Router();
 
 // Apply authentication middleware to all routes in this router
-todoRouter.use(tokenMiddleware);
+todoRouter.use(isAuth);
 
 // GET /api/todos
 todoRouter.get("/todos", getAllTodos);
@@ -35,3 +31,4 @@ todoRouter.delete("/todos/completed",  clearCompleted);
 todoRouter.delete("/todos/:id",  deleteTodo);
 
 module.exports = todoRouter;
+

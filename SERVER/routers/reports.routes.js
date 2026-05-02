@@ -7,18 +7,14 @@ const {
     getConsolidatedIncomePreview
 } = require("../controllers/consolidatedIncomePDFController");
 const Router = require("express").Router;
-const checkToken = require('../middleware/check_token');
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const isAuth = require('../middleware/is_auth');
 
 const { hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 
 const reportsRouter = Router();
 
 // Apply authentication middleware to all routes in this router
-reportsRouter.use(tokenMiddleware);
+reportsRouter.use(isAuth);
 
 // Data endpoints
 reportsRouter.get("/consolidated-summary", getConsolidatedSummary);
@@ -36,3 +32,4 @@ reportsRouter.get(
 );
 
 module.exports = reportsRouter;
+

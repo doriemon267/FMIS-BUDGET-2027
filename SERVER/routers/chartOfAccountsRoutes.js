@@ -1,12 +1,6 @@
 const express = require('express');
 const router = express.Router();
-
-
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
-
+const isAuth = require('../middleware/is_auth');
 
 const {
   getAllChartOfAccounts,
@@ -18,7 +12,7 @@ const {
   getSublineItems
 } = require("../controllers/chartOfAccountsController");
 // Apply authentication to all chart of accounts routes
-router.use(tokenMiddleware);
+router.use(isAuth);
 // Get all chart of accounts
 router.get("/chart-of-accounts", getAllChartOfAccounts);
 // Get a single chart of account by ID
@@ -34,3 +28,4 @@ router.get("/accounting-titles", getAccountingTitles);
 // Get subline items (existing endpoint)
 router.get("/subline-items", getSublineItems);
 module.exports = router;
+

@@ -5,11 +5,11 @@
 const express = require('express');
 const router = express.Router();
 const Comment = require('../models/Comment');
-const checkToken = require('../middleware/check_token');
+const isAuth = require('../middleware/is_auth');
 const { logDataModification } = require('../middleware/auditLogger');
 
 // Apply authentication
-router.use(checkToken);
+router.use(isAuth);
 
 // Get comments for a proposal
 router.get('/proposals/:proposalId/comments', async (req, res) => {
@@ -143,3 +143,4 @@ router.delete('/proposals/:proposalId/comments/:commentId', logDataModification,
 });
 
 module.exports = router;
+

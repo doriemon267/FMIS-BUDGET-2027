@@ -7,17 +7,13 @@ const {
 } = require("../controllers/loyaltyPayController");
 const { getEligibleForLoyaltyPay } = require("../controllers/employeelistController");
 const Router = require("express").Router;
-const checkToken = require('../middleware/check_token');
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const isAuth = require('../middleware/is_auth');
 
 const checkDueDate = require("../middleware/checkDueDate");
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const loyaltyPayRouter = Router();
 // Apply authentication middleware to all routes in this router
-loyaltyPayRouter.use(tokenMiddleware);
+loyaltyPayRouter.use(isAuth);
 // Apply submission workflow control middleware for read operations
 loyaltyPayRouter.use('/loyalty-pay', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 loyaltyPayRouter.use('/loyalty-pay/stats', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
@@ -31,3 +27,4 @@ loyaltyPayRouter.post("/loyalty-pay", checkDueDate, submissionWorkflowControl('c
 loyaltyPayRouter.put("/loyalty-pay/:id", checkDueDate, submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }), updateLoyaltyPay);
 loyaltyPayRouter.delete("/loyalty-pay/:id", checkDueDate, submissionWorkflowControl('delete', { enforceSubmissionWorkflow: true }), deleteLoyaltyPay);
 module.exports = loyaltyPayRouter;
+

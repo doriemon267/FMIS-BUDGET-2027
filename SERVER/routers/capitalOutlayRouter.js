@@ -12,12 +12,7 @@ const {
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
 const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBypass");
-const checkToken = require("../middleware/check_token");
-
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const isAuth = require("../middleware/is_auth");
 
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
@@ -25,7 +20,7 @@ const { enforceAccessRestrictions } = require('../middleware/accessRestrictions'
 const CapitalOutlay = require("../models/CapitalOutlay"); // New model import
 const capitalOutlayRouter = Router();
 // Apply authentication to all capital outlay routes
-capitalOutlayRouter.use(tokenMiddleware);
+capitalOutlayRouter.use(isAuth);
 capitalOutlayRouter.get("/capital-outlays", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllCapitalOutlays);
 capitalOutlayRouter.post("/capital-outlays", checkDueDateWithRoleBypass, submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
 capitalOutlayRouter.put("/capital-outlays/:id", checkDueDateWithRoleBypass, submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
@@ -189,3 +184,4 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
 // Bulk update Capital Outlay entries
 capitalOutlayRouter.put("/capital-outlay/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
 module.exports = capitalOutlayRouter;
+

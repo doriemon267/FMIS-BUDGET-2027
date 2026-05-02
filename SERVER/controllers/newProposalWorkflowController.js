@@ -2052,8 +2052,10 @@ exports.getProposals = async (req, res) => {
         }
 
         // Apply organizational scope restriction (intersection)
+        // Note: Exclude region from spread since region field is ObjectId, not String
         if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
-          query = { ...query, ...orgScope };
+          const { region, ...orgScopeWithoutRegion } = orgScope;
+          query = { ...query, ...orgScopeWithoutRegion };
         }
 
         query.status = 'DRAFT';     // Use DRAFT enum value
@@ -2112,8 +2114,10 @@ exports.getProposals = async (req, res) => {
           query.status = { $in: Array.from(allStatuses) };
           
           // Apply Organizational Scope Restriction
+          // Note: Exclude region from spread since region field is ObjectId, not String
           if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
-            query = { ...query, ...orgScope };
+            const { region, ...orgScopeWithoutRegion } = orgScope;
+            query = { ...query, ...orgScopeWithoutRegion };
           }
 
           if (!query.status.$in || query.status.$in.length === 0) {
@@ -2155,8 +2159,10 @@ exports.getProposals = async (req, res) => {
         }
 
         // Apply Organizational Scope Restriction (intersection) for ALL non-Super Admins
+        // Note: Exclude region from spread since region field is ObjectId, not String
         if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
-          query = { ...query, ...orgScope };
+          const { region, ...orgScopeWithoutRegion } = orgScope;
+          query = { ...query, ...orgScopeWithoutRegion };
         }
         break;
       case 'monitoring':
@@ -2166,8 +2172,10 @@ exports.getProposals = async (req, res) => {
           query.status = { $ne: 'DRAFT' };
           
           // Apply Organizational Scope Restriction for Managers
+          // Note: Exclude region from spread since region field is ObjectId, not String
           if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
-            query = { ...query, ...orgScope };
+            const { region, ...orgScopeWithoutRegion } = orgScope;
+            query = { ...query, ...orgScopeWithoutRegion };
           }
         } else {
             return res.json({
@@ -2279,22 +2287,27 @@ exports.getProposals = async (req, res) => {
     // Fallback: if my-proposals view returned none, broaden search to createdBy only (no status) then re-filter
     if (view === 'my-proposals' && newProposals.length === 0) {
       // First fallback: direct createdBy match (string cast)
-      const fallbackQuery = { createdBy: userIdString, ...myProposalOrgScope };
+      // Note: Exclude region from spread since region field is ObjectId, not String
+      const { region, ...orgScopeWithoutRegion } = orgScope;
+      const fallbackQuery = { createdBy: userIdString, ...orgScopeWithoutRegion };
   const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
       newProposals = fallbackAll.filter(p => p.status === 'DRAFT');
       // Second fallback: try createdByName if still empty
       if (newProposals.length === 0) {
-  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...myProposalOrgScope }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+        const { region: _r, ...orgScopeWithoutRegion } = orgScope;
+  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
         newProposals = nameFallback;
       }
       // Final fallback: only return user-specific drafts. Do NOT return ALL drafts to avoid exposure.
       if (newProposals.length === 0) {
-        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: 'DRAFT', ...myProposalOrgScope }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
+        const { region: _r2, ...orgScopeWithoutRegion } = orgScope;
+        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: 'DRAFT', ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
         // Also try createdByName fallback, but do not broaden to all drafts
         if (allUserDrafts.length > 0) {
           newProposals = allUserDrafts;
         } else {
-          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...myProposalOrgScope }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+          const { region: _r3, ...orgScopeWithoutRegion } = orgScope;
+          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
           newProposals = nameFallback;
         }
       }

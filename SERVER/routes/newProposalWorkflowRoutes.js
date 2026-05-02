@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const newProposalWorkflowController = require('../controllers/newProposalWorkflowController');
 const consolidationController = require('../controllers/consolidationController');
-const checkToken = require('../middleware/checkToken');
+const isAuth = require('../middleware/is_auth');
 const { validateJoi } = require('../middleware/validateJoi');
 const { createProposalSchema, updateProposalSchema, performActionSchema } = require('../validators/proposalValidators');
 const { logUserActivity } = require('../middleware/userLogs');
@@ -63,7 +63,7 @@ const handleMulterError = (err, req, res, next) => {
 };
 
 // Apply authentication middleware to all routes
-router.use(checkToken);
+router.use(isAuth);
 
 // Serve uploaded files
 router.get('/uploads/:filename', (req, res) => {

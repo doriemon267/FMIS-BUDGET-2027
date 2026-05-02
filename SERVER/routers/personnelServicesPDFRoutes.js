@@ -1,21 +1,17 @@
 const express = require('express');
 const router = express.Router();
+const isAuth = require('../middleware/is_auth');
 const { 
   exportPermanentPersonnelPDF, 
   exportCasualPersonnelPDF,
   exportCOSPersonnelPDF
 } = require('../controllers/personnelServicesPDFController');
 
-const check_token_dev = require('../middleware/check_token_dev');
-const check_token_prod = require('../middleware/check_token_prod');
-const IS_PRODUCTION = require('../utils/IS_PRODUCTION');
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
-
 const { hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { logUserActivity } = require('../middleware/userLogs');
 
 // Apply authentication middleware to all routes in this router
-router.use(tokenMiddleware);
+router.use(isAuth);
 
 /**
  * @route   POST /api/personnel-services-pdf/export-permanent
@@ -81,3 +77,4 @@ router.post(
 );
 
 module.exports = router;
+

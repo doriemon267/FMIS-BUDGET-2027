@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const auth = require('../middleware/checkToken');
+const isAuth = require('../middleware/is_auth');
 const { loadHierarchicalAssignment } = require('../middleware/hierarchicalAssignmentMiddleware');
 const { budgetRoleVisibilityControl } = require('../middleware/budgetRoleVisibilityControl');
 const myProposalsController = require('../controllers/myProposalsController');
@@ -9,7 +9,7 @@ const myProposalsController = require('../controllers/myProposalsController');
 // All Proposals list - applies auth, organizational scope, and role visibility
 router.get(
 	'/all',
-	auth,
+	isAuth,
 	loadHierarchicalAssignment,
 	budgetRoleVisibilityControl(),
 	myProposalsController.getAllUserBudgetItems

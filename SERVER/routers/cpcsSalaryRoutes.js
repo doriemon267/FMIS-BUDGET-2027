@@ -1,13 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const checkToken = require("../middleware/check_token");
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const isAuth = require('../middleware/is_auth');
 const cpcsSalaryController = require("../controllers/cpcsSalaryController");
 
-router.use(tokenMiddleware);
+router.use(isAuth);
 
 // Settings
 router.get("/settings", cpcsSalaryController.getSettings);
@@ -29,3 +25,4 @@ router.get("/rate-by-job-grade-and-step/:job_grade/:step", cpcsSalaryController.
 router.get("/rate", cpcsSalaryController.getRateByCPCS);
 
 module.exports = router;
+

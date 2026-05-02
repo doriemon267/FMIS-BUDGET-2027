@@ -27,14 +27,11 @@ const {
   getLinkedFiscalYears,
 } = require("../controllers/settingsControllerEnhanced");
 const Router = require("express").Router;
+const isAuth = require('../middleware/is_auth');
 const settingsRouter = Router();
-const check_token_dev = require("../middleware/check_token_dev");
-const check_token_prod = require("../middleware/check_token_prod");
-const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
-const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 const { logUserActivity } = require("../middleware/userLogs");
 // Apply authentication to all settings routes
-settingsRouter.use(tokenMiddleware);
+settingsRouter.use(isAuth);
 
 // ==================== STANDALONE COMPENSATION MANAGEMENT ENDPOINTS ====================
 // ✅ These endpoints enforce STRICT SEPARATION:
@@ -149,3 +146,4 @@ settingsRouter.put(
 settingsRouter.delete("/settings/:id", logUserActivity({ action: 'DELETE', resource: 'Settings', getResourceId: (req) => req.params.id }), deleteSettings);
 
 module.exports = settingsRouter;
+

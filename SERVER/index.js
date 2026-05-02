@@ -167,7 +167,7 @@ const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes
 const databaseBackupRouter = require("./routers/databaseBackupRoutes");
 const budgetOfficerEditRouter = require("./routers/budgetOfficerEditRoutes");
 const personnelServicesPDFRouter = require("./routers/personnelServicesPDFRoutes");
-const checkToken = require("./middleware/checkToken");
+const isAuth = require("./middleware/is_auth");
 const authRouter = require("./routers/auth_router");
 
 const enforceOrgAccess = require("./middleware/enforceOrgAccess");
@@ -500,7 +500,7 @@ app.get(`${apiPrefix}/compensation`, async (req, res) => {
 });
 
 // Temporary public template download endpoint (for testing)
-app.get(`${apiPrefix}/excel-upload/template`, checkToken, async (req, res) => {
+app.get(`${apiPrefix}/excel-upload/template`, isAuth, async (req, res) => {
   try {
     console.log("TEMP: Template download requested by authenticated user");
 
@@ -585,7 +585,7 @@ app.use((req, res, next) => {
       return next();
     }
     // Ensure user is authenticated before enforcing org access
-    return checkToken(req, res, () => enforceOrgAccess(req, res, next));
+    return isAuth(req, res, () => enforceOrgAccess(req, res, next));
   } catch (e) {
     // Global org enforcement error
     return res
@@ -595,7 +595,7 @@ app.use((req, res, next) => {
 });
 
 // ✅ Protected /uploads route - requires authentication
-app.use("/uploads", checkToken, express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", isAuth, express.static(path.join(__dirname, "uploads")));
 
 app.use(apiPrefix, employeeRouter);
 app.use(apiPrefix, statusRouter);

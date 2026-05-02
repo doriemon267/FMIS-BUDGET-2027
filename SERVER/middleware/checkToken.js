@@ -1,3 +1,3 @@
 // Backward-compatibility shim.
-// Canonical auth middleware implementation lives in `check_token.js`.
-module.exports = require('./check_token');
+// Canonical auth middleware implementation lives in `is_auth.js`.
+module.exports = require('./is_auth');
