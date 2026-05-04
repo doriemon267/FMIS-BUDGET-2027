@@ -151,10 +151,17 @@ const WorkflowNotifications = () => {
       <Tooltip title={`${unreadCount} unread notifications`}>
         <IconButton
           onClick={(e) => setAnchorEl(e.currentTarget)}
-          sx={{ position: 'relative' }}
+          sx={{
+            position: 'relative',
+            color: unreadCount > 0 ? '#e11d48' : 'rgba(15, 23, 42, 0.78)',
+            '&:hover': {
+              color: unreadCount > 0 ? '#be123c' : 'rgba(15, 23, 42, 0.95)',
+              bgcolor: 'rgba(15, 23, 42, 0.06)',
+            },
+          }}
         >
           <Badge badgeContent={unreadCount} color="error">
-            <GrNotification style={{ color: unreadCount > 0 ? '#ff6b6b' : '#ffffff' }} />
+            <GrNotification style={{ color: 'currentColor', fontSize: '1.05rem' }} />
           </Badge>
         </IconButton>
       </Tooltip>

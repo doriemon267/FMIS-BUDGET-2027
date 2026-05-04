@@ -209,7 +209,7 @@ export default function BRDConsolidationPage() {
 
   if (error) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 3 } }}>
         <Alert
           severity="error"
           action={
@@ -228,7 +228,7 @@ export default function BRDConsolidationPage() {
   const fiscalYearOptions = availableFiscalYears.length > 0 ? availableFiscalYears : fallbackYears;
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 3 } }}>
       {/* Page Header */}
       <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box>

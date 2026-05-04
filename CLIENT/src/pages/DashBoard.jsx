@@ -272,9 +272,23 @@ const HomePage = () => {
   const userRoles = Array.isArray(currentUser?.Roles) ? currentUser.Roles : currentUser?.Roles ? [currentUser.Roles] : [];
   const isPreparer = userRoles.includes('BUDGET_PREPARER');
 
-  let userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
-  let userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
-  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+  const rawScope = String(currentUser?.hierarchicalAccess?.scope || 'REGION').toUpperCase();
+  const accessibleDivisions = currentUser?.hierarchicalAccess?.accessibleDivisions || [];
+  const accessibleDepartments = currentUser?.hierarchicalAccess?.accessibleDepartments || [];
+  const hasDivisionAssignment = accessibleDivisions.length > 0;
+  const hasDepartmentAssignment = accessibleDepartments.length > 0;
+
+  let userAccessLevel = rawScope;
+  let userDivision = accessibleDivisions[0];
+  const userDepartment = accessibleDepartments[0]?.departmentName;
+
+  // Normalize scope for users whose backend scope still resolves as REGION
+  // but already have deeper hierarchical assignments.
+  if (rawScope === 'BUDGET_AND_REVENUE_DIVISION' || hasDivisionAssignment) {
+    userAccessLevel = 'DIVISION';
+  } else if (rawScope === 'DEPARTMENT' || hasDepartmentAssignment) {
+    userAccessLevel = 'DEPARTMENT';
+  }
 
   if (isPreparer && (userAccessLevel === 'REGION' || !userAccessLevel || userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION')) {
     userAccessLevel = 'DIVISION';
@@ -396,7 +410,7 @@ const HomePage = () => {
 
   return (
     <>
-      <Container maxWidth='xl' sx={{ py: { xs: 3, md: 5 } }}>
+      <Container maxWidth={false} sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, md: 3 } }}>
         <Stack spacing={4}>
           
         {/* --- HERO SECTION --- */}
@@ -677,7 +691,7 @@ const HomePage = () => {
           { label: 'Active Region', value: regionName, icon: '📍' },
           { label: 'Division', value: divisionName || 'N/A', icon: '🏢' },
           { label: 'Department', value: userDepartment || 'N/A', icon: '📋' },
-          { label: 'Access Scope', value: displayInfo.scope, icon: '🔑' }
+          { label: 'Access Scope', value: displayInfo.level, icon: '🔑' }
         ].map((item, idx) => (
           <Box 
             key={idx} 

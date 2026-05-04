@@ -63,8 +63,29 @@ const searchableRoutes = [
 const DashboardContent = () => {
   const nav = useNavigate();
   const theme = useTheme();
-  const { open, toggleDrawer, collapsed, toggleCollapsed } = useDrawer();
+  const { open, setOpen, toggleDrawer, collapsed, toggleCollapsed, setCollapsed } = useDrawer();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const isTablet = useMediaQuery(theme.breakpoints.down("sm"));
+  const wasMobileRef = useRef(isMobile);
+
+  useEffect(() => {
+    // When returning to full desktop, normalize drawer into expanded state.
+    if (wasMobileRef.current && !isMobile) {
+      setCollapsed(false);
+      setOpen(true);
+    }
+    wasMobileRef.current = isMobile;
+  }, [isMobile, setCollapsed, setOpen]);
+  
+  // Calculate responsive drawer width
+  const getDrawerWidth = () => {
+    if (collapsed && !isMobile) {
+      return isTablet ? 60 : 70;
+    }
+    return isTablet ? 240 : drawerWidth;
+  };
+  
+  const currentDrawerWidth = getDrawerWidth();
 
   // --- Logic States ---
   const [searchQuery, setSearchQuery] = useState("");
@@ -131,8 +152,8 @@ const DashboardContent = () => {
           boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.05)",
           borderBottom: "1px solid",
           borderColor: "rgba(0,0,0,0.05)",
-          width: { md: `calc(100% - ${collapsed ? collapsedDrawerWidth : drawerWidth}px)` },
-          ml: { md: `${collapsed ? collapsedDrawerWidth : drawerWidth}px` },
+          width: isMobile ? "100%" : `calc(100% - ${currentDrawerWidth}px)`,
+          ml: isMobile ? 0 : `${currentDrawerWidth}px`,
           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
@@ -207,14 +228,14 @@ const DashboardContent = () => {
         open={open}
         onClose={toggleDrawer}
         sx={{
-          width: collapsed && !isMobile ? collapsedDrawerWidth : drawerWidth,
+          width: currentDrawerWidth,
           flexShrink: 0,
-          zIndex: 1300, // Explicitly above AppBar (1100)
+          zIndex: 1300,
           "& .MuiDrawer-paper": {
-            width: collapsed && !isMobile ? collapsedDrawerWidth : drawerWidth,
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            width: currentDrawerWidth,
+            transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             overflowX: "hidden",
-            background: "#061a11", // Dark forest green
+            background: "#061a11",
             borderRight: "none",
             boxShadow: "10px 0 30px rgba(0,0,0,0.1)",
           },

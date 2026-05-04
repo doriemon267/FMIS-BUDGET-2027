@@ -167,7 +167,7 @@ export default function Sidebar() {
       isAllow: true,
       subItems: [
         {
-          title: "Budget System",
+          title: "OSBPIS",
           path: IS_PRODUCTION
             ? env("BUDGET_URL_PROD") + "/dashboard"
             : env("BUDGET_URL_DEV") + "/dashboard",

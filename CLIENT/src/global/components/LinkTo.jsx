@@ -7,6 +7,10 @@ import {
   List,
   Badge,
   Tooltip,
+  Menu,
+  MenuItem,
+  useMediaQuery,
+  useTheme
 } from "@mui/material";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { IoMdArrowDropdown, IoMdArrowDropup } from "react-icons/io";
@@ -15,134 +19,60 @@ import { useDrawer } from "../../context/DrawerContext";
 
 const LinkTo = ({
   icon,
-  name = "",
-  link = "",
-  subLinks = [],
-  isAllow = false,
-  notificationValue = 0,
+  name,
+  link,
+  isAllow = true,
   collapsed = false,
+  subLinks = [],
+  notificationValue = 0,
   ariaLabel,
+  itemSx = {},
+  tooltipSx = {},
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { toggleDrawer, setCollapsed, expandedMenuKey, setExpandedMenuKey } = useDrawer();
+  const theme = useTheme();
+  const isMdScreen = useMediaQuery(theme.breakpoints.down("md"));
+  const { toggleDrawer, expandedMenuKey, setExpandedMenuKey } = useDrawer();
+
   const [open, setOpen] = useState(false);
-  const isMdScreen = window.matchMedia("(max-width: 1200px)").matches;
+  const [flyoutAnchorEl, setFlyoutAnchorEl] = useState(null);
 
-  const isActive = location.pathname === link;
+  const allowedSubLinks = useMemo(
+    () => subLinks.filter((s) => s.isAllow !== false),
+    [subLinks]
+  );
 
-  // Allowed children: always respect each subLink's isAllow so BRD-only items stay hidden for non-BRD
-  const allowedSubLinks = useMemo(() => {
-    return subLinks.filter((s) => Boolean(s.isAllow));
-  }, [subLinks]);
-
-  // Promote single child to parent
-  const promoteChild =
-    !isAllow && allowedSubLinks.length === 1 && subLinks.length > 0;
+  const promoteChild = useMemo(
+    () => allowedSubLinks.length === 1 && !link,
+    [allowedSubLinks, link]
+  );
 
   const promotedLink = promoteChild ? allowedSubLinks[0] : null;
 
-  // Decide if parent renders at all
-  const shouldRender =
-    isAllow || allowedSubLinks.length > 0 || (!subLinks.length && isAllow);
+  const isActive = useMemo(() => {
+    if (link && location.pathname === link) return true;
+    return allowedSubLinks.some((s) => s.link === location.pathname);
+  }, [link, location.pathname, allowedSubLinks]);
 
-  useEffect(() => {
-    if (!promoteChild && allowedSubLinks.length > 0) {
-      const activeChild = allowedSubLinks.find(
-        (l) => l.link === location.pathname,
-      );
-      if (activeChild) setOpen(true);
-    }
-    return () => setOpen(false);
-  }, [allowedSubLinks, location, promoteChild]);
+  if (!isAllow) return null;
 
-  useEffect(() => {
-    if (expandedMenuKey === name) {
-      setOpen(true);
-      setExpandedMenuKey?.(null);
-    }
-  }, [expandedMenuKey, name]);
-
-  if (!shouldRender) return null;
-
-  const itemSx = {
-    borderRadius: "12px",
-    mb: 0.5,
-    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-    color: "rgba(255,255,255,0.6)",
-    px: collapsed ? 0 : 2,
-    py: 1,
-    minHeight: 48,
-    cursor: "pointer",
-    "& .MuiListItemIcon-root": {
-      color: "inherit",
-      minWidth: collapsed ? 0 : 38,
-      display: "flex",
-      justifyContent: "center",
-      transition: "all 0.3s ease",
-    },
-    "& .MuiTypography-root": {
-      fontWeight: 500,
-      fontSize: "0.875rem",
-      whiteSpace: "nowrap",
-    },
-    "&:hover": { 
-      bgcolor: "rgba(255,255,255,0.05)",
-      color: "white",
-      "& .MuiListItemIcon-root": { color: "white" }
-    },
-    ...(isActive && {
-      bgcolor: "rgba(255,255,255,0.1) !important",
-      color: "#4ade80",
-      fontWeight: 600,
-      "&::before": {
-        content: '""',
-        position: "absolute",
-        left: 0,
-        height: "60%",
-        width: 4,
-        bgcolor: "#4ade80",
-        borderRadius: "0 4px 4px 0",
-      },
-      "& .MuiListItemIcon-root": { color: "#4ade80" }
-    }),
-    ...(collapsed && { 
-      justifyContent: "center", 
-      width: 44,
-      mx: "auto",
-      borderRadius: "12px",
-    }),
-  };
-
-  const tooltipSx = {
-    tooltip: {
-      sx: {
-        bgcolor: "rgba(0, 0, 0, 0.9)",
-        fontSize: "0.875rem",
-        fontWeight: 500,
-        "& .MuiTooltip-arrow": { color: "rgba(0, 0, 0, 0.9)" },
-      },
-    },
-  };
-
-  /* ===============================
-     COLLAPSED: ICON + TOOLTIP + SUBMENU INDICATOR (click expands drawer instead of floating menu)
-     =============================== */
   if (collapsed) {
     const label = promoteChild && promotedLink ? promotedLink.name : name;
     const to = promoteChild && promotedLink ? promotedLink.link : link;
     const hasDirectLink = Boolean(to);
     const hasSubMenu = allowedSubLinks.length > 0;
-    const active =
-      (promoteChild && promotedLink && location.pathname === promotedLink.link) ||
-      (!promoteChild && link && location.pathname === link) ||
-      (!promoteChild && hasSubMenu && allowedSubLinks.some((s) => s.link === location.pathname));
+    const active = isActive;
+
+    const handleCloseFlyout = () => {
+      setFlyoutAnchorEl(null);
+    };
 
     const handleCollapsedClick = (e) => {
       if (hasSubMenu) {
         e.preventDefault();
-        setExpandedMenuKey?.(name);
-        setCollapsed?.(false);
+        e.stopPropagation();
+        setFlyoutAnchorEl((prev) => (prev ? null : e.currentTarget));
       } else if (hasDirectLink && isMdScreen) {
         setTimeout(() => toggleDrawer(), 300);
       }
@@ -156,8 +86,8 @@ const LinkTo = ({
         aria-label={ariaLabel || (hasSubMenu ? `Expand ${label} menu` : `Go to ${label}`)}
         sx={{
           ...itemSx,
-          bgcolor: active ? "#2d5a3f" : "transparent",
-          color: active ? "white" : "rgba(255,255,255,0.7)",
+          bgcolor: active ? "rgba(74, 222, 128, 0.22)" : "transparent",
+          color: active ? "#4ade80" : "rgba(255,255,255,0.7)",
           cursor: "pointer",
           position: "relative",
           px: 0,
@@ -166,22 +96,39 @@ const LinkTo = ({
           display: "flex",
           justifyContent: "center",
           minHeight: 44,
+          borderRadius: "12px",
+          transition: "all 0.3s ease",
+          "&:hover": {
+            bgcolor: active ? "rgba(74, 222, 128, 0.3)" : "rgba(255,255,255,0.08)",
+            color: "white",
+          },
         }}
       >
-        <ListItemIcon sx={{ minWidth: 0, display: "flex", justifyContent: "center" }}>
+        <ListItemIcon sx={{ minWidth: 0, display: "flex", justifyContent: "center", color: "inherit" }}>
           {promoteChild && promotedLink ? promotedLink.icon || icon : icon}
         </ListItemIcon>
         {hasSubMenu && (
-          <FaChevronRight
+          <span
             style={{
               position: "absolute",
-              right: 6,
+              right: 2,
               top: "50%",
               transform: "translateY(-50%)",
-              color: "rgba(255,255,255,0.7)",
-              fontSize: "0.7rem",
+              width: 14,
+              height: 14,
+              borderRadius: 999,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(74, 222, 128, 0.22)",
+              border: "1px solid rgba(74, 222, 128, 0.45)",
+              boxShadow: "0 0 0 1px rgba(5, 31, 18, 0.35)",
+              pointerEvents: "none",
             }}
-          />
+            aria-hidden="true"
+          >
+            <FaChevronRight style={{ color: "#86efac", fontSize: "0.48rem" }} />
+          </span>
         )}
         {notificationValue > 0 && (
           <Badge
@@ -192,15 +139,100 @@ const LinkTo = ({
         )}
       </ListItem>
     );
+
+    const effectiveTooltipSx = {
+      tooltip: {
+        sx: {
+          bgcolor: "rgba(0, 0, 0, 0.95)",
+          fontSize: "0.84rem",
+          fontWeight: 600,
+          backdropFilter: "blur(8px)",
+          borderRadius: "10px",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          px: 1.5,
+          py: 0.8,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          "& .MuiTooltip-arrow": { color: "rgba(0, 0, 0, 0.95)" },
+          ...tooltipSx.tooltip?.sx,
+        },
+      },
+      ...tooltipSx,
+    };
+
     return (
-      <Tooltip
-        title={label}
-        placement="right"
-        arrow
-        slotProps={tooltipSx}
-      >
-        {content}
-      </Tooltip>
+      <>
+        <Tooltip
+          title={label}
+          placement="right"
+          arrow
+          slotProps={effectiveTooltipSx}
+        >
+          {content}
+        </Tooltip>
+
+        {hasSubMenu && (
+          <Menu
+            anchorEl={flyoutAnchorEl}
+            open={Boolean(flyoutAnchorEl)}
+            onClose={handleCloseFlyout}
+            anchorOrigin={{ vertical: "top", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "left" }}
+            disableAutoFocusItem
+            MenuListProps={{ autoFocusItem: false }}
+            PaperProps={{
+              sx: {
+                mt: -0.5,
+                ml: 1,
+                minWidth: 240,
+                borderRadius: "14px",
+                border: "1px solid rgba(74, 222, 128, 0.25)",
+                background: "linear-gradient(180deg, rgba(5,31,18,0.98), rgba(6,26,17,0.98))",
+                backdropFilter: "blur(10px)",
+                boxShadow: "0 16px 40px rgba(0,0,0,0.35)",
+                py: 0.75,
+              },
+            }}
+          >
+            {allowedSubLinks.map((subLink) => {
+              const subActive = location.pathname === subLink.link;
+              return (
+                <MenuItem
+                  key={subLink.link}
+                  selected={subActive}
+                  onClick={() => {
+                    navigate(subLink.link);
+                    handleCloseFlyout();
+                  }}
+                  sx={{
+                    mx: 0.75,
+                    borderRadius: "10px",
+                    minHeight: 42,
+                    color: subActive ? "#fff" : "rgba(255,255,255,0.78)",
+                    bgcolor: subActive ? "rgba(74, 222, 128, 0.22)" : "transparent",
+                    "&:hover": {
+                      bgcolor: "rgba(74, 222, 128, 0.14)",
+                    },
+                    "&.Mui-selected": {
+                      bgcolor: "rgba(74, 222, 128, 0.22)",
+                    },
+                    "& .MuiListItemIcon-root": {
+                      minWidth: 34,
+                      color: "inherit",
+                    },
+                    "& .MuiListItemText-primary": {
+                      fontSize: "0.84rem",
+                      fontWeight: subActive ? 700 : 500,
+                    },
+                  }}
+                >
+                  <ListItemIcon>{subLink.icon}</ListItemIcon>
+                  <ListItemText primary={subLink.name} />
+                </MenuItem>
+              );
+            })}
+          </Menu>
+        )}
+      </>
     );
   }
 
@@ -217,11 +249,18 @@ const LinkTo = ({
         aria-label={ariaLabel || `Go to ${promotedLink.name}`}
         sx={{
           ...itemSx,
-          bgcolor: active ? "#2d5a3f !important" : "transparent",
-          color: active ? "white" : "rgba(255,255,255,0.7)",
+          bgcolor: active ? "rgba(74, 222, 128, 0.22) !important" : "transparent",
+          color: active ? "#4ade80" : "rgba(255,255,255,0.7)",
+          borderRadius: "12px",
+          mb: 0.5,
+          transition: "all 0.2s ease",
+          "&:hover": {
+            bgcolor: active ? "rgba(74, 222, 128, 0.3)" : "rgba(255,255,255,0.08)",
+            color: "white",
+          },
         }}
       >
-        <ListItemIcon>
+        <ListItemIcon sx={{ color: "inherit" }}>
           {promotedLink.icon || icon}
         </ListItemIcon>
         <ListItemText primary={promotedLink.name} />
@@ -258,11 +297,18 @@ const LinkTo = ({
         }}
         sx={{
           ...itemSx,
-          bgcolor: isActive ? "#2d5a3f !important" : "transparent",
-          color: isActive ? "white" : "rgba(255,255,255,0.7)",
+          bgcolor: isActive ? "rgba(74, 222, 128, 0.22) !important" : "transparent",
+          color: isActive ? "#4ade80" : "rgba(255,255,255,0.7)",
+          borderRadius: "12px",
+          mb: 0.5,
+          transition: "all 0.2s ease",
+          "&:hover": {
+            bgcolor: isActive ? "rgba(74, 222, 128, 0.3)" : "rgba(255,255,255,0.08)",
+            color: "white",
+          },
         }}
       >
-        <ListItemIcon>{icon}</ListItemIcon>
+        <ListItemIcon sx={{ color: "inherit" }}>{icon}</ListItemIcon>
         <ListItemText primary={name} />
 
         {notificationValue > 0 && (
@@ -317,7 +363,7 @@ const LinkTo = ({
                     pl: 2,
                   }}
                 >
-                  <ListItemIcon>
+                  <ListItemIcon sx={{ color: "inherit" }}>
                     {subLink.icon}
                   </ListItemIcon>
                   <ListItemText primary={subLink.name} />
@@ -329,6 +375,6 @@ const LinkTo = ({
       )}
     </>
   );
-};
+}
 
 export default LinkTo;
