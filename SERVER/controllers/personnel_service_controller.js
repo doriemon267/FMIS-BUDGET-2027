@@ -1605,8 +1605,8 @@ exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
     // Fetch from PersonnelServices ONLY
     const personnel = await PersonnelServices.find(query).lean();
     
-    // Strict filtering based on June 1, 1988 cutoff
-    const cutoffDate = new Date("1988-06-01");
+    // Filter based on year 1988 (include up to Dec 31, 1988)
+    const cutoffDate = new Date("1989-01-01");
     const filteredPersonnel = personnel.filter(emp => {
       const doaValue = emp.DateOfAppointment || emp.dateOfAppointment;
       if (!doaValue) return false;
@@ -1614,7 +1614,7 @@ exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
       const doa = new Date(doaValue);
       if (isNaN(doa.getTime())) return false;
       
-      // Return true if hired strictly BEFORE June 1, 1988
+      // Return true if hired before 1989 (includes all of 1988)
       return doa < cutoffDate;
     });
 
