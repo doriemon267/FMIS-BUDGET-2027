@@ -115,7 +115,7 @@ exports.getPersonnelServicesLegal = async (_, res) => {
     const personnelServices = await PersonnelServices.find(
       {
         department: { $regex: /^legal services$/i },
-        statusOfAppointment: "PERMANENT",
+        statusOfAppointment: { $regex: /^permanent$/i },
       },
       "employeeFullName positionTitle department division"
     );

@@ -281,7 +281,7 @@ const App = () => {
 
         <Route path="/not-authorized" element={<NotAuthorized />} />
 
-        <Route path="/annexis" element={<AnnexPage />} />
+        {/* <Route path="/annexis" element={<AnnexPage />} /> */}
         <Route
           path="/employeeBenefits"
           element={
@@ -294,22 +294,57 @@ const App = () => {
           }
         />
 
-        {/* Keep these routes for backward compatibility but they will redirect in the future */}
-        <Route path="/courtAppearance" element={<EmployeeBenefitsPage />} />
-        <Route path="/overTime" element={<EmployeeBenefitsPage />} />
-        <Route
-          path="/subsistenceAllowanceMDS"
-          element={<EmployeeBenefitsPage />}
-        />
-        <Route
-          path="/subsistenceAllowanceST"
-          element={<EmployeeBenefitsPage />}
-        />
-        <Route
-          path="/subsistenceAllowance"
-          element={<EmployeeBenefitsPage />}
-        />
-        <Route path="/loyaltyPay" element={<EmployeeBenefitsPage />} />
+        {/* Sub-routes for Employee Benefits tabs — same access as /employeeBenefits */}
+        <Route path="/courtAppearance" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/overTime" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/subsistenceAllowanceMDS" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/subsistenceAllowanceST" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/subsistenceAllowance" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/loyaltyPay" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/mealallowance" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/medicalAllowance" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/childrenAllowance" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/retirees" element={
+          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+            <EmployeeBenefitsPage />
+          </ProtectedRoute>
+        } />
         <Route path="/Appearance" element={<AppearancePage />} />
         <Route path="/ProposalSummaryPage" element={<ProposalSummaryPage />} />
         <Route
@@ -360,11 +395,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        {/* <Route path="/uploader" element={<UploaderPage />} /> */}
-        <Route path="/mealallowance" element={<EmployeeBenefitsPage />} />
-        <Route path="/medicalAllowance" element={<EmployeeBenefitsPage />} />
-        <Route path="/childrenAllowance" element={<EmployeeBenefitsPage />} />
-        <Route path="/retirees" element={<EmployeeBenefitsPage />} />
+        {/* Note: /mealallowance, /medicalAllowance, /childrenAllowance, /retirees are defined above with ProtectedRoute */}
         <Route
           path="/hierarchical-user-assignments"
           element={

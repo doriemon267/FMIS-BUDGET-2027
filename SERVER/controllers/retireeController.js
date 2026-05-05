@@ -1,24 +1,84 @@
 const Retiree = require("../models/Retiree");
 const PersonnelService = require('../models/PersonnelServices');
+const EmployeeList = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
 /**
  * Get all retirees with pagination
  */
 exports.getAllRetirees = async (req, res) => {
   try {
+    const { page = 1, limit = 20, fiscalYear } = req.query;
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.max(1, Number(limit));
+    const skip = (pageNum - 1) * limitNum;
+
     // Build query with hierarchical filters
     const query = {};
+    if (fiscalYear) query.fiscalYear = fiscalYear;
     
-    // Merge hierarchical read filters if present
-    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
-      Object.assign(query, req.hierarchicalFilters);
+    // Initial fetch to apply manual case-insensitive filtering if needed
+    // or just use regex in the query for better performance if model is consistent
+    const retirees = await Retiree.find(query).sort({ createdAt: -1 }).lean();
+    
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
+    const userId = req.user?.id || req.user?._id;
+    const userRoles = req.user?.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    
+    let filteredRetirees = retirees;
+
+    if (!isSuperAdmin && !isBudgetManager && userId) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        
+        if (userAssignment) {
+          const assignedDepartment = String(userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department || '').toUpperCase().trim();
+          const assignedRegion = String(userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region || '').toUpperCase().trim();
+          const assignedDivision = String(userAssignment.divisionName || '').toUpperCase().trim();
+          
+          filteredRetirees = retirees.filter(ps => {
+            const psDivision = String(ps.division || '').toUpperCase().trim();
+            const psDepartment = String(ps.department || '').toUpperCase().trim();
+            const psRegion = String(ps.region || '').toUpperCase().trim();
+
+            if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
+              return psDivision === assignedDivision;
+            }
+            if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
+              return psDepartment === assignedDepartment;
+            }
+            if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
+              return psRegion === assignedRegion;
+            }
+            if (userAssignment.assignmentLevel === 'FULL') {
+              return true;
+            }
+            return false;
+          });
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getAllRetirees:', err.message);
+      }
     }
     
-    const retirees = await Retiree.find(query).sort({ createdAt: -1 });
-    // Log a sample record if available
-    if (retirees.length > 0) {
-      }
-    res.status(200).json(retirees);
+    // Apply pagination to filtered results
+    const paginatedRetirees = filteredRetirees.slice(skip, skip + limitNum);
+    
+    res.status(200).json({
+      retiree: paginatedRetirees,
+      totalRecords: filteredRetirees.length,
+      totalPages: Math.ceil(filteredRetirees.length / limitNum),
+      currentPage: pageNum
+    });
   } catch (error) {
     console.error("Error fetching retirees:", error);
     res.status(500).json({ message: error.message });
@@ -45,17 +105,55 @@ exports.getRetireeById = async (req, res) => {
  */
 exports.createRetiree = async (req, res) => {
   try {
+    const leaveDays = parseFloat(req.body.leaveDays) || 0;
+    const terminalLeave = parseFloat(req.body.terminalLeave) || 0;
+    const retirementGratuity = parseFloat(req.body.retirementGratuity) || 0;
+
+    // Resolve fiscal year from body or active settings
+    let usedFiscalYear = req.body.fiscalYear;
+    if (!usedFiscalYear) {
+      const activeSetting = await Settings.findOne({ isActive: true }).lean();
+      usedFiscalYear = activeSetting?.fiscalYear;
+    }
+
     // Convert string amounts to numbers
     const formData = {
       ...req.body,
-      terminalLeave: parseFloat(req.body.terminalLeave) || 0,
-      retirementGratuity: parseFloat(req.body.retirementGratuity) || 0,
-      total: parseFloat(req.body.total) || 
-             (parseFloat(req.body.terminalLeave) || 0) + 
-             (parseFloat(req.body.retirementGratuity) || 0)
+      leaveDays,
+      terminalLeave,
+      retirementGratuity,
+      fiscalYear: usedFiscalYear,
+      total: parseFloat(req.body.total) || (terminalLeave + retirementGratuity)
     };
     const newRetiree = new Retiree(formData);
     await newRetiree.save();
+
+    // --- Sync PersonnelServices record (same as updateRetiree) ---
+    const employeeNumber = req.body.employeeNumber;
+    if (employeeNumber && usedFiscalYear) {
+      const personnel = await PersonnelService.findOne({ employeeNumber, fiscalYear: usedFiscalYear });
+      if (personnel) {
+        personnel.terminalLeave = terminalLeave;
+        personnel.retirementBenefits = retirementGratuity;
+        // Recalculate Total using all numeric fields
+        const numericFields = [
+          "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
+          "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
+          "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
+          "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
+          "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
+          "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+        ];
+        personnel.Total = numericFields.reduce(
+          (acc, field) => acc + (Number(personnel[field]) || 0),
+          0
+        );
+        await personnel.save();
+      } else {
+        console.warn(`[createRetiree] No PersonnelServices record found for employeeNumber=${employeeNumber}, fiscalYear=${usedFiscalYear}`);
+      }
+    }
+
     res.status(201).json({ 
       message: "Retiree record created successfully", 
       retiree: newRetiree 
@@ -80,6 +178,7 @@ exports.updateRetiree = async (req, res) => {
       region,
       retirementType,
       dateOfRetirement,
+      leaveDays,
       terminalLeave,
       retirementGratuity,
       processBy,
@@ -108,6 +207,7 @@ exports.updateRetiree = async (req, res) => {
         region,
         retirementType,
         dateOfRetirement,
+        leaveDays: Number(leaveDays) || 0,
         terminalLeave: Number(terminalLeave),
         retirementGratuity: Number(retirementGratuity),
         total: Number(terminalLeave) + Number(retirementGratuity),
@@ -213,7 +313,45 @@ exports.getRetireeStats = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
+
+    // RESPONSIBILITY CENTER FILTERING: Match the table logic
+    const userId = req.user?.id || req.user?._id;
+    const userRoles = req.user?.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+
+    if (!isSuperAdmin && !isBudgetManager && userId) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        
+        if (userAssignment) {
+          const assignedDepartment = String(userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department || '').toUpperCase().trim();
+          const assignedRegion = String(userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region || '').toUpperCase().trim();
+          const assignedDivision = String(userAssignment.divisionName || '').toUpperCase().trim();
+
+          if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
+            query.division = { $regex: new RegExp(`^${assignedDivision}$`, 'i') };
+          } else if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
+            query.department = { $regex: new RegExp(`^${assignedDepartment}$`, 'i') };
+          } else if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
+            query.region = { $regex: new RegExp(`^${assignedRegion}$`, 'i') };
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getRetireeStats:', err.message);
+      }
+    }
+
     const totalRecords = await Retiree.countDocuments(query);
+
     // Get the sum of all benefits with fiscal year filter
     const aggregationResult = await Retiree.aggregate([
       {
@@ -228,12 +366,21 @@ exports.getRetireeStats = async (req, res) => {
         }
       }
     ]);
-    // Get counts by retirement type
-    const compulsoryCount = await Retiree.countDocuments({ ...query, retirementType: "Compulsory" });
-    const optionalCount = await Retiree.countDocuments({ ...query, retirementType: "Optional" });
+
+    // Get counts by retirement type (Case-insensitive matching)
+    const compulsoryCount = await Retiree.countDocuments({ 
+      ...query, 
+      retirementType: { $regex: /^Compulsory$/i } 
+    });
+    const optionalCount = await Retiree.countDocuments({ 
+      ...query, 
+      retirementType: { $regex: /^Optional$/i } 
+    });
+
     const totalBenefits = aggregationResult.length > 0 ? aggregationResult[0].totalBenefits : 0;
     const totalTerminalLeave = aggregationResult.length > 0 ? aggregationResult[0].totalTerminalLeave : 0;
     const totalRetirementGratuity = aggregationResult.length > 0 ? aggregationResult[0].totalRetirementGratuity : 0;
+
     const result = {
       totalRecords,
       totalBenefits,
@@ -242,12 +389,14 @@ exports.getRetireeStats = async (req, res) => {
       compulsoryRetirements: compulsoryCount,
       optionalRetirements: optionalCount
     };
+
     res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching retiree stats:", error);
     res.status(500).json({ message: "Failed to fetch retiree statistics" });
   }
 };
+
 /**
  * Get summary of retirees by type
  */
@@ -262,12 +411,50 @@ exports.getRetireesSummary = async (req, res) => {
       return res.status(400).json({ message: "Settings not found." });
     }
     const usedFiscalYear = fiscalYear || settings.fiscalYear;
+    
+    // Build filter query for organization
+    const filterQuery = { fiscalYear: usedFiscalYear };
+    const userId = req.user?.id || req.user?._id;
+    const userRoles = req.user?.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+
+    if (!isSuperAdmin && !isBudgetManager && userId) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        
+        if (userAssignment) {
+          const assignedDepartment = String(userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department || '').toUpperCase().trim();
+          const assignedRegion = String(userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region || '').toUpperCase().trim();
+          const assignedDivision = String(userAssignment.divisionName || '').toUpperCase().trim();
+
+          if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
+            filterQuery.division = { $regex: new RegExp(`^${assignedDivision}$`, 'i') };
+          } else if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
+            filterQuery.department = { $regex: new RegExp(`^${assignedDepartment}$`, 'i') };
+          } else if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
+            filterQuery.region = { $regex: new RegExp(`^${assignedRegion}$`, 'i') };
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getRetireesSummary:', err.message);
+      }
+    }
+
     // Get summary for Compulsory retirements
     const compulsorySummary = await Retiree.aggregate([
       { 
         $match: { 
-          fiscalYear: usedFiscalYear,
-          retirementType: "Compulsory"
+          ...filterQuery,
+          retirementType: { $regex: /^Compulsory$/i }
         } 
       },
       { 
@@ -280,12 +467,13 @@ exports.getRetireesSummary = async (req, res) => {
         } 
       }
     ]);
+
     // Get summary for Optional retirements
     const optionalSummary = await Retiree.aggregate([
       { 
         $match: { 
-          fiscalYear: usedFiscalYear,
-          retirementType: "Optional"
+          ...filterQuery,
+          retirementType: { $regex: /^Optional$/i }
         } 
       },
       { 
@@ -298,6 +486,7 @@ exports.getRetireesSummary = async (req, res) => {
         } 
       }
     ]);
+
     return res.status(200).json({
       fiscalYear: usedFiscalYear,
       compulsory: compulsorySummary[0] || {
@@ -321,15 +510,35 @@ exports.getRetireesSummary = async (req, res) => {
 // ...existing code...
 exports.getEligibleForRetirement = async (req, res) => {
   try {
-    const today = new Date();
     const { region } = req.query;
-    // Build query for active employees with appointment and birthdate
+
+    // --- Reference Date: December 31 of the active fiscal year ---
+    // Per Philippine government budget rules, retirement eligibility is determined
+    // based on the employee's age AS OF DECEMBER 31 of the budget year —
+    // not today's actual date. This ensures employees who turn 60/65 later
+    // this year are included in the budget proposal.
+    let referenceYear = new Date().getFullYear();
+    try {
+      const activeSetting = await Settings.findOne({ isActive: true }).lean();
+      if (activeSetting?.fiscalYear) {
+        const parsed = parseInt(String(activeSetting.fiscalYear), 10);
+        if (!isNaN(parsed)) referenceYear = parsed;
+      }
+    } catch (_) { /* fallback to current year */ }
+    // December 31 of the reference year (local time, noon — avoids timezone edge cases)
+    const referenceDate = new Date(referenceYear, 11, 31, 12, 0, 0);
+
+    // Build query for active employees with an appointment date.
+    // NOTE: We do NOT filter DateOfBirth in the DB query to avoid excluding
+    // employees whose DateOfBirth field exists but is null/missing in older records.
+    // We validate DateOfBirth in JavaScript below.
     const query = {
-      employeeStatus: "Active",
+      // Case-insensitive match to catch "active", "ACTIVE", "Active" variants
+      employeeStatus: { $regex: /^Active$/i },
       DateOfAppointment: { $exists: true, $ne: null },
-      DateOfBirth: { $exists: true, $ne: null }
     };
-    // Merge hierarchical read filters if present (ensure eligible employees match visible scope)
+    
+    // Apply hierarchical filters (PersonnelServices uses lowercase for org units)
     if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
       Object.assign(query, req.hierarchicalFilters);
     }
@@ -338,54 +547,67 @@ exports.getEligibleForRetirement = async (req, res) => {
     if (region && !query.region) {
       query.region = region;
     }
-    // Get employees based on query
+
+    // Get employees based on query from PersonnelServices
     const employees = await PersonnelService.find(query).lean();
+    
     // Remove duplicates based on employeeNumber
     const uniqueEmployees = employees.filter((emp, index, self) => 
-      index === self.findIndex(e => e.employeeNumber === emp.employeeNumber || e.EmployeeID === emp.EmployeeID)
+      index === self.findIndex(e => e.employeeNumber === emp.employeeNumber)
     );
+    
     const eligible = uniqueEmployees
       .map(emp => {
-        const dob = new Date(emp.dateOfBirth || emp.DateOfBirth);
-        const doa = new Date(emp.dateOfAppointment || emp.DateOfAppointment);
-        // Compute age
-        let age = today.getFullYear() - dob.getFullYear();
+        // Skip employees with missing or invalid DateOfBirth
+        if (!emp.DateOfBirth) return null;
+        const dob = new Date(emp.DateOfBirth);
+        if (isNaN(dob.getTime())) return null; // invalid date string
+
+        // Skip employees with missing or invalid DateOfAppointment
+        const doa = new Date(emp.DateOfAppointment);
+        if (isNaN(doa.getTime())) return null;
+        
+        // Compute age AS OF DECEMBER 31 of the fiscal year
+        let age = referenceDate.getFullYear() - dob.getFullYear();
         if (
-          today.getMonth() < dob.getMonth() ||
-          (today.getMonth() === dob.getMonth() && today.getDate() < dob.getDate())
+          referenceDate.getMonth() < dob.getMonth() ||
+          (referenceDate.getMonth() === dob.getMonth() && referenceDate.getDate() < dob.getDate())
         ) {
           age--;
         }
-        // Compute service years
-        let serviceYears = today.getFullYear() - doa.getFullYear();
+        
+        // Compute service years AS OF DECEMBER 31 of the fiscal year
+        let serviceYears = referenceDate.getFullYear() - doa.getFullYear();
         if (
-          today.getMonth() < doa.getMonth() ||
-          (today.getMonth() === doa.getMonth() && today.getDate() < doa.getDate())
+          referenceDate.getMonth() < doa.getMonth() ||
+          (referenceDate.getMonth() === doa.getMonth() && referenceDate.getDate() < doa.getDate())
         ) {
           serviceYears--;
         }
-        // Determine eligibility
+        
+        // Determine eligibility — strictly based on age requirement
+        // Compulsory: age >= 65
+        // Optional: age 60–64 AND at least 15 years of service
         let eligibleType = null;
-        if (age >= 65 || serviceYears >= 30) {
+        if (age >= 65) {
           eligibleType = "Compulsory";
-        } else if (
-          (age >= 60 && age < 65 && serviceYears >= 15) ||
-          serviceYears >= 25
-        ) {
+        } else if (age >= 60 && age < 65 && serviceYears >= 15) {
           eligibleType = "Optional";
         }
+        
         return eligibleType
           ? {
-              employeeNumber: emp.employeeNumber || emp.EmployeeID,
-              employeeFullName: emp.employeeFullName || emp.EmployeeFullName,
-              positionTitle: emp.positionTitle || emp.PositionTitle,
-              department: emp.department || emp.Department,
-              division: emp.division || emp.Division,
-              region: emp.region || emp.Region,
-              dateOfBirth: emp.dateOfBirth || emp.DateOfBirth,
-              dateOfAppointment: emp.dateOfAppointment || emp.DateOfAppointment,
-              earnedLeaves: emp.earnedLeaves,
-              annualSalary: emp.annualSalary,
+              employeeNumber: emp.employeeNumber,
+              employeeFullName: emp.employeeFullName,
+              positionTitle: emp.positionTitle,
+              department: emp.department,
+              division: emp.division,
+              region: emp.region,
+              dateOfBirth: emp.DateOfBirth,
+              dateOfAppointment: emp.DateOfAppointment,
+              earnedLeaves: emp.earnedLeaves || 0,
+              annualSalary: emp.annualSalary || 0,
+              monthlySalary: emp.monthlySalary || 0, // Needed for terminal leave formula
               age,
               serviceYears,
               eligibleType,
@@ -393,8 +615,9 @@ exports.getEligibleForRetirement = async (req, res) => {
           : null;
       })
       .filter(Boolean);
-    res.json(eligible);
+    res.json({ eligible, referenceDate: referenceDate.toISOString().split('T')[0], referenceYear });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err });
+    console.error("Error in getEligibleForRetirement:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };

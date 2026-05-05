@@ -106,7 +106,7 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
       setLoading(true);
       setError(null);
       try {
-        // Change this line to fetch only employees hired before June 1988
+        // Fetch employees for children allowance
         const res = await api.get("/getpersonnels/hiredBeforeJune1988");
         setEmployees(res.data);
       } catch (err) {

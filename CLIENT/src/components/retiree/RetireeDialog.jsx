@@ -79,7 +79,7 @@ const RetireeDialog = ({
   });
 
   // Fetch employees eligible for retirement
-  const { data: eligibleEmployees, isLoading: isLoadingEmployees } = useQuery({
+  const { data: eligibleData, isLoading: isLoadingEmployees } = useQuery({
     queryKey: ["eligible-for-retirement", activeRegion?.name],
     queryFn: async () => {
       // Add region parameter if available
@@ -89,10 +89,17 @@ const RetireeDialog = ({
       }
       
       const response = await api.get("/retiree/eligible", { params });
+      // Backend now returns { eligible: [...], referenceDate, referenceYear }
       return response.data;
     },
     enabled: open && !isEditing,
   });
+
+  // Extract the eligible array and reference date from the response
+  const eligibleEmployees = Array.isArray(eligibleData?.eligible)
+    ? eligibleData.eligible
+    : Array.isArray(eligibleData) ? eligibleData : []; // backward-compat fallback
+  const eligibilityReferenceDate = eligibleData?.referenceDate || null;
 
   // Build a unique, de-duplicated options list for Autocomplete
   const retireeOptions = useMemo(() => {
@@ -118,8 +125,16 @@ const RetireeDialog = ({
   useEffect(() => {
     if (open) {
       if (isEditing) {
+        // Normalize dateOfRetirement: DB stores full ISO strings (e.g. "2026-12-31T00:00:00.000Z")
+        // but <input type="date"> requires "YYYY-MM-DD" — slice at "T" to fix the empty placeholder bug.
+        const rawDate = row?.dateOfRetirement;
+        const normalizedDate = rawDate
+          ? String(rawDate).split("T")[0]   // "2026-12-31T00:00:00.000Z" → "2026-12-31"
+          : "";
+
         setFormData({
           ...row,
+          dateOfRetirement: normalizedDate,
           processBy: `${currentUser?.FirstName || ""} ${
             currentUser?.LastName || ""
           }`,
@@ -135,6 +150,8 @@ const RetireeDialog = ({
           region: "",
           retirementType: "Compulsory",
           dateOfRetirement: "",
+          leaveDays: 0,
+          monthlySalary: 0,
           terminalLeave: 0,
           retirementGratuity: 0,
           total: 0,
@@ -149,17 +166,32 @@ const RetireeDialog = ({
     }
   }, [open, row, isEditing, currentUser, settingsData]);
 
-  // Calculate total when terminalLeave or retirementGratuity changes
+  // Recalculate terminal leave when leaveDays or monthlySalary changes
   useEffect(() => {
-    if (formData.terminalLeave !== undefined || formData.retirementGratuity !== undefined) {
-      const terminalLeave = Number(formData.terminalLeave) || 0;
-      const retirementGratuity = Number(formData.retirementGratuity) || 0;
+    if (formData.leaveDays !== undefined && formData.monthlySalary !== undefined) {
+      const computed = calculateTerminalLeave(
+        Number(formData.leaveDays) || 0,
+        Number(formData.monthlySalary) || 0
+      );
       setFormData(prev => ({
         ...prev,
-        total: terminalLeave + retirementGratuity
+        terminalLeave: computed,
+        total: computed + (Number(prev.retirementGratuity) || 0)
       }));
     }
-  }, [formData.terminalLeave, formData.retirementGratuity]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.leaveDays, formData.monthlySalary]);
+
+  // Keep total in sync with retirementGratuity changes
+  useEffect(() => {
+    if (formData.retirementGratuity !== undefined) {
+      setFormData(prev => ({
+        ...prev,
+        total: (Number(prev.terminalLeave) || 0) + (Number(prev.retirementGratuity) || 0)
+      }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.retirementGratuity]);
 
   const handleOpen = () => {
     setOpen(true);
@@ -194,15 +226,14 @@ const RetireeDialog = ({
     }
   };
 
-  // Function to calculate terminal leave based on earned leaves and salary
-  const calculateTerminalLeave = (earnedLeaves, monthlySalary) => {
-    if (!earnedLeaves || earnedLeaves <= 0) return 0;
-
-    // Calculate daily rate: Monthly salary / 22 working days
-    const dailyRate = monthlySalary ? (monthlySalary / 22) : 500; // Default to 500 if no salary data
-
-    // Terminal leave = earned leaves × daily rate
-    return earnedLeaves * dailyRate;
+  // Function to calculate terminal leave using the official formula:
+  // Terminal Leave = Total Earned Leaves × Monthly Rate × 0.0481927
+  const TERMINAL_LEAVE_FACTOR = 0.0481927;
+  const calculateTerminalLeave = (leaveDays, monthlySalary) => {
+    if (!leaveDays || leaveDays <= 0) return 0;
+    if (!monthlySalary || monthlySalary <= 0) return 0;
+    // Formula: leaveDays × Monthly Rate × 0.0481927
+    return leaveDays * monthlySalary * TERMINAL_LEAVE_FACTOR;
   };
 
   const handleChange = (e) => {
@@ -236,13 +267,21 @@ const RetireeDialog = ({
                           employee.EmployeeID ||
                           (typeof employee._id === 'string' ? employee._id : "");
 
-      // Calculate retirement type based on birth date
-      const retirementInfo = calculateRetirementType(employee.dateOfBirth || employee.DateOfBirth);
+      // Use the server-computed eligibleType (already based on Dec 31 reference date).
+      // DO NOT re-compute via calculateRetirementType() — that function uses today's date
+      // and can return "Not Eligible" which fails Mongoose enum validation → 500 error.
+      const retirementType = employee.eligibleType; // "Compulsory" | "Optional"
 
-      // Calculate terminal leave based on earned leaves and salary
-      const earnedLeaves = employee.earnedLeaves || 0;
-      const monthlySalary = employee.annualSalary ? (employee.annualSalary / 12) : null;
-      const calculatedTerminalLeave = calculateTerminalLeave(earnedLeaves, monthlySalary);
+      // Get monthly salary — prefer monthlySalary field, fallback to annualSalary/12
+      const monthlySal = employee.monthlySalary
+        ? Number(employee.monthlySalary)
+        : (employee.annualSalary ? Number(employee.annualSalary) / 12 : 0);
+
+      // Default leave days from earnedLeaves
+      const leaveDays = Number(employee.earnedLeaves) || 0;
+
+      // Compute terminal leave: leaveDays × Monthly Rate × 0.0481927
+      const calculatedTerminalLeave = calculateTerminalLeave(leaveDays, monthlySal);
 
       setFormData((prev) => ({
         ...prev,
@@ -252,12 +291,14 @@ const RetireeDialog = ({
         department: employee.department || employee.Department || "",
         division: employee.division || employee.Division || "",
         region: employee.region || employee.Region || "",
-        retirementType: retirementInfo.type, // Auto-set based on age calculation
-        terminalLeave: calculatedTerminalLeave, // Auto-calculate terminal leave
-        earnedLeaves: earnedLeaves, // Store for reference
-        retirementAge: retirementInfo.age, // Store calculated age
-        retirementReason: retirementInfo.reason, // Store reason
-        dateOfBirth: employee.dateOfBirth || employee.DateOfBirth || "", // Store birth date
+        retirementType,
+        leaveDays,
+        monthlySalary: monthlySal,
+        terminalLeave: calculatedTerminalLeave,
+        earnedLeaves: leaveDays,       // Store original for reference
+        retirementAge: employee.age,   // from server (Dec 31 reference)
+        retirementReason: retirementType === "Compulsory" ? "65 years or older" : "60–64 years old with 15+ years service",
+        dateOfBirth: employee.dateOfBirth || employee.DateOfBirth || "",
       }));
     }
   };
@@ -265,30 +306,18 @@ const RetireeDialog = ({
   const validateForm = () => {
     const newErrors = {};
     
-    // Required fields validation
     if (!formData.employeeNumber) {
       newErrors.employeeNumber = "Employee number is required";
     }
-    
     if (!formData.employeeFullName) {
       newErrors.employeeFullName = "Employee name is required";
     }
-    
     if (!formData.dateOfRetirement) {
       newErrors.dateOfRetirement = "Retirement date is required";
     }
-
-    // Retirement type is auto-determined, no validation needed
-
-    // Add validation for amounts
-    if (!formData.terminalLeave || Number(formData.terminalLeave) <= 0) {
-      newErrors.terminalLeave = "Terminal leave amount is required";
+    if (!formData.leaveDays && Number(formData.leaveDays) <= 0) {
+      newErrors.leaveDays = "Leave days is required";
     }
-    
-    if (!formData.retirementGratuity || Number(formData.retirementGratuity) <= 0) {
-      newErrors.retirementGratuity = "Retirement gratuity amount is required";
-    }
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -343,23 +372,22 @@ const RetireeDialog = ({
     },
   });
 
-  // Fix the handleSubmit function to properly format the data
   const handleSubmit = () => {
     if (!validateForm()) {
       return;
     }
     
-    // Prepare the data for submission
+    const terminalLeaveAmt = parseFloat(formData.terminalLeave) || 0;
+    const retirementGratuityAmt = parseFloat(formData.retirementGratuity) || 0;
+
     const submissionData = {
       ...formData,
-      // Ensure numeric fields are sent as numbers
-      terminalLeave: parseFloat(formData.terminalLeave) || 0,
-      retirementGratuity: parseFloat(formData.retirementGratuity) || 0,
-      total: parseFloat(formData.terminalLeave || 0) + parseFloat(formData.retirementGratuity || 0),
-      // Add process information
-      processBy: "Current User", // Replace with actual user info
+      leaveDays: parseFloat(formData.leaveDays) || 0,
+      terminalLeave: terminalLeaveAmt,
+      retirementGratuity: retirementGratuityAmt,
+      total: terminalLeaveAmt + retirementGratuityAmt,
+      processBy: `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`,
       processDate: new Date().toISOString(),
-      // Add default values if not provided
       fiscalYear: formData.fiscalYear || new Date().getFullYear().toString(),
       budgetType: formData.budgetType || "Initial"
     };
@@ -456,14 +484,16 @@ const RetireeDialog = ({
           <Grid container spacing={2} sx={{ mt: 1 }}>
             {!isEditing && (
               <Grid item xs={12}>
+                {/* Reference date info banner */}
+                {eligibilityReferenceDate && (
+                  <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary', fontStyle: 'italic' }}>
+                    ℹ️ Eligibility based on age as of <strong>December 31, {eligibleData?.referenceYear}</strong> — per Philippine government budget rules.
+                  </Typography>
+                )}
                 <Autocomplete
-                   options={
-    Array.isArray(eligibleEmployees)
-      ? eligibleEmployees.filter(e => e.eligibleType === "Compulsory" || e.eligibleType === "Optional")
-      : []
-  }
+                  options={retireeOptions}
                   getOptionLabel={(option) =>
-                    `${option.employeeNumber || ''} - ${option.employeeFullName || ''} (Age: ${calculateRetirementType(option.dateOfBirth || option.DateOfBirth).age})`
+                    `${option.employeeNumber || ''} - ${option.employeeFullName || ''} (Age as of Dec 31: ${option.age ?? '?'})`
                   }
                   onChange={handleEmployeeSelect}
                   loading={isLoadingEmployees}
@@ -478,7 +508,6 @@ const RetireeDialog = ({
                   )}
                   renderOption={(props, option) => {
                     const uniqueKey = String(option.employeeNumber ?? option.employeeID ?? option.EmployeeID ?? option._id ?? `${option.employeeFullName}-${option.dateOfBirth || option.DateOfBirth || ''}`);
-                    // Extract 'key' from props to avoid spreading it; pass explicitly to satisfy React warning
                     const { key, ...optionProps } = props;
                     return (
                       <Box component="li" key={uniqueKey} {...optionProps}>
@@ -489,13 +518,13 @@ const RetireeDialog = ({
                           <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                             <Chip
                               size="small"
-                              label={`Age: ${calculateRetirementType(option.dateOfBirth || option.DateOfBirth).age}`}
+                              label={`Age (Dec 31): ${option.age ?? '?'}`}
                               color="primary"
                               variant="outlined"
                             />
                             <Chip
                               size="small"
-                              label={option.eligibleType ? option.eligibleType : "Not Eligible"}
+                              label={option.eligibleType ?? "Not Eligible"}
                               color={
                                 option.eligibleType === "Compulsory"
                                   ? "error"
@@ -504,7 +533,7 @@ const RetireeDialog = ({
                                   : "default"
                               }
                             />
-                            {option.earnedLeaves && (
+                            {option.earnedLeaves > 0 && (
                               <Chip
                                 size="small"
                                 label={`${option.earnedLeaves} leave days`}
@@ -617,21 +646,46 @@ const RetireeDialog = ({
 
             <Grid item xs={12} md={6}>
               <TextField
-                name="terminalLeave"
-                label="Terminal Leave Amount (Auto-calculated)"
-                value={formData.terminalLeave || ""}
-                onChange={handleChange}
+                name="leaveDays"
+                label="Leave Days (Total Earned)"
+                type="number"
+                value={formData.leaveDays ?? ""}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  setFormData(prev => ({ ...prev, leaveDays: val }));
+                }}
                 fullWidth
                 required
-                error={!!errors.terminalLeave}
-                helperText={formData.earnedLeaves ?
-                  `Based on ${formData.earnedLeaves} earned leave days` :
-                  errors.terminalLeave
+                error={!!errors.leaveDays}
+                helperText={
+                  errors.leaveDays ||
+                  (formData.earnedLeaves > 0
+                    ? `Prefilled from earned leaves (${formData.earnedLeaves} days). Editable.`
+                    : "Enter total earned leave days")
+                }
+                inputProps={{ min: 0, step: 0.5 }}
+              />
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <TextField
+                name="terminalLeave"
+                label="Terminal Leave (Auto-computed)"
+                value={
+                  (Number(formData.terminalLeave) || 0)
+                    .toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                }
+                fullWidth
+                disabled
+                helperText={
+                  formData.leaveDays > 0 && formData.monthlySalary > 0
+                    ? `${formData.leaveDays} days × ₱${Number(formData.monthlySalary).toLocaleString('en-PH', {minimumFractionDigits:2})} × 0.0481927`
+                    : "Formula: Leave Days × Monthly Rate × 0.0481927"
                 }
                 InputProps={{
-                  inputComponent: NumberFormatCustom,
-                  inputProps: { style: { textAlign: 'right' } },
-                  readOnly: !isEditing // Make read-only for new entries, editable for existing ones
+                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                  readOnly: true,
+                  style: { fontWeight: 'bold' }
                 }}
               />
             </Grid>
@@ -643,9 +697,8 @@ const RetireeDialog = ({
                 value={formData.retirementGratuity || ""}
                 onChange={handleChange}
                 fullWidth
-                required
                 error={!!errors.retirementGratuity}
-                helperText={errors.retirementGratuity}
+                helperText={errors.retirementGratuity || "Optional"}
                 InputProps={{
                   inputComponent: NumberFormatCustom,
                   inputProps: { style: { textAlign: 'right' } }

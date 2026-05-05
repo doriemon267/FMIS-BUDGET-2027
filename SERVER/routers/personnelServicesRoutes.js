@@ -170,14 +170,22 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
           const assignedDivision = userAssignment.divisionName;
           
           const filteredPersonnel = personnel.filter(ps => {
+            const psDivision = String(ps.division || ps.Division || '').toUpperCase().trim();
+            const psDepartment = String(ps.department || ps.Department || '').toUpperCase().trim();
+            const psRegion = String(ps.region || ps.Region || '').toUpperCase().trim();
+            
+            const targetDivision = String(assignedDivision || '').toUpperCase().trim();
+            const targetDepartment = String(assignedDepartment || '').toUpperCase().trim();
+            const targetRegion = String(assignedRegion || '').toUpperCase().trim();
+
             if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
-              return ps.division === assignedDivision;
+              return psDivision === targetDivision;
             }
             if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
-              return (ps.department || ps.Department) === assignedDepartment;
+              return psDepartment === targetDepartment;
             }
             if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
-              return ps.region === assignedRegion;
+              return psRegion === targetRegion;
             }
             if (userAssignment.assignmentLevel === 'FULL') {
               return true;
@@ -264,14 +272,22 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
           const assignedDivision = userAssignment.divisionName;
           
           const filteredPersonnel = personnel.filter(ps => {
+            const psDivision = String(ps.division || ps.Division || '').toUpperCase().trim();
+            const psDepartment = String(ps.department || ps.Department || '').toUpperCase().trim();
+            const psRegion = String(ps.region || ps.Region || '').toUpperCase().trim();
+            
+            const targetDivision = String(assignedDivision || '').toUpperCase().trim();
+            const targetDepartment = String(assignedDepartment || '').toUpperCase().trim();
+            const targetRegion = String(assignedRegion || '').toUpperCase().trim();
+
             if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
-              return ps.division === assignedDivision;
+              return psDivision === targetDivision;
             }
             if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
-              return (ps.department || ps.Department) === assignedDepartment;
+              return psDepartment === targetDepartment;
             }
             if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
-              return ps.region === assignedRegion;
+              return psRegion === targetRegion;
             }
             if (userAssignment.assignmentLevel === 'FULL') {
               return true;
@@ -296,7 +312,7 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
 });
 personnelServicesRouter.get(
   "/getpersonnels/hiredBeforeJune1988", 
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }),
   getPersonnelHiredBeforeJune1988 || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );

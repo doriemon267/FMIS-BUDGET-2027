@@ -281,13 +281,15 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
     // OLD STRUCTURE: Division → Department → Region (BACKWARD COMPATIBILITY)
     switch (assignment.assignmentLevel) {
       case 'DIVISION':
+      case 'DIVISION_LEVEL':
+      case 'RESPONSIBILITY_CENTER':
         // Division users can only see their own division data (any status)
         // AND submitted data from their level (but not other divisions)
         hierarchicalFilters = {
           $and: [
-            { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-            { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-            { division: assignment.divisionName || assignment.divisions[0] }
+            { region: assignment.regionId?.Region || (assignment.regions && assignment.regions[0]?.regionName) },
+            { department: assignment.departmentId?.Department || (assignment.departments && assignment.departments[0]?.departmentName) },
+            { division: assignment.divisionName || (assignment.divisions && assignment.divisions[0]) }
           ]
         };
         if (enforceSubmissionWorkflow) {
@@ -313,20 +315,22 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         break;
 
       case 'DEPARTMENT':
+      case 'DEPARTMENT_REGIONAL_LEVEL':
+      case 'OFFICE':
         // Department users can see:
         // 1. Their own department data (any status)
         // 2. SUBMITTED data from divisions within their department
         if (enforceSubmissionWorkflow) {
           submissionFilters = {
             $and: [
-              { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-              { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+              { region: assignment.regionId?.Region || (assignment.regions && assignment.regions[0]?.regionName) },
+              { department: assignment.departmentId?.Department || (assignment.departments && assignment.departments[0]?.departmentName) },
               {
                 $or: [
                   // Own department-level data (no division specified, any status)
                   {
                     $and: [
-                      { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+                      { department: assignment.departmentId?.Department || (assignment.departments && assignment.departments[0]?.departmentName) },
                       {
                         $or: [
                           { workflowLevel: 'DEPARTMENT' },
@@ -339,7 +343,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                   {
                     $and: [
                       { division: { $exists: true, $ne: null, $ne: "" } },
-                      { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+                      { department: assignment.departmentId?.Department || (assignment.departments && assignment.departments[0]?.departmentName) },
                       { workflowLevel: 'DIVISION' },
                       {
                         $or: [
@@ -371,8 +375,8 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
           // Fallback to standard hierarchical filtering
           hierarchicalFilters = {
             $and: [
-              { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-              { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName }
+              { region: assignment.regionId?.Region || (assignment.regions && assignment.regions[0]?.regionName) },
+              { department: assignment.departmentId?.Department || (assignment.departments && assignment.departments[0]?.departmentName) }
             ]
           };
           submissionFilters = hierarchicalFilters;
@@ -380,19 +384,20 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         break;
 
       case 'REGION':
+      case 'BUDGET_AND_REVENUE_DIVISION':
         // Region users can see:
         // 1. Their own region data (any status)
         // 2. SUBMITTED data from departments within their region
         if (enforceSubmissionWorkflow) {
           submissionFilters = {
             $and: [
-              { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+              { region: assignment.regionId?.Region || (assignment.regions && assignment.regions[0]?.regionName) },
               {
                 $or: [
                   // Own region-level data (no department/division specified, any status)
                   {
                     $and: [
-                      { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+                      { region: assignment.regionId?.Region || (assignment.regions && assignment.regions[0]?.regionName) },
                       { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] },
                       { workflowLevel: 'REGION' }
                     ]
@@ -404,7 +409,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                         { department: { $exists: true, $ne: null, $ne: "" } },
                         { division: { $exists: true, $ne: null, $ne: "" } }
                       ] },
-                      { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+                      { region: assignment.regionId?.Region || (assignment.regions && assignment.regions[0]?.regionName) },
                       {
                         $or: [
                           // Legacy labels
@@ -429,7 +434,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         } else {
           // Fallback to standard hierarchical filtering
           hierarchicalFilters = {
-            region: assignment.regionId?.Region || assignment.regions[0]?.regionName
+            region: assignment.regionId?.Region || (assignment.regions && assignment.regions[0]?.regionName)
           };
           submissionFilters = hierarchicalFilters;
         }
@@ -629,6 +634,8 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
     
     switch (assignment.assignmentLevel) {
       case 'DIVISION':
+      case 'DIVISION_LEVEL':
+      case 'RESPONSIBILITY_CENTER':
         // Division users can only access their specific division
         hierarchicalFilters = {
           $and: [
@@ -639,6 +646,8 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
         };
         break;
       case 'DEPARTMENT':
+      case 'DEPARTMENT_REGIONAL_LEVEL':
+      case 'OFFICE':
         // Department users can access all divisions within their department
         hierarchicalFilters = {
           $and: [
@@ -648,6 +657,7 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
         };
         break;
       case 'REGION':
+      case 'BUDGET_AND_REVENUE_DIVISION':
         // Region users can access all departments and divisions within their region
         hierarchicalFilters = {
           region: regionName

@@ -8,13 +8,13 @@ const { submissionWorkflowControl } = require('../middleware/submissionWorkflowC
 // Apply authentication middleware to all routes in this router
 router.use(isAuth);
 // Get eligible for retirement
-router.get("/retiree/eligible", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), retireeController.getEligibleForRetirement)
+router.get("/retiree/eligible", submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), retireeController.getEligibleForRetirement)
 // Get all retirees with pagination
-router.get("/retiree", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), retireeController.getAllRetirees);
+router.get("/retiree", submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), retireeController.getAllRetirees);
 // Get retiree statistics (must be before :id route)
-router.get("/retiree/stats", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), retireeController.getRetireeStats);
+router.get("/retiree/stats", submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), retireeController.getRetireeStats);
 // Get summary of retirees by type
-router.get("/retiree/summary", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), retireeController.getRetireesSummary);
+router.get("/retiree/summary", submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), retireeController.getRetireesSummary);
 // Get a single retiree by ID
 router.get("/retiree/:id", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), retireeController.getRetireeById);
 // Create a new retiree record

@@ -54,6 +54,12 @@ const RetireePage = () => {
       label: "Retirement Date",
       show: true,
     },
+    leaveDays: {
+      type: "number",
+      label: "Leave Days",
+      show: true,
+      customRender: (row) => `${(row.leaveDays || 0).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} days`,
+    },
     terminalLeave: {
       type: "number",
       label: "Terminal Leave",

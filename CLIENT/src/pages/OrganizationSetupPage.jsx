@@ -132,10 +132,21 @@ const OrganizationSetupPage = () => {
   // Filter and Paginate Mappings
   const filteredMappings = useMemo(() => {
     const searchLower = mappingSearch.toLowerCase();
-    return mappings.filter(m => {
+    const filtered = mappings.filter(m => {
       const deptMatch = (m.departmentName || m.departmentId?.Department || '').toLowerCase().includes(searchLower);
       const regionMatch = (m.regionId?.Region || '').toLowerCase().includes(searchLower);
       return deptMatch || regionMatch;
+    });
+
+    // Sort by Region then Department
+    return filtered.sort((a, b) => {
+      const regA = a.regionId?.Region || 'Central Office';
+      const regB = b.regionId?.Region || 'Central Office';
+      if (regA !== regB) return regA.localeCompare(regB);
+      
+      const deptA = a.departmentName || a.departmentId?.Department || '';
+      const deptB = b.departmentName || b.departmentId?.Department || '';
+      return deptA.localeCompare(deptB);
     });
   }, [mappings, mappingSearch]);
 
@@ -612,12 +623,16 @@ const OrganizationSetupPage = () => {
                 <Accordion key={mapping._id} sx={{ mb: 1, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ backgroundColor: '#fafafa' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                      <Box sx={{ minWidth: '180px' }}>
+                        {mapping.regionId ? (
+                          <Chip label={mapping.regionId.Region} size="small" color="primary" sx={{ fontWeight: 'bold' }} />
+                        ) : (
+                          <Chip label="CENTRAL OFFICE" size="small" variant="outlined" />
+                        )}
+                      </Box>
                       <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
                         {mapping.departmentName || mapping.departmentId?.Department}
                       </Typography>
-                      {mapping.regionId && (
-                        <Chip label={`Region: ${mapping.regionId.Region}`} size="small" color="primary" variant="outlined" />
-                      )}
                       <Box sx={{ flexGrow: 1 }} />
                       <Typography variant="body2" color="textSecondary">
                         {mapping.divisions?.length || 0} Divisions

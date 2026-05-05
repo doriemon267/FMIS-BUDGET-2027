@@ -306,7 +306,12 @@ exports.getAllPersonnelServices = async (req, res) => {
     }
     textFilter(query, { employeeFullName });
     if (statusOfAppointment) {
-      query.statusOfAppointment = statusOfAppointment;
+      if (statusOfAppointment.includes('|')) {
+        const statuses = statusOfAppointment.split('|');
+        query.statusOfAppointment = { $regex: new RegExp(`^(${statuses.join('|')})$`, 'i') };
+      } else {
+        query.statusOfAppointment = { $regex: new RegExp(`^${statusOfAppointment}$`, 'i') };
+      }
     }
     // Note: Submission workflow filters are now included in activeFilters above
 
@@ -424,14 +429,22 @@ exports.getAllPersonnelServices = async (req, res) => {
           const assignedDivision = userAssignment.divisionName;
           
           const filteredPersonnel = personnelServices.filter(ps => {
+            const psDivision = String(ps.division || ps.Division || '').toUpperCase().trim();
+            const psDepartment = String(ps.department || ps.Department || '').toUpperCase().trim();
+            const psRegion = String(ps.region || ps.Region || '').toUpperCase().trim();
+            
+            const targetDivision = String(assignedDivision || '').toUpperCase().trim();
+            const targetDepartment = String(assignedDepartment || '').toUpperCase().trim();
+            const targetRegion = String(assignedRegion || '').toUpperCase().trim();
+
             if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
-              return ps.division === assignedDivision;
+              return psDivision === targetDivision;
             }
             if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
-              return (ps.department || ps.Department) === assignedDepartment;
+              return psDepartment === targetDepartment;
             }
             if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
-              return ps.region === assignedRegion;
+              return psRegion === targetRegion;
             }
             if (userAssignment.assignmentLevel === 'FULL') {
               return true;
@@ -782,8 +795,9 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     // ⚠️ CRITICAL: Build STRICT query using DIRECT user assignment
     // This is the PRIMARY fix - no more middleware filter merging
     let employeeQuery = {
-      StatusOfAppointment: statusOfAppointment,
-      fiscalYear: fiscalYear
+      StatusOfAppointment: { $regex: new RegExp(`^${statusOfAppointment}$`, 'i') }
+      // Removed fiscalYear filter to allow adding personnel even if they were uploaded in a different year
+      // consistent with COSPersonnelController.js
     };
 
    // Include both Active and Inactive employees to ensure VACANT positions are included
@@ -866,7 +880,7 @@ let statusConditions = [
       return res.status(200).json({
         added: [],
         duplicates: [],
-        message: `No active ${statusOfAppointment} employees found in your assigned scope (${scopeInfo}) for fiscal year ${fiscalYear}. Please verify that employees are properly assigned to your Office/Responsibility Center in the Employee Master List.`
+        message: `No active ${statusOfAppointment} employees found in your assigned scope (${scopeInfo}). Please verify that employees are properly assigned to your Office/Responsibility Center in the Employee Master List.`
       });
     }
     const personnelServicesData = [];
@@ -1019,7 +1033,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         yearEndBonus: monthlySalary,
         gsisPremium: annualSalary * (activeSettings.gsisPremium || 0),
         // Provident Fund: percentage of annual salary for PERMANENT only
-        providentFund: statusAppointment === "PERMANENT"
+        providentFund: (statusAppointment && String(statusAppointment).toUpperCase().trim() === "PERMANENT")
           ? annualSalary * (activeSettings.providentFund || 0)
           : 0,
         philhealthPremium: (monthlyPhilhealthPremium * 12) / 2,
@@ -1048,7 +1062,8 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         // Track who created this record for SUPER_ADMIN visibility filtering
         createdBy: req.user?.id ? String(req.user.id) : undefined
       };
-      if (statusAppointment === "COS") {
+      const isCOSEmployee = statusAppointment && String(statusAppointment).toUpperCase().trim() === "COS";
+      if (isCOSEmployee) {
         personnelService = {
           ...personnelService,
           RATA: 0,
@@ -1416,7 +1431,7 @@ exports.getGrandTotalPermanent = async (req, res) => {
     const { region, search, employeeFullName, orderBy, order = 'asc' } = req.query;
     // Build query criteria - match list endpoint: exclude charged-to-income
     const query = {
-      statusOfAppointment: "PERMANENT",
+      statusOfAppointment: { $regex: /^PERMANENT$/i },
       fiscalYear,
       chargedToIncomeEligible: false, // Same as table list - exclude charged-to-income
     };
@@ -1468,7 +1483,7 @@ exports.getGrandTotalCasual = async (req, res) => {
     const { region, search, employeeFullName, orderBy, order = 'asc' } = req.query;
     // Build query criteria
     const query = {
-      statusOfAppointment: "CASUAL",
+      statusOfAppointment: { $regex: /^CASUAL$/i },
       fiscalYear,
       chargedToIncomeEligible: false, // Same as table list - exclude charged-to-income
     };
@@ -1551,6 +1566,7 @@ exports.getGrandTotal = async (req, res) => {
 };
 exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
   try {
+    const { region, department, division } = req.query;
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings || !activeSettings.fiscalYear) {
       return res.status(400).json({
@@ -1559,137 +1575,52 @@ exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
       });
     }
     const { fiscalYear } = activeSettings;
-    // Get region from query parameters, user context, or headers
-    const region =
-      req.query.region || req.user?.Region || req.headers["x-region"];
-    // Build filter object
-    const filter = {
+    
+    // Build query object
+    const query = {
       fiscalYear,
-      DateOfAppointment: { $lt: new Date("1988-06-01"), $ne: null },
-    };
-    // Add region filter if provided
-    if (region) {
-      filter.region = region;
-    }
-    const personnel = await PersonnelServices.find(filter);
-    res.status(200).json(personnel);
-  } catch (error) {
-    console.error("Error fetching personnel:", error.stack);
-    res.status(500).json({ message: "Server error", details: error.message });
-  }
-};
-exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
-  try {
-    const activeSettings = await Settings.findOne({ isActive: true });
-    if (!activeSettings || !activeSettings.fiscalYear) {
-      return res.status(400).json({
-        message: "Active settings with a fiscalYear not found",
-        details: "No active settings available",
-      });
-    }
-    const { fiscalYear } = activeSettings;
-
-    // Load user's hierarchical assignment for access control
-    const userId = req.user.id;
-    let userAssignment = null;
-    try {
-      userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
-    } catch (error) {
-      console.warn('Could not load hierarchical assignment for user:', userId, error.message);
-    }
-
-    // Get region from query parameters (for backward compatibility)
-    const requestedRegion = req.query.region;
-
-    // Build base filter object
-    const filter = {
-      fiscalYear,
-      DateOfAppointment: { $lt: new Date("1988-06-01"), $ne: null },
+      // Ensure we only look for records with a date of appointment
+      $or: [
+        { DateOfAppointment: { $exists: true, $ne: null } },
+        { dateOfAppointment: { $exists: true, $ne: null } }
+      ]
     };
 
-    // Apply hierarchical access control
-    if (userAssignment) {
-      switch (userAssignment.assignmentLevel) {
-        case 'DIVISION':
-          // Division users can only access their specific division data
-          if (userAssignment.divisions && userAssignment.divisions.length > 0) {
-            filter.$and = filter.$and || [];
-            filter.$and.push(
-              { region: userAssignment.regions[0]?.regionName },
-              { department: userAssignment.departments[0]?.departmentName },
-              { division: userAssignment.divisions[0] }
-            );
-          }
-          break;
-        case 'DEPARTMENT':
-          // Department users can access all divisions within their department
-          if (userAssignment.departments && userAssignment.departments.length > 0) {
-            filter.$and = filter.$and || [];
-            filter.$and.push(
-              { region: userAssignment.regions[0]?.regionName },
-              { department: userAssignment.departments[0]?.departmentName }
-            );
-          }
-          break;
-        case 'REGION':
-          // Region users can access all departments and divisions within their region
-          if (userAssignment.regions && userAssignment.regions.length > 0) {
-            filter.region = userAssignment.regions[0]?.regionName;
-          }
-          break;
-        case 'FULL':
-          // Full access users can access everything, but if they have specific region assignments,
-          // they should still be filtered to those regions
-          if (userAssignment.regions && userAssignment.regions.length > 0) {
-            filter.region = { $in: userAssignment.regions.map(r => r.regionName) };
-          }
-          // If no specific regions assigned, allow access to all
-          break;
-        default:
-          // No assignment found, restrict to user's region if available
-          const userRegion = req.user?.Region;
-          if (userRegion) {
-            filter.region = userRegion;
-          }
-          break;
-      }
-    } else {
-      // Fallback: use user's region if no hierarchical assignment
-      const userRegion = req.user?.Region || req.headers["x-region"];
-      if (userRegion) {
-        filter.region = userRegion;
-      }
+    // Apply submission workflow filters (handles region, department, division from middleware)
+    // If req.submissionWorkflowFilters exists, it means the middleware is restricting results.
+    if (req.submissionWorkflowFilters) {
+      Object.assign(query, req.submissionWorkflowFilters);
     }
-
-    // If a specific region was requested in query params, intersect with hierarchical access
-    if (requestedRegion) {
-      if (filter.region) {
-        // If we already have a region filter, ensure the requested region is allowed
-        if (filter.region.$in) {
-          // Multiple regions allowed - check if requested region is in the list
-          if (!filter.region.$in.includes(requestedRegion)) {
-            return res.status(403).json({
-              message: "Access denied",
-              details: `You do not have access to region: ${requestedRegion}`
-            });
-          }
-        } else if (filter.region !== requestedRegion) {
-          // Single region filter - check if it matches
-          return res.status(403).json({
-            message: "Access denied",
-            details: `You do not have access to region: ${requestedRegion}`
-          });
-        }
-      } else {
-        // No hierarchical restriction, but requested region specified
-        filter.region = requestedRegion;
-      }
+    
+    // Apply hierarchical filters
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
     }
+    
+    // Fallback filters from query params if not already set by middleware or hierarchical filters
+    if (region && !query.region) query.region = region;
+    if (department && !query.department) query.department = department;
+    if (division && !query.division) query.division = division;
 
-    const personnel = await PersonnelServices.find(filter);
-    res.status(200).json(personnel);
+    // Fetch from PersonnelServices ONLY
+    const personnel = await PersonnelServices.find(query).lean();
+    
+    // Strict filtering based on June 1, 1988 cutoff
+    const cutoffDate = new Date("1988-06-01");
+    const filteredPersonnel = personnel.filter(emp => {
+      const doaValue = emp.DateOfAppointment || emp.dateOfAppointment;
+      if (!doaValue) return false;
+      
+      const doa = new Date(doaValue);
+      if (isNaN(doa.getTime())) return false;
+      
+      // Return true if hired strictly BEFORE June 1, 1988
+      return doa < cutoffDate;
+    });
+
+    res.status(200).json(filteredPersonnel);
   } catch (error) {
-    console.error("Error fetching personnel:", error.stack);
+    console.error("Error fetching personnel hired before June 1988:", error.stack);
     res.status(500).json({ message: "Server error", details: error.message });
   }
 };

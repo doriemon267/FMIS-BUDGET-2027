@@ -128,13 +128,7 @@ const MedicalAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
           }
         });
         
-        // Ensure all employees have the current fiscal year
-        const employeesWithFiscalYear = res.data.map(emp => ({
-          ...emp,
-          fiscalYear: settings.fiscalYear
-        }));
-        
-        setEmployees(employeesWithFiscalYear);
+        setEmployees(res.data);
       } catch (err) {
         const errorMsg = err.message || "Failed to fetch employees";
         setError(errorMsg);

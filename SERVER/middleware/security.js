@@ -93,7 +93,7 @@ const securityHeaders = helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:", "https://accounts.nia.gov.ph"],
-      connectSrc: ["'self'", "https:"],
+      connectSrc: ["'self'", "https:", "http://localhost:*", "http://127.0.0.1:*"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],

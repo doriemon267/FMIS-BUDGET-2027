@@ -616,7 +616,11 @@ const CustomDrawer = () => {
             icon={<FaBriefcase size={24} />}
             name="Employee Benefits"
             link="/employeeBenefits"
-            isAllow={isSuperAdmin(currentUser) || (hasPermission(currentUser, "EditAllProposals") && !isOverallApprover && !isBudgetOfficer)}
+            isAllow={
+              isSuperAdmin(currentUser) ||
+              hasPermission(currentUser, "EditAllProposals") ||
+              (hasPermission(currentUser, "EditOwnProposals") && !isOverallApprover && !isBudgetOfficer && !isBudgetPlanningAnalyst)
+            }
             collapsed={collapsed}
           />
 

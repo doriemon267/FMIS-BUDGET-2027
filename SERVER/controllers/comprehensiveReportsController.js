@@ -986,12 +986,13 @@ const processPersonnelServicesData = async (psData, query) => {
           }
           let amount = 0;
           if (itemData.field) {
+            const appointmentStatus = String(employee.statusOfAppointment || '').toUpperCase();
             if (categoryKey === '1' && itemKey === 'a') {
-              if (employee.statusOfAppointment === 'PERMANENT') {
+              if (appointmentStatus === 'PERMANENT') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else if (categoryKey === '1' && itemKey === 'b') {
-              if (employee.statusOfAppointment === 'CASUAL') {
+              if (appointmentStatus === 'CASUAL') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else {

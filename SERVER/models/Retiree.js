@@ -13,6 +13,7 @@ const RetireeSchema = mongoose.Schema(
       required: true 
     },
     dateOfRetirement: { type: Date, required: true },
+    leaveDays: { type: Number, default: 0 },       // Editable leave days used for terminal leave computation
     terminalLeave: { type: Number, default: 0 },
     retirementGratuity: { type: Number, default: 0 },
     total: { type: Number, default: 0 },

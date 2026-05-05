@@ -23,4 +23,3 @@ overtimeRouter.delete("/overtime-pay/:id", checkDueDate, submissionWorkflowContr
 overtimeRouter.get("/overtime-pay/sum", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getSumOfOvertimeAmount);
 overtimeRouter.get("/overtime-pay/by-region", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getOvertimeByRegion);
 module.exports = overtimeRouter;
-

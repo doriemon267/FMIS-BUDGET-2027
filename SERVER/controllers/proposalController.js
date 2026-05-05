@@ -419,10 +419,11 @@ exports.updateProposalStatus = async (req, res) => {
 
         // Aggregate Department + Division data
         const aggregatedPersonnel = [...deptPersonnel, ...divisionPersonnel].reduce((acc, item) => {
-          const key = `${item._id.processBy}_${item._id.region}_${item._id.statusOfAppointment}`;
+          const appointmentStatus = String(item._id.statusOfAppointment || '').toUpperCase();
+          const key = `${item._id.processBy}_${item._id.region}_${appointmentStatus}`;
           if (!acc[key]) {
             acc[key] = {
-              _id: item._id,
+              _id: { ...item._id, statusOfAppointment: appointmentStatus },
               totalCost: 0
             };
           }
@@ -446,7 +447,7 @@ exports.updateProposalStatus = async (req, res) => {
       budgetType,
       submittedDate: new Date(),
       status,
-      cobExpenditures: `Personnel Services - ${p._id.statusOfAppointment}`,
+      cobExpenditures: `Personnel Services - ${String(p._id.statusOfAppointment || '').toUpperCase()}`,
       totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
       totalIncome: 0,
       isHierarchicallyAggregated: departmentPersonnelAggregation.length > 0 // Flag for hierarchical aggregation
@@ -3471,10 +3472,11 @@ exports.updateProposalStatus = async (req, res) => {
 
         // Aggregate Department + Division data
         const aggregatedPersonnel = [...deptPersonnel, ...divisionPersonnel].reduce((acc, item) => {
-          const key = `${item._id.processBy}_${item._id.region}_${item._id.statusOfAppointment}`;
+          const appointmentStatus = String(item._id.statusOfAppointment || '').toUpperCase();
+          const key = `${item._id.processBy}_${item._id.region}_${appointmentStatus}`;
           if (!acc[key]) {
             acc[key] = {
-              _id: item._id,
+              _id: { ...item._id, statusOfAppointment: appointmentStatus },
               totalCost: 0
             };
           }
@@ -3498,7 +3500,7 @@ exports.updateProposalStatus = async (req, res) => {
       budgetType,
       submittedDate: new Date(),
       status,
-      cobExpenditures: `Personnel Services - ${p._id.statusOfAppointment}`,
+      cobExpenditures: `Personnel Services - ${String(p._id.statusOfAppointment || '').toUpperCase()}`,
       totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
       totalIncome: 0,
       isHierarchicallyAggregated: departmentPersonnelAggregation.length > 0 // Flag for hierarchical aggregation
