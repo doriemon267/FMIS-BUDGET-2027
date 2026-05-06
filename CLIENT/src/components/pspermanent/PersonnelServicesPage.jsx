@@ -1,9 +1,25 @@
 import React from "react";
 import CustomPageTable from "./PersonnelCustomPageTable";
-
-//import CustomPage from "../../global/components/CustomPage";
+import { Box, Button } from "@mui/material";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "react-toastify";
+import api from "../../config/api";
 
 const PersonnelServicesPage = () => {
+  const queryClient = useQueryClient();
+
+  const syncMealAllowances = useMutation({
+    mutationFn: async () => {
+      return api.post("/personnelServices/sync-meal-allowances");
+    },
+    onSuccess: (data) => {
+      toast.success(`Meal allowances synced successfully: ${data.data.message}`);
+      queryClient.invalidateQueries({ queryKey: ["personnelServices"] });
+    },
+    onError: (error) => {
+      toast.error(`Error syncing meal allowances: ${error.response?.data?.message || error.message}`);
+    }
+  });
   const personnelServicesSchema = {
     action: {
       type: "action",
@@ -246,16 +262,28 @@ earnedLeaves: {
     //   ROWS_PER_PAGE={20}
     // />
 
-    <CustomPageTable
-      dataListName="personnelServices" // router, response controller
-      title="Personnel Services"
-      description="This is the Personnel Services Table"
-      schema={personnelServicesSchema}
-      searchable={true}
-      hasEdit={true}
-      hasDelete={false}
-      ROWS_PER_PAGE={10}
-    />
+    <>
+      {/* <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => syncMealAllowances.mutate()}
+          disabled={syncMealAllowances.isPending}
+        >
+          {syncMealAllowances.isPending ? "Syncing..." : "Sync Meal Allowances"}
+        </Button>
+      </Box> */}
+      <CustomPageTable
+        dataListName="personnelServices" // router, response controller
+        title="Personnel Services"
+        description="This is the Personnel Services Table"
+        schema={personnelServicesSchema}
+        searchable={true}
+        hasEdit={true}
+        hasDelete={false}
+        ROWS_PER_PAGE={10}
+      />
+    </>
   );
 };
 

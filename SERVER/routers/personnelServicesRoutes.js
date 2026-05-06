@@ -11,6 +11,7 @@ const {
   getPersonnelHiredBeforeJune1988,
   bulkSetPersonnelSubsidy,
   bulkSetPersonnelChargedToIncome,
+  syncAllMealAllowances
 } = require("../controllers/personnel_service_controller");
 // Import the model directly to ensure it's available
 const PersonnelService = require("../models/PersonnelServices");
@@ -321,7 +322,7 @@ personnelServicesRouter.post(
   "/personnelServices/sync-meal-allowances", 
   checkDueDate,
   submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
-  exports.syncAllMealAllowances || 
+  syncAllMealAllowances || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 module.exports = personnelServicesRouter;

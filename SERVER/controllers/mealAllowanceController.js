@@ -104,23 +104,23 @@ exports.createMealAllowance = [
           (
             await Settings.findOne({ isActive: true }).lean()
           ).fiscalYear,
-        DateOfAppointment: { $lt: new Date("1988-06-01") },
+        DateOfAppointment: { $lt: new Date("1988-12-31") },
       });
       if (!personnel) {
         return res.status(400).json({
           message:
-            "Employee is not eligible for meal allowance (must be hired before June 1988)",
+            "Employee is not eligible for meal allowance (must be hired before 1988)",
         });
       }
       const settings = fiscalYear
-        ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
-        : await Settings.findOne({ isActive: true }).lean();
+        ? await Settings.findOne({ fiscalYear, isActive: true }).populate('compensationSettingsId').lean()
+        : await Settings.findOne({ isActive: true }).populate('compensationSettingsId').lean();
       if (!settings) {
         return res
           .status(404)
           .json({ message: "Active settings not found" });
       }
-      // Get meal allowance rate (use default 200 if not set)
+      // We explicitly pass the settings object to getAllowanceRates to ensure it uses the populated compensationSettingsId
       const rates = getAllowanceRates(settings);
       const mealAllowanceRate = rates.mealAllowance;
       // Calculate monthly amount: days × daily rate
@@ -169,7 +169,7 @@ exports.createMealAllowance = [
       if (personnelDoc) {
         await PersonnelServices.updateOne(
           { _id: personnelDoc._id },
-          { meal: annualAmount }
+          { $set: { meal: annualAmount } }
         );
         const updatedPersonnel = await PersonnelServices.findOne({ _id: personnelDoc._id });
         if (updatedPersonnel) {
@@ -247,17 +247,17 @@ exports.updateMealAllowance = [
           (
             await Settings.findOne({ isActive: true }).lean()
           ).fiscalYear,
-        DateOfAppointment: { $lt: new Date("1988-06-01") },
+        DateOfAppointment: { $lt: new Date("1988-12-31") },
       });
       if (!personnel) {
         return res.status(400).json({
           message:
-            "Employee is not eligible for meal allowance (must be hired before June 1988)",
+            "Employee is not eligible for meal allowance (must be hired before 1988)",
         });
       }
       const settings = fiscalYear
-        ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
-        : await Settings.findOne({ isActive: true }).lean();
+        ? await Settings.findOne({ fiscalYear, isActive: true }).populate('compensationSettingsId').lean()
+        : await Settings.findOne({ isActive: true }).populate('compensationSettingsId').lean();
       if (!settings) {
         return res
           .status(404)
@@ -317,7 +317,7 @@ exports.updateMealAllowance = [
       if (personnelDoc) {
         await PersonnelServices.updateOne(
           { _id: personnelDoc._id },
-          { meal: annualAmount }
+          { $set: { meal: annualAmount } }
         );
         const updatedPersonnel = await PersonnelServices.findOne({ _id: personnelDoc._id });
         if (updatedPersonnel) {
@@ -486,90 +486,7 @@ exports.getAllMealAllowances = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
-exports.updateMealAllowance = [
-  ...validateMealAllowance,
-  async (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-      const { id } = req.params;
-      const {
-        employeeNumber,
-        employeeFullName,
-        positionTitle,
-        department,
-        division,
-        region,
-        processBy,
-        processDate,
-        fiscalYear,
-        budgetType,
-      } = req.body;
-      const settings = fiscalYear
-        ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
-        : await Settings.findOne({ isActive: true }).lean();
-      if (!settings || !settings.meal) {
-        return res
-          .status(404)
-          .json({ message: "Active settings with meal rate not found" });
-      }
-      const amount = Number(actualDays) * Number(settings.meal);
-      const usedFiscalYear = fiscalYear || settings.fiscalYear;
-      const usedBudgetType = budgetType || settings.budgetType;
-      const updated = await MealAllowance.findByIdAndUpdate(
-        id,
-        {
-          employeeNumber,
-          employeeFullName,
-          positionTitle,
-          department,
-          division,
-          region,
-          actualDays: actualDays, // Always 22
-          amount,
-          processBy,
-          processDate: processDate ? new Date(processDate) : new Date(),
-          fiscalYear: usedFiscalYear,
-          budgetType: usedBudgetType,
-        },
-        { new: true, runValidators: true }
-      );
-      if (!updated)
-        return res.status(404).json({ message: "Record not found" });
-      const personnelDoc = await ensurePersonnelRecordEditable(
-        {
-          employeeNumber: updated.employeeNumber,
-          employeeFullName: updated.employeeFullName,
-          fiscalYear: usedFiscalYear,
-          proposalId,
-          workflowRef,
-        },
-        'meal allowance'
-      );
 
-      if (personnelDoc) {
-        personnelDoc.meal = amount;
-        await personnelDoc.save();
-        if (personnelDoc.proposalId) {
-          await recalculateAndSaveProposalTotals({ proposalId: personnelDoc.proposalId });
-        }
-      }
-      return res
-        .status(200)
-        .json({ message: "Record updated and synced", data: updated });
-    } catch (err) {
-      if (err.statusCode) {
-        return res.status(err.statusCode).json({ message: err.message });
-      }
-      console.error("❌ Error in updateMealAllowance:", err.stack);
-      return res
-        .status(500)
-        .json({ message: "Server error", error: err.message });
-    }
-  },
-];
 // In mealAllowanceController.js
 exports.deleteMealAllowance = async (req, res) => {
   try {

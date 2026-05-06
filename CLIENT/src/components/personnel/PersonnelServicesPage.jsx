@@ -201,7 +201,7 @@ const PersonnelServicesPage = () => {
 
   return (
     <>
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+      {/* <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           variant="contained"
           color="primary"
@@ -210,7 +210,7 @@ const PersonnelServicesPage = () => {
         >
           {syncMealAllowances.isPending ? "Syncing..." : "Sync Meal Allowances"}
         </Button>
-      </Box>
+      </Box> */}
       
       <CustomPageTable
         dataListName="personnelServices"

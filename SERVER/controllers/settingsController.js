@@ -153,7 +153,7 @@ exports.updateSettings = async (req, res) => {
       const personnelToUpdate = await PersonnelServices.find({
         fiscalYear: updatedSettings.fiscalYear,
         employeeNumber: { $in: employeeNumbers },
-        DateOfAppointment: { $lt: new Date("1988-06-01") },
+        DateOfAppointment: { $lt: new Date("1988-12-31") },
       });
       // Update PersonnelServices.meal based on corresponding MealAllowance.actualDays
       for (const personnel of personnelToUpdate) {

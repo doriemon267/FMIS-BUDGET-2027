@@ -131,7 +131,7 @@ const getPersonnelHiredBeforeJune1988 = async (req, res) => {
     const { region } = req.query;
     // Build query for PersonnelServices collection
     const query = {
-      DateOfAppointment: { $lt: new Date("1988-06-01") },
+      DateOfAppointment: { $lt: new Date("1988-12-31") },
     };
     // Add region filter if provided - IMPORTANT: This is the key filter
     if (region) {

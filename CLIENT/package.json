@@ -33,7 +33,7 @@
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.13",
     "decimal.js": "^10.5.0",
-    "exceljs": "^4.4.0",
+    "exceljs": "^3.4.0",
     "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.4.4",

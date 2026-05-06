@@ -37,7 +37,7 @@ function calculateMonthlyMealAllowance(actualDays = 22, dailyRate = 200) {
  */
 function isEligibleForMealAllowance(appointmentDate) {
   if (!appointmentDate) return false;
-  const cutoffDate = new Date("1988-06-01");
+  const cutoffDate = new Date("1988-12-31");
   return new Date(appointmentDate) < cutoffDate;
 }
 /**
@@ -47,7 +47,7 @@ function isEligibleForMealAllowance(appointmentDate) {
  */
 function isEligibleForMedicalAllowance(appointmentDate) {
   if (!appointmentDate) return false;
-  const cutoffDate = new Date("1988-06-01");
+  const cutoffDate = new Date("1988-12-31");
   return new Date(appointmentDate) < cutoffDate;
 }
 /**
@@ -57,8 +57,8 @@ function isEligibleForMedicalAllowance(appointmentDate) {
  */
 function getAllowanceRates(settings) {
   return {
-    medicalAllowance: settings?.medicalAllowance || 200,
-    mealAllowance: settings?.meal || 200
+    medicalAllowance: settings?.compensationSettingsId?.medicalAllowance ?? settings?.medicalAllowance ?? 200,
+    mealAllowance: settings?.compensationSettingsId?.meal ?? settings?.meal ?? 200
   };
 }
 /**
@@ -114,4 +114,4 @@ module.exports = {
   getAllowanceRates,
   formatAllowanceAmount,
   calculateEmployeeAllowances
-};
+};

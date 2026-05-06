@@ -107,10 +107,16 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
       const settings = await Settings.findOne({
         fiscalYear,
         isActive: true,
-      }).lean();
-      if (settings && settings.meal) {
-        const monthlyAmount = mealAllowance.actualDays * settings.meal;
-        const annualAmount = monthlyAmount * 12;
+      }).populate('compensationSettingsId').lean();
+
+      if (settings) {
+        const { getAllowanceRates } = require("../utils/allowanceUtils");
+        const rates = getAllowanceRates(settings);
+        const mealAllowanceRate = rates.mealAllowance;
+        
+        if (mealAllowanceRate) {
+          const monthlyAmount = mealAllowance.actualDays * mealAllowanceRate;
+          const annualAmount = monthlyAmount * 12;
         const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
         if (!personnelDoc) return false;
         await PersonnelServices.updateOne(
@@ -159,6 +165,7 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
         }
         return true;
       }
+    }
     }
     return false;
   } catch (error) {

@@ -169,7 +169,7 @@ const getPersonnelHiredBeforeJune1988 = async (req, res) => {
     }
     // First try to get from PersonnelServices collection with fiscal year filter
     let query = {
-      DateOfAppointment: { $lt: new Date("1988-06-01") },
+      DateOfAppointment: { $lt: new Date("1988-12-31") },
       fiscalYear: activeFiscalYear // Add fiscal year filter
     };
     // Add region filter if provided
@@ -181,7 +181,7 @@ const getPersonnelHiredBeforeJune1988 = async (req, res) => {
     if (personnel.length === 0) {
       // Build query for Employee collection
       const employeeQuery = {
-        DateOfAppointment: { $lt: new Date("1988-06-01") },
+        DateOfAppointment: { $lt: new Date("1988-12-31") },
         employeeStatus: "Active"
       };
       // Add region filter if provided (note the capital R in Region for Employee collection)

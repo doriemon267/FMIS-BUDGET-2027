@@ -2,32 +2,29 @@ import { useEffect, useState } from "react";
 import { Box, Collapse, IconButton, Typography, Tooltip } from "@mui/material";
 import { Link, useLocation } from "react-router-dom";
 import {
-  FaChevronLeft,
-  FaSignOutAlt,
-  FaChevronDown,
-  FaUserShield,
-} from "react-icons/fa";
-import {
-  FaChartBar,
-  FaFileContract,
-  FaFileInvoiceDollar,
-  FaFileSignature,
-  FaMoneyBillTransfer,
-  FaMoneyBillWave,
-  FaPiggyBank,
-  FaRegCalendarDays,
-  FaSignature,
-  FaUserCheck,
-  FaUserGear,
-  FaWallet,
-} from "react-icons/fa6";
-import { AiOutlineSignature } from "react-icons/ai";
-import { CiViewTable } from "react-icons/ci";
-import { GiReceiveMoney } from "react-icons/gi";
-import { MdOutlineCollectionsBookmark, MdSpaceDashboard } from "react-icons/md";
-import { PiLinkSimpleBold, PiUserListDuotone } from "react-icons/pi";
-import { RiFundsFill } from "react-icons/ri";
-import { LuContact } from "react-icons/lu";
+  LuChevronLeft,
+  LuLogOut,
+  LuChevronDown,
+  LuShieldCheck,
+  LuBarChart3,
+  LuFileText,
+  LuReceipt,
+  LuPenTool,
+  LuArrowLeftRight,
+  LuBanknote,
+  LuPiggyBank,
+  LuCalendarDays,
+  LuSignature,
+  LuSettings,
+  LuWallet,
+  LuHandCoins,
+  LuBookmark,
+  LuLayoutDashboard,
+  LuLink,
+  LuUsers,
+  LuCoins,
+  LuContact,
+} from "react-icons/lu";
 
 import { useDrawer } from "../context/DrawerContext";
 import { useUser } from "../context/UserContext";
@@ -69,12 +66,12 @@ export default function Sidebar() {
     {
       title: "Dashboard",
       path: "/dashboard",
-      icon: MdSpaceDashboard,
+      icon: LuLayoutDashboard,
       isAllow: true, // Replicating old logic where Dashboard was unconditionally allowed via "isAllow" prop
     },
     {
       title: "Roles Management",
-      icon: FaUserGear,
+      icon: LuSettings,
       isAllow: isSuperAdmin(currentUser),
       subItems: [
         { title: "Roles", path: "/roles", isAllow: isSuperAdmin(currentUser) },
@@ -87,7 +84,7 @@ export default function Sidebar() {
     },
     {
       title: "Signatories Management",
-      icon: FaFileSignature,
+      icon: LuPenTool,
       isAllow: true,
       subItems: [
         { title: "Signatories", path: "/signatories", isAllow: true },
@@ -101,36 +98,36 @@ export default function Sidebar() {
     {
       title: "Payors",
       path: "/payors",
-      icon: PiUserListDuotone,
+      icon: LuUsers,
       isAllow: isCashRoles(currentUser) || isAccountingRoles(currentUser),
     },
     {
       title: "Payees",
       path: "/payees",
-      icon: GiReceiveMoney,
+      icon: LuHandCoins,
       isAllow: isAccountingRoles(currentUser) || isSuperAdmin(currentUser),
     },
     {
       title: "Contracts",
       path: "/contracts",
-      icon: FaFileContract,
+      icon: LuFileText,
       isAllow: isCashRoles(currentUser) || isAccountingRoles(currentUser),
     },
     {
       title: "Nature Of Collections",
       path: "/nature-of-collections",
-      icon: MdOutlineCollectionsBookmark,
+      icon: LuBookmark,
       isAllow: isPersonnel, // Assuming this is evaluated as a boolean/constant in your checkRole
     },
     {
       title: "Fund Clusters",
       path: "/fund-clusters",
-      icon: RiFundsFill,
+      icon: LuCoins,
       isAllow: isCashRoles(currentUser) || isAccountingRoles(currentUser),
     },
     {
       title: "Chart Of Accounts",
-      icon: FaChartBar,
+      icon: LuBarChart3,
       isAllow: isAccountingRoles(currentUser),
       subItems: [
         {
@@ -148,13 +145,13 @@ export default function Sidebar() {
     {
       title: "Calendar",
       path: "/date-calendar",
-      icon: FaRegCalendarDays,
+      icon: LuCalendarDays,
       isAllow: isAccountingRoles(currentUser),
     },
     {
       title: "E Signature",
       path: "/e-signature",
-      icon: AiOutlineSignature,
+      icon: LuSignature,
       isAllow:
         isAccountingRoles(currentUser) ||
         isBudgetRoles(currentUser) ||
@@ -163,7 +160,7 @@ export default function Sidebar() {
     { isDivider: true },
     {
       title: "FMIS Subsystems",
-      icon: PiLinkSimpleBold,
+      icon: LuLink,
       isAllow: true,
       subItems: [
         {
@@ -171,7 +168,7 @@ export default function Sidebar() {
           path: IS_PRODUCTION
             ? env("BUDGET_URL_PROD") + "/dashboard"
             : env("BUDGET_URL_DEV") + "/dashboard",
-          icon: FaPiggyBank,
+          icon: LuPiggyBank,
           isAllow: isBudgetRoles(currentUser),
         },
         {
@@ -179,7 +176,7 @@ export default function Sidebar() {
           path: IS_PRODUCTION
             ? env("DV_URL_PROD") + "/dashboard"
             : env("DV_URL_DEV") + "/dashboard",
-          icon: FaFileInvoiceDollar,
+          icon: LuReceipt,
           isAllow: true, // No specific role required in old code
         },
         {
@@ -187,7 +184,7 @@ export default function Sidebar() {
           path: IS_PRODUCTION
             ? env("CMIS_URL_PROD") + "/dashboard"
             : env("CMIS_URL_DEV") + "/dashboard",
-          icon: FaMoneyBillWave,
+          icon: LuBanknote,
           isAllow: isCashRoles(currentUser),
         },
         {
@@ -195,7 +192,7 @@ export default function Sidebar() {
           path: IS_PRODUCTION
             ? env("BCD_URL_PROD") + "/dashboard"
             : env("BCD_URL_DEV") + "/dashboard",
-          icon: FaMoneyBillTransfer,
+          icon: LuArrowLeftRight,
           isAllow: isCashRoles(currentUser) || isAccountingRoles(currentUser),
         },
         {
@@ -203,7 +200,7 @@ export default function Sidebar() {
           path: IS_PRODUCTION
             ? env("ITINERARY_URL_PROD") + "/itinerary_info"
             : env("ITINERARY_URL_DEV") + "/itinerary_info",
-          icon: FaWallet,
+          icon: LuWallet,
           isAllow: true, // No specific role required in old code
         },
       ],
@@ -272,7 +269,7 @@ export default function Sidebar() {
           flexDirection: "column",
           height: "100%",
           position: "relative",
-          bgcolor: "#0f2115",
+          bgcolor: "#08140c",
         }}
       >
         {/* COLLAPSE TOGGLE ARROW */}
@@ -285,16 +282,20 @@ export default function Sidebar() {
           sx={{
             display: { xs: "none", lg: "flex" },
             position: "absolute",
-            right: -14,
-            top: 32,
-            width: 28,
-            height: 28,
-            bgcolor: "#27633b",
+            right: -10,
+            top: 24,
+            width: 20,
+            height: 20,
+            bgcolor: "#1e3b28",
             color: "white",
-            border: "1px solid #1e3b28",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "4px",
             zIndex: 100,
-            transition: "background-color 0.2s",
-            "&:hover": { bgcolor: "#1f4f2f" },
+            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            "&:hover": { 
+              bgcolor: "#2d6643",
+              transform: "scale(1.1)",
+            },
             "&:hover .toggle-tooltip": {
               opacity: 1,
               visibility: "visible",
@@ -309,7 +310,7 @@ export default function Sidebar() {
               transform: open ? "rotate(0deg)" : "rotate(180deg)",
             }}
           >
-            <FaChevronLeft size={12} />
+            <LuChevronLeft size={14} />
           </Box>
 
           <Box
@@ -323,13 +324,13 @@ export default function Sidebar() {
               visibility: "hidden",
               px: 1.5,
               py: 0.75,
-              bgcolor: "#0a170e",
-              border: "1px solid #1e3b28",
+              bgcolor: "#0f1a12",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
               color: "white",
               borderRadius: 1,
               fontSize: "0.75rem",
               fontWeight: 500,
-              boxShadow: 4,
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.4)",
               pointerEvents: "none",
               transition: "all 0.2s ease-in-out",
               whiteSpace: "nowrap",
@@ -342,9 +343,9 @@ export default function Sidebar() {
                 left: -5,
                 width: 10,
                 height: 10,
-                bgcolor: "#0a170e",
-                borderBottom: "1px solid #1e3b28",
-                borderLeft: "1px solid #1e3b28",
+                bgcolor: "#0f1a12",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                borderLeft: "1px solid rgba(255, 255, 255, 0.08)",
                 transform: "translateY(-50%) rotate(45deg)",
               }}
             />
@@ -360,9 +361,9 @@ export default function Sidebar() {
             display: "flex",
             alignItems: "center",
             gap: 2,
-            height: 80,
+            height: 72,
             px: open ? 3 : 2.5,
-            borderBottom: "1px solid #1e3b28",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
             flexShrink: 0,
           }}
         >
@@ -370,7 +371,11 @@ export default function Sidebar() {
             component="img"
             src="/2020-nia-logo.svg"
             alt="NIA Logo"
-            sx={{ height: 40, width: 40 }}
+            sx={{ 
+              height: 32, 
+              width: 32,
+              filter: "drop-shadow(0 0 8px rgba(105, 216, 146, 0.2))",
+            }}
           />
           {open && (
             <Typography
@@ -414,13 +419,13 @@ export default function Sidebar() {
           {/* ROLES DISPLAY */}
           <Box
             sx={{
-              mb: 1.5,
-              mx: open ? 0.5 : 0,
+              mb: 2,
+              mx: open ? 1 : 0.5,
               px: open ? 1.5 : 0,
               py: open ? 1.5 : 1,
-              borderRadius: open ? 2 : 0,
-              bgcolor: open ? "rgba(255, 255, 255, 0.02)" : "transparent",
-              border: open ? "1px solid rgba(255, 255, 255, 0.04)" : "none",
+              borderRadius: 2,
+              bgcolor: "rgba(255, 255, 255, 0.03)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
               display: "flex",
               flexDirection: "column",
               alignItems: open ? "stretch" : "center",
@@ -450,9 +455,9 @@ export default function Sidebar() {
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                     <Box
                       sx={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 1.5,
+                        width: 32,
+                        height: 32,
+                        borderRadius: "8px",
                         bgcolor: "rgba(105, 216, 146, 0.1)",
                         color: "#69d892",
                         display: "flex",
@@ -461,7 +466,7 @@ export default function Sidebar() {
                         flexShrink: 0,
                       }}
                     >
-                      <FaUserShield size={16} />
+                      <LuShieldCheck size={16} />
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography
@@ -469,7 +474,7 @@ export default function Sidebar() {
                           fontSize: "0.6rem",
                           fontWeight: 700,
                           letterSpacing: 0.5,
-                          color: "text.secondary",
+                          color: "rgba(255,255,255,0.4)",
                           textTransform: "uppercase",
                         }}
                       >
@@ -487,7 +492,7 @@ export default function Sidebar() {
                         >
                           <Typography
                             sx={{
-                              fontSize: "0.85rem",
+                              fontSize: "0.8rem",
                               fontWeight: 600,
                               color: "white",
                               whiteSpace: "nowrap",
@@ -498,26 +503,14 @@ export default function Sidebar() {
                             {formatRole(primaryRoleRaw)}
                           </Typography>
                         </Tooltip>
-                        {!hasMultipleRoles && (
-                          <Box
-                            sx={{
-                              width: 6,
-                              height: 6,
-                              borderRadius: "50%",
-                              bgcolor: "#69d892",
-                              boxShadow: "0 0 6px rgba(105, 216, 146, 0.6)",
-                              flexShrink: 0,
-                            }}
-                          />
-                        )}
                       </Box>
                     </Box>
                   </Box>
                   {hasMultipleRoles && (
-                    <FaChevronDown
+                    <LuChevronDown
                       size={12}
                       style={{
-                        color: "#94a3b8",
+                        color: "rgba(255,255,255,0.4)",
                         transform: isRolesExpanded
                           ? "rotate(180deg)"
                           : "rotate(0deg)",
@@ -590,9 +583,9 @@ export default function Sidebar() {
               <Tooltip title={formatRole(primaryRoleRaw)} placement="right">
                 <Box
                   sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 1.5,
+                    width: 32,
+                    height: 32,
+                    borderRadius: "8px",
                     bgcolor: "rgba(105, 216, 146, 0.1)",
                     color: "#69d892",
                     display: "flex",
@@ -603,7 +596,7 @@ export default function Sidebar() {
                     "&:hover": { bgcolor: "rgba(105, 216, 146, 0.2)" },
                   }}
                 >
-                  <FaUserShield size={18} />
+                  <LuShieldCheck size={16} />
                 </Box>
               </Tooltip>
             )}
@@ -650,19 +643,18 @@ export default function Sidebar() {
                       alignItems: "center",
                       justifyContent: open ? "space-between" : "center",
                       px: 2,
-                      py: 1.2,
+                      py: 1.5,
                       borderRadius: 2,
                       width: "100%",
-                      border: "1px solid transparent",
-                      bgcolor: isExpanded ? "#163321" : "transparent",
-                      color: isExpanded ? "white" : "#cbd5e1",
+                      border: "none",
+                      bgcolor: isExpanded ? "rgba(255, 255, 255, 0.05)" : "transparent",
+                      color: isExpanded ? "white" : "rgba(255, 255, 255, 0.6)",
                       cursor: "pointer",
-                      transition: "all 0.2s",
+                      transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                      position: "relative",
                       "&:hover": {
                         color: "white",
-                        bgcolor: isExpanded
-                          ? "#163321"
-                          : "rgba(22, 51, 33, 0.6)",
+                        bgcolor: "rgba(255, 255, 255, 0.08)",
                       },
                     }}
                   >
@@ -671,19 +663,21 @@ export default function Sidebar() {
                     >
                       {item.icon && (
                         <item.icon
-                          size={18}
+                          size={17}
                           style={{
                             color: isExpanded ? "#69d892" : "inherit",
-                            transition: "color 0.2s",
+                            opacity: isExpanded ? 1 : 0.6,
+                            transition: "all 0.2s",
                           }}
                         />
                       )}
                       {open && (
                         <Typography
                           sx={{
-                            fontSize: "0.875rem",
-                            fontWeight: 500,
+                            fontSize: "0.85rem",
+                            fontWeight: isExpanded ? 600 : 500,
                             whiteSpace: "nowrap",
+                            letterSpacing: "0.01em",
                           }}
                         >
                           {item.title}
@@ -691,9 +685,10 @@ export default function Sidebar() {
                       )}
                     </Box>
                     {open && (
-                      <FaChevronDown
+                      <LuChevronDown
                         size={14}
                         style={{
+                          opacity: 0.4,
                           transform: isExpanded
                             ? "rotate(180deg)"
                             : "rotate(0deg)",
@@ -719,35 +714,52 @@ export default function Sidebar() {
                       justifyContent: open ? "flex-start" : "center",
                       gap: 1.5,
                       px: 2,
-                      py: 1.2,
+                      py: 1.5,
                       borderRadius: 2,
-                      border: "1px solid",
+                      border: "none",
                       textDecoration: "none",
-                      transition: "all 0.2s",
-                      borderColor: isActive ? "#2d6643" : "transparent",
-                      bgcolor: isActive ? "#1a3d28" : "transparent",
-                      color: isActive ? "white" : "#cbd5e1",
+                      transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                      bgcolor: isActive ? "rgba(255, 255, 255, 0.08)" : "transparent",
+                      color: isActive ? "white" : "rgba(255, 255, 255, 0.6)",
+                      position: "relative",
+                      "&::before": isActive ? {
+                        content: '""',
+                        position: "absolute",
+                        left: 0,
+                        top: "20%",
+                        height: "60%",
+                        width: 3,
+                        bgcolor: "#69d892",
+                        borderRadius: "0 4px 4px 0",
+                        boxShadow: "0 0 10px rgba(105, 216, 146, 0.4)",
+                      } : {},
                       "&:hover": {
-                        bgcolor: isActive ? "#1a3d28" : "rgba(22, 51, 33, 0.6)",
+                        bgcolor: isActive ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.05)",
                         color: "white",
+                        "& .nav-icon": {
+                          opacity: 1,
+                        }
                       },
                     }}
                   >
                     {item.icon && (
                       <item.icon
-                        size={18}
+                        className="nav-icon"
+                        size={17}
                         style={{
                           color: isActive ? "#69d892" : "inherit",
-                          transition: "color 0.2s",
+                          opacity: isActive ? 1 : 0.6,
+                          transition: "all 0.2s",
                         }}
                       />
                     )}
                     {open && (
                       <Typography
                         sx={{
-                          fontSize: "0.875rem",
+                          fontSize: "0.85rem",
                           fontWeight: isActive ? 600 : 500,
                           whiteSpace: "nowrap",
+                          letterSpacing: "0.01em",
                         }}
                       >
                         {item.title}
@@ -802,25 +814,26 @@ export default function Sidebar() {
                               alignItems: "center",
                               gap: 1.5,
                               px: 1.5,
-                              py: 1,
+                              py: 1.2,
                               borderRadius: 1.5,
                               textDecoration: "none",
-                              transition: "all 0.2s",
+                              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
                               bgcolor: isSubActive
-                                ? "rgba(26, 61, 40, 0.6)"
+                                ? "rgba(255, 255, 255, 0.05)"
                                 : "transparent",
-                              color: isSubActive ? "white" : "#cbd5e1",
+                              color: isSubActive ? "white" : "rgba(255, 255, 255, 0.5)",
                               "&:hover": {
-                                bgcolor: "rgba(22, 51, 33, 0.4)",
+                                bgcolor: "rgba(255, 255, 255, 0.03)",
                                 color: "white",
                               },
                             }}
                           >
                             <Typography
                               sx={{
-                                fontSize: "0.8125rem",
-                                fontWeight: isSubActive ? 500 : 400,
+                                fontSize: "0.8rem",
+                                fontWeight: isSubActive ? 600 : 400,
                                 whiteSpace: "nowrap",
+                                letterSpacing: "0.01em",
                               }}
                             >
                               {sub.title}
@@ -837,7 +850,7 @@ export default function Sidebar() {
         </Box>
 
         {/* LOGOUT BUTTON AREA */}
-        <Box sx={{ p: 2, borderTop: "1px solid #1e3b28", flexShrink: 0 }}>
+        <Box sx={{ p: 2, pb: 3, borderTop: "1px solid rgba(255, 255, 255, 0.05)", flexShrink: 0 }}>
           <Box
             component="button"
             onClick={() => setShowLogoutConfirm(true)}
@@ -850,26 +863,38 @@ export default function Sidebar() {
               gap: 1.5,
               width: "100%",
               px: 2,
-              py: 1.2,
+              py: 1.5,
               borderRadius: 2,
               border: "none",
               background: "transparent",
-              color: "#cbd5e1",
+              color: "rgba(255, 255, 255, 0.6)",
               cursor: "pointer",
-              transition: "all 0.2s",
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
               "&:hover": {
-                bgcolor: "rgba(239, 68, 68, 0.1)",
+                bgcolor: "rgba(239, 68, 68, 0.08)",
                 color: "#f87171",
+                "& .logout-icon": {
+                  opacity: 1,
+                  transform: "translateX(3px)",
+                }
               },
             }}
           >
-            <FaSignOutAlt size={18} />
+            <LuLogOut 
+              className="logout-icon"
+              size={17} 
+              style={{ 
+                opacity: 0.6,
+                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              }} 
+            />
             {open && (
               <Typography
                 sx={{
-                  fontSize: "0.875rem",
+                  fontSize: "0.85rem",
                   fontWeight: 500,
                   whiteSpace: "nowrap",
+                  letterSpacing: "0.01em",
                 }}
               >
                 Sign Out
@@ -887,13 +912,13 @@ export default function Sidebar() {
               transform: "translateY(-50%)",
               px: 1.5,
               py: 0.75,
-              bgcolor: "#0a170e",
-              border: "1px solid #1e3b28",
+              bgcolor: "#0f1a12",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
               color: "white",
               borderRadius: 1,
               fontSize: "0.75rem",
               fontWeight: 500,
-              boxShadow: 4,
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.4)",
               pointerEvents: "none",
               zIndex: 1400,
               animation: "fadeInRight 0.15s ease",
@@ -906,9 +931,9 @@ export default function Sidebar() {
                 left: -5,
                 width: 10,
                 height: 10,
-                bgcolor: "#0a170e",
-                borderBottom: "1px solid #1e3b28",
-                borderLeft: "1px solid #1e3b28",
+                bgcolor: "#0f1a12",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                borderLeft: "1px solid rgba(255, 255, 255, 0.08)",
                 transform: "translateY(-50%) rotate(45deg)",
               }}
             />

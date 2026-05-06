@@ -184,6 +184,10 @@ const personnelServicesSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    meal: {
+      type: Number,
+      default: 0,
+    },
     midyearBonus: {
       type: Number,
       required: true,
