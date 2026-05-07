@@ -3298,7 +3298,7 @@ const ProposalCustomPage = ({
             )}
 
             {/* Export Button */}
-            <Button
+            {/* <Button
               variant="outlined"
               color="secondary"
               onClick={(e) => setExportMenuAnchor(e.currentTarget)}
@@ -3306,17 +3306,17 @@ const ProposalCustomPage = ({
               sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
             >
               Export
-            </Button>
+            </Button> */}
 
             {/* Activity Log Button */}
-            <Button
+            {/* <Button
               variant="outlined"
               onClick={() => setShowActivityLog(true)}
               startIcon={<HistoryIcon />}
               sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
             >
               Activity
-            </Button>
+            </Button> */}
 
             {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
             {(canCreate || canEditOwn) && (
@@ -3434,7 +3434,7 @@ const ProposalCustomPage = ({
             onClose={() => setSpeedDialOpen(false)}
             onOpen={() => setSpeedDialOpen(true)}
           >
-            <SpeedDialAction
+            {/* <SpeedDialAction
               icon={<GetAppIcon />}
               tooltipTitle="Export"
               onClick={(e) => setExportMenuAnchor(e.currentTarget)}
@@ -3443,7 +3443,7 @@ const ProposalCustomPage = ({
               icon={<HistoryIcon />}
               tooltipTitle="Activity Log"
               onClick={() => setShowActivityLog(true)}
-            />
+            /> */}
             {showBulkActions && (
               <SpeedDialAction
                 icon={<SelectAllIcon />}

@@ -240,7 +240,9 @@ const createMedicalAllowance = async (req, res) => {
     }
     // Since /getpersonnels/hiredBeforeJune1988 already filters eligible employees,
     // we skip the Employee lookup and assume the employee is eligible
-    const settings = await Settings.findOne({ fiscalYear, isActive: true }).lean();
+    const settings = await Settings.findOne({ fiscalYear, isActive: true })
+      .populate('compensationSettingsId')
+      .lean();
     if (!settings) {
       return res.status(404).json({ error: "Active settings not found for the specified fiscal year" });
     }
@@ -356,7 +358,9 @@ const updateMedicalAllowance = async (req, res) => {
     }
     // Since /getpersonnels/hiredBeforeJune1988 already filters eligible employees,
     // we skip the Employee lookup and assume the employee is eligible
-    const settings = await Settings.findOne({ fiscalYear, isActive: true }).lean();
+    const settings = await Settings.findOne({ fiscalYear, isActive: true })
+      .populate('compensationSettingsId')
+      .lean();
     if (!settings) {
       return res.status(404).json({ error: "Active settings not found for the specified fiscal year" });
     }
@@ -471,15 +475,19 @@ const bulkAddMedicalAllowances = async (req, res) => {
       return res.status(400).json({ error: "Budget type is required" });
     }
     // Get active settings
-    const settings = await Settings.findOne({ fiscalYear, isActive: true }).lean();
+    const settings = await Settings.findOne({ fiscalYear, isActive: true })
+      .populate('compensationSettingsId')
+      .lean();
     if (!settings) {
       return res.status(404).json({ error: "Active settings not found for the specified fiscal year" });
     }
-    if (!settings.medicalAllowance) {
+    // Get the medical allowance rate from settings (handles both legacy and new standalone compensation structure)
+    const rates = getAllowanceRates(settings);
+    const medicalAllowanceRate = rates.medicalAllowance;
+    
+    if (!medicalAllowanceRate) {
       return res.status(400).json({ error: "Medical allowance rate not found in settings" });
     }
-    // Get the medical allowance rate from settings (monthly rate)
-    const medicalAllowanceRate = settings.medicalAllowance;
     // Find eligible employees using PersonnelServices (already filtered by hire date)
     const eligibleEmployees = await PersonnelServices.find({
       DateOfAppointment: { $lt: new Date("1988-06-01") },

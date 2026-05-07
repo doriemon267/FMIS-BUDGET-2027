@@ -28,6 +28,7 @@ const personnelServicesRouter = Router();
 personnelServicesRouter.use(isAuth);
 // Apply submission workflow control middleware for read operations
 personnelServicesRouter.use('/personnelServices', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/personnel-services', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
 personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
@@ -49,6 +50,11 @@ personnelServicesRouter.put(
 // Unprotected GET routes
 personnelServicesRouter.get(
   "/personnelServices", 
+  getAllPersonnelServices || 
+    ((req, res) => res.status(500).json({ message: "Function not available" }))
+);
+personnelServicesRouter.get(
+  "/personnel-services", 
   getAllPersonnelServices || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );

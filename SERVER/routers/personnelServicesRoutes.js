@@ -325,5 +325,96 @@ personnelServicesRouter.post(
   syncAllMealAllowances || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
+// Alias route for compatibility with frontend expecting /api/personnel-services
+personnelServicesRouter.get("/api/personnel-services", async (req, res) => {
+  // Delegate to the same logic as /api/personnel/getByParams
+  // (copy-paste from /api/personnel/getByParams above)
+  try {
+    const { proposalId, fiscalYear, budgetType, processBy, region, status, employeeNumber } = req.query;
+    const query = {};
+
+    if (proposalId) {
+      try {
+        query.$or = [{ workflowRef: proposalId }];
+        const Proposal = require('../models/Proposal');
+        const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        if (legacy?._id) {
+          query.$or.push({ proposalId: legacy._id });
+        }
+      } catch (_e) {
+        query.proposalId = proposalId;
+      }
+    } else {
+      if (fiscalYear) query.fiscalYear = fiscalYear;
+      if (budgetType) query.budgetType = budgetType;
+      if (processBy) query.processBy = processBy;
+      if (status) query.status = status;
+      if (employeeNumber) query.employeeNumber = employeeNumber;
+    }
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+    if (region && !query.region) query.region = region;
+    if (!PersonnelService) {
+      console.error("PersonnelServices model is not available");
+      return res.status(500).json({ message: "Internal server error: Model not available" });
+    }
+    let personnel = await PersonnelService.find(query).lean();
+    // Responsibility center filtering (same as /api/personnel/getByParams)
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    const userRoles = req.user?.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        if (userAssignment) {
+          const assignedDepartment = userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department;
+          const assignedRegion = userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region;
+          const assignedDivision = userAssignment.divisionName;
+          const filteredPersonnel = personnel.filter(ps => {
+            const psDivision = String(ps.division || ps.Division || '').toUpperCase().trim();
+            const psDepartment = String(ps.department || ps.Department || '').toUpperCase().trim();
+            const psRegion = String(ps.region || ps.Region || '').toUpperCase().trim();
+            const targetDivision = String(assignedDivision || '').toUpperCase().trim();
+            const targetDepartment = String(assignedDepartment || '').toUpperCase().trim();
+            const targetRegion = String(assignedRegion || '').toUpperCase().trim();
+            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              return psDivision === targetDivision;
+            }
+            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              return psDepartment === targetDepartment;
+            }
+            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              return psRegion === targetRegion;
+            }
+            if (userAssignment.assignmentLevel === 'FULL') {
+              return true;
+            }
+            return false;
+          });
+          if (filteredPersonnel.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
+            personnel = filteredPersonnel;
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in /api/personnel-services:', err.message);
+      }
+    }
+    res.status(200).json(personnel);
+  } catch (error) {
+    console.error("Error fetching personnel by params (/api/personnel-services):", error);
+    res.status(500).json({ message: "Failed to fetch personnel data" });
+  }
+});
 module.exports = personnelServicesRouter;
 

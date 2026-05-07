@@ -3,6 +3,7 @@ const Settings = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const { getAllowanceRates } = require("../utils/allowanceUtils");
 const PersonnelServices = PersonnelService;
 
 // Function to sync children allowance with personnel services
@@ -279,15 +280,24 @@ const createChildrenAllowance = async (req, res) => {
       return res.status(400).json({ error: "Invalid process date" });
     }
     // Fetch settings
-    const settings = await Settings.findOne({ fiscalYear, isActive: true }).lean();
+    const settings = await Settings.findOne({ fiscalYear, isActive: true })
+      .populate('compensationSettingsId')
+      .lean();
+      
     if (!settings) {
       return res.status(404).json({ error: "Active settings not found for the specified fiscal year" });
     }
-    if (!settings.childrenAllowance) {
+    
+    // Get rates from settings (handles both legacy and new standalone compensation structure)
+    const rates = getAllowanceRates(settings);
+    const childrenAllowanceRate = rates.childrenAllowance;
+    
+    if (!childrenAllowanceRate) {
       return res.status(400).json({ error: "Children allowance rate not found in settings" });
     }
+    
     // Validate amount (annual calculation: monthly rate * 12)
-    const expectedAmount = validDependents * settings.childrenAllowance * 12;
+    const expectedAmount = validDependents * childrenAllowanceRate * 12;
     if (Number(amount) !== expectedAmount) {
       return res.status(400).json({
         error: `Invalid amount. Expected ${expectedAmount} for ${validDependents} dependents`,
@@ -393,15 +403,24 @@ const updateChildrenAllowance = async (req, res) => {
       return res.status(400).json({ error: "Invalid process date" });
     }
     // Fetch settings
-    const settings = await Settings.findOne({ fiscalYear, isActive: true }).lean();
+    const settings = await Settings.findOne({ fiscalYear, isActive: true })
+      .populate('compensationSettingsId')
+      .lean();
+      
     if (!settings) {
       return res.status(404).json({ error: "Active settings not found for the specified fiscal year" });
     }
-    if (!settings.childrenAllowance) {
+    
+    // Get rates from settings (handles both legacy and new standalone compensation structure)
+    const rates = getAllowanceRates(settings);
+    const childrenAllowanceRate = rates.childrenAllowance;
+    
+    if (!childrenAllowanceRate) {
       return res.status(400).json({ error: "Children allowance rate not found in settings" });
     }
+    
     // Validate amount (annual calculation: monthly rate * 12)
-    const expectedAmount = validDependents * settings.childrenAllowance * 12;
+    const expectedAmount = validDependents * childrenAllowanceRate * 12;
     if (Number(amount) !== expectedAmount) {
       return res.status(400).json({
         error: `Invalid amount. Expected ${expectedAmount} for ${validDependents} dependents`,

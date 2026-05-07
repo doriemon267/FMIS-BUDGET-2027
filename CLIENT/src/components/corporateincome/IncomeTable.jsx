@@ -79,6 +79,13 @@ const IncomeTable = ({
 }) => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  const isSuperAdmin = useMemo(() => {
+    return (currentUser?.Roles || []).some((role) =>
+      ["SUPER ADMIN", "SUPER_ADMIN", "SUPERADMIN"].includes(
+        String(role).toUpperCase()
+      )
+    );
+  }, [currentUser]);
   const { activeRegion } = useRegion();
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -1063,11 +1070,16 @@ const IncomeTable = ({
             )}
           </Box>
           <Box display="flex" alignItems="center" gap={1}>
-            <Tooltip title="Export data">
-              <IconButton onClick={(e) => setExportMenuAnchor(e.currentTarget)} color="primary">
-                <GetAppIcon />
-              </IconButton>
-            </Tooltip>
+            {isSuperAdmin && (
+              <Tooltip title="Export data">
+                <IconButton
+                  onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+                  color="primary"
+                >
+                  <GetAppIcon />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title="Refresh data">
               <span>
                 <IconButton onClick={handleRefresh} color="primary" disabled={isLoading}>
@@ -1093,15 +1105,17 @@ const IncomeTable = ({
               </Button>
             </Tooltip>
 
-            <Tooltip title="Bulk import income data">
-              <IconButton
-                color="primary"
-                onClick={() => setShowBulkUpload(true)}
-                size="small"
-              >
-                <CloudUploadIcon />
-              </IconButton>
-            </Tooltip>
+            {isSuperAdmin && (
+              <Tooltip title="Bulk import income data">
+                <IconButton
+                  color="primary"
+                  onClick={() => setShowBulkUpload(true)}
+                  size="small"
+                >
+                  <CloudUploadIcon />
+                </IconButton>
+              </Tooltip>
+            )}
           </Box>
         </Box>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>

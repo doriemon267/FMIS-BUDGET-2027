@@ -148,6 +148,13 @@ const defaultFilterState = {
 
 const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false, locked = false }) => {
   const { currentUser } = useUser();
+  const isSuperAdmin = useMemo(() => {
+    return (currentUser?.Roles || []).some((role) =>
+      ["SUPER ADMIN", "SUPER_ADMIN", "SUPERADMIN"].includes(
+        String(role).toUpperCase()
+      )
+    );
+  }, [currentUser]);
   const { workflowRef, headerConfig } = useWorkflowRef();
   const hasWorkflowRef = Boolean(workflowRef);
   const ensureWorkflowRef = useCallback(() => {
@@ -1067,15 +1074,17 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
               </IconButton>
             </Tooltip>
 
-            <Tooltip title="Bulk import capital outlay data">
-              <IconButton
-                color="primary"
-                onClick={() => setShowBulkUpload(true)}
-                size="small"
-              >
-                <CloudUploadIcon />
-              </IconButton>
-            </Tooltip>
+            {isSuperAdmin && (
+              <Tooltip title="Bulk import capital outlay data">
+                <IconButton
+                  color="primary"
+                  onClick={() => setShowBulkUpload(true)}
+                  size="small"
+                >
+                  <CloudUploadIcon />
+                </IconButton>
+              </Tooltip>
+            )}
           </Box>
         </Box>
 

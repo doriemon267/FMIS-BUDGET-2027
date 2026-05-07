@@ -105,6 +105,13 @@ import BulkUploadModal from "../common/BulkUploadModal";
 
 const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, fiscalYear = null }) => {  // ADDED: Accept region, proposalId, fiscalYear from parent
   const { currentUser } = useUser();
+  const isSuperAdmin = useMemo(() => {
+    return (currentUser?.Roles || []).some((role) =>
+      ["SUPER ADMIN", "SUPER_ADMIN", "SUPERADMIN"].includes(
+        String(role).toUpperCase()
+      )
+    );
+  }, [currentUser]);
   const contextRegion = useRegion(); // Get the active region from context
   const activeRegion = region || contextRegion.activeRegion; // ADDED: Use prop first, then context
   const queryClient = useQueryClient();
@@ -1562,24 +1569,32 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             </FormControl> */}
 
             {/* Export button */}
-            <Tooltip title="Export to CSV">
-              <IconButton onClick={handleExportToExcel} color="primary">
-                <GetAppIcon />
-              </IconButton>
-            </Tooltip>
+            {isSuperAdmin && (
+              <Tooltip title="Export to CSV">
+                <IconButton onClick={handleExportToExcel} color="primary">
+                  <GetAppIcon />
+                </IconButton>
+              </Tooltip>
+            )}
 
             {/* Import button */}
-            <Tooltip title="Import from CSV">
-              <IconButton component="label" color="primary" disabled={!isEditable}>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleImportData}
-                  style={{ display: 'none' }}
-                />
-                <GetAppIcon sx={{ transform: 'rotate(180deg)' }} />
-              </IconButton>
-            </Tooltip>
+            {isSuperAdmin && (
+              <Tooltip title="Import from CSV">
+                <IconButton
+                  component="label"
+                  color="primary"
+                  disabled={!isEditable}
+                >
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleImportData}
+                    style={{ display: "none" }}
+                  />
+                  <GetAppIcon sx={{ transform: "rotate(180deg)" }} />
+                </IconButton>
+              </Tooltip>
+            )}
 
             {/* Bulk edit toggle */}
             <Tooltip title="Bulk edit mode">
@@ -1593,15 +1608,17 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             </Tooltip>
 
             {/* Bulk upload button */}
-            <Tooltip title="Bulk import MOOE data">
-              <IconButton
-                color="primary"
-                onClick={() => setShowBulkUpload(true)}
-                disabled={!isEditable}
-              >
-                <CloudUploadIcon />
-              </IconButton>
-            </Tooltip>
+            {isSuperAdmin && (
+              <Tooltip title="Bulk import MOOE data">
+                <IconButton
+                  color="primary"
+                  onClick={() => setShowBulkUpload(true)}
+                  disabled={!isEditable}
+                >
+                  <CloudUploadIcon />
+                </IconButton>
+              </Tooltip>
+            )}
           </Box>
         </Box>
 
