@@ -110,6 +110,11 @@ const CustomDrawer = () => {
   const isBudgetPlanningAnalyst = roles.some(r => String(r) === JOB_ROLES.BUDGET_PLANNING_ANALYST);
   const isBRDLevel = isBRDLevelUser(currentUser);
 
+  const reportLinkName = (name) => {
+    if (isBRDLevel) return name;
+    return name.replace(/Consolidated /gi, '');
+  };
+
   const displayRole = useMemo(() => {
     if (!roles.length) {
       if (isSuperAdmin(currentUser)) return 'Admin';
@@ -126,6 +131,10 @@ const CustomDrawer = () => {
     isBudgetOfficer ||
     isOverallApprover ||
     isSuperAdmin(currentUser);
+
+  const canSeeReports =
+    canSeeBRDOnlyMenus ||
+    roles.some(r => [JOB_ROLES.BUDGET_PREPARER, JOB_ROLES.BUDGET_REVIEWER, JOB_ROLES.BUDGET_APPROVER].includes(String(r)));
 
   useEffect(() => {
     let isMounted = true;
@@ -440,30 +449,30 @@ const CustomDrawer = () => {
           <LinkTo
             icon={<LuLayoutDashboard size={18} />}
             name="Reports & Analytics"
-            isAllow={canSeeBRDOnlyMenus}
+            isAllow={canSeeReports}
             collapsed={collapsed}
             subLinks={[
               {
                 link: '/consolidated-corporate-income',
-                name: 'Consolidated Corporate Income',
+                name: reportLinkName('Consolidated Corporate Income'),
                 isAllow: true,
                 icon: <LuBanknote size={18} />,
               },
               {
                 link: '/consolidated-reports',
-                name: 'Consolidated MOOE',
+                name: reportLinkName('Consolidated MOOE'),
                 isAllow: true,
                 icon: <LuFileText size={18} />,
               },
               {
                 link: '/consolidated-capital-outlay-reports',
-                name: 'Consolidated Capital Outlay Reports',
+                name: reportLinkName('Consolidated Capital Outlay Reports'),
                 isAllow: true,
                 icon: <LuBanknote size={18} />,
               },
               {
                 link: '/consolidated-personnel-services-reports',
-                name: 'Consolidated Personnel Services Reports',
+                name: reportLinkName('Consolidated Personnel Services Reports'),
                 isAllow: true,
                 icon: <LuUsers size={18} />,
               },

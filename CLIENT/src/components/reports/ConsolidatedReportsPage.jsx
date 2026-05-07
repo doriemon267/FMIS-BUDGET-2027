@@ -116,6 +116,43 @@ const ConsolidatedReportsPage = () => {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  // --- ROLE-BASED SCOPING LOGIC ---
+  const hierarchical = currentUser?.hierarchicalAccess || {};
+  const scope = hierarchical.scope; // FULL, REGION, DEPARTMENT, DIVISION
+  const isBRDLevel = scope === "FULL" || (currentUser?.Roles || []).some(r => String(r).toUpperCase().includes("BRD") || String(r).toUpperCase().includes("PLANNING"));
+  
+  // Enforce restrictions based on role/scope
+  useEffect(() => {
+    if (!isBRDLevel && scope) {
+      // 1. Force "current" consolidation for non-BRD
+      if (consolidationType !== "current") {
+        setConsolidationType("current");
+      }
+      
+      // 2. Restrict region selection
+      const userRegion = hierarchical.accessibleRegions?.[0]?.regionName || activeRegion?.name || activeRegion?.Region;
+      if (userRegion && selectedCurrentRegion !== userRegion) {
+        setSelectedCurrentRegion(userRegion);
+      }
+      
+      // 3. Restrict Department
+      if ((scope === "DEPARTMENT" || scope === "DIVISION") && hierarchical.accessibleDepartments?.[0]) {
+        const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
+        if (selectedDepartment !== userDeptId) {
+          setSelectedDepartment(userDeptId);
+        }
+      }
+      
+      // 4. Restrict Division
+      if (scope === "DIVISION" && hierarchical.accessibleDivisions?.[0]) {
+        const userDiv = hierarchical.accessibleDivisions[0];
+        if (selectedDivision !== userDiv) {
+          setSelectedDivision(userDiv);
+        }
+      }
+    }
+  }, [isBRDLevel, scope, consolidationType, hierarchical, activeRegion, selectedCurrentRegion, selectedDepartment, selectedDivision]);
+
   useEffect(() => {
     return () => {
       if (pdfPreviewUrl) {
@@ -610,6 +647,7 @@ const ConsolidatedReportsPage = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
+                disabled={!isBRDLevel && !!scope}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
                 <MenuItem value="all">All Regions</MenuItem>
@@ -626,6 +664,7 @@ const ConsolidatedReportsPage = () => {
                   value={selectedCurrentRegion || effectiveCurrentRegion || ""}
                   onChange={handleCurrentRegionChange}
                   label="Region"
+                  disabled={!isBRDLevel && !!scope}
                 >
                   {(regions || []).map((region) => {
                     const name = region.name || region.Region || "";
@@ -648,6 +687,7 @@ const ConsolidatedReportsPage = () => {
                   multiple
                   value={selectedRegions}
                   onChange={handleRegionChange}
+                  disabled={!isBRDLevel && !!scope}
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {selected.map((value) => (
@@ -677,7 +717,7 @@ const ConsolidatedReportsPage = () => {
                   setSelectedDivision("");
                 }}
                 label="Department"
-                disabled={consolidationType !== "current" || !effectiveCurrentRegion || departments.length === 0}
+                disabled={consolidationType !== "current" || !effectiveCurrentRegion || departments.length === 0 || (!isBRDLevel && (scope === 'DEPARTMENT' || scope === 'DIVISION'))}
               >
                 <MenuItem value=""><em>All Departments</em></MenuItem>
                 {departments.map((dept, idx) => {
@@ -699,7 +739,7 @@ const ConsolidatedReportsPage = () => {
                 value={String(selectedDivision ?? "")}
                 onChange={(e) => setSelectedDivision(e.target.value || "")}
                 label="Division"
-                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
+                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0 || (!isBRDLevel && scope === 'DIVISION')}
               >
                 <MenuItem value=""><em>All Divisions</em></MenuItem>
                 {divisions.map((div, idx) => {

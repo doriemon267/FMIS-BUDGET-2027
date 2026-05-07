@@ -43,11 +43,13 @@ import {
 } from '@mui/icons-material';
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
+import { useUser } from '../context/UserContext';
 import IncomeReportSummary from '../components/reports/IncomeReportSummary';
 import EnhancedPDFPreviewDialog from '../components/EnhancedPDFPreviewDialog';
 import ReportPageLayout from '../components/reports/ReportPageLayout';
 
 const ConsolidatedCorporateIncomePage = () => {
+  const { currentUser } = useUser();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [reportData, setReportData] = useState(null);
@@ -70,6 +72,37 @@ const ConsolidatedCorporateIncomePage = () => {
   const [divisions, setDivisions] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('');
+
+  // --- ROLE-BASED SCOPING LOGIC ---
+  const hierarchical = currentUser?.hierarchicalAccess || {};
+  const scope = hierarchical.scope; // FULL, REGION, DEPARTMENT, DIVISION
+  const isBRDLevel = scope === "FULL" || (currentUser?.Roles || []).some(r => String(r).toUpperCase().includes("BRD") || String(r).toUpperCase().includes("PLANNING"));
+
+  // Enforce restrictions based on role/scope
+  useEffect(() => {
+    if (!isBRDLevel && scope) {
+      if (consolidationType !== 'current') {
+        setConsolidationType('current');
+      }
+      const userRegion = hierarchical.accessibleRegions?.[0]?.regionName || activeRegionName;
+      if (userRegion && selectedRegions !== userRegion) {
+        setSelectedRegions(userRegion);
+      }
+      if ((scope === 'DEPARTMENT' || scope === 'DIVISION') && hierarchical.accessibleDepartments?.[0]) {
+        const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
+        if (selectedDepartment !== userDeptId) {
+          setSelectedDepartment(userDeptId);
+        }
+      }
+      if (scope === 'DIVISION' && hierarchical.accessibleDivisions?.[0]) {
+        const userDiv = hierarchical.accessibleDivisions[0];
+        if (selectedDivision !== userDiv) {
+          setSelectedDivision(userDiv);
+        }
+      }
+    }
+  }, [isBRDLevel, scope, consolidationType, hierarchical, activeRegionName, selectedRegions, selectedDepartment, selectedDivision]);
+
   const selectedDepartmentName = selectedDepartment
     ? (departments.find((d) => String(d._id) === String(selectedDepartment))?.Department || selectedDepartment)
     : '';
@@ -391,6 +424,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="consolidation-type-label"
                     value={consolidationType}
                     label="Consolidation Type"
+                    disabled={!isBRDLevel && !!scope}
                     onChange={(e) => {
                       const nextType = e.target.value;
                       setConsolidationType(nextType);
@@ -449,7 +483,7 @@ const ConsolidatedCorporateIncomePage = () => {
 
               {/* Region Selector */}
               <Grid item xs={12} md={3}>
-                <FormControl fullWidth size="small" disabled={consolidationType === 'all'}>
+                <FormControl fullWidth size="small" disabled={consolidationType === 'all' || (!isBRDLevel && !!scope)}>
                   <InputLabel id="region-filter-label">Region</InputLabel>
                   <Select
                     labelId="region-filter-label"
@@ -482,7 +516,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="department-filter-label"
                     value={String(selectedDepartment ?? '')}
                     label="Department"
-                    disabled={consolidationType === 'all' || departments.length === 0}
+                    disabled={consolidationType === 'all' || departments.length === 0 || (!isBRDLevel && (scope === 'DEPARTMENT' || scope === 'DIVISION'))}
                     onChange={(e) => {
                       setSelectedDepartment(e.target.value || '');
                       setSelectedDivision('');
@@ -508,7 +542,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="division-filter-label"
                     value={String(selectedDivision ?? '')}
                     label="Division"
-                    disabled={consolidationType === 'all' || !selectedDepartment || divisions.length === 0}
+                    disabled={consolidationType === 'all' || !selectedDepartment || divisions.length === 0 || (!isBRDLevel && scope === 'DIVISION')}
                     onChange={(e) => setSelectedDivision(e.target.value || '')}
                   >
                     <MenuItem value=""><em>All Divisions</em></MenuItem>

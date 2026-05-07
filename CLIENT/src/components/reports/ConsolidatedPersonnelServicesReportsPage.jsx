@@ -80,6 +80,31 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
     ? (divisions.find((d) => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
     : "";
 
+  const [isScopeRestricted, setIsScopeRestricted] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.hierarchicalAccess || currentUser.hierarchicalAccess.scope === "FULL") {
+      setIsScopeRestricted(false);
+      return;
+    }
+
+    const { scope, departments: userDepts, divisions: userDivs } = currentUser.hierarchicalAccess;
+    setIsScopeRestricted(true);
+    setConsolidationType("current");
+
+    if (scope === "DEPARTMENT" || scope === "DIVISION") {
+      if (userDepts && userDepts.length > 0) {
+        setSelectedDepartment(String(userDepts[0]));
+      }
+    }
+
+    if (scope === "DIVISION") {
+      if (userDivs && userDivs.length > 0) {
+        setSelectedDivision(userDivs[0]);
+      }
+    }
+  }, [currentUser]);
+
   useEffect(() => {
     return () => {
       if (pdfPreviewUrl) {
@@ -391,10 +416,11 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
+                disabled={isScopeRestricted}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
-                <MenuItem value="all">All Regions</MenuItem>
-                <MenuItem value="custom">Custom Selection</MenuItem>
+                {!isScopeRestricted && <MenuItem value="all">All Regions</MenuItem>}
+                {!isScopeRestricted && <MenuItem value="custom">Custom Selection</MenuItem>}
               </Select>
             </FormControl>
           </Grid>
@@ -428,7 +454,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                   setSelectedDivision("");
                 }}
                 label="Department"
-                disabled={consolidationType !== "current" || !activeRegion || departments.length === 0}
+                disabled={isScopeRestricted || consolidationType !== "current" || !activeRegion || departments.length === 0}
               >
                 <MenuItem value=""><em>All Departments</em></MenuItem>
                 {departments.map((dept, idx) => {
@@ -450,7 +476,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 value={String(selectedDivision ?? "")}
                 onChange={(e) => setSelectedDivision(e.target.value || "")}
                 label="Division"
-                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
+                disabled={isScopeRestricted || consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
               >
                 <MenuItem value=""><em>All Divisions</em></MenuItem>
                 {divisions.map((div, idx) => {
