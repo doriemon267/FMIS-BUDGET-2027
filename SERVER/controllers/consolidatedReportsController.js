@@ -226,40 +226,69 @@ const consolidatedReportsController = {
     }
 
     try {
-      const { regions, fiscalYear, budgetType, department, division } = req.query;
+      const { regions, fiscalYear, budgetType } = req.query;
+      let { department, division } = req.query;
       const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
+
+      if (!department || !division) {
+        const sFilters = req.submissionWorkflowFilters || {};
+        const hAccess = req.hierarchicalAccess || req.hierarchicalAccessInfo || {};
+        
+        if (!department) {
+          if (sFilters.department) department = sFilters.department;
+          else if (hAccess.accessibleDepartments?.[0]?.departmentName) department = hAccess.accessibleDepartments[0].departmentName;
+          else if (hAccess.accessibleDepartments?.[0] && typeof hAccess.accessibleDepartments[0] === 'string') department = hAccess.accessibleDepartments[0];
+          else if (hAccess.accessibleOffices?.[0]) department = hAccess.accessibleOffices[0];
+          else if (req.user?.department) department = req.user.department;
+          else if (sFilters.$and) {
+            const df = sFilters.$and.find(f => f.department);
+            if (df) department = df.department;
+            else {
+              const of = sFilters.$and.find(f => f.region && !f.division);
+              if (of && of.region) department = of.region;
+            }
+          }
+        }
+        
+        if (!division) {
+          if (sFilters.division) division = sFilters.division;
+          else if (hAccess.accessibleDivisions?.[0]) division = hAccess.accessibleDivisions[0];
+          else if (hAccess.accessibleResponsibilityCenters?.[0]) division = hAccess.accessibleResponsibilityCenters[0];
+          else if (req.user?.division) division = req.user.division;
+          else if (sFilters.$and) {
+            const df = sFilters.$and.find(f => f.division);
+            if (df) division = df.division;
+            else {
+              const dptf = sFilters.$and.find(f => f.department);
+              if (dptf && dptf.department) division = dptf.department;
+            }
+          }
+        }
+      }
 
       let regionFilter = {};
       if (regionList && regionList.length) {
         regionFilter.region = { $in: regionList };
       }
 
-      const accessScope = req.hierarchicalAccess?.scope;
-      const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+      const accessScope = req.hierarchicalAccess?.scope || req.hierarchicalAccessInfo?.scope;
+      const accessibleRegionName = (req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName) || (req.hierarchicalAccessInfo?.accessibleRegions?.[0]?.regionName);
+      
       if (accessScope && accessScope !== 'FULL' && accessibleRegionName && !regionFilter.region) {
         regionFilter.region = accessibleRegionName;
-      }
-      if (accessScope === 'DIVISION') {
-        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-        const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-        if (deptName && !regionFilter.department) regionFilter.department = deptName;
-        if (divName && !regionFilter.division) regionFilter.division = divName;
-      } else if (accessScope === 'DEPARTMENT') {
-        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-        if (deptName && !regionFilter.department) regionFilter.department = deptName;
       }
 
       const mooeQuery = { ...regionFilter };
       if (fiscalYear) mooeQuery.fiscalYear = fiscalYear;
       if (budgetType) mooeQuery.budgetType = budgetType;
-      if (department && !mooeQuery.department && !mooeQuery.$and) {
-        mooeQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-      }
-      if (division && !mooeQuery.division && !mooeQuery.$and) {
-        mooeQuery.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-      }
+      if (department) mooeQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      if (division)   mooeQuery.division   = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
       const mooeData = await MooeProposal.find(mooeQuery).lean();
+
+      // FINAL FALLBACK: Extract from data if still missing
+      if (!department && mooeData.length > 0) department = mooeData[0].department;
+      if (!division && mooeData.length > 0) division = mooeData[0].division;
 
       // --- Resolve signatories from workflow ---
       let signatoriesInfo = extractSignatoriesFromWorkflow(null);
@@ -273,14 +302,14 @@ const consolidatedReportsController = {
         }
       }
 
-      // --- Group data by region > category ---
+      // --- Group data by Responsibility Center > category ---
       const grouped = {};
       mooeData.forEach((item) => {
-        const regionName = item.region || 'Unknown Region';
+        const rcName = item.division || item.department || item.region || 'Unknown Responsibility Center';
         const categoryName = item.sublineItem || 'Uncategorized';
-        if (!grouped[regionName]) grouped[regionName] = {};
-        if (!grouped[regionName][categoryName]) grouped[regionName][categoryName] = [];
-        grouped[regionName][categoryName].push({
+        if (!grouped[rcName]) grouped[rcName] = {};
+        if (!grouped[rcName][categoryName]) grouped[rcName][categoryName] = [];
+        grouped[rcName][categoryName].push({
           uacsCode: item.uacsCode || '',
           accountingTitle: item.accountingTitle || '',
           income: Number(item.income || 0),
@@ -290,9 +319,9 @@ const consolidatedReportsController = {
       });
 
       // Sort items within each category by uacsCode
-      for (const regionName of Object.keys(grouped)) {
-        for (const catName of Object.keys(grouped[regionName])) {
-          grouped[regionName][catName].sort((a, b) => {
+      for (const rcName of Object.keys(grouped)) {
+        for (const catName of Object.keys(grouped[rcName])) {
+          grouped[rcName][catName].sort((a, b) => {
             const aUacs = (a.uacsCode || '').toString();
             const bUacs = (b.uacsCode || '').toString();
             if (/^\d[\d\-]*$/.test(aUacs) && /^\d[\d\-]*$/.test(bUacs)) {
@@ -321,7 +350,7 @@ const consolidatedReportsController = {
       // Row heights
       const ROW_H        = 14;   // standard data row
       const HDR_ROW_H    = 16;   // column header row
-      const REGION_ROW_H = 15;   // region label row
+      const RC_ROW_H     = 15;   // RC label row
 
       // ============================================================
       // INK-SAVING COLOR PALETTE  — only black and grays
@@ -336,24 +365,61 @@ const consolidatedReportsController = {
       // ============================================================
       // COLUMN LAYOUT
       // ============================================================
+      const COL_RC      = 100;
       const COL_UACS    = 68;
       const COL_INCOME  = 108;
       const COL_SUBSIDY = 108;
       const COL_AMOUNT  = 108;
-      const COL_TITLE   = CONTENT_WIDTH - COL_UACS - COL_INCOME - COL_SUBSIDY - COL_AMOUNT;
+      const COL_TITLE   = CONTENT_WIDTH - COL_RC - COL_UACS - COL_INCOME - COL_SUBSIDY - COL_AMOUNT;
 
       const colX = {
-        uacs:    CONTENT_LEFT,
-        title:   CONTENT_LEFT + COL_UACS,
-        income:  CONTENT_LEFT + COL_UACS + COL_TITLE,
-        subsidy: CONTENT_LEFT + COL_UACS + COL_TITLE + COL_INCOME,
-        amount:  CONTENT_LEFT + COL_UACS + COL_TITLE + COL_INCOME + COL_SUBSIDY,
+        rc:      CONTENT_LEFT,
+        uacs:    CONTENT_LEFT + COL_RC,
+        title:   CONTENT_LEFT + COL_RC + COL_UACS,
+        income:  CONTENT_LEFT + COL_RC + COL_UACS + COL_TITLE,
+        subsidy: CONTENT_LEFT + COL_RC + COL_UACS + COL_TITLE + COL_INCOME,
+        amount:  CONTENT_LEFT + COL_RC + COL_UACS + COL_TITLE + COL_INCOME + COL_SUBSIDY,
       };
 
       // ============================================================
       // HELPERS
       // ============================================================
       const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
+
+      const wrapText = (text, maxWidth, fontSize) => {
+        const words = String(text || '').split(' ');
+        const lines = [];
+        let currentLine = '';
+        const getWidth = (t) => {
+          try { return pdfDoc.calculateTextDimensions(t, { fontSize }).width; }
+          catch (e) { return t.length * (fontSize * 0.55); }
+        };
+        words.forEach(word => {
+          let testLine = currentLine ? `${currentLine} ${word}` : word;
+          if (getWidth(testLine) > maxWidth) {
+            if (currentLine) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              let part = '';
+              for (let char of word) {
+                if (getWidth(part + char) > maxWidth) {
+                  lines.push(part);
+                  part = char;
+                } else {
+                  part += char;
+                }
+              }
+              currentLine = part;
+            }
+          } else {
+            currentLine = testLine;
+          }
+        });
+        if (currentLine) lines.push(currentLine);
+        return lines;
+      };
+
       const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.id || 'Authorized User');
       const formatPhp = (n) =>
         Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -453,10 +519,17 @@ const consolidatedReportsController = {
         pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, { color: DARK, fontSize: 10, bold: true, align: 'center' });
         hy += 11;
 
-        let regionLabel = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
-        if (department) regionLabel += `  |  Dept: ${department}`;
-        if (division)   regionLabel += `  >  Div: ${division}`;
-        pdfDoc.text(regionLabel, cx, hy, { color: MID, fontSize: 8, align: 'center' });
+        let rcHeader = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
+        if (department || division) {
+          let subHeader = '';
+          if (department) subHeader += department;
+          if (division) subHeader += (subHeader ? ' - ' : '') + division;
+          pdfDoc.text(rcHeader, cx, hy, { color: MID, fontSize: 9, bold: true, align: 'center' });
+          hy += 12;
+          pdfDoc.text(subHeader, cx, hy, { color: MID, fontSize: 8, align: 'center' });
+        } else {
+          pdfDoc.text(rcHeader, cx, hy, { color: MID, fontSize: 9, bold: true, align: 'center' });
+        }
         hy += 14;
 
         // Report title — bold text only, no colored bar
@@ -513,11 +586,12 @@ const consolidatedReportsController = {
         });
 
         // Vertical column dividers inside header
-        [colX.title, colX.income, colX.subsidy, colX.amount].forEach(x => {
+        [colX.uacs, colX.title, colX.income, colX.subsidy, colX.amount].forEach(x => {
           pdfDoc.rectangle(x, hY, 0.5, HDR_ROW_H, { fill: BLACK, stroke: BLACK, lineWidth: 0 });
         });
 
         // Header labels — bold black text
+        pdfDoc.text('RESPONSIBILITY CENTER',            colX.rc + 4,                        hY + 5, { color: BLACK, fontSize: 6.5, bold: true });
         pdfDoc.text('UACS CODE',                        colX.uacs + 4,                      hY + 5, { color: BLACK, fontSize: 7.5, bold: true });
         pdfDoc.text('ACCOUNTING TITLE / DESCRIPTION',   colX.title + 6,                     hY + 5, { color: BLACK, fontSize: 7.5, bold: true });
         pdfDoc.text('INCOME',  colX.income  + COL_INCOME  - 5, hY + 5, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
@@ -566,16 +640,23 @@ const consolidatedReportsController = {
 
       const regionNames = Object.keys(grouped).sort();
 
-      for (const regionName of regionNames) {
-        const categories = grouped[regionName];
+      for (const rcName of regionNames) {
+        const categories = grouped[rcName];
 
-        // ---- REGION HEADER ROW ----
-        ensureSpace(1, REGION_ROW_H);
-        pdfDoc.text(regionName.toUpperCase(), CONTENT_LEFT + 6, curY + 4, {
-          color: BLACK, fontSize: 8.5, bold: true
+        // ---- RC HEADER ROW ----
+        ensureSpace(2, RC_ROW_H);
+        
+        const rcLines = wrapText(rcName, COL_RC - 8, 7);
+        rcLines.forEach((line, idx) => {
+          pdfDoc.text(line, colX.rc + 4, curY + 4 + (idx * ROW_H), {
+            color: BLACK, fontSize: 7, bold: true
+          });
         });
-        curY += REGION_ROW_H;
+        
+        let rcRowHeight = Math.max(RC_ROW_H, rcLines.length * ROW_H);
+        // curY += rcRowHeight; // No, we want to align with category name if it's the first row
 
+        let rcFirstRow = true;
         let regionIncome  = 0;
         let regionSubsidy = 0;
         let regionAmount  = 0;
@@ -590,13 +671,15 @@ const consolidatedReportsController = {
             color: DARK, fontSize: 7.5, bold: true
           }, { columnWidth: COL_TITLE - 9, overflow: 'truncate' });
           curY += ROW_H;
+          rcFirstRow = false;
 
           let catIncome  = 0;
           let catSubsidy = 0;
           let catAmount  = 0;
 
           rows.forEach((row, idx) => {
-            ensureSpace(1);
+            const titleLines = wrapText(safeStr(row.accountingTitle), COL_TITLE - 20, 7.5);
+            ensureSpace(titleLines.length);
 
             // UACS code — smaller, gray
             if (row.uacsCode) {
@@ -606,18 +689,19 @@ const consolidatedReportsController = {
             }
 
             // Accounting title — indented under category
-            pdfDoc.text(
-              safeStr(row.accountingTitle),
-              colX.title + 16, curY + 4,
-              { color: DARK, fontSize: 7.5 },
-              { columnWidth: COL_TITLE - 20, overflow: 'truncate' }
-            );
+            titleLines.forEach((line, lineIdx) => {
+              pdfDoc.text(
+                line,
+                colX.title + 16, curY + 4 + (lineIdx * ROW_H),
+                { color: DARK, fontSize: 7.5 }
+              );
+            });
 
             pdfDoc.text(formatPhp(row.income),  colX.income  + COL_INCOME  - 5, curY + 4, { color: DARK, fontSize: 7.5, align: 'right' });
             pdfDoc.text(formatPhp(row.subsidy), colX.subsidy + COL_SUBSIDY - 5, curY + 4, { color: DARK, fontSize: 7.5, align: 'right' });
             pdfDoc.text(formatPhp(row.amount),  colX.amount  + COL_AMOUNT  - 5, curY + 4, { color: DARK, fontSize: 7.5, align: 'right' });
 
-            curY += ROW_H;
+            curY += (titleLines.length * ROW_H);
 
             catIncome  += row.income;
             catSubsidy += row.subsidy;
@@ -642,9 +726,9 @@ const consolidatedReportsController = {
           regionAmount  += catAmount;
         }
 
-        // ---- REGION TOTAL ROW ----
+        // ---- RC TOTAL ROW ----
         ensureSpace(1);
-        pdfDoc.text(`Region Total: ${regionName}`, CONTENT_LEFT + 6, curY + 5, {
+        pdfDoc.text(`Total for ${rcName}:`, CONTENT_LEFT + 6, curY + 5, {
           color: BLACK, fontSize: 8, bold: true
         });
         pdfDoc.text(formatPhp(regionIncome),  colX.income  + COL_INCOME  - 5, curY + 5, { color: BLACK, fontSize: 8, bold: true, align: 'right' });

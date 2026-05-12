@@ -112,6 +112,23 @@ const HierarchicalUserAssignmentPage = () => {
   const { currentUser, refetchUserProfile } = useUser();
   const queryClient = useQueryClient();
 
+  // Fetch available fiscal years
+  const { data: fiscalYearsData } = useQuery({
+    queryKey: ['fiscal-years'],
+    queryFn: async () => {
+      const res = await api.get('/settings/settings/fiscal-years');
+      return res.data?.data || [];
+    }
+  });
+
+  const { data: activeSettings } = useQuery({
+    queryKey: ['activeSettings'],
+    queryFn: async () => {
+      const res = await api.get('/settings/active');
+      return res.data;
+    }
+  });
+
   // Pagination state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);

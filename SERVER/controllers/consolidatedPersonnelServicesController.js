@@ -85,21 +85,38 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
   try {
     const { regions, region, fiscalYear, budgetType, department, division } = req.query;
     // Build query
-    const query = {};
+    let query = {};
+    if (fiscalYear) query.fiscalYear = fiscalYear;
+    if (budgetType) query.budgetType = budgetType;
+
     if (regions) {
       const regionList = Array.isArray(regions) ? regions : [regions];
       query.region = { $in: regionList };
     } else if (region) {
       query.region = region;
     }
-    // Apply hierarchical filters if present
-    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
-      query.region = req.hierarchicalFilters.region;
-    }
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
+
     if (department) query.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     if (division) query.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+    // Apply hierarchical filters if present (merged with query)
+    const hFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    if (Object.keys(hFilters).length > 0) {
+      if (hFilters.$and) {
+        query = {
+          $and: [
+            query,
+            ...hFilters.$and
+          ]
+        };
+      } else {
+        query = {
+          ...query,
+          ...hFilters
+        };
+      }
+    }
+
     // Fetch all PersonnelServices data
     const psData = await PersonnelServices.find(query).lean();
     if (!Array.isArray(psData) || psData.length === 0) {
@@ -151,15 +168,17 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
           // Calculate amount based on field mapping
           let amount = 0;
           if (itemData.field) {
+            const appointment = (employee.statusOfAppointment || '').toString().trim().toUpperCase();
+            
             // Special handling for Salaries and Wages based on statusOfAppointment
             if (categoryKey === '1' && itemKey === 'a') {
-              // Salaries - Regular (Authorized Positions) = Permanent only
-              if (employee.statusOfAppointment === 'PERMANENT') {
+              // Salaries - Regular (Authorized Positions) = Permanent/Regular/Plantilla only
+              if (appointment.includes('PERMANENT') || appointment.includes('REGULAR') || appointment.includes('PLANTILLA')) {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else if (categoryKey === '1' && itemKey === 'b') {
               // Casual Personnel = Casual only
-              if (employee.statusOfAppointment === 'CASUAL') {
+              if (appointment.includes('CASUAL')) {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else {
@@ -324,20 +343,79 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
   }
 
   try {
-    const { regions, region, fiscalYear, budgetType, department, division } = req.query;
-    const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
-    const query = {};
-    if (regionList && regionList.length) query.region = { $in: regionList };
-    else if (region) query.region = region;
-    if (req.hierarchicalFilters && req.hierarchicalFilters.region && !query.region) {
-      query.region = req.hierarchicalFilters.region;
+    const { regions, region, fiscalYear, budgetType } = req.query;
+    let { department, division } = req.query;
+
+    if (!department || !division) {
+      const sFilters = req.submissionWorkflowFilters || {};
+      const hAccess = req.hierarchicalAccess || req.hierarchicalAccessInfo || {};
+      
+      if (!department) {
+        if (sFilters.department) department = sFilters.department;
+        else if (hAccess.accessibleDepartments?.[0]?.departmentName) department = hAccess.accessibleDepartments[0].departmentName;
+        else if (hAccess.accessibleDepartments?.[0] && typeof hAccess.accessibleDepartments[0] === 'string') department = hAccess.accessibleDepartments[0];
+        else if (hAccess.accessibleOffices?.[0]) department = hAccess.accessibleOffices[0];
+        else if (req.user?.department) department = req.user.department;
+        else if (sFilters.$and) {
+          const df = sFilters.$and.find(f => f.department);
+          if (df) department = df.department;
+          else {
+            const of = sFilters.$and.find(f => f.region && !f.division);
+            if (of && of.region) department = of.region;
+          }
+        }
+      }
+      
+      if (!division) {
+        if (sFilters.division) division = sFilters.division;
+        else if (hAccess.accessibleDivisions?.[0]) division = hAccess.accessibleDivisions[0];
+        else if (hAccess.accessibleResponsibilityCenters?.[0]) division = hAccess.accessibleResponsibilityCenters[0];
+        else if (req.user?.division) division = req.user.division;
+        else if (sFilters.$and) {
+          const df = sFilters.$and.find(f => f.division);
+          if (df) division = df.division;
+          else {
+            const dptf = sFilters.$and.find(f => f.department);
+            if (dptf && dptf.department) division = dptf.department;
+          }
+        }
+      }
     }
+
+    const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
+    let query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
+
+    if (regionList && regionList.length) query.region = { $in: regionList };
+    else if (region) query.region = region;
+
     if (department) query.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     if (division) query.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
+    // Apply hierarchical filters if present
+    const hFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    if (Object.keys(hFilters).length > 0) {
+      if (hFilters.$and) {
+        query = {
+          $and: [
+            query,
+            ...hFilters.$and
+          ]
+        };
+      } else {
+        query = {
+          ...query,
+          ...hFilters
+        };
+      }
+    }
+
     const psData = await PersonnelServices.find(query).lean();
+
+    // FINAL FALLBACK: Extract from data if still missing
+    if (!department && psData.length > 0) department = psData[0].department;
+    if (!division && psData.length > 0) division = psData[0].division;
 
     let signatoriesInfo = extractSignatoriesFromWorkflow(null);
     const workflowRefId = psData.map((m) => m.workflowRef).filter(Boolean)[0];
@@ -352,21 +430,24 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     const grouped = {};
     psData.forEach((employee) => {
-      const regionName = employee.region || 'Unknown Region';
-      if (!grouped[regionName]) grouped[regionName] = {};
+      const rcName = employee.division || employee.department || employee.region || 'Unknown Responsibility Center';
+      if (!grouped[rcName]) grouped[rcName] = {};
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         const categoryName = `${categoryKey} ${categoryData.name}`;
-        if (!grouped[regionName][categoryName]) grouped[regionName][categoryName] = {};
+        if (!grouped[rcName][categoryName]) grouped[rcName][categoryName] = {};
         Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
-          if (!grouped[regionName][categoryName][itemKey]) {
-            grouped[regionName][categoryName][itemKey] = { key: `${categoryKey}.${itemKey}`, name: itemData.name, amount: 0 };
+          if (!grouped[rcName][categoryName][itemKey]) {
+            grouped[rcName][categoryName][itemKey] = { key: `${categoryKey}.${itemKey}`, name: itemData.name, amount: 0 };
           }
           let amount = 0;
           if (itemData.field) {
+            const appointment = (employee.statusOfAppointment || '').toString().trim().toUpperCase();
             if (categoryKey === '1' && itemKey === 'a') {
-              if (employee.statusOfAppointment === 'PERMANENT') amount = Number(employee.annualSalary) || 0;
+              if (appointment.includes('PERMANENT') || appointment.includes('REGULAR') || appointment.includes('PLANTILLA')) {
+                amount = Number(employee.annualSalary) || 0;
+              }
             } else if (categoryKey === '1' && itemKey === 'b') {
-              if (employee.statusOfAppointment === 'CASUAL') amount = Number(employee.annualSalary) || 0;
+              if (appointment.includes('CASUAL')) amount = Number(employee.annualSalary) || 0;
             } else if (itemData.field.includes(',')) {
               const fields = itemData.field.split(',');
               amount = fields.reduce((sum, field) => sum + (Number(employee[field.trim()]) || 0), 0);
@@ -427,10 +508,18 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       hy += LINE_H;
       pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
       hy += LINE_H;
-      let regionLabel = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
-      if (department) regionLabel += `  |  Dept: ${department}`;
-      if (division) regionLabel += `  >  Div: ${division}`;
-      pdfDoc.text(regionLabel, cx, hy, textOpt({ fontSize: 9, align: 'center' }));
+      
+      let rcHeader = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
+      if (department || division) {
+        let subHeader = '';
+        if (department) subHeader += department;
+        if (division) subHeader += (subHeader ? ' - ' : '') + division;
+        pdfDoc.text(rcHeader, cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+        hy += LINE_H;
+        pdfDoc.text(subHeader, cx, hy, textOpt({ fontSize: 9, align: 'center' }));
+      } else {
+        pdfDoc.text(rcHeader, cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+      }
 
       curY = hy + LINE_H * 1.3;
       pdfDoc.text('CONSOLIDATED PERSONNEL SERVICES REPORT', cx, curY, textOpt({ fontSize: 14, bold: true, align: 'center' }));
@@ -450,7 +539,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       if (curY + lines * LINE_H > PAGE_HEIGHT - MARGIN - 22) startNewPage();
     };
 
-    const COL_REGION = 80;
+    const COL_REGION = 90;
     const COL_ITEM = 75;
     const COL_AMOUNT = 90;
     const COL_PARTICULARS = CONTENT_RIGHT - CONTENT_LEFT - COL_REGION - COL_ITEM - COL_AMOUNT;
@@ -464,7 +553,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     const drawTableHeader = () => {
       ensureSpace(2);
       pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.5 });
-      pdfDoc.text('REGION', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
+      pdfDoc.text('RESPONSIBILITY CENTER', colX.region + 3, curY, textOpt({ fontSize: 7, bold: true }));
       pdfDoc.text('ITEM NO.', colX.item + 3, curY, textOpt({ fontSize: 8, bold: true }));
       pdfDoc.text('PARTICULARS', colX.particulars + 3, curY, textOpt({ fontSize: 8, bold: true }));
       pdfDoc.text('AMOUNT', colX.amount + 3, curY, textOpt({ fontSize: 8, bold: true }));
@@ -476,14 +565,20 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     drawTableHeader();
 
     let grandAmount = 0;
-    for (const [regionName, categories] of Object.entries(grouped)) {
+    for (const [rcName, categories] of Object.entries(grouped)) {
       let regionFirstRow = true;
       for (const [categoryName, itemsMap] of Object.entries(categories)) {
         ensureSpace(2);
         pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 2, { stroke: '#c0d0c0', lineWidth: 0.3 });
-        pdfDoc.text(regionFirstRow ? regionName : '', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
+        
+        const rcLines = regionFirstRow ? wrapText(rcName, COL_REGION - 6, 7) : [''];
+        ensureSpace(Math.max(1, rcLines.length));
+        rcLines.forEach((line, idx) => {
+          pdfDoc.text(line, colX.region + 3, curY + (idx * LINE_H), textOpt({ fontSize: 7, bold: true }));
+        });
+
         pdfDoc.text(categoryName, colX.item + 3, curY, textOpt({ fontSize: 8, bold: true }), { columnWidth: COL_PARTICULARS + COL_ITEM - 6, overflow: 'truncate' });
-        curY += LINE_H + 2;
+        curY += (Math.max(1, rcLines.length) * LINE_H);
         regionFirstRow = false;
 
         let catTotal = 0;

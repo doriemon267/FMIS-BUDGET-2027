@@ -24,6 +24,29 @@ const parseAmount = (value) => {
 const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const resolveMooeMapping = async ({ sublineItem, accountingTitle }) => {
+  // Hardcoded mappings for special categories that may not be in ChartOfAccounts
+  const hardcodedMappings = [
+    { sublineItem: "Financial Expenses", accountingTitle: "Interest Expenses", uacsCode: "5-02-30-010" },
+    { sublineItem: "Financial Expenses", accountingTitle: "Bank Charges", uacsCode: "5-02-30-020" },
+    { sublineItem: "Financial Expenses", accountingTitle: "Other Financial Expenses", uacsCode: "5-02-30-990" },
+    { sublineItem: "Irrigators' Associations (IAs) Operation & Maintenance Cost", accountingTitle: "National Irrigation System", uacsCode: "5-02-99-990-NIS" },
+    { sublineItem: "Irrigators' Associations (IAs) Operation & Maintenance Cost", accountingTitle: "Communal Irrigation System", uacsCode: "5-02-99-990-CIS" },
+    { sublineItem: "Communication Expenses", accountingTitle: "Telephone Expenses-Mobile", uacsCode: "5-02-05-020-2" }
+  ];
+
+  if (sublineItem) {
+    const match = hardcodedMappings.find(m => 
+      m.sublineItem.toLowerCase() === sublineItem.toLowerCase() && 
+      (!accountingTitle || m.accountingTitle.toLowerCase() === accountingTitle.toLowerCase())
+    );
+    if (match) {
+      return {
+        accountingTitle: accountingTitle || match.accountingTitle,
+        uacsCode: match.uacsCode
+      };
+    }
+  }
+
   const exactSubline = sublineItem ? new RegExp(`^${escapeRegex(sublineItem)}$`, "i") : null;
   const exactAccountingTitle = accountingTitle ? new RegExp(`^${escapeRegex(accountingTitle)}$`, "i") : null;
 
@@ -254,8 +277,7 @@ exports.getSampleMooeTemplate = async (req, res) => {
         "SUBLINE ITEM": "Office Supplies",
         "ACCOUNTING TITLE": "Office Supplies Expenses",
         "INCOME": 10000,
-        "SUBSIDY": 5000,
-        "AMOUNT": 15000
+        "SUBSIDY": 5000
       },
       { 
         "REGION": "",
@@ -264,8 +286,7 @@ exports.getSampleMooeTemplate = async (req, res) => {
         "SUBLINE ITEM": "Travel Expenses",
         "ACCOUNTING TITLE": "Traveling Expenses - Local",
         "INCOME": 20000,
-        "SUBSIDY": 8000,
-        "AMOUNT": 28000
+        "SUBSIDY": 8000
       },
       { 
         "REGION": "",
@@ -274,8 +295,25 @@ exports.getSampleMooeTemplate = async (req, res) => {
         "SUBLINE ITEM": "Other Maintenance and Operating Expenses",
         "ACCOUNTING TITLE": "Representation Expenses",
         "INCOME": 5000,
-        "SUBSIDY": 2000,
-        "AMOUNT": 7000
+        "SUBSIDY": 2000
+      },
+      { 
+        "REGION": "",
+        "DEPARTMENT": "",
+        "RESPONSIBILITY CENTER": "",
+        "SUBLINE ITEM": "Financial Expenses",
+        "ACCOUNTING TITLE": "Bank Charges",
+        "INCOME": 1000,
+        "SUBSIDY": 500
+      },
+      { 
+        "REGION": "",
+        "DEPARTMENT": "",
+        "RESPONSIBILITY CENTER": "",
+        "SUBLINE ITEM": "Irrigators' Associations (IAs) Operation & Maintenance Cost",
+        "ACCOUNTING TITLE": "National Irrigation System",
+        "INCOME": 50000,
+        "SUBSIDY": 25000
       }
     ];
     const worksheet = xlsx.utils.json_to_sheet(sampleData);
@@ -285,7 +323,6 @@ exports.getSampleMooeTemplate = async (req, res) => {
       { wch: 35 },
       { wch: 28 },
       { wch: 32 },
-      { wch: 16 },
       { wch: 16 },
       { wch: 16 }
     ];

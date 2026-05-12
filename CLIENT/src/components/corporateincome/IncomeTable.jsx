@@ -1214,7 +1214,7 @@ const IncomeTable = ({
                         Fiscal Year
                       </Typography>
                       <Typography variant="body1" sx={{ color: 'white', fontWeight: 'medium' }}>
-                        {fiscalYear || 'Not Set'}
+                        {effectiveFiscalYear || 'Not Set'}
                       </Typography>
                     </Box>
                   </Box>
@@ -1227,7 +1227,7 @@ const IncomeTable = ({
                         Budget Type
                       </Typography>
                       <Typography variant="body1" sx={{ color: 'white', fontWeight: 'medium' }}>
-                        {budgetType || 'Not Set'}
+                        {effectiveBudgetType || 'Not Set'}
                       </Typography>
                     </Box>
                   </Box>

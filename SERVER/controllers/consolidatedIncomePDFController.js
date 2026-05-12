@@ -923,7 +923,14 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       const headerY = MARGIN_TOP;
       const title = continuation ? `${getTabTitle()} (CONT.)` : getTabTitle();
       pdfDoc.text(title, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
-      pdfDoc.text(`Fiscal Year: ${fiscalYear} | Budget Type: ${budgetType}`, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 12, textOpt({ fontSize: 8, align: 'center' }));
+      
+      let subTitle = `Fiscal Year: ${fiscalYear} | Budget Type: ${budgetType}`;
+      const filterDept = department || req.submissionWorkflowFilters?.department || req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const filterDiv = division || req.submissionWorkflowFilters?.division || req.hierarchicalAccess?.accessibleDivisions?.[0];
+      if (filterDept) subTitle += ` | Dept: ${filterDept}`;
+      if (filterDiv) subTitle += ` > Div: ${filterDiv}`;
+      
+      pdfDoc.text(subTitle, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 12, textOpt({ fontSize: 8, align: 'center' }));
       pdfDoc.text(`Regions: ${groupRegions.join(', ')}`, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 22, textOpt({ fontSize: 8, align: 'center' }));
       pdfDoc.text('ANNEX A', CONTENT_RIGHT - 46, headerY + 24, textOpt({ fontSize: 9, bold: true }));
 

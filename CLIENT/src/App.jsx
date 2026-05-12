@@ -379,7 +379,7 @@ const App = () => {
           path="/comparative-report"
           element={
             <ProtectedRoute
-              requiredWorkflowRoles={["BUDGET_PLANNING_ANALYST", "budgetAnalyst", "BUDGET_OFFICER", "BUDGET_MANAGER", "overallBudgetApprover", "superAdmin"]}
+              requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
               <ComparativeReportPage />
             </ProtectedRoute>
@@ -446,7 +446,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
+              requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedCorporateIncomePage />
             </ProtectedRoute>
@@ -479,7 +479,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
+              requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedCapitalOutlayReportsPage />
             </ProtectedRoute>
@@ -490,7 +490,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
+              requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedPersonnelServicesReportsPage />
             </ProtectedRoute>

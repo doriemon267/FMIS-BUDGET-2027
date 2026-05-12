@@ -87,29 +87,36 @@ exports.addIncomeCategory = async (req, res) => {
     }
     // Check for duplicate category name within the same region scope
     // Allow duplicates if they are assigned to different regions
-    const existingCategory = await IncomeCat.findOne({
+    const existingCategories = await IncomeCat.find({
       incomeCategoryName: categoryName
     });
-    if (existingCategory) {
-      // If existing category is global, don't allow any duplicates
-      if (existingCategory.isGlobal === true) {
-        return res.status(400).json({ error: "A global category with this name already exists." });
-      }
-      // If new category is global, don't allow if any category with same name exists
+
+    if (existingCategories.length > 0) {
+      // If new category is global, check if any category already exists (global or regional)
       if (isGlobal === true) {
-        return res.status(400).json({ error: "Cannot create global category - a regional category with this name already exists." });
+        return res.status(400).json({ error: "Cannot create global category - a category with this name already exists (global or regional)." });
       }
-      // For regional categories, check if there's overlap in assigned regions
-      const existingRegions = existingCategory.regions || [];
-      const newRegions = regions || [];
-      const hasOverlap = existingRegions.some(region => newRegions.includes(region));
-      if (hasOverlap) {
-        const overlappingRegions = existingRegions.filter(region => newRegions.includes(region));
-        return res.status(400).json({ 
-          error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
-        });
+
+      // If existing category is global, we can still allow a regional one 
+      // but let's check if there are other regional categories with overlap
+      for (const existing of existingCategories) {
+        // If the existing category is global, it doesn't block regional ones anymore
+        if (existing.isGlobal === true) {
+          continue; 
+        }
+
+        // For regional categories, check if there's overlap in assigned regions
+        const existingRegions = existing.regions || [];
+        const newRegions = regions || [];
+        const hasOverlap = existingRegions.some(region => newRegions.includes(region));
+        if (hasOverlap) {
+          const overlappingRegions = existingRegions.filter(region => newRegions.includes(region));
+          return res.status(400).json({ 
+            error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
+          });
+        }
       }
-      }
+    }
     const newIncomeCategory = new IncomeCat({
       incomeCategoryName: categoryName,
       name: categoryName,
@@ -150,30 +157,34 @@ exports.editIncomeCategory = async (req, res) => {
       return res.status(400).json({ error: "Category name is required" });
     }
     // Check for duplicate name with region-aware validation
-    const duplicate = await IncomeCat.findOne({
+    const duplicates = await IncomeCat.find({
       incomeCategoryName,
       _id: { $ne: id }
     });
-    if (duplicate) {
-      // If existing category is global, don't allow any duplicates
-      if (duplicate.isGlobal === true) {
-        return res.status(400).json({ error: "A global category with this name already exists." });
-      }
-      // If updating to global, don't allow if any category with same name exists
+    
+    if (duplicates.length > 0) {
+      // If updating to global, check if any category already exists
       if (isGlobal === true) {
-        return res.status(400).json({ error: "Cannot update to global category - a regional category with this name already exists." });
+        return res.status(400).json({ error: "Cannot update to global category - a category with this name already exists (global or regional)." });
       }
-      // For regional categories, check if there's overlap in assigned regions
-      const existingRegions = duplicate.regions || [];
-      const newRegions = regions || [];
-      const hasOverlap = existingRegions.some(region => newRegions.includes(region));
-      if (hasOverlap) {
-        const overlappingRegions = existingRegions.filter(region => newRegions.includes(region));
-        return res.status(400).json({ 
-          error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
-        });
+
+      for (const duplicate of duplicates) {
+        if (duplicate.isGlobal === true) {
+          continue; // Allow regional even if global exists
+        }
+
+        // For regional categories, check if there's overlap in assigned regions
+        const existingRegions = duplicate.regions || [];
+        const newRegions = regions || [];
+        const hasOverlap = existingRegions.some(region => newRegions.includes(region));
+        if (hasOverlap) {
+          const overlappingRegions = existingRegions.filter(region => newRegions.includes(region));
+          return res.status(400).json({ 
+            error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
+          });
+        }
       }
-      }
+    }
     // Prepare update data
     const updateData = {
       incomeCategoryName,
@@ -249,38 +260,43 @@ exports.createCategory = async (req, res) => {
       return res.status(400).json({ error: "Name is required" });
     }
     // Check for duplicate category name within the same region scope
-    let existingCategory;
+    let existingCategories;
     try {
-      existingCategory = await IncomeCat.findOne({
+      existingCategories = await IncomeCat.find({
         incomeCategoryName: categoryName
       });
-      } catch (dbError) {
+    } catch (dbError) {
       console.error("Database error during category lookup:", dbError);
       return res.status(500).json({ 
         error: "Database error during validation", 
         details: dbError.message 
       });
     }
-    if (existingCategory) {
-      // If existing category is global, don't allow any duplicates
-      if (existingCategory.isGlobal === true) {
-        return res.status(400).json({ error: "A global category with this name already exists." });
-      }
-      // If new category is global, don't allow if any category with same name exists
+
+    if (existingCategories.length > 0) {
+      // If new category is global, check if any category already exists
       if (isGlobal === true) {
-        return res.status(400).json({ error: "Cannot create global category - a regional category with this name already exists." });
+        return res.status(400).json({ error: "Cannot create global category - a category with this name already exists (global or regional)." });
       }
-      // For regional categories, check if there's overlap in assigned regions
-      const existingRegions = existingCategory.regions || [];
-      const newRegions = regions || [];
-      const hasOverlap = existingRegions.some(region => newRegions.includes(region));
-      if (hasOverlap) {
-        const overlappingRegions = existingRegions.filter(region => newRegions.includes(region));
-        return res.status(400).json({ 
-          error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
-        });
+
+      for (const existing of existingCategories) {
+        // If the existing category is global, it doesn't block regional ones anymore
+        if (existing.isGlobal === true) {
+          continue; // Allow regional even if global exists
+        }
+
+        // For regional categories, check if there's overlap in assigned regions
+        const existingRegions = existing.regions || [];
+        const newRegions = regions || [];
+        const hasOverlap = existingRegions.some(region => newRegions.includes(region));
+        if (hasOverlap) {
+          const overlappingRegions = existingRegions.filter(region => newRegions.includes(region));
+          return res.status(400).json({ 
+            error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
+          });
+        }
       }
-      }
+    }
     const newCategory = new IncomeCat({
       incomeCategoryName: categoryName,
       name: categoryName, // Add this line to set the name field
@@ -488,23 +504,26 @@ exports.copyCategory = async (req, res) => {
     });
 
     if (existingCategory) {
-      // If existing category is global, don't allow any duplicates
-      if (existingCategory.isGlobal === true) {
-        return res.status(400).json({ error: "A global category with this name already exists." });
-      }
-      // If new category is global, don't allow if any category with same name exists
+      // If source (new) category is global, don't allow if any category already exists
       if (sourceCategory.isGlobal === true) {
-        return res.status(400).json({ error: "Cannot create global category - a regional category with this name already exists." });
+        return res.status(400).json({ error: "Cannot create global category - a category with this name already exists (global or regional)." });
       }
-      // For regional categories, check if there's overlap in assigned regions
-      const existingRegions = existingCategory.regions || [];
-      const sourceRegions = sourceCategory.regions || [];
-      const hasOverlap = existingRegions.some(region => sourceRegions.includes(region));
-      if (hasOverlap) {
-        const overlappingRegions = existingRegions.filter(region => sourceRegions.includes(region));
-        return res.status(400).json({ 
-          error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
-        });
+
+      // If existing category is global, we can still allow a regional one 
+      if (existingCategory.isGlobal === true) {
+        // Continue to check other potential duplicates if any (though findOne only returns one)
+        // Actually, findOne might return the global one first.
+      } else {
+        // If existing is regional, check for region overlap
+        const existingRegions = existingCategory.regions || [];
+        const sourceRegions = sourceCategory.regions || [];
+        const hasOverlap = existingRegions.some(region => sourceRegions.includes(region));
+        if (hasOverlap) {
+          const overlappingRegions = existingRegions.filter(region => sourceRegions.includes(region));
+          return res.status(400).json({ 
+            error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
+          });
+        }
       }
     }
 

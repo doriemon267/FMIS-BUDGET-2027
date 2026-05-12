@@ -210,17 +210,22 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     // Deduplicate categories by name - consolidate all regions for same category name
     const categoryMap = new Map();
     allIncomeCategories.forEach(category => {
-      const categoryName = category.incomeCategoryName || category.name;
-      if (!categoryMap.has(categoryName)) {
-        categoryMap.set(categoryName, {
+      const rawName = category.incomeCategoryName || category.name;
+      if (!rawName) return;
+      const categoryName = rawName.trim();
+      const lowerName = categoryName.toLowerCase();
+      
+      if (!categoryMap.has(lowerName)) {
+        categoryMap.set(lowerName, {
           _id: category._id,
           name: categoryName,
           regions: [...(category.regions || [])],
-          isGlobal: category.isGlobal || false
+          isGlobal: category.isGlobal || false,
+          order: category.order || 0
         });
       } else {
         // Merge regions from duplicate categories
-        const existing = categoryMap.get(categoryName);
+        const existing = categoryMap.get(lowerName);
         const newRegions = category.regions || [];
         existing.regions = [...new Set([...existing.regions, ...newRegions])];
         existing.isGlobal = existing.isGlobal || category.isGlobal;

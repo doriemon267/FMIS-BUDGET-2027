@@ -5,6 +5,7 @@ const isAuth = require('../middleware/is_auth');
 
 const corporateIncomeController = require("../controllers/corporateIncomeController");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
+const { budgetRoleVisibilityControl } = require("../middleware/budgetRoleVisibilityControl");
 // Configure Multer (Store file in memory)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -14,6 +15,7 @@ router.use(isAuth);
 router.post(
 	"/corporate-income/upload",
 	submissionWorkflowControl('create', { strictMode: true }),
+	budgetRoleVisibilityControl(),
 	upload.single("file"),
 	corporateIncomeController.uploadCorporateIncome
 );
@@ -23,12 +25,14 @@ router.get("/corporate-income/template", corporateIncomeController.generateTempl
 router.get(
 	"/corporate-income",
 	submissionWorkflowControl('read'),
+	budgetRoleVisibilityControl(),
 	corporateIncomeController.getCorporateIncome
 );
 // Route for getting consolidated corporate income data
 router.get(
 	"/corporate-income/consolidated",
 	submissionWorkflowControl('read'),
+	budgetRoleVisibilityControl(),
 	corporateIncomeController.getConsolidatedCorporateIncome
 );
 module.exports = router;

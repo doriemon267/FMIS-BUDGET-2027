@@ -341,13 +341,21 @@ const ProposalCustomPage = ({
   const [searchTerm, setSearchTerm] = useState("");
 
   const allowedFiscalYears = useMemo(() => {
-    const list = currentUser?.hierarchicalAccess?.restrictions?.allowedFiscalYears;
-    return Array.isArray(list) ? list.map((year) => String(year)) : [];
+    const fromHierarchy = currentUser?.hierarchicalAccess?.restrictions?.allowedFiscalYears;
+    const fromRoot = currentUser?.restrictions?.allowedFiscalYears;
+    const years = Array.isArray(fromHierarchy) && fromHierarchy.length > 0
+      ? fromHierarchy
+      : (Array.isArray(fromRoot) ? fromRoot : []);
+    return years.map((year) => String(year));
   }, [currentUser]);
 
   const allowedBudgetTypes = useMemo(() => {
-    const list = currentUser?.hierarchicalAccess?.restrictions?.allowedBudgetTypes;
-    return Array.isArray(list) ? list : [];
+    const fromHierarchy = currentUser?.hierarchicalAccess?.restrictions?.allowedBudgetTypes;
+    const fromRoot = currentUser?.restrictions?.allowedBudgetTypes;
+    const types = Array.isArray(fromHierarchy) && fromHierarchy.length > 0
+      ? fromHierarchy
+      : (Array.isArray(fromRoot) ? fromRoot : []);
+    return types;
   }, [currentUser]);
 
   const resolvedFiscalYear = useMemo(() => {
@@ -3133,7 +3141,7 @@ const ProposalCustomPage = ({
                 dataListName={dataListName}
                 schema={schema}
                 region={activeRegion}
-                fiscalYear={selectedFiscalYear}
+                fiscalYear={resolvedFiscalYear}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3148,7 +3156,7 @@ const ProposalCustomPage = ({
                 dataListName={dataListName}
                 schema={schema}
                 region={activeRegion}
-                fiscalYear={selectedFiscalYear}
+                fiscalYear={resolvedFiscalYear}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3163,7 +3171,7 @@ const ProposalCustomPage = ({
                 dataListName={dataListName}
                 schema={schema}
                 region={activeRegion}
-                fiscalYear={selectedFiscalYear}
+                fiscalYear={resolvedFiscalYear}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3178,7 +3186,7 @@ const ProposalCustomPage = ({
                 dataListName={dataListName}
                 schema={schema}
                 region={activeRegion}
-                fiscalYear={selectedFiscalYear}
+                fiscalYear={resolvedFiscalYear}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3193,7 +3201,7 @@ const ProposalCustomPage = ({
                 dataListName={dataListName}
                 schema={schema}
                 region={activeRegion}
-                fiscalYear={selectedFiscalYear}
+                fiscalYear={resolvedFiscalYear}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3209,7 +3217,7 @@ const ProposalCustomPage = ({
                   dataListName={dataListName}
                   schema={schema}
                   region={activeRegion}
-                  fiscalYear={selectedFiscalYear}
+                  fiscalYear={resolvedFiscalYear}
                   proposalId={
                     currentProposalId ||
                     sessionStorage.getItem("activeWorkflowRef") ||
@@ -3222,7 +3230,7 @@ const ProposalCustomPage = ({
                   dataListName={dataListName}
                   schema={schema}
                   region={activeRegion}
-                  fiscalYear={selectedFiscalYear}
+                  fiscalYear={resolvedFiscalYear}
                   proposalId={
                     currentProposalId ||
                     sessionStorage.getItem("activeWorkflowRef") ||
@@ -3234,7 +3242,7 @@ const ProposalCustomPage = ({
 
             {activeTab === "Budgetary Support" && (
               <>
-                {!activeBudgetType || !selectedFiscalYear ? (
+                {!resolvedBudgetType || !resolvedFiscalYear ? (
                   <Box
                     sx={{
                       p: 3,
@@ -3252,17 +3260,17 @@ const ProposalCustomPage = ({
                       display="block"
                       sx={{ mt: 1 }}
                     >
-                      Fiscal Year: {selectedFiscalYear || "Loading..."}
+                      Fiscal Year: {resolvedFiscalYear || "Loading..."}
                     </Typography>
                     <Typography variant="caption" display="block">
-                      Budget Type: {activeBudgetType || "Loading..."}
+                      Budget Type: {resolvedBudgetType || "Loading..."}
                     </Typography>
                   </Box>
                 ) : (
                   <BudgetarySupportTable
                     proposalId={currentProposalId}
-                    fiscalYear={selectedFiscalYear || activeFiscalYear}
-                    budgetType={activeBudgetType}
+                    fiscalYear={resolvedFiscalYear}
+                    budgetType={resolvedBudgetType}
                     incomeGrandTotal={incomeGrandTotal}
                     groupedItems={groupedItems}
                     onChargedToIncomeChange={setChargedToIncomeAmount}
@@ -3298,25 +3306,29 @@ const ProposalCustomPage = ({
             )}
 
             {/* Export Button */}
-            {/* <Button
-              variant="outlined"
-              color="secondary"
-              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-              startIcon={<GetAppIcon />}
-              sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
-            >
-              Export
-            </Button> */}
+            {isSuperAdmin && (
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+                startIcon={<GetAppIcon />}
+                sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
+              >
+                Export
+              </Button>
+            )}
 
             {/* Activity Log Button */}
-            {/* <Button
-              variant="outlined"
-              onClick={() => setShowActivityLog(true)}
-              startIcon={<HistoryIcon />}
-              sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
-            >
-              Activity
-            </Button> */}
+            {isSuperAdmin && (
+              <Button
+                variant="outlined"
+                onClick={() => setShowActivityLog(true)}
+                startIcon={<HistoryIcon />}
+                sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
+              >
+                Activity
+              </Button>
+            )}
 
             {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
             {(canCreate || canEditOwn) && (
@@ -3434,16 +3446,20 @@ const ProposalCustomPage = ({
             onClose={() => setSpeedDialOpen(false)}
             onOpen={() => setSpeedDialOpen(true)}
           >
-            {/* <SpeedDialAction
-              icon={<GetAppIcon />}
-              tooltipTitle="Export"
-              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-            />
-            <SpeedDialAction
-              icon={<HistoryIcon />}
-              tooltipTitle="Activity Log"
-              onClick={() => setShowActivityLog(true)}
-            /> */}
+            {isSuperAdmin && (
+              <SpeedDialAction
+                icon={<GetAppIcon />}
+                tooltipTitle="Export"
+                onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+              />
+            )}
+            {isSuperAdmin && (
+              <SpeedDialAction
+                icon={<HistoryIcon />}
+                tooltipTitle="Activity Log"
+                onClick={() => setShowActivityLog(true)}
+              />
+            )}
             {showBulkActions && (
               <SpeedDialAction
                 icon={<SelectAllIcon />}
@@ -3516,6 +3532,9 @@ const ProposalCustomPage = ({
             <ListItemText>Deselect All</ListItemText>
           </MenuItem>
         </Menu>
+
+        {/* Activity Log Dialog */}
+        <ActivityLogDialog />
 
         {/* Export Menu */}
         <Menu

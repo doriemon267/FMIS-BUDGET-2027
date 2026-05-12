@@ -1490,10 +1490,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             <StickyButtons
               handleSave={() => handleSave(false)}
               handleClear={handleClear}
-              disabled={!isEditable}
+              disabled={!isSuperAdmin && !isEditable}
             />
 
-            {!hasWorkflowRef && (
+            {!hasWorkflowRef && !isSuperAdmin && (
               <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
                 Create a proposal first to unlock MOOE editing and saving.
               </Typography>
@@ -1506,7 +1506,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   checked={autoSave}
                   onChange={(e) => setAutoSave(e.target.checked)}
                   color="primary"
-                  disabled={!hasWorkflowRef}
+                  disabled={!isSuperAdmin && !hasWorkflowRef}
                 />
               }
               label={
@@ -1583,7 +1583,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                 <IconButton
                   component="label"
                   color="primary"
-                  disabled={!isEditable}
+                  disabled={!isSuperAdmin && !isEditable}
                 >
                   <input
                     type="file"
@@ -1601,7 +1601,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               <IconButton
                 onClick={handleBulkEdit}
                 color={bulkEditMode ? "primary" : "default"}
-                disabled={!isEditable}
+                disabled={!isSuperAdmin && !isEditable}
               >
                 <EditIcon />
               </IconButton>
@@ -1613,7 +1613,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                 <IconButton
                   color="primary"
                   onClick={() => setShowBulkUpload(true)}
-                  disabled={!isEditable}
+                  disabled={!isSuperAdmin && !isEditable}
                 >
                   <CloudUploadIcon />
                 </IconButton>
@@ -1948,7 +1948,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                                 }));
                                 handleIncomeChange(child.id, v);
                               }}
-                              disabled={!isEditable || disableIncomeInputs}
+                              disabled={(!isSuperAdmin && !isEditable) || disableIncomeInputs}
                               placeholder="0.00"
                               InputProps={{
                                 startAdornment: <InputAdornment position="start">₱</InputAdornment>,
@@ -1956,7 +1956,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                                 inputProps: { style: { textAlign: 'right' } }
                               }}
                               sx={{
-                                backgroundColor: !isEditable || disableIncomeInputs ? "#f5f5f5" : "white",
+                                backgroundColor: (!isSuperAdmin && !isEditable) || disableIncomeInputs ? "#f5f5f5" : "white",
                                 '& .MuiInputBase-input': { textAlign: 'right' }
                               }}
                             />
@@ -1994,7 +1994,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                                 }));
                                 handleSubsidyChange(child.id, v);
                               }}
-                              disabled={!isEditable}
+                              disabled={!isSuperAdmin && !isEditable}
                               placeholder="0.00"
                               InputProps={{
                                 startAdornment: <InputAdornment position="start">₱</InputAdornment>,
@@ -2002,7 +2002,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                                 inputProps: { style: { textAlign: 'right' } }
                               }}
                               sx={{
-                                backgroundColor: !isEditable ? "#f5f5f5" : "white",
+                                backgroundColor: !isSuperAdmin && !isEditable ? "#f5f5f5" : "white",
                                 '& .MuiInputBase-input': { textAlign: 'right' }
                               }}
                             />

@@ -41,7 +41,17 @@ const drawWorkflowSignatureBlock = (context, signatories, currentY, startX, tota
   const sigLineY = currentY + 15;
 
   const renderBlock = (x, roleInfo) => {
-    context.text(`${roleInfo.title.replace('Budget ', '')} by:`, x, currentY, textOpt({ fontSize: 8, font: 'Helvetica' }));
+    let label = roleInfo.label;
+    if (!label) {
+      const baseRole = String(roleInfo.title || '').trim();
+      if (baseRole.includes('Preparer')) label = 'Prepared by:';
+      else if (baseRole.includes('Reviewer')) label = 'Reviewed by:';
+      else if (baseRole.includes('Approver')) label = 'Approved by:';
+      else if (baseRole.includes('Verifier')) label = 'Verified by:';
+      else if (baseRole) label = `${baseRole} by:`;
+      else label = 'Signature:';
+    }
+    context.text(label, x, currentY, textOpt({ fontSize: 8, font: 'Helvetica' }));
     
     context.text(roleInfo.name || '________________________', x, sigLineY + 15, textOpt({ fontSize: 9, font: 'Helvetica-Bold' }));
     context.text(roleInfo.title, x, sigLineY + 25, textOpt({ fontSize: 8, font: 'Helvetica' }));

@@ -176,7 +176,7 @@ exports.uploadCorporateIncome = async (req, res) => {
         
         if (rc) {
           const rcUpper = rc.toUpperCase();
-          if (knownRegions.includes(rcUpper) || rcUpper === 'CENTRAL OFFICE' || rcUpper === 'CO' || rcUpper.startsWith('REGION')) {
+          if (knownRegions.includes(rcUpper) || rcUpper === 'CENTRAL OFFICE' || rcUpper === 'CO' || rcUpper.startsWith('REGION') || rcUpper === 'MARIIS' || rcUpper === 'UPRIIS') {
             targetRegion = rc;
             targetLevel = 'REGION';
           } else if (knownDepts.includes(rcUpper) || rcUpper.includes('DEPARTMENT') || rcUpper.includes('SERVICES')) {
@@ -210,12 +210,26 @@ exports.uploadCorporateIncome = async (req, res) => {
 
         results.regions.add(targetRegion || targetDepartment || targetDivision || 'Unknown');
 
-        const category = await IncomeCategory.findOne({ 
+        // Prioritize region-specific category over global one
+        const categoryQuery = {
           $or: [
-            { incomeCategoryName: categoryName },
-            { name: categoryName }
+            { incomeCategoryName: { $regex: new RegExp(`^${categoryName.trim()}$`, 'i') } },
+            { name: { $regex: new RegExp(`^${categoryName.trim()}$`, 'i') } }
           ]
-        });
+        };
+
+        const category = await IncomeCategory.findOne({ 
+          $and: [
+            categoryQuery,
+            { regions: targetRegion }
+          ]
+        }) || await IncomeCategory.findOne({ 
+          $and: [
+            categoryQuery,
+            { isGlobal: true }
+          ]
+        }) || await IncomeCategory.findOne(categoryQuery);
+
         if (!category) {
           results.errors.push({
             row: index + 2,
@@ -248,6 +262,7 @@ exports.uploadCorporateIncome = async (req, res) => {
           category: categoryName,
           subcategory: subcategoryName || null,
           amount,
+          cost: amount, // Ensure cost matches amount for frontend display
           fiscalYear: activeSettings.fiscalYear,
           budgetType: activeSettings.budgetType,
           region: targetRegion,
@@ -258,7 +273,7 @@ exports.uploadCorporateIncome = async (req, res) => {
           createdBy: userIdString,
           processBy: req.user?.userName || req.user?.username || req.user?.id || 'System Upload',
           processDate: new Date(),
-          status: 'Draft'
+          status: 'Draft' // Reverted to Draft per user request
         });
         await income.save();
         results.successfullyProcessed++;
@@ -371,7 +386,16 @@ exports.getCorporateIncome = async (req, res) => {
     // Apply submission workflow filters if present (region-level corporate income should be visible only per workflow rules)
     const submissionFilters = req.submissionWorkflowFilters || {};
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+    const budgetRoleVisibilityFilter = req.budgetRoleVisibilityFilter || {};
+
+    if (budgetRoleVisibilityFilter && Object.keys(budgetRoleVisibilityFilter).length > 0) {
+      if (budgetRoleVisibilityFilter.$and || budgetRoleVisibilityFilter.$or) {
+        const baseConditions = Object.entries(query).map(([k,v]) => ({ [k]: v }));
+        query = { $and: [ ...baseConditions, budgetRoleVisibilityFilter ] };
+      } else {
+        query = { ...query, ...budgetRoleVisibilityFilter };
+      }
+    } else if (submissionFilters && Object.keys(submissionFilters).length > 0) {
       if (submissionFilters.$and) {
         const baseConditions = Object.entries(query).map(([k,v]) => ({ [k]: v }));
         query = { $and: [ ...baseConditions, ...submissionFilters.$and ] };
@@ -410,7 +434,16 @@ exports.getConsolidatedCorporateIncome = async (req, res) => {
     let baseFilter = { fiscalYear, budgetType };
     const submissionFilters = req.submissionWorkflowFilters || {};
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+    const budgetRoleVisibilityFilter = req.budgetRoleVisibilityFilter || {};
+
+    if (budgetRoleVisibilityFilter && Object.keys(budgetRoleVisibilityFilter).length > 0) {
+      if (budgetRoleVisibilityFilter.$and) {
+        const conditions = Object.entries(baseFilter).map(([k,v]) => ({ [k]: v }));
+        baseFilter = { $and: [ ...conditions, ...budgetRoleVisibilityFilter.$and ] };
+      } else {
+        baseFilter = { ...baseFilter, ...budgetRoleVisibilityFilter };
+      }
+    } else if (submissionFilters && Object.keys(submissionFilters).length > 0) {
       if (submissionFilters.$and) {
         const conditions = Object.entries(baseFilter).map(([k,v]) => ({ [k]: v }));
         baseFilter = { $and: [ ...conditions, ...submissionFilters.$and ] };

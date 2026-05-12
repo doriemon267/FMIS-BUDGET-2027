@@ -86,61 +86,87 @@ const budgetRoleVisibilityControl = () => {
         return next();
       }
 
-      // Build visibility filters based on role
-      let visibilityFilter = {};
-
       // Get hierarchical assignment for organizational filtering
       const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
-      const userDivision = assignment.divisionName || req.user?.division || null;
+
+      // Resolve organizational scope from the populated assignment arrays
+      const assignedRegionNames = (assignment.regions || []).map(r => r.regionName).filter(Boolean);
+      const assignedDeptNames = (assignment.departments || []).map(d => d.departmentName).filter(Boolean);
+      const assignedDivisions = assignment.divisions || [];
       
-      // Populate department and region names from ObjectIds
-      let userDepartment = null;
-      let userRegion = null;
-      
-      if (assignment.departmentId) {
-        try {
-          const Department = require('../models/Department');
-          const dept = await Department.findById(assignment.departmentId);
-          userDepartment = dept ? dept.Department : null;
-        } catch (error) {
-          console.error('Error loading department name:', error);
-        }
+      const orgScope = {};
+      if (assignedRegionNames.length > 0) {
+        orgScope.region = assignedRegionNames.length === 1 ? assignedRegionNames[0] : { $in: assignedRegionNames };
       }
       
-      if (assignment.regionId) {
-        try {
-          const Region = require('../models/Region');
-          const region = await Region.findById(assignment.regionId);
-          userRegion = region ? region.Region : null;
-        } catch (error) {
-          console.error('Error loading region name:', error);
-        }
+      // Handle Division/Department overlap: some models use 'department' for division-level names
+      if (assignedDivisions.length > 0 && assignedDeptNames.length > 0) {
+        orgScope.$or = [
+          { 
+            $and: [
+              { department: assignedDeptNames.length === 1 ? assignedDeptNames[0] : { $in: assignedDeptNames } },
+              { division: assignedDivisions.length === 1 ? assignedDivisions[0] : { $in: assignedDivisions } }
+            ]
+          },
+          { department: assignedDivisions.length === 1 ? assignedDivisions[0] : { $in: assignedDivisions } },
+          // Allow region-level records (no division/department) if region matches
+          { 
+            $and: [
+              { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] },
+              { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
+            ] 
+          }
+        ];
+      } else if (assignedDivisions.length > 0) {
+        // If assigned to a division, allow matching either division OR department field 
+        // (common when bulk imports place division names in department column)
+        const divNames = assignedDivisions;
+        orgScope.$or = [
+          { division: divNames.length === 1 ? divNames[0] : { $in: divNames } },
+          { department: divNames.length === 1 ? divNames[0] : { $in: divNames } },
+          // Allow region-level records (no division/department) if region matches
+          { 
+            $and: [
+              { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] },
+              { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
+            ] 
+          }
+        ];
+      } else if (assignedDeptNames.length > 0) {
+        orgScope.$or = [
+          { department: assignedDeptNames.length === 1 ? assignedDeptNames[0] : { $in: assignedDeptNames } },
+          // Allow region-level records (no department/division) if region matches
+          { 
+            $and: [
+              { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] },
+              { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
+            ] 
+          }
+        ];
       }
 
       console.log('🔍 BUDGET ROLE VISIBILITY DEBUG:', {
         userId: req.user?.id,
         userRoles: userRoles,
         budgetRole: budgetRole,
-        userDivision: userDivision,
-        userDepartment: userDepartment,
-        userRegion: userRegion,
+        assignedRegionNames,
+        assignedDeptNames,
+        assignedDivisions,
+        orgScope,
         assignmentLoaded: !!assignment.userId,
         hasHierarchicalAssignment: !!req.userHierarchicalAssignment
       });
       
       logToFile('DEBUG: ' + JSON.stringify({
-        userId: req.user?.id, userRoles, budgetRole, userDivision, userDepartment, userRegion,
+        userId: req.user?.id, userRoles, budgetRole, orgScope,
         assignmentLoaded: !!assignment.userId
       }));
 
-      // Build organizational scope filter (intersection of all assigned levels)
-      const orgScope = {};
-      if (userRegion) orgScope.region = userRegion;
-      if (userDepartment) orgScope.department = userDepartment;
-      if (userDivision) orgScope.division = userDivision;
-
       // Declare userName once for use in multiple cases
-      const userName = req.user?.name || req.user?.Username || req.user?.displayName || req.user?.fullName;
+      const userName = req.user?.name || req.user?.Username || req.user?.displayName || req.user?.fullName || req.user?.userName || req.user?.username;
+
+      // Build visibility filters based on role
+      let visibilityFilter = {};
 
       switch (budgetRole) {
         case 'BUDGET_PLANNING_ANALYST':
@@ -185,15 +211,16 @@ const budgetRoleVisibilityControl = () => {
               $and: [
                 { $or: [
                   { createdByUserId: userId },
+                  { createdBy: userId },
                   { processBy: userId }
                 ]},
                 { status: { $ne: 'Draft' } }
               ]
             },
             // Organizational division scope - but only if submitted (not Draft)
-            ...(userDivision ? [{
+            ...(Object.keys(orgScope).length > 0 ? [{
               $and: [
-                { division: userDivision },
+                orgScope,
                 { status: { $ne: 'Draft' } }
               ]
             }] : [])
@@ -260,6 +287,7 @@ const budgetRoleVisibilityControl = () => {
                 $and: [
                   { $or: [
                     { createdByUserId: userId },
+                    { createdBy: userId },
                     { processBy: userId }
                   ]},
                   { status: { $ne: 'Draft' } }
@@ -284,17 +312,12 @@ const budgetRoleVisibilityControl = () => {
             $or: [
               // Proposals created by this user (Proposal model)
               { createdByUserId: userId },
+              { createdBy: userId },
               // Proposals processed by this user (used in both Proposal and entity models)
               { processBy: userId },
               { processBy: userName },
               // Proposals in their organizational scope
-              ...((userDivision || userDepartment || userRegion) ? [{
-                $and: [
-                  ...(userDivision ? [{ division: userDivision }] : []),
-                  ...(userDepartment ? [{ department: userDepartment }] : []),
-                  ...(userRegion ? [{ region: userRegion }] : [])
-                ]
-              }] : []),
+              ...(Object.keys(orgScope).length > 0 ? [orgScope] : []),
               // Proposals assigned to them in workflow
               { 'workflowHistory.userId': userId }
             ]
@@ -308,6 +331,7 @@ const budgetRoleVisibilityControl = () => {
             $or: [
               // Own proposals created by this user
               { createdByUserId: userId },
+              { createdBy: userId },
               // Proposals assigned/processed by this user (by ID or name)
               { $or: [
                 { processBy: userId },

@@ -1,5 +1,6 @@
 const xlsx = require("xlsx");
 const CapitalOutlay = require("../models/CapitalOutlay");
+const CapitalOutlayDetails = require("../models/CapitalOutlayDetails");
 const Category = require("../models/Category");
 const ChartOfAccounts = require("../models/chartOfAccounts");
 const TitleMapping = require("../models/titleMapping");
@@ -24,11 +25,18 @@ const parseAmount = (value) => {
 
 const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle }) => {
+const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle, particulars }) => {
   const exactSubline = sublineItem ? new RegExp(`^${escapeRegex(sublineItem)}$`, "i") : null;
   const exactAccountingTitle = accountingTitle ? new RegExp(`^${escapeRegex(accountingTitle)}$`, "i") : null;
   const exactTitle = title ? new RegExp(`^${escapeRegex(title)}$`, "i") : null;
 
+  let resolved = {
+    uacsCode: null,
+    sublineItem: sublineItem || "",
+    accountingTitle: accountingTitle || ""
+  };
+
+  // 1. Try exact match from TitleMapping if we have the Title
   if (exactTitle) {
     const titleMapping = await TitleMapping.findOne({
       lineItem: exactTitle,
@@ -36,42 +44,78 @@ const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle })
     }).sort({ accountingTitle: 1, sublineItem: 1 }).lean();
 
     if (titleMapping?.uacsCode) {
-      return titleMapping.uacsCode;
+      resolved.uacsCode = titleMapping.uacsCode;
+      if (!resolved.sublineItem) resolved.sublineItem = titleMapping.sublineItem;
+      if (!resolved.accountingTitle) resolved.accountingTitle = titleMapping.accountingTitle;
+      return resolved;
     }
   }
 
-  if (exactSubline && exactAccountingTitle) {
-    const chartAccount = await ChartOfAccounts.findOne({
-      sublineItem: exactSubline,
-      accountingTitle: exactAccountingTitle,
-    }).lean();
+  // 2. SMART FALLBACK: If exact Title fails, try fuzzy match or keyword match
+  const searchStr = `${title} ${particulars}`.toUpperCase();
+  const keywords = [
+    { key: "FURNITURE", match: /FURNITURE|FIXTURE|BOOK/i, defaultUacs: "5060407001", defaultSubline: "Furniture and Fixtures", defaultAcc: "Furniture and Fixtures" },
+    { key: "MACHINERY", match: /MACHINERY|EQUIPMENT|IT|COMPUTER|SOFTWARE/i, defaultUacs: "5060405003", defaultSubline: "IT Equipment", defaultAcc: "Information and Communication Technology Equipment" },
+    { key: "TRANSPORTATION", match: /TRANSPORTATION|VEHICLE|CAR|MOTOR|TRUCK/i, defaultUacs: "5060406001", defaultSubline: "Motor Vehicles", defaultAcc: "Motor Vehicles" },
+    { key: "LAND", match: /LAND|LOT|TITLING/i, defaultUacs: "5060101000", defaultSubline: "Land", defaultAcc: "Land" },
+    { key: "CONSTRUCTION", match: /CONSTRUCTION|BUILDING|STRUCTURE|FACILITIES|REHABILITATION/i, defaultUacs: "5060404001", defaultSubline: "Buildings", defaultAcc: "Buildings" }
+  ];
 
-    if (chartAccount?.uacsCode) {
-      return chartAccount.uacsCode;
+  for (const k of keywords) {
+    if (k.match.test(searchStr)) {
+      // Try TitleMapping first
+      const fuzzyMapping = await TitleMapping.findOne({
+        $or: [
+          { lineItem: new RegExp(k.key, "i") },
+          { sublineItem: new RegExp(k.key, "i") },
+          { accountingTitle: new RegExp(k.key, "i") }
+        ]
+      }).sort({ isActive: -1 }).lean();
+
+      if (fuzzyMapping?.uacsCode) {
+        resolved.uacsCode = fuzzyMapping.uacsCode;
+        if (!resolved.sublineItem) resolved.sublineItem = fuzzyMapping.sublineItem;
+        if (!resolved.accountingTitle) resolved.accountingTitle = fuzzyMapping.accountingTitle;
+        console.log(`Smart Match (TitleMapping): Keyword "${k.key}" -> Resolved to ${resolved.uacsCode}`);
+        return resolved;
+      }
+
+      // Try ChartOfAccounts fallback
+      const chartAccount = await ChartOfAccounts.findOne({
+        $or: [
+          { sublineItem: new RegExp(k.key, "i") },
+          { accountingTitle: new RegExp(k.key, "i") }
+        ]
+      }).lean();
+
+      if (chartAccount?.uacsCode) {
+        resolved.uacsCode = chartAccount.uacsCode;
+        if (!resolved.sublineItem) resolved.sublineItem = chartAccount.sublineItem;
+        if (!resolved.accountingTitle) resolved.accountingTitle = chartAccount.accountingTitle;
+        console.log(`Smart Match (ChartOfAccounts): Keyword "${k.key}" -> Resolved to ${resolved.uacsCode}`);
+        return resolved;
+      }
+
+      // FINAL HARDCODED FALLBACK
+      resolved.uacsCode = k.defaultUacs;
+      if (!resolved.sublineItem) resolved.sublineItem = k.defaultSubline;
+      if (!resolved.accountingTitle) resolved.accountingTitle = k.defaultAcc;
+      console.log(`Hardcoded Fallback Used: Keyword "${k.key}" -> Resolved to ${resolved.uacsCode}`);
+      return resolved;
     }
   }
 
-  if (exactSubline) {
-    const chartAccount = await ChartOfAccounts.findOne({
-      sublineItem: exactSubline,
-    }).sort({ accountingTitle: 1 }).lean();
-
-    if (chartAccount?.uacsCode) {
-      return chartAccount.uacsCode;
+  // 3. Diagnostics if all failed
+  if (!resolved.uacsCode) {
+    try {
+      const allItems = await TitleMapping.find({ isActive: true }).distinct('lineItem');
+      console.warn(`[DIAGNOSTIC] Could not resolve "${title}". Available Line Items in DB:`, allItems);
+    } catch (e) {
+      console.error("Diagnostic failed:", e.message);
     }
   }
 
-  if (exactAccountingTitle) {
-    const chartAccount = await ChartOfAccounts.findOne({
-      accountingTitle: exactAccountingTitle,
-    }).lean();
-
-    if (chartAccount?.uacsCode) {
-      return chartAccount.uacsCode;
-    }
-  }
-
-  return null;
+  return resolved;
 };
 
 const getUploadOrgContext = async (req) => {
@@ -130,19 +174,17 @@ exports.uploadCapitalOutlay = async (req, res) => {
     const sublineCol = findColumn(headers, ["Subline Item"]);
     const accountingCol = findColumn(headers, ["Accounting Title"]);
     const particularsCol = findColumn(headers, ["Particulars"]);
-    const incomeCol = findColumn(headers, ["INCOME", "Income"]);
+    const incomeCol = findColumn(headers, ["INCOME", "Income", "AMOUNT", "Amount"]);
     const subsidyCol = findColumn(headers, ["SUBSIDY", "Subsidy"]);
 
     // Hierarchy Identifiers
     const regionCol = findColumn(headers, ["REGION", "Region"]);
     const departmentCol = findColumn(headers, ["DEPARTMENT", "Department"]);
     const divisionCol = findColumn(headers, ["DIVISION", "Division"]);
-    const rcCol = findColumn(headers, ["RESPONSIBILITY CENTER", "Responsibility Center", "RC"]);
+    const rcCol = findColumn(headers, ["RESPONSIBILITY CENTER", "Responsibility Center", "RC", "rc"]);
 
     const missingColumns = [
       ["TITLE", titleCol],
-      ["Subline Item", sublineCol],
-      ["Accounting Title", accountingCol],
     ]
       .filter(([, column]) => !column)
       .map(([label]) => label);
@@ -150,7 +192,7 @@ exports.uploadCapitalOutlay = async (req, res) => {
     if (missingColumns.length > 0) {
       return res.status(400).json({
         error: "Invalid format",
-        message: `Missing required columns: ${missingColumns.join(", ")}`
+        message: `Missing required column: ${missingColumns.join(", ")}`
       });
     }
 
@@ -163,7 +205,23 @@ exports.uploadCapitalOutlay = async (req, res) => {
     const knownRegions = allRegions.map(r => String(r.regionName || r.Region || '').toUpperCase().trim());
     const knownDepts = allDepartments.map(d => String(d.departmentName || d.DepartmentName || d.Department || '').toUpperCase().trim());
 
+    console.log(`Processing Capital Outlay upload. Rows found: ${sheetData.length}`);
     const org = await getUploadOrgContext(req);
+    
+    // Find matching proposal to link records correctly
+    const ProposalModel = require('../models/Proposal');
+    const targetProposal = await ProposalModel.findOne({
+      fiscalYear: activeSettings.fiscalYear.toString(),
+      budgetType: activeSettings.budgetType,
+      region: org.region
+    }).select('_id').lean();
+
+    if (targetProposal) {
+      console.log(`[LINKAGE] Found matching proposal: ${targetProposal._id} for Region: ${org.region}`);
+    } else {
+      console.warn(`[LINKAGE] No matching proposal found for Region: ${org.region}, FY: ${activeSettings.fiscalYear}. Records will be unlinked.`);
+    }
+
     let success = 0, failed = 0, errors = [];
     let currentRegion = '';
     let currentDept = '';
@@ -198,24 +256,41 @@ exports.uploadCapitalOutlay = async (req, res) => {
       }
 
       try {
-        if (!title || !sublineItem) {
-          throw new Error("TITLE and Subline Item are required");
+        console.log(`Row ${index + 2}: Title="${title}", Particulars="${particulars}", Income=${income}`);
+
+        if (!title) {
+          console.warn(`Row ${index + 2} skipped: Missing TITLE`);
+          throw new Error("TITLE (Category) is required");
         }
 
-        const categoryDoc = await Category.findOne({ categoryName: new RegExp(`^${escapeRegex(title)}$`, "i") });
+        // Auto-create category if it doesn't exist yet
+        // This ensures all Excel title categories (FURNITURE, MACHINERY, etc.) are saved
+        const categoryDoc = await Category.findOneAndUpdate(
+          { categoryName: new RegExp(`^${escapeRegex(title)}$`, 'i') },
+          { $setOnInsert: { categoryName: title.toUpperCase() } },
+          { upsert: true, new: true, lean: true }
+        );
         if (!categoryDoc) {
-          throw new Error(`Category/TITLE \"${title}\" was not found in Capital Outlay categories`);
+          throw new Error(`Failed to find or create Category for title "${title}"`);
         }
 
-        const resolvedUacsCode = await resolveCapitalOutlayUacs({
+        const resolution = await resolveCapitalOutlayUacs({
           title,
           sublineItem,
           accountingTitle,
+          particulars
         });
 
-        if (!resolvedUacsCode) {
-          throw new Error(`Unable to determine UACS code automatically for TITLE \"${title}\"`);
+        console.log(`Row ${index + 2} resolution: UACS=${resolution.uacsCode}, Subline=${resolution.sublineItem}`);
+
+        if (!resolution.uacsCode) {
+          throw new Error(`Unable to determine UACS code automatically for TITLE "${title}". Please provide Subline Item.`);
         }
+
+        // Use resolved values if they were missing in Excel
+        const finalSubline = sublineItem || resolution.sublineItem;
+        const finalAccountingTitle = accountingTitle || resolution.accountingTitle;
+        const resolvedUacsCode = resolution.uacsCode;
 
         let targetRegion = rowRegionInput || org.region || null;
         let targetDepartment = rowDeptInput || org.department || null;
@@ -236,33 +311,75 @@ exports.uploadCapitalOutlay = async (req, res) => {
           }
         }
 
-        if (!targetRegion && !targetDepartment && !targetDivision) {
-          throw new Error('Mission region/organizational context. Please specify REGION or RESPONSIBILITY CENTER.');
+        // FINAL VALIDATION: Prevent "Global" records that leak to other departments
+        if (!targetRegion) throw new Error("Could not determine REGION for this record. Please specify in Excel or your profile.");
+        if (!targetDepartment) {
+          // If the user is a super admin and no dept in Excel, we might allow it, but for Preparers it's fatal.
+          const userRoles = req.user?.roles || req.user?.Roles || [];
+          if (!userRoles.includes('SUPER_ADMIN')) {
+            throw new Error("Could not determine DEPARTMENT for this record. Data leak prevention triggered.");
+          }
         }
 
-        await CapitalOutlay.create({
+        console.log(`Row ${index + 2} Tagging: Region=${targetRegion}, Dept=${targetDepartment}, Div=${targetDivision}`);
+
+        // 1. MASTER RECORD (CapitalOutlay): Find or Create
+        // KEY: category._id is included so different titles (e.g. FURNITURE vs MACHINERY)
+        // always get separate master records even if UACS resolves to the same code
+        let masterRecord = await CapitalOutlay.findOne({
           category: categoryDoc._id,
-          particulars,
-          sublineItem,
-          accountingTitle,
           uacsCode: resolvedUacsCode,
+          sublineItem: finalSubline,
           region: targetRegion,
           department: targetDepartment,
-          division: targetDivision,
-          originalLevel: targetLevel,
-          income,
-          subsidy,
-          cost,
           fiscalYear: activeSettings.fiscalYear,
-          fiscal_year: Number(activeSettings.fiscalYear),
-          budgetType: activeSettings.budgetType,
-          processBy: req.user?.username || req.user?.name || req.user?.id || "System",
-          processDate: new Date(),
-          createdBy: req.user?.id || req.user?.userId || "system",
+          budgetType: activeSettings.budgetType
         });
 
+        if (!masterRecord) {
+          masterRecord = await CapitalOutlay.create({
+            category: categoryDoc._id,
+            sublineItem: finalSubline,
+            accountingTitle: finalAccountingTitle,
+            uacsCode: resolvedUacsCode,
+            region: targetRegion,
+            department: targetDepartment,
+            division: targetDivision,
+            originalLevel: targetLevel,
+            income: 0,
+            subsidy: 0,
+            cost: 0,
+            fiscalYear: activeSettings.fiscalYear,
+            fiscal_year: Number(activeSettings.fiscalYear),
+            budgetType: activeSettings.budgetType,
+            processBy: req.user?.username || req.user?.name || req.user?.id || "System",
+            processDate: new Date(),
+            createdBy: req.user?.id || req.user?.userId || "system",
+            status: "Draft",
+            proposalId: targetProposal?._id
+          });
+        }
+
+        // 2. DETAIL RECORD (CapitalOutlayDetails)
+        const detailRecord = await CapitalOutlayDetails.create({
+          capital_outlay_id: masterRecord._id,
+          particulars: particulars || "Bulk Upload Item",
+          income_amount: income,
+          subsidy_amount: subsidy,
+          processBy: req.user?.username || req.user?.name || req.user?.id || "System",
+          processDate: new Date()
+        });
+
+        // 3. UPDATE MASTER TOTALS
+        masterRecord.income += income;
+        masterRecord.subsidy += subsidy;
+        masterRecord.cost = masterRecord.income + masterRecord.subsidy;
+        await masterRecord.save();
+
+        console.log(`Row ${index + 2} SAVED: DetailID=${detailRecord._id} -> MasterID=${masterRecord._id}`);
         success++;
       } catch (error) {
+        console.error(`Row ${index + 2} FAILED: ${error.message}`);
         failed++;
         errors.push({
           row: index + 2,
@@ -273,6 +390,8 @@ exports.uploadCapitalOutlay = async (req, res) => {
         });
       }
     }
+
+    console.log(`Upload complete. Success: ${success}, Failed: ${failed}`);
 
     return res.json({
       message: "Capital Outlay file processed successfully",
@@ -307,8 +426,7 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "Accounting Title": "Motor Vehicles",
         "Particulars": "One service vehicle for field operations",
         "INCOME": 500000,
-        "SUBSIDY": 250000,
-        "TOTAL": 750000
+        "SUBSIDY": 250000
       },
       {
         "REGION": "",
@@ -319,8 +437,7 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "Accounting Title": "Furniture and Fixtures",
         "Particulars": "Replacement of workstations and cabinets",
         "INCOME": 300000,
-        "SUBSIDY": 150000,
-        "TOTAL": 450000
+        "SUBSIDY": 150000
       },
       {
         "REGION": "",
@@ -331,8 +448,7 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "Accounting Title": "Transportation Equipment",
         "Particulars": "Motorcycles for monitoring teams",
         "INCOME": 400000,
-        "SUBSIDY": 200000,
-        "TOTAL": 600000
+        "SUBSIDY": 200000
       }
     ];
 
@@ -347,8 +463,7 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
       { wch: 28 },
       { wch: 38 },
       { wch: 16 },
-      { wch: 16 },
-      { wch: 16 },
+      { wch: 16 }
     ];
 
     const workbook = xlsx.utils.book_new();

@@ -19,78 +19,55 @@ const consolidatedCapitalOutlayController = {
   getConsolidatedCapitalOutlayData: async (req, res) => {
     try {
       const { regions, fiscalYear, budgetType } = req.query;
-      
+
+      // --- ENHANCED USER & ORG DETECTION ---
+      const user = req.user || {};
+      const userId = user.id || user.userId || user._id || user.UserId;
+      const userRoles = user.roles || user.Roles || [];
+      const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN', 'BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+
+      let forcedDept = req.query.department || req.submissionWorkflowData?.department || req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+
+      // Emergency DB lookup if department scope is missing
+      if (!isSuperAdmin && !forcedDept && userId) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+            .populate('departmentId').lean();
+          if (assignment) {
+            forcedDept = assignment.departmentId?.departmentName || assignment.departmentId?.Department || assignment.departmentId?.DepartmentName;
+            console.log(`[CO_REPORT] Emergency lookup User=${userId}: Dept=${forcedDept}`);
+          }
+        } catch (_) {}
+      }
+
       let regionFilter = {};
-      
       if (req.submissionWorkflowFilters) {
         Object.assign(regionFilter, req.submissionWorkflowFilters);
       } else if (req.hierarchicalAccess) {
         const accessInfo = req.hierarchicalAccess;
-        
-        if (accessInfo?.scope === 'DIVISION') {
-          if (accessInfo.accessibleRegions?.[0]?.regionName) {
-            regionFilter.region = accessInfo.accessibleRegions[0].regionName;
-          }
-          if (accessInfo.accessibleDepartments?.[0]?.departmentName) {
-            regionFilter.department = accessInfo.accessibleDepartments[0].departmentName;
-          }
-          if (accessInfo.accessibleDivisions?.[0]) {
-            regionFilter.division = accessInfo.accessibleDivisions[0];
-          }
-        } else if (accessInfo?.scope === 'DEPARTMENT') {
-          const baseRegion = accessInfo.accessibleRegions?.[0]?.regionName;
-          const baseDepartment = accessInfo.accessibleDepartments?.[0]?.departmentName;
-          
-          if (baseRegion && baseDepartment) {
-            regionFilter = {
-              $and: [
-                { region: baseRegion },
-                { department: baseDepartment },
-                {
-                  $or: [
-                    { $and: [{ $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }] },
-                    {
-                      $and: [
-                        { division: { $exists: true, $ne: null, $ne: "" } },
-                        { status: { $in: ["Submitted", "Approved", "Completed"] } }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            };
-          }
-        } else if (accessInfo?.scope === 'REGION') {
-          const baseRegion = accessInfo.accessibleRegions?.[0]?.regionName;
-          if (baseRegion) {
-            regionFilter = {
-              $and: [
-                { region: baseRegion },
-                { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
-              ]
-            };
-          }
-        } else if (accessInfo?.accessibleRegions?.[0]?.regionName) {
+        if (accessInfo?.accessibleRegions?.[0]?.regionName) {
           regionFilter.region = accessInfo.accessibleRegions[0].regionName;
         }
       }
-      
+
       if (regions && !regionFilter.$and) {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter.region = { $in: regionList };
       }
 
-      const { department: deptParam, division: divParam } = req.query;
       const coQuery = { ...regionFilter };
       if (fiscalYear) coQuery.fiscalYear = fiscalYear;
       if (budgetType) coQuery.budgetType = budgetType;
-      // Allow explicit department/division filter from query (e.g. Tier page)
-      if (deptParam && !coQuery.department && !coQuery.$and) {
-        coQuery.department = new RegExp(`^${String(deptParam).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+      // STRICT department filter for non-admins
+      if (forcedDept && !isSuperAdmin) {
+        coQuery.department = new RegExp(`^${String(forcedDept).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      } else if (req.query.division) {
+        coQuery.division = new RegExp(`^${String(req.query.division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
       }
-      if (divParam && !coQuery.division && !coQuery.$and) {
-        coQuery.division = new RegExp(`^${String(divParam).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-      }
+
+      console.log(`[CO_REPORT_DATA] ForcedDept=${forcedDept} Query=`, JSON.stringify(coQuery));
 
       const coData = await CapitalOutlay.find(coQuery).populate('category', 'categoryName').lean();
 
@@ -101,70 +78,75 @@ const consolidatedCapitalOutlayController = {
 
       const detailsByParentId = {};
       allDetails.forEach((d) => {
-        // Parentheses added to fix potential ambiguity (though only ?? used here, it's good practice)
         const pid = (d.capital_outlay_id?.toString?.()) ?? d.capital_outlay_id;
         if (!detailsByParentId[pid]) detailsByParentId[pid] = [];
         detailsByParentId[pid].push(d);
       });
 
-      const regionGroups = {};
+      // GROUP BY TITLE (category header like "ACQUISITION OF FURNITURE & FIXTURES AND BOOKS")
+      const titleGroups = {};
       let grandTotal = 0;
 
       coData.forEach((parent) => {
-        const regionName = parent.region || 'Unknown Region';
-        if (!regionGroups[regionName]) regionGroups[regionName] = [];
+        // GROUP BY categoryName from the Category collection (e.g., "ACQUISITION OF FURNITURE & FIXTURES AND BOOKS")
+        const titleKey = (parent.category?.categoryName) || parent.accountingTitle || parent.sublineItem || 'Other';
+        if (!titleGroups[titleKey]) titleGroups[titleKey] = [];
+
         const details = detailsByParentId[parent._id.toString()];
-        
         if (Array.isArray(details) && details.length > 0) {
-          const categoryGroup = parent.sublineItem || parent.accountingTitle || (parent.category && parent.category.categoryName) || 'Other';
           details.forEach((d) => {
             const incomeAmt = Number(d.income_amount) || 0;
             const subsidyAmt = Number(d.subsidy_amount) || 0;
             const amount = incomeAmt + subsidyAmt;
-            const expanded = {
-              ...parent,
+            titleGroups[titleKey].push({
               _id: d._id,
               particulars: d.particulars || '',
-              sublineItem: d.particulars || parent.sublineItem,
-              categoryGroup,
+              department: parent.department || '',
+              division: parent.division || '',
+              region: parent.region || '',
+              uacsCode: parent.uacsCode || '',
               income: incomeAmt,
               subsidy: subsidyAmt,
               cost: amount,
               amount,
-              uacsCode: `${parent.uacsCode || parent._id}-${d._id}`,
-            };
-            regionGroups[regionName].push(expanded);
+            });
             grandTotal += amount;
           });
         } else {
-          const amount = (Number(parent.amount) ?? (Number(parent.cost) || 0)) || ((Number(parent.income) || 0) + (Number(parent.subsidy) || 0));
-          regionGroups[regionName].push({ ...parent, amount });
+          const amount = (Number(parent.amount) || 0) || ((Number(parent.income) || 0) + (Number(parent.subsidy) || 0));
+          titleGroups[titleKey].push({
+            _id: parent._id,
+            particulars: parent.sublineItem || parent.accountingTitle || titleKey,
+            department: parent.department || '',
+            division: parent.division || '',
+            region: parent.region || '',
+            uacsCode: parent.uacsCode || '',
+            income: Number(parent.income) || 0,
+            subsidy: Number(parent.subsidy) || amount,
+            cost: amount,
+            amount,
+          });
           grandTotal += amount;
         }
       });
 
-      const formattedData = Object.keys(regionGroups).map((regionName) => {
-        const items = regionGroups[regionName];
-        // FIX 2: Wrapped ?? and || in parentheses
-        const total = items.reduce((sum, item) => sum + (Number(item.amount) ?? (Number(item.cost) || 0)), 0);
-        return { region: regionName, items, total, count: items.length };
+      const formattedData = Object.keys(titleGroups).map((titleName) => {
+        const items = titleGroups[titleName];
+        const total = items.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
+        return { category: titleName, region: items[0]?.region || '', items, total, count: items.length };
       });
 
-      const totalEntries = Object.values(regionGroups).reduce((s, arr) => s + arr.length, 0);
-      
+      const totalEntries = Object.values(titleGroups).reduce((s, arr) => s + arr.length, 0);
+
       return res.status(200).json({
         success: true,
         data: formattedData,
         summary: {
-          totalRegions: Object.keys(regionGroups).length,
+          totalCategories: Object.keys(titleGroups).length,
           totalEntries,
           grandTotal
         },
-        filters: {
-          fiscalYear,
-          budgetType,
-          regions: regions || 'All'
-        }
+        filters: { fiscalYear, budgetType, regions: regions || 'All', department: forcedDept }
       });
 
     } catch (error) {
@@ -190,30 +172,101 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
   }
 
   try {
-    const { regions, fiscalYear, budgetType, department, division } = req.query;
+    const { regions, fiscalYear, budgetType } = req.query;
+    let { department, division } = req.query;
+    
+    // --- SECURITY OVERRIDE FOR PDF: enforce dept scope same as data endpoint ---
+    const userId   = req.user?.id || req.user?.userId || req.user?._id || req.user?.UserId;
+    const userRoles = req.user?.roles || req.user?.Roles || [];
+
+    // Region-wide roles: Super Admins + Budget & Revenue Division (BRD) roles
+    const REGION_WIDE_ROLES = [
+      'SUPER_ADMIN', 'SUPER ADMIN', 'BUDGET_MANAGER',
+      'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST',
+      'BUDGET_OFFICER', 'BUDGET OFFICER',
+      'OVERALL_BUDGET_APPROVER', 'OVERALL BUDGET APPROVER',
+      'BUDGET_ADMIN', 'BUDGET ADMIN',
+    ];
+    let isSuperAdmin = userRoles.some(r => REGION_WIDE_ROLES.includes(r));
+
+    if (!isSuperAdmin) {
+      // Try middleware first
+      let assignedDept = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName
+        || req.submissionWorkflowData?.department
+        || req.submissionWorkflowFilters?.department;
+      let assignedDiv = req.hierarchicalAccess?.accessibleDivisions?.[0]
+        || req.submissionWorkflowData?.division;
+
+      // Emergency DB lookup if middleware didn't provide dept
+      if (userId) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+            .populate('departmentId').lean();
+          if (assignment) {
+            const level = assignment.assignmentLevel || '';
+            // BRD / Region-level → treat same as super admin (full region, no dept filter)
+            const isRegionLevel = ['BUDGET_AND_REVENUE_DIVISION', 'REGION', 'FULL'].includes(level);
+            if (isRegionLevel) {
+              isSuperAdmin = true;
+              console.log(`[CO_PDF] BRD/Region-level user=${userId} level=${level} → region-wide access`);
+            } else if (!assignedDept) {
+              assignedDept = assignment.departmentId?.departmentName
+                || assignment.departmentId?.Department
+                || assignment.departmentId?.DepartmentName;
+              assignedDiv  = assignedDiv || assignment.divisionName || assignment.division;
+              console.log(`[CO_PDF] Emergency lookup User=${userId}: Dept=${assignedDept} Level=${level}`);
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!isSuperAdmin) {
+        // Hard block: non-admin with no dept = 403
+        if (!assignedDept) {
+          return res.status(403).json({
+            message: 'Cannot generate PDF: your organizational scope could not be determined. Please contact your administrator.'
+          });
+        }
+        // Override any query params with the scoped values
+        department = assignedDept;
+        if (assignedDiv) division = assignedDiv;
+      }
+    }
+
+    // Track what to SHOW in the PDF header (only explicitly scoped values)
+    // Super admins generating a full-region report should NOT show dept/div in header
+    const headerDept = isSuperAdmin ? null : department;
+    const headerDiv  = isSuperAdmin ? null : division;
+
     const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
 
-    // Reuse existing data-fetching logic ─────────────────────────────────────
     let regionFilter = {};
     if (req.submissionWorkflowFilters) {
       Object.assign(regionFilter, req.submissionWorkflowFilters);
     }
-    // Always apply explicit region list from query params (mirrors getConsolidatedCapitalOutlayData logic)
     if (regionList && regionList.length && !regionFilter.$and) {
       regionFilter.region = { $in: regionList };
     }
 
     const coQuery = { ...regionFilter };
-    if (fiscalYear) coQuery.fiscalYear = fiscalYear;
-    if (budgetType) coQuery.budgetType = budgetType;
-    if (department) coQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    if (division)   coQuery.division   = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    if (fiscalYear)  coQuery.fiscalYear  = fiscalYear;
+    if (budgetType)  coQuery.budgetType  = budgetType;
+    if (department)  coQuery.department  = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    if (division)    coQuery.division    = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+    console.log(`[CO_PDF] User=${userId} isSuperAdmin=${isSuperAdmin} Dept=${department} Div=${division} Query=`, JSON.stringify(coQuery));
 
     const coData = await CapitalOutlay.find(coQuery).populate('category', 'categoryName').lean();
+
+    // Fallback labels for query only (NOT shown in header for super admins)
+    const _fallbackDept = (!department && coData.length > 0) ? coData[0].department : department;
+    const _fallbackDiv  = (!division   && coData.length > 0) ? coData[0].division   : division;
+
     const parentIds = coData.map((c) => c._id);
     const allDetails = await CapitalOutlayDetails.find({ capital_outlay_id: { $in: parentIds } }).sort({ createdAt: 1 }).lean();
 
-    // Resolve workflow signatories from the first linked NewProposalWorkflow
+    // Resolve workflow signatories
     let signatoriesInfo = extractSignatoriesFromWorkflow(null);
     const workflowRefId = coData.map((c) => c.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
@@ -225,6 +278,22 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       }
     }
 
+    // Fallback: if no workflow (bulk-uploaded data), use username_process or req.user
+    if (!signatoriesInfo.preparer?.name) {
+      const uploaderName = coData.find(c => c.username_process)?.username_process
+        || req.user?.name || req.user?.UserName || req.user?.username || '';
+      if (uploaderName && signatoriesInfo.preparer) {
+        signatoriesInfo.preparer.name = uploaderName;
+      }
+    }
+
+    // --- OVERRIDE LABELS ---
+    if (signatoriesInfo) {
+      if (signatoriesInfo.preparer) signatoriesInfo.preparer.label = "Prepared by:";
+      if (signatoriesInfo.reviewer) signatoriesInfo.reviewer.label = "Reviewed by:";
+      if (signatoriesInfo.approver) signatoriesInfo.approver.label = "Approved by:";
+    }
+
     const detailsByParentId = {};
     allDetails.forEach((d) => {
       const pid = (d.capital_outlay_id?.toString?.()) ?? d.capital_outlay_id;
@@ -232,38 +301,24 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       detailsByParentId[pid].push(d);
     });
 
-    // Build per-region, per-category row list ─────────────────────────────────
-    const regionGroups = {};
+    // GROUP BY categoryName (Excel layout: category header → RC rows)
+    const catGroups = {};
     coData.forEach((parent) => {
-      const regionName = parent.region || 'Unknown Region';
-      if (!regionGroups[regionName]) regionGroups[regionName] = {};
-      const categoryKey = parent.sublineItem || parent.accountingTitle || (parent.category && parent.category.categoryName) || 'Other';
-      if (!regionGroups[regionName][categoryKey]) regionGroups[regionName][categoryKey] = [];
-
+      const catKey = (parent.category?.categoryName) || parent.accountingTitle || parent.sublineItem || 'Other';
+      if (!catGroups[catKey]) catGroups[catKey] = [];
+      const rcName = parent.department || parent.division || parent.region || '';
       const details = detailsByParentId[parent._id.toString()];
       if (Array.isArray(details) && details.length > 0) {
         details.forEach((d) => {
-          regionGroups[regionName][categoryKey].push({
-            particulars: d.particulars || '',
-            uacsCode: parent.uacsCode || '',
-            income: Number(d.income_amount) || 0,
-            subsidy: Number(d.subsidy_amount) || 0,
-            cost: (Number(d.income_amount) || 0) + (Number(d.subsidy_amount) || 0),
-          });
+          const amt = (Number(d.income_amount) || 0) + (Number(d.subsidy_amount) || 0);
+          catGroups[catKey].push({ rc: rcName, particulars: d.particulars || '', amount: amt });
         });
       } else {
-        const cost = Number(parent.amount) || (Number(parent.income) || 0) + (Number(parent.subsidy) || 0);
-        regionGroups[regionName][categoryKey].push({
-          particulars: parent.sublineItem || parent.accountingTitle || '',
-          uacsCode: parent.uacsCode || '',
-          income: Number(parent.income) || 0,
-          subsidy: Number(parent.subsidy) || 0,
-          cost,
-        });
+        const amt = (Number(parent.income) || 0) + (Number(parent.subsidy) || 0);
+        catGroups[catKey].push({ rc: rcName, particulars: parent.sublineItem || parent.accountingTitle || '', amount: amt });
       }
     });
 
-    // ── Build PDF ─────────────────────────────────────────────────────────────
     const tmpFilePath = path.join(os.tmpdir(), `co_report_${Date.now()}.pdf`);
     const tempSignatureImagePaths = [];
 
@@ -275,7 +330,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const recipeOptions = {
       version: 1.6,
       author: 'FMIS-BUDGET',
-      title: 'Consolidated Capital Outlay Report',
+      title: 'CAPITAL OUTLAY',
       subject: `Capital Outlay - FY ${fiscalYear || 'All Years'}`,
     };
     if (pdfSecurityEnabled) {
@@ -286,9 +341,9 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
-    const PAGE_WIDTH  = 595.28; // A4 portrait width (points)
-    const PAGE_HEIGHT = 841.89; // A4 portrait height (points)
-    const MARGIN      = 36;
+    const PAGE_WIDTH  = 595.28; 
+    const PAGE_HEIGHT = 841.89; 
+    const MARGIN        = 18;   // reduced — closer to paper edge
     const CONTENT_LEFT  = MARGIN;
     const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
     const LINE_H = 13;
@@ -298,6 +353,44 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
     const textOpt = (o = {}) => ({ color: '#000000', ...o });
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
+
+    const wrapText = (text, maxWidth, fontSize) => {
+      const words = String(text || '').split(' ');
+      const lines = [];
+      let currentLine = '';
+      
+      const getWidth = (t) => {
+        try { return pdfDoc.calculateTextDimensions(t, { fontSize }).width; }
+        catch (e) { return t.length * (fontSize * 0.55); }
+      };
+
+      words.forEach(word => {
+        let testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (getWidth(testLine) > maxWidth) {
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            // Very long single word - character level split
+            let part = '';
+            for (let char of word) {
+              if (getWidth(part + char) > maxWidth) {
+                lines.push(part);
+                part = char;
+              } else {
+                part += char;
+              }
+            }
+            currentLine = part;
+          }
+        } else {
+          currentLine = testLine;
+        }
+      });
+      if (currentLine) lines.push(currentLine);
+      return lines;
+    };
+
     const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.id || 'Authorized User');
     const watermarkText = process.env.COMPREHENSIVE_PDF_WATERMARK_TEXT || `FMIS CONFIDENTIAL • ${requesterLabel}`;
     const formatPhp = (n) => Number(n || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
@@ -306,55 +399,81 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       for (const c of candidates) { if (c && fs.existsSync(c)) return c; }
       return null;
     };
-    const sealPath        = resolveExisting(path.join(__dirname, '../assets/Seal.png'),            path.join(process.cwd(), 'SERVER/assets/Seal.png'),            path.join(process.cwd(), 'CLIENT/public/Seal.png'));
-    const nialogoPath     = resolveExisting(path.join(__dirname, '../assets/logo.png'),            path.join(process.cwd(), 'SERVER/assets/logo.png'),            path.join(process.cwd(), 'CLIENT/public/logo.png'));
-    const bagongPath      = resolveExisting(path.join(__dirname, '../assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png'));
+    const sealPath      = resolveExisting(path.join(__dirname, '../assets/Seal.png'),            path.join(process.cwd(), 'SERVER/assets/Seal.png'),            path.join(process.cwd(), 'CLIENT/public/Seal.png'));
+    const nialogoPath   = resolveExisting(path.join(__dirname, '../assets/logo.png'),            path.join(process.cwd(), 'SERVER/assets/logo.png'),            path.join(process.cwd(), 'CLIENT/public/logo.png'));
+    const bagongPath    = resolveExisting(path.join(__dirname, '../assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png'));
+
+    // ── Font resolution: Cambria & Trajan Pro (Windows fonts) ────────────────
+    const F_CAMBRIA      = resolveExisting('C:/Windows/Fonts/cambria.ttc',  'C:/Windows/Fonts/CAMBRIA.TTC')  || 'Times-Roman';
+    const F_CAMBRIA_B    = resolveExisting('C:/Windows/Fonts/cambriab.ttf', 'C:/Windows/Fonts/CAMBRIAB.TTF') || 'Times-Bold';
+    const F_TRAJAN       = resolveExisting(
+      'C:/Windows/Fonts/TrajanPro3Regular.otf',
+      'C:/Windows/Fonts/TrajanPro-Regular.otf',
+      'C:/Windows/Fonts/trajan.ttf',
+      'C:/Program Files/Adobe/Acrobat DC/Resource/Font/TrajanPro3-Regular.otf',
+      'C:/Program Files (x86)/Common Files/Adobe/Fonts/TrajanPro3-Regular.otf'
+    ) || 'Times-Bold';
+    const F_TRAJAN_B     = resolveExisting(
+      'C:/Windows/Fonts/TrajanPro3Bold.otf',
+      'C:/Windows/Fonts/TrajanPro-Bold.otf'
+    ) || 'Times-Bold';
+    console.log(`[CO_PDF] Fonts: Cambria=${F_CAMBRIA} CambriaBold=${F_CAMBRIA_B} Trajan=${F_TRAJAN}`);
 
     const drawPage = (isFirst) => {
       const cx = PAGE_WIDTH / 2;
-      const cy = PAGE_HEIGHT / 2;
 
-      // Border
-      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, { stroke: '#4d4c4c', lineWidth: 1.5 });
-
-      // Watermark
-      pdfDoc.text(watermarkText, cx, cy - 18, textOpt({ fontSize: 30, color: '#d9d9d9', align: 'center' }));
-      pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, cx, cy + 15, textOpt({ fontSize: 12, color: '#dddddd', align: 'center' }));
-
-      // Footer
-      pdfDoc.text('Annex E (Capital Outlay)', CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
+      // Footer — near the very bottom edge of the paper
+      pdfDoc.text('Annex E (Capital Outlay)', CONTENT_LEFT, PAGE_HEIGHT - 10, textOpt({ fontSize: 7, font: F_CAMBRIA }));
+      pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 40, PAGE_HEIGHT - 10, textOpt({ fontSize: 7, align: 'right', font: F_CAMBRIA }));
 
       if (!isFirst) return;
 
-      // Logos
       const logoW = 44, logoH = 44, logoY = MARGIN + 2;
       if (sealPath)    { try { pdfDoc.image(sealPath,    CONTENT_LEFT, logoY, { width: logoW, height: logoH }); } catch(e) {} }
       if (nialogoPath) { try { pdfDoc.image(nialogoPath, CONTENT_LEFT + logoW + 5, logoY, { width: logoW, height: logoH }); } catch(e) {} }
       if (bagongPath)  { try { pdfDoc.image(bagongPath,  CONTENT_RIGHT - logoW, logoY, { width: logoW, height: logoH }); } catch(e) {} }
 
-      // Header text
       let hy = logoY + 6;
-      pdfDoc.text('Republic of the Philippines', cx, hy, textOpt({ fontSize: 10, align: 'center' }));
+      // "Republic of the Philippines" → BOLD (highlighted)
+      pdfDoc.text('Republic of the Philippines', cx, hy, textOpt({ fontSize: 11, bold: true, align: 'center', font: F_CAMBRIA_B }));
       hy += LINE_H;
-      pdfDoc.text('OFFICE OF THE PRESIDENT', cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+      // "OFFICE OF THE PRESIDENT" → regular (not highlighted)
+      pdfDoc.text('OFFICE OF THE PRESIDENT', cx, hy, textOpt({ fontSize: 11, align: 'center', font: F_CAMBRIA }));
       hy += LINE_H;
-      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
+      // "NATIONAL IRRIGATION ADMINISTRATION" → BOLD (highlighted), Trajan Pro
+      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, textOpt({ fontSize: 11, bold: true, align: 'center', font: F_TRAJAN_B }));
       hy += LINE_H;
-      let regionLabel = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
-      if (department) regionLabel += `  |  Dept: ${department}`;
-      if (division)   regionLabel += `  >  Div: ${division}`;
-      pdfDoc.text(regionLabel, cx, hy, textOpt({ fontSize: 9, align: 'center' }));
 
-      if (bagongPath) pdfDoc.text('ANNEX E', CONTENT_RIGHT - 62, MARGIN + logoH + 2, textOpt({ fontSize: 13, bold: true }));
+      let rcHeader = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
+      if (headerDept || headerDiv) {
+        let subHeader = '';
+        if (headerDept) subHeader += headerDept;
+        if (headerDiv) subHeader += (subHeader ? '\n' : '') + headerDiv;
+        // Region/dept/div lines → regular weight, Trajan Pro, size 11
+        pdfDoc.text(rcHeader,  cx, hy, textOpt({ fontSize: 11, align: 'center', font: F_TRAJAN }));
+        hy += LINE_H;
+        pdfDoc.text(subHeader, cx, hy, textOpt({ fontSize: 11, align: 'center', font: F_TRAJAN }));
+      } else {
+        pdfDoc.text(rcHeader,  cx, hy, textOpt({ fontSize: 11, align: 'center', font: F_TRAJAN }));
+      }
 
-      curY = hy + LINE_H * 1.3;
+      if (bagongPath) pdfDoc.text('ANNEX E', CONTENT_RIGHT - 62, MARGIN + logoH + 2, textOpt({ fontSize: 13, bold: true, font: F_CAMBRIA_B }));
 
-      // Title
-      pdfDoc.text('CONSOLIDATED CAPITAL OUTLAY REPORT', cx, curY, textOpt({ fontSize: 15, bold: true, align: 'center' }));
-      curY += LINE_H * 1.2;
-      pdfDoc.text(`Fiscal Year: ${safeStr(fiscalYear) || 'All Years'}  |  Budget Type: ${safeStr(budgetType) || 'All'}`, cx, curY, textOpt({ fontSize: 10, align: 'center' }));
-      curY += LINE_H * 1.8;
+      // ── Title block ────────────────────────────────────────────────────────
+      curY = hy + LINE_H * 1.5;
+      // CORPORATE OPERATING BUDGET → bold, size 12
+      pdfDoc.text('CORPORATE OPERATING BUDGET', cx, curY, textOpt({ fontSize: 12, bold: true, align: 'center', font: F_CAMBRIA_B }));
+      curY += LINE_H + 1;
+      // FISCAL YEAR → bold, size 12
+      pdfDoc.text(`FISCAL YEAR ${safeStr(fiscalYear) || 'ALL YEARS'}`, cx, curY, textOpt({ fontSize: 12, bold: true, align: 'center', font: F_CAMBRIA_B }));
+      curY += LINE_H + 5;
+      // thin separator line (full table width)
+      pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, 0.7, { fill: '#000000', stroke: '#000000', lineWidth: 0 });
+      curY += 7;
+      // CAPITAL OUTLAY → bold, size 14
+      pdfDoc.text('CAPITAL OUTLAY', cx, curY, textOpt({ fontSize: 14, bold: true, align: 'center', font: F_CAMBRIA_B }));
+      curY += LINE_H * 2;
+
     };
 
     const startNewPage = () => {
@@ -369,95 +488,94 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       if (curY + lines * LINE_H > PAGE_HEIGHT - MARGIN - 22) startNewPage();
     };
 
-    // Column widths (portrait)
-    const COL_REGION   = 70;
-    const COL_UACS     = 65;
-    const COL_INCOME   = 75;
-    const COL_SUBSIDY  = 75;
-    const COL_COST     = 75;
-    const COL_TITLE    = CONTENT_RIGHT - CONTENT_LEFT - COL_REGION - COL_UACS - COL_INCOME - COL_SUBSIDY - COL_COST;
+    // ── Column layout: 3 columns matching Excel ─────────────────────────
+    const TBL_W   = CONTENT_RIGHT - CONTENT_LEFT;
+    const COL_RC  = 130;  // Responsibility Center
+    const COL_AMT = 90;   // Amount (right-aligned)
+    const COL_PAR = TBL_W - COL_RC - COL_AMT; // Particulars
 
-    const colX = {
-      region:  CONTENT_LEFT,
-      uacs:    CONTENT_LEFT + COL_REGION,
-      title:   CONTENT_LEFT + COL_REGION + COL_UACS,
-      income:  CONTENT_LEFT + COL_REGION + COL_UACS + COL_TITLE,
-      subsidy: CONTENT_LEFT + COL_REGION + COL_UACS + COL_TITLE + COL_INCOME,
-      cost:    CONTENT_LEFT + COL_REGION + COL_UACS + COL_TITLE + COL_INCOME + COL_SUBSIDY,
-    };
+    const xRC  = CONTENT_LEFT;
+    const xPar = CONTENT_LEFT + COL_RC;
+    const xAmt = CONTENT_RIGHT - COL_AMT;
 
-    const drawTableHeader = () => {
-      ensureSpace(2);
-      const cellStyle = { fontSize: 8, bold: true, color: '#000000' };
-      pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.5 });
-      pdfDoc.text('REGION',      colX.region  + 3, curY, textOpt(cellStyle));
-      pdfDoc.text('UACS CODE',   colX.uacs    + 3, curY, textOpt(cellStyle));
-      pdfDoc.text('PROJECT / PARTICULARS', colX.title + 3, curY, textOpt(cellStyle));
-      pdfDoc.text('INCOME',      colX.income  + 3, curY, textOpt(cellStyle));
-      pdfDoc.text('SUBSIDY',     colX.subsidy + 3, curY, textOpt(cellStyle));
-      pdfDoc.text('TOTAL COST',  colX.cost    + 3, curY, textOpt(cellStyle));
-      curY += LINE_H + 4;
-    };
+    const ROMAN = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII','XVIII','XIX','XX'];
+    const ROW_H = 18;   // row height — more breathing room
+    const PAD_V = 4;    // vertical text padding inside row
 
-    // First page
     pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
     drawPage(true);
-    drawTableHeader();
 
-    let grandIncome = 0, grandSubsidy = 0, grandCost = 0;
+    let grandTotal = 0;
+    const catEntries = Object.entries(catGroups);
 
-    for (const [regionName, categories] of Object.entries(regionGroups)) {
-      let regionFirstRow = true;
-      for (const [catName, rows] of Object.entries(categories)) {
-        // Category header row
-        ensureSpace(2);
-        pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 2, { stroke: '#c0d0c0', lineWidth: 0.3 });
-        pdfDoc.text(regionFirstRow ? regionName : '', colX.region + 3, curY, textOpt({ fontSize: 8, bold: true }));
-        pdfDoc.text(catName, colX.uacs + 3, curY, textOpt({ fontSize: 8, bold: true }), { columnWidth: COL_TITLE + COL_UACS - 6, overflow: 'truncate' });
-        curY += LINE_H + 2;
-        regionFirstRow = false;
+    catEntries.forEach(([catName, rows], catIdx) => {
+      // ── Category Header: bold text + bottom border, no fill ─────────────
+      ensureSpace(3);
+      const catLabel = `${ROMAN[catIdx] || (catIdx + 1)}.  ${catName}`;
+      const catLines = wrapText(catLabel, TBL_W - 10, 8.5);
+      catLines.forEach((line, i) => {
+        pdfDoc.text(line, CONTENT_LEFT + 3, curY + PAD_V + (i * LINE_H), textOpt({ fontSize: 8.5, bold: true, color: '#000000' }));
+      });
+      curY += catLines.length * LINE_H + PAD_V * 2;
+      // bottom border under category header
+      pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, 0.8, { fill: '#000000', stroke: '#000000', lineWidth: 0 });
+      curY += 4;
 
-        let catIncome = 0, catSubsidy = 0, catCost = 0;
-        for (const row of rows) {
-          ensureSpace(1);
-          pdfDoc.text('', colX.region  + 3, curY, textOpt({ fontSize: 7.5 }));
-          pdfDoc.text(safeStr(row.uacsCode),   colX.uacs    + 3, curY, textOpt({ fontSize: 7.5 }));
-          pdfDoc.text(safeStr(row.particulars), colX.title   + 3, curY, textOpt({ fontSize: 7.5 }), { columnWidth: COL_TITLE - 6, overflow: 'truncate' });
-          pdfDoc.text(formatPhp(row.income),   colX.income  + COL_INCOME  - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
-          pdfDoc.text(formatPhp(row.subsidy),  colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
-          pdfDoc.text(formatPhp(row.cost),     colX.cost    + COL_COST    - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
-          curY += LINE_H;
-          catIncome += row.income; catSubsidy += row.subsidy; catCost += row.cost;
-        }
+      // ── Sub-header row ────────────────────────────────────────────────────
+      ensureSpace(2);
+      pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, ROW_H, { stroke: '#000000', lineWidth: 0.5 });
+      pdfDoc.text('RESPONSIBILITY CENTER', xRC  + 4, curY + PAD_V, textOpt({ fontSize: 7, bold: true }));
+      pdfDoc.text('PARTICULARS',           xPar + 4, curY + PAD_V, textOpt({ fontSize: 7, bold: true }));
+      pdfDoc.text('AMOUNT', xAmt + COL_AMT - 4, curY + PAD_V, textOpt({ fontSize: 7, bold: true, align: 'right' }));
+      pdfDoc.rectangle(xPar, curY, 0.4, ROW_H, { fill: '#000000', stroke: '#000000', lineWidth: 0 });
+      pdfDoc.rectangle(xAmt, curY, 0.4, ROW_H, { fill: '#000000', stroke: '#000000', lineWidth: 0 });
+      curY += ROW_H;
 
-        // Category subtotal
-        ensureSpace(1);
-        pdfDoc.rectangle(colX.region, curY - 1, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 1, { stroke: '#9e9e9e', lineWidth: 0.4 });
-        pdfDoc.text(`Subtotal: ${catName}`, colX.uacs + 3, curY, textOpt({ fontSize: 7.5, bold: true }));
-        pdfDoc.text(formatPhp(catIncome),  colX.income  + COL_INCOME  - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
-        pdfDoc.text(formatPhp(catSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
-        pdfDoc.text(formatPhp(catCost),    colX.cost    + COL_COST    - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
-        curY += LINE_H + 2;
-        grandIncome += catIncome; grandSubsidy += catSubsidy; grandCost += catCost;
-      }
-      curY += 4; // breathing space between regions
-    }
+      // ── Data rows ─────────────────────────────────────────────────────────
+      let catTotal = 0;
+      rows.forEach((row) => {
+        const parLines = wrapText(safeStr(row.particulars), COL_PAR - 10, 8);
+        const rcLines  = wrapText(safeStr(row.rc),          COL_RC  - 8,  8);
+        const rowLines = Math.max(parLines.length, rcLines.length, 1);
+        const rowH     = rowLines * LINE_H + PAD_V * 2;
+        ensureSpace(rowLines + 1);
 
-    // Grand Total row
+        pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, rowH, { stroke: '#aaaaaa', lineWidth: 0.3 });
+        pdfDoc.rectangle(xPar, curY, 0.3, rowH, { fill: '#aaaaaa', stroke: '#aaaaaa', lineWidth: 0 });
+        pdfDoc.rectangle(xAmt, curY, 0.3, rowH, { fill: '#aaaaaa', stroke: '#aaaaaa', lineWidth: 0 });
+
+        rcLines.forEach( (l, i) => pdfDoc.text(l, xRC  + 4, curY + PAD_V + i * LINE_H, textOpt({ fontSize: 8 })));
+        parLines.forEach((l, i) => pdfDoc.text(l, xPar + 4, curY + PAD_V + i * LINE_H, textOpt({ fontSize: 8 })));
+        pdfDoc.text(formatPhp(row.amount), xAmt + COL_AMT - 4, curY + PAD_V, textOpt({ fontSize: 8, align: 'right' }));
+
+        curY += rowH;
+        catTotal += row.amount;
+      });
+
+      // ── Category TOTAL row ────────────────────────────────────────────────
+      ensureSpace(2);
+      pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, ROW_H, { stroke: '#000000', lineWidth: 0.5 });
+      pdfDoc.rectangle(xPar, curY, 0.4, ROW_H, { fill: '#000000', stroke: '#000000', lineWidth: 0 });
+      pdfDoc.rectangle(xAmt, curY, 0.4, ROW_H, { fill: '#000000', stroke: '#000000', lineWidth: 0 });
+      pdfDoc.text('TOTAL', xPar + 4, curY + PAD_V, textOpt({ fontSize: 8, bold: true }));
+      pdfDoc.text(formatPhp(catTotal), xAmt + COL_AMT - 4, curY + PAD_V, textOpt({ fontSize: 8, bold: true, align: 'right' }));
+      curY += ROW_H + 10;
+      grandTotal += catTotal;
+    });
+
+    // ── TOTAL CAPITAL OUTLAY ──────────────────────────────────────────────────
     ensureSpace(2);
-    pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.6 });
-    pdfDoc.text('GRAND TOTAL', colX.region + 3, curY, textOpt({ fontSize: 9, bold: true }));
-    pdfDoc.text(formatPhp(grandIncome),  colX.income  + COL_INCOME  - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
-    pdfDoc.text(formatPhp(grandSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
-    pdfDoc.text(formatPhp(grandCost),    colX.cost    + COL_COST    - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
-    curY += LINE_H + 6;
+    pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, ROW_H + 2, { stroke: '#000000', lineWidth: 1 });
+    pdfDoc.text('TOTAL CAPITAL OUTLAY', xRC + 4, curY + PAD_V + 1, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text(formatPhp(grandTotal), xAmt + COL_AMT - 4, curY + PAD_V + 1, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+    curY += ROW_H + 16;
 
-    // Prepared by / Noted by / Approved by — 3-column signature block
-    ensureSpace(8);
-    curY += LINE_H * 2;
+
+    // Drawing signature block — keep on same page if possible
+    ensureSpace(4);
+    curY += LINE_H;
     curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, PAGE_WIDTH - (MARGIN * 2), tempSignatureImagePaths);
 
-    // Finalize
     pdfDoc.endPage().endPDF((err) => {
       if (err) {
         console.error('Error finalizing Capital Outlay PDF:', err);
@@ -486,6 +604,28 @@ consolidatedCapitalOutlayController.getConsolidatedCapitalOutlayPdf = getConsoli
 const getAvailableDepartments = async (req, res) => {
   try {
     const { fiscalYear, budgetType, region } = req.query;
+    const user = req.user || {};
+    const userId = user.id || user.userId || user._id || user.UserId;
+    const userRoles = user.roles || user.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN', 'BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+
+    let assignedDept = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName || req.submissionWorkflowData?.department;
+
+    // Emergency Lookup
+    if (!isSuperAdmin && !assignedDept && userId) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) }).populate('departmentId').lean();
+        if (assignment) {
+          assignedDept = assignment.departmentId?.departmentName || assignment.departmentId?.Department || assignment.departmentId?.DepartmentName;
+        }
+      } catch (_) {}
+    }
+
+    if (!isSuperAdmin && assignedDept) {
+      return res.json({ departments: [assignedDept] });
+    }
+
     const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
@@ -500,6 +640,28 @@ const getAvailableDepartments = async (req, res) => {
 const getAvailableDivisions = async (req, res) => {
   try {
     const { fiscalYear, budgetType, region, department } = req.query;
+    const user = req.user || {};
+    const userId = user.id || user.userId || user._id || user.UserId;
+    const userRoles = user.roles || user.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN', 'BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+
+    let assignedDiv = req.hierarchicalAccess?.accessibleDivisions?.[0] || req.submissionWorkflowData?.division;
+
+    // Emergency Lookup
+    if (!isSuperAdmin && !assignedDiv && userId) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) }).lean();
+        if (assignment) {
+          assignedDiv = assignment.divisionName;
+        }
+      } catch (_) {}
+    }
+
+    if (!isSuperAdmin && assignedDiv) {
+      return res.json({ divisions: [assignedDiv] });
+    }
+
     const query = {};
     if (fiscalYear)  query.fiscalYear = fiscalYear;
     if (budgetType)  query.budgetType = budgetType;

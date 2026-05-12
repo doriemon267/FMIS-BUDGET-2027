@@ -95,7 +95,7 @@ exports.createIncome = async (req, res) => {
       try {
         const activeSettings = await Settings.findOne({ isActive: true });
         const inferQuery = {
-          fiscalYear: activeSettings?.fiscalYear ? String(activeSettings.fiscalYear) : fiscalYear,
+          fiscalYear: activeSettings?.fiscalYear || fiscalYear,
           budgetType: activeSettings?.budgetType || budgetType,
           region: workflowData.region || region
         };
@@ -398,11 +398,12 @@ exports.getAllIncome = async (req, res) => {
           const assignedDivision = userAssignment.divisionName || (userAssignment.divisions && userAssignment.divisions[0]) || req.user?.division;
           
           const filteredIncome = incomeEntries.filter(inc => {
+            // Handle Division matching either division OR department field
             if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
-              return inc.division === assignedDivision;
+              return inc.division === assignedDivision || inc.department === assignedDivision || (!inc.division && !inc.department && inc.region === assignedRegion);
             }
             if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
-              return inc.department === assignedDepartment;
+              return inc.department === assignedDepartment || (!inc.division && !inc.department && inc.region === assignedRegion);
             }
             if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
               return inc.region === assignedRegion;
@@ -421,6 +422,14 @@ exports.getAllIncome = async (req, res) => {
         console.error('[ORG_FILTER] Error in getAllIncome:', err.message);
       }
     }
+    // Ensure cost is populated if missing/zero but amount exists (for frontend display compatibility)
+    incomeEntries = incomeEntries.map(entry => {
+      const doc = entry.toObject ? entry.toObject() : entry;
+      if ((!doc.cost || doc.cost === 0) && doc.amount > 0) {
+        doc.cost = doc.amount;
+      }
+      return doc;
+    });
     
     res.status(200).json(incomeEntries);
   } catch (error) {
@@ -493,11 +502,22 @@ exports.getIncomeByParams = async (req, res) => {
     // Merge submission workflow filters when available; fallback to hierarchical filters
     const submissionFilters = req.submissionWorkflowFilters || {};
     const hierarchicalFilters = req.hierarchicalFilters || {};
+    const budgetRoleVisibilityFilter = req.budgetRoleVisibilityFilter || {};
+
     let query = { ...baseQuery };
-    if (submissionFilters && Object.keys(submissionFilters).length > 0) {
-      if (submissionFilters.$and) {
+
+    if (budgetRoleVisibilityFilter && Object.keys(budgetRoleVisibilityFilter).length > 0) {
+      if (budgetRoleVisibilityFilter.$and || budgetRoleVisibilityFilter.$or) {
         const conditions = [];
         // expand baseQuery into individual conditions
+        Object.entries(baseQuery).forEach(([k, v]) => conditions.push({ [k]: v }));
+        query = { $and: [ ...conditions, budgetRoleVisibilityFilter ] };
+      } else {
+        query = { ...baseQuery, ...budgetRoleVisibilityFilter };
+      }
+    } else if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+      if (submissionFilters.$and) {
+        const conditions = [];
         Object.entries(baseQuery).forEach(([k, v]) => conditions.push({ [k]: v }));
         query = { $and: [ ...conditions, ...submissionFilters.$and ] };
       } else {
@@ -515,21 +535,51 @@ exports.getIncomeByParams = async (req, res) => {
 
     let income = await Income.find(query).populate('incomecategory').lean();
 
-    // Fallback: when viewing a proposal but no records by workflowRef/proposalId, try unlinked
-    // records (no workflowRef) with same fiscalYear + budgetType + division so older data can show
-    if (proposalId && income.length === 0 && (req.query.fiscalYear || req.query.budgetType)) {
-      const fallbackQuery = {
+    // ✅ ENHANCED FALLBACK: Always merge relevant unlinked records when viewing a proposal,
+    // not just when linked records are missing. This ensures centralized/bulk-uploaded income 
+    // (no workflowRef) shows up alongside proposal-specific entries.
+    if (proposalId && (req.query.fiscalYear || req.query.budgetType)) {
+      // Build regional search array including special regions
+      const searchRegions = [null, ""];
+      if (req.query.region) {
+        const reg = String(req.query.region).trim();
+        searchRegions.push(reg);
+        
+        // Handle Region 10 / Region X equivalence
+        if (reg === 'Region 10') searchRegions.push('Region X');
+        if (reg === 'Region X') searchRegions.push('Region 10');
+      }
+
+      const unlinkedQuery = {
         $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }],
         ...(req.query.fiscalYear && { fiscalYear: req.query.fiscalYear }),
         ...(req.query.budgetType && { budgetType: req.query.budgetType }),
+        region: { $in: searchRegions }
       };
+
       if (req.query.division) {
         const div = String(req.query.division).trim();
-        fallbackQuery.division = div;
+        unlinkedQuery.$and = [
+          {
+            $or: [
+              { division: div },
+              { $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] }
+            ]
+          }
+        ];
       }
-      const fallbackIncome = await Income.find(fallbackQuery).populate('incomecategory').lean();
-      if (fallbackIncome.length > 0) {
-        income = fallbackIncome;
+
+      const unlinkedIncome = await Income.find(unlinkedQuery).populate('incomecategory').lean();
+      
+      if (unlinkedIncome.length > 0) {
+        // Merge and deduplicate by _id to avoid showing the same record twice 
+        // (though unlinked records by definition shouldn't be in the first 'income' array)
+        const existingIds = new Set(income.map(inc => String(inc._id)));
+        const uniqueUnlinked = unlinkedIncome.filter(inc => !existingIds.has(String(inc._id)));
+        
+        if (uniqueUnlinked.length > 0) {
+          income = [...income, ...uniqueUnlinked];
+        }
       }
     }
 
@@ -546,19 +596,7 @@ exports.getIncomeByParams = async (req, res) => {
       const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
       const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
       
-      // SUPER_ADMIN: Filter by createdBy (self-created records only)
-      if (isSuperAdmin && userIdString) {
-        const filteredIncome = income.filter(inc => {
-          const createdByMatch = (
-            String(inc.createdBy || inc.userId || '') === userIdString ||
-            String(inc.userId || '') === userIdString
-          );
-          return createdByMatch;
-        });
-        if (filteredIncome.length > 0) {
-          income = filteredIncome;
-        }
-      } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      if (!isSuperAdmin && !isBudgetManager && userIdString) {
         try {
           const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
           const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
@@ -575,15 +613,27 @@ exports.getIncomeByParams = async (req, res) => {
                                   userAssignment.regionId?.region || req.user?.Region || req.user?.region;
             const assignedDivision = userAssignment.divisionName || (userAssignment.divisions && userAssignment.divisions[0]) || req.user?.division;
             
+            const isRegionMatch = (recordRegion, userRegion) => {
+              if (!recordRegion) return true; // Global records match everyone
+              if (recordRegion === userRegion) return true;
+              
+              // Special region mappings (equivalences only, not hierarchies)
+              if (userRegion === 'Region 10' && recordRegion === 'Region X') return true;
+              if (userRegion === 'Region X' && recordRegion === 'Region 10') return true;
+              
+              return false;
+            };
+
             const filteredIncome = income.filter(inc => {
+              // Handle Division matching either division OR department field
               if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
-                return inc.division === assignedDivision;
+                return inc.division === assignedDivision || inc.department === assignedDivision || (!inc.division && !inc.department && isRegionMatch(inc.region, assignedRegion));
               }
               if (assignedDepartment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(userAssignment.assignmentLevel)) {
-                return inc.department === assignedDepartment;
+                return inc.department === assignedDepartment || (!inc.division && !inc.department && isRegionMatch(inc.region, assignedRegion));
               }
               if (assignedRegion && ['REGION', 'REGION_LEVEL', 'BUDGET_AND_REVENUE_DIVISION'].includes(userAssignment.assignmentLevel)) {
-                return inc.region === assignedRegion;
+                return isRegionMatch(inc.region, assignedRegion);
               }
               if (userAssignment.assignmentLevel === 'FULL') {
                 return true;
@@ -693,7 +743,16 @@ exports.getIncomeByParams = async (req, res) => {
       console.warn("[Income] Net ISF computation skipped:", netErr?.message);
     }
 
-    res.status(200).json(income);
+      // Ensure cost is populated if missing/zero but amount exists (for frontend display compatibility)
+      const mappedIncome = income.map(entry => {
+        const doc = entry.toObject ? entry.toObject() : entry;
+        if ((!doc.cost || doc.cost === 0) && doc.amount > 0) {
+          doc.cost = doc.amount;
+        }
+        return doc;
+      });
+
+      res.status(200).json(mappedIncome);
   } catch (error) {
     console.error("Error fetching income by params:", error);
     res.status(500).json({ message: "Failed to fetch income data" });

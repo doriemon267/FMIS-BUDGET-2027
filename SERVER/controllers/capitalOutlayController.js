@@ -47,8 +47,33 @@ const getActiveFiscalYear = async () => {
 // Get all capital outlays with search & pagination
 exports.getAllCapitalOutlays = async (req, res) => {
   try {
-    const { page = 1, search, category, orderBy, order = "asc", region } = req.query;
+    const { page = 1, search, category, orderBy, order = "asc", region, department, division } = req.query;
     let query = {};
+
+    // --- ENHANCED USER & ORG DETECTION ---
+    const user = req.user || {};
+    const userId = user.id || user.userId || user._id || user.UserId;
+    const userRoles = user.roles || user.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+
+    let activeDept = department || req.submissionWorkflowData?.department || req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+
+    // If activeDept is still missing, attempt emergency lookup from DB
+    if (!activeDept && userId && !isSuperAdmin) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+          .populate('departmentId')
+          .lean();
+        if (assignment) {
+          activeDept = assignment.departmentId?.departmentName || assignment.departmentId?.Department || assignment.departmentId?.DepartmentName;
+          console.log(`[CO_FETCH_DEBUG] Emergency lookup for User ${userId}: Dept=${activeDept}`);
+        }
+      } catch (err) {
+        console.warn(`[CO_FETCH_DEBUG] Emergency lookup failed: ${err.message}`);
+      }
+    }
+
     // Add fiscal year to the query
     try {
       query.fiscalYear = await getActiveFiscalYear();
@@ -56,7 +81,7 @@ exports.getAllCapitalOutlays = async (req, res) => {
       return res.status(400).json({ error: error.message });
     }
     if (search) {
-      query.title = { $regex: search, $options: "i" };
+      query.particulars = { $regex: search, $options: "i" };
     }
     if (category && mongoose.Types.ObjectId.isValid(category)) {
       query.category = new mongoose.Types.ObjectId(category);
@@ -67,6 +92,7 @@ exports.getAllCapitalOutlays = async (req, res) => {
     const submissionFilters = req.submissionWorkflowFilters || {};
     const hierarchicalFilters = req.hierarchicalFilters || {};
     const activeFilters = Object.keys(submissionFilters).length > 0 ? submissionFilters : hierarchicalFilters;
+    
     if (activeFilters && Object.keys(activeFilters).length > 0) {
       if (activeFilters.$and) {
         const baseQuery = { ...query };
@@ -75,10 +101,20 @@ exports.getAllCapitalOutlays = async (req, res) => {
         query = { ...query, ...activeFilters };
       }
     }
-    // Add region filter if provided and not already constrained
-    if (region && !query.region) {
-      query.region = region;
+
+    // STRICT OVERRIDE: Ensure we filter by the selected department to prevent "Global" records from showing
+    if (activeDept && !isSuperAdmin) {
+      if (query.$and) {
+        query.$and.push({ department: activeDept });
+      } else {
+        query.department = activeDept;
+      }
     }
+
+    if (region && !query.region) query.region = region;
+    if (division && !query.division) query.division = division;
+
+    console.log(`[CO_FETCH_FILTER] User=${userId} Dept=${activeDept} Roles=${userRoles} ->`, JSON.stringify(query, null, 2));
     const sortQuery = { [orderBy || "createdAt"]: order === "desc" ? -1 : 1 };
     const [capitalOutlays, totalRecords] = await Promise.all([
       CapitalOutlay.find(query)
@@ -511,20 +547,42 @@ exports.deleteCapitalOutlay = async (req, res) => {
 // Fetch all capital outlay list
 exports.getCapitalOutlayList = async (req, res) => {
   try {
-    const { region, fiscalYear } = req.query;
+    const { region, fiscalYear, department, division } = req.query;
     let query = {};
     
+    // --- ENHANCED USER & ORG DETECTION ---
+    const user = req.user || {};
+    const userId = user.id || user.userId || user._id || user.UserId;
+    const userRoles = user.roles || user.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+
+    let activeDept = department || req.submissionWorkflowData?.department || req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+
+    // Emergency lookup if missing
+    if (!activeDept && userId && !isSuperAdmin) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+          .populate('departmentId')
+          .lean();
+        if (assignment) {
+          activeDept = assignment.departmentId?.departmentName || assignment.departmentId?.Department || assignment.departmentId?.DepartmentName;
+        }
+      } catch (_) {}
+    }
+
     if (region) query.region = region;
     if (fiscalYear) query.fiscalYear = fiscalYear;
+    if (activeDept && !isSuperAdmin) query.department = activeDept;
+    if (division) query.division = division;
     
+    console.log(`[CO_LIST_DEBUG] User=${userId} Dept=${activeDept} Region=${region}`);
     let capitalOutlays = await CapitalOutlay.find(query);
     
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
-    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
     const userIdString = userId ? String(userId) : undefined;
-    const userRoles = req.user?.Roles || [];
     
-    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
     const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
     
     if (!isSuperAdmin && !isBudgetManager && userIdString) {

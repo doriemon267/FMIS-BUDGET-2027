@@ -97,7 +97,9 @@ exports.uploadCorporateIncome = async (req, res) => {
       'region 2': 'Region 2',
       'region 3': 'Region 3',
       'region 10': 'Region 10',
-      'region 12': 'Region 12'
+      'region 12': 'Region 12',
+      'mariis': 'MARIIS',
+      'upriis': 'UPRIIS'
     };
     const results = {
       success: 0,
@@ -113,10 +115,15 @@ exports.uploadCorporateIncome = async (req, res) => {
     const subcategoryMap = new Map();
     allCategories.forEach(cat => {
       const mainCat = cat.incomeCategoryName.toLowerCase().trim();
-      categoryMap.set(mainCat, {
+      if (!categoryMap.has(mainCat)) {
+        categoryMap.set(mainCat, []);
+      }
+      categoryMap.get(mainCat).push({
         id: cat._id,
         name: cat.incomeCategoryName,
-        subcategories: cat.incomeSubcategoryName || []
+        subcategories: cat.incomeSubcategoryName || [],
+        isGlobal: cat.isGlobal,
+        regions: cat.regions || []
       });
       // Create normalized subcategory lookup for each category
       if (cat.incomeSubcategoryName) {
@@ -138,19 +145,41 @@ exports.uploadCorporateIncome = async (req, res) => {
         // Debug: Print current record
         // Split the category input into category and subcategory
         const categoryInput = record[headers[0]].trim();
-        let [mainCategory, ...subcategoryParts] = categoryInput.split('-').map(part => part.trim());
-        let subcategoryInput = subcategoryParts.join('-').trim();
-        // Try to find the main category
-        const mainCatLower = mainCategory.toLowerCase();
-        const categoryInfo = categoryMap.get(mainCatLower);
-        if (!categoryInfo) {
+        const categoryInputLower = categoryInput.toLowerCase();
+        
+        // Strategy: First try to match the entire input as a category name (handles categories with hyphens)
+        // If not found and contains a hyphen, try splitting it
+        let categoryInfos = categoryMap.get(categoryInputLower);
+        let mainCategory = categoryInput;
+        let subcategoryInput = "";
+        
+        if (categoryInfos && categoryInfos.length > 0) {
+          // Found an exact match for the full string
+          mainCategory = categoryInfos[0].name;
+          subcategoryInput = ""; // No subcategory in this case
+        } else if (categoryInput.includes('-')) {
+          // No exact match, try to split it into Category - Subcategory
+          let [splitMain, ...subcategoryParts] = categoryInput.split('-').map(part => part.trim());
+          const splitMainLower = splitMain.toLowerCase();
+          categoryInfos = categoryMap.get(splitMainLower);
+          
+          if (categoryInfos && categoryInfos.length > 0) {
+            mainCategory = categoryInfos[0].name;
+            subcategoryInput = subcategoryParts.join('-').trim();
+          }
+        }
+
+        if (!categoryInfos || categoryInfos.length === 0) {
           results.failed++;
           results.errors.push({
             category: categoryInput,
-            error: `Category "${mainCategory}" not found in the system. Available categories: ${allCategories.map(c => c.incomeCategoryName).join(", ")}`
+            error: `Category "${categoryInput}" not found in the system. Available categories: ${allCategories.map(c => c.incomeCategoryName).join(", ")}`
           });
           continue;
         }
+
+        const mainCatLower = mainCategory.toLowerCase();
+
         // Try to match subcategory if provided
         let matchedSubcategory = null;
         if (subcategoryInput) {
@@ -167,7 +196,7 @@ exports.uploadCorporateIncome = async (req, res) => {
               results.failed++;
               results.errors.push({
                 category: categoryInput,
-                error: `Subcategory "${subcategoryInput}" not found for category "${mainCategory}". Available subcategories: ${categoryInfo.subcategories.join(", ")}`
+                error: `Subcategory "${subcategoryInput}" not found for category "${mainCategory}". Available subcategories: ${categoryInfos[0].subcategories.join(", ")}`
               });
               continue;
             }
@@ -177,7 +206,6 @@ exports.uploadCorporateIncome = async (req, res) => {
         // Process each region column
         for (const regionCol of regionColumns) {
           // Debug: Log EVERYTHING about this region column
-          console.log('Processing region column:', regionCol, 'entireRecord:', entireRecord);
           const amount = parseFloat(record[regionCol]);
           // Skip if no amount for this region
           if (isNaN(amount) || amount === 0) {
@@ -189,6 +217,12 @@ exports.uploadCorporateIncome = async (req, res) => {
               .replace(/\s+/g, ' ')
               .trim();
             const standardRegion = regionMappings[regionKey] || regionCol;
+
+            // Find best matching category for this region
+            const categoryInfo = categoryInfos.find(cat => 
+              (cat.regions && cat.regions.includes(standardRegion))
+            ) || categoryInfos.find(cat => cat.isGlobal) || categoryInfos[0];
+
             // Generate particulars based on subcategory and region
             let particulars;
             if (matchedSubcategory) {
@@ -211,8 +245,10 @@ exports.uploadCorporateIncome = async (req, res) => {
               budgetType: activeSettings.budgetType,
               department: assignedDepartment,
               division: assignedDivision,
-              originalLevel: originalLevel,
-              workflowLevel: originalLevel,
+              // If uploader is Super Admin (no division), set as REGION level and Finalized status
+              originalLevel: assignedDivision ? originalLevel : 'REGION',
+              workflowLevel: assignedDivision ? originalLevel : 'REGION',
+              status: 'Draft', // Reverted to Draft per user request
               createdBy: userIdString,
               processBy: req.user?.userName || userIdString || "System Upload",
               processDate: new Date()
@@ -250,9 +286,13 @@ exports.uploadCorporateIncome = async (req, res) => {
     return res.json({
       message: "File processed successfully",
       processedRecords: results.success,
+      successfullyProcessed: results.success, // Added to match frontend expectation
       failedRecords: results.failed,
       errors: results.errors,
       regions: results.regions,
+      fiscalYear: activeSettings.fiscalYear, // Added to match frontend expectation
+      budgetType: activeSettings.budgetType, // Added to match frontend expectation
+      totalRecords: sheetData.length, // Added to match frontend expectation
       processed: results.processedData // Include processed data in response
     });
   } catch (error) {

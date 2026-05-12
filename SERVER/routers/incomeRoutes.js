@@ -4,6 +4,7 @@ const isAuth = require('../middleware/is_auth');
 
 const incomeController = require("../controllers/IncomeController");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
+const { budgetRoleVisibilityControl } = require("../middleware/budgetRoleVisibilityControl");
 const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
 // Apply authentication to all income routes
 router.use(isAuth);
@@ -14,9 +15,9 @@ router.put("/income/bulk-update", submissionWorkflowControl('update', { strictMo
 // Update an income entry (apply hierarchical update control, strict mode for security)
 router.put("/income/:id", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), incomeController.updateIncome);
 // Get all income entries (apply hierarchical read control)
-router.get("/income", submissionWorkflowControl('read'), incomeController.getAllIncome);
+router.get("/income", submissionWorkflowControl('read'), budgetRoleVisibilityControl(), incomeController.getAllIncome);
 // Get income by parameters
-router.get("/income/getByParams", submissionWorkflowControl('read'), incomeController.getIncomeByParams);
+router.get("/income/getByParams", submissionWorkflowControl('read'), budgetRoleVisibilityControl(), incomeController.getIncomeByParams);
 // Get income by ID
 router.get("/income/:id", incomeController.getIncomeById);
 // Delete income
