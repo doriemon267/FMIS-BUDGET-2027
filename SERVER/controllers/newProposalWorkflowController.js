@@ -1639,6 +1639,87 @@ const formatCarryForwardMessage = (result) => {
   return `Carried forward ${parts.join(', ')} from FY ${result.source.sourceFiscalYear}.`;
 };
 
+/**
+ * Synchronize unlinked records (bulk uploaded by Super Admin) to a newly created proposal.
+ * Finds records with matching organizational context that don't have a proposalId yet.
+ */
+const syncUnlinkedRecordsToProposal = async ({ 
+  workflowId, 
+  legacyProposalId, 
+  fiscalYear, 
+  budgetType, 
+  regionName, 
+  department, 
+  division,
+  userName 
+}) => {
+  try {
+    const searchRegions = [regionName];
+    if (regionName === 'Region 10') searchRegions.push('Region X');
+    if (regionName === 'Region X') searchRegions.push('Region 10');
+
+    // Build organizational match filter similar to getByParams
+    const orgClauses = [];
+    if (division) {
+      orgClauses.push({ division: division });
+      orgClauses.push({ department: division });
+    }
+    if (department) {
+      orgClauses.push({ department: department });
+      orgClauses.push({ division: department });
+    }
+    // Also include records that have NO division/department (Central/Region level)
+    orgClauses.push({ $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] });
+
+    const unlinkedQuery = {
+      $and: [
+        { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
+        { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] },
+        { $or: orgClauses },
+        { region: { $in: searchRegions } },
+        { fiscalYear: String(fiscalYear) },
+        { budgetType: budgetType }
+      ]
+    };
+
+    const updateFields = {
+      workflowRef: workflowId,
+      proposalId: legacyProposalId,
+      processBy: userName,
+      processDate: new Date()
+    };
+
+    // Special handling for PersonnelServices which uses both fiscalYear and fiscal_year
+    const psUpdateFields = {
+      ...updateFields,
+      fiscal_year: Number(fiscalYear)
+    };
+
+    const [incomeResult, personnelResult, mooeResult, capitalResult] = await Promise.all([
+      Income.updateMany(unlinkedQuery, { $set: updateFields }),
+      PersonnelServices.updateMany(unlinkedQuery, { $set: psUpdateFields }),
+      MooeProposal.updateMany(unlinkedQuery, { $set: updateFields }),
+      CapitalOutlay.updateMany(unlinkedQuery, { $set: updateFields })
+    ]);
+
+    const totalModified = (incomeResult.modifiedCount || 0) + 
+                          (personnelResult.modifiedCount || 0) + 
+                          (mooeResult.modifiedCount || 0) + 
+                          (capitalResult.modifiedCount || 0);
+
+    return {
+      income: incomeResult.modifiedCount || 0,
+      personnel: personnelResult.modifiedCount || 0,
+      mooe: mooeResult.modifiedCount || 0,
+      capitalOutlay: capitalResult.modifiedCount || 0,
+      total: totalModified
+    };
+  } catch (err) {
+    console.error('[syncUnlinked] Error syncing records to proposal:', err.message);
+    return { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0, total: 0 };
+  }
+};
+
 // Create new proposal
 exports.createProposal = async (req, res) => {
   try {
@@ -1836,6 +1917,38 @@ exports.createProposal = async (req, res) => {
     const legacyProposal = new Proposal(legacyProposalData);
     await legacyProposal.save();
 
+    // ✅ SYNC UNLINKED RECORDS: Automatically adopt records bulk-uploaded by Super Admin
+    // matching this proposal's organizational context (Region/Dept/Div).
+    let syncResult = { total: 0 };
+    try {
+      syncResult = await syncUnlinkedRecordsToProposal({
+        workflowId: proposal._id,
+        legacyProposalId: legacyProposal._id,
+        fiscalYear: fiscalYear,
+        budgetType: normalizedModelType,
+        regionName: legacyProposalData.region,
+        department: derivedDepartment || '',
+        division: derivedDivision || '',
+        userName: userName
+      });
+
+      if (syncResult.total > 0) {
+        proposal.workflowHistory = proposal.workflowHistory || [];
+        proposal.workflowHistory.push({
+          action: 'SYNCED_UNLINKED_DATA',
+          fromStatus: 'DRAFT',
+          toStatus: 'DRAFT',
+          performedBy: String(userId),
+          performedByName: userName,
+          comment: `Automatically synced ${syncResult.total} unlinked records (${syncResult.income} Income, ${syncResult.personnel} PS, ${syncResult.mooe} MOOE, ${syncResult.capitalOutlay} CO)`,
+          timestamp: new Date()
+        });
+        await proposal.save();
+      }
+    } catch (syncErr) {
+      console.warn('[createProposal] Failed to sync unlinked records:', syncErr.message);
+    }
+
     let carryForwardResult = {
       carriedForward: false,
       source: null,
@@ -1901,11 +2014,16 @@ exports.createProposal = async (req, res) => {
       }
     }
 
+    if (syncResult.total > 0) {
+      messageParts.push(`Automatically synced ${syncResult.total} unlinked records`);
+    }
+
     res.status(201).json({
       success: true,
       message: `${messageParts.join('. ')}.`,
       data: proposal,
-      carryForward: carryForwardResult
+      carryForward: carryForwardResult,
+      syncResult: syncResult
     });
   } catch (error) {
     console.error('Error creating proposal:', error);
@@ -1987,19 +2105,20 @@ exports.getProposals = async (req, res) => {
     
     // Resolve Organizational Scope
     let orgScope = {};
+    let userAssignment = null;
     try {
-      const assignment = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
+      userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
         .populate('departmentId')
         .populate('regionId')
         .lean();
 
-      if (assignment) {
-        if (assignment.divisionName) orgScope.division = assignment.divisionName.trim();
-        if (assignment.departmentId) {
-          orgScope.department = (assignment.departmentId.Department || assignment.departmentId.departmentName || '').trim();
+      if (userAssignment) {
+        if (userAssignment.divisionName) orgScope.division = userAssignment.divisionName.trim();
+        if (userAssignment.departmentId) {
+          orgScope.department = (userAssignment.departmentId.Department || userAssignment.departmentId.departmentName || '').trim();
         }
-        if (assignment.regionId) {
-          orgScope.region = (assignment.regionId.Region || assignment.regionId.regionName || '').trim();
+        if (userAssignment.regionId) {
+          orgScope.region = (userAssignment.regionId.Region || userAssignment.regionId.regionName || '').trim();
         }
       }
     } catch (err) {
@@ -2319,11 +2438,13 @@ exports.getProposals = async (req, res) => {
     // Budget Planning Analyst uses separate region filter below (isNIAWide / assignedRegions)
     if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && userRole !== 'BUDGET PLANNING ANALYST' && view !== 'monitoring' && view !== 'my-proposals') {
       try {
-        // Get user's hierarchical assignment
-        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
-          .populate('departmentId', 'Department DepartmentName department')
-          .populate('regionId', 'Region RegionName region')
-          .lean();
+        // Use previously fetched assignment if available
+        if (!userAssignment) {
+          userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+            .populate('departmentId', 'Department DepartmentName department')
+            .populate('regionId', 'Region RegionName region')
+            .lean();
+        }
         
         if (userAssignment) {
           // Get assigned organizational unit names
@@ -2529,14 +2650,35 @@ exports.getProposals = async (req, res) => {
       const regionName = legacy?.region || p.region?.Region || p.region?.regionName || p.region?.RegionName || orgFallback.region || '';
       const divisionName = legacy?.division || legacy?.originalDivision || p.division || orgFallback.division || '';
       const departmentName = legacy?.department || legacy?.originalDepartment || p.department || orgFallback.department || '';
-      // Responsibility Center display should prioritize the actual organizational unit
-      // (department/division) and only fallback to region when unit fields are unavailable.
-      const responsibilityCenter =
-        [departmentName, divisionName].filter(Boolean).join(' / ') ||
-        divisionName ||
-        departmentName ||
-        regionName ||
-        undefined;
+      // Responsibility Center display should respect the user's organizational level.
+      // If user is DEPARTMENT level, only show department. If DIVISION level, show division.
+      const rawLevel = String(userAssignment?.assignmentLevel || '').toUpperCase();
+      const resolvedLevel = ({
+        DIVISION_LEVEL: 'DIVISION',
+        BUDGET_AND_REVENUE_DIVISION: 'REGION',
+        DEPARTMENT_LEVEL: 'DEPARTMENT',
+        DEPARTMENT_REGIONAL_LEVEL: 'DEPARTMENT',
+        RESPONSIBILITY_CENTER: 'DIVISION',
+        OFFICE_LEVEL: 'OFFICE',
+        REGION_LEVEL: 'REGION'
+      })[rawLevel] || rawLevel;
+
+      let responsibilityCenter;
+      if (resolvedLevel === 'DEPARTMENT' || resolvedLevel === 'OFFICE') {
+        responsibilityCenter = departmentName || regionName || undefined;
+      } else if (resolvedLevel === 'DIVISION') {
+        responsibilityCenter = divisionName || departmentName || regionName || undefined;
+      } else if (resolvedLevel === 'REGION') {
+        responsibilityCenter = regionName || undefined;
+      } else {
+        // Default (Super Admin or no assignment): show full hierarchy
+        responsibilityCenter =
+          [departmentName, divisionName].filter(Boolean).join(' / ') ||
+          divisionName ||
+          departmentName ||
+          regionName ||
+          undefined;
+      }
       return ({
         _id: p._id,
         title: p.title,

@@ -16,10 +16,15 @@ const { recalculateAndSaveProposalTotals } = require('../utils/recalculatePropos
 const DEBUG_LOG_FILE = path.join(__dirname, '../logs/role-debug.log');
 function writeDebugLog(msg) {
   try {
+    const logDir = path.dirname(DEBUG_LOG_FILE);
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
     const timestamp = new Date().toISOString();
     fs.appendFileSync(DEBUG_LOG_FILE, `[${timestamp}] ${JSON.stringify(msg)}\n`);
-    } catch (err) {
-    }
+  } catch (err) {
+    console.error('❌ Failed to write to role-debug.log:', err.message);
+  }
 }
 
 const MODULE_LABELS = {

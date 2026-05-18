@@ -188,7 +188,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route
+        {/* <Route
           path="/AllProposals"
           element={
             <ProtectedRoute
@@ -198,7 +198,7 @@ const App = () => {
               <AllProposalsPage />
             </ProtectedRoute>
           }
-        />
+        /> */}
         <Route
           path="/proposal-details/:proposalId"
           element={
@@ -345,8 +345,8 @@ const App = () => {
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
-        <Route path="/Appearance" element={<AppearancePage />} />
-        <Route path="/ProposalSummaryPage" element={<ProposalSummaryPage />} />
+        {/* <Route path="/Appearance" element={<AppearancePage />} />
+        <Route path="/ProposalSummaryPage" element={<ProposalSummaryPage />} /> */}
         <Route
           path="/allproposal"
           element={

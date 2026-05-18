@@ -3309,7 +3309,8 @@ const NewProposalWorkflowPage = () => {
                       Responsibility Center
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                      {selectedProposal?.division ||
+                      {selectedProposal?.responsibilityCenter ||
+                        selectedProposal?.division ||
                         selectedProposal?.department ||
                         proposalDetails?.income?.[0]?.division ||
                         proposalDetails?.income?.[0]?.department ||
@@ -3320,7 +3321,6 @@ const NewProposalWorkflowPage = () => {
                         proposalDetails?.mooe?.[0]?.department ||
                         proposalDetails?.capitalOutlay?.[0]?.division ||
                         proposalDetails?.capitalOutlay?.[0]?.department ||
-                        selectedProposal?.responsibilityCenter ||
                         proposalDetails?.income?.[0]?.region ||
                         proposalDetails?.personnel?.[0]?.region ||
                         proposalDetails?.mooe?.[0]?.region ||

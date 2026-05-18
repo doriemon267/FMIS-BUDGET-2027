@@ -20,9 +20,21 @@ const path = require('path');
 
 // Log to file
 const logToFile = (message) => {
-  const logPath = path.join(__dirname, '..', 'logs', 'middleware-debug.log');
-  const timestamp = new Date().toISOString();
-  fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+  try {
+    const logPath = path.join(__dirname, '..', 'logs', 'middleware-debug.log');
+    
+    // Ensure logs directory exists
+    const logDir = path.dirname(logPath);
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+  } catch (error) {
+    // Fallback to console if file logging fails
+    console.error('❌ Failed to write to log file:', error.message);
+  }
 };
 
 const budgetRoleVisibilityControl = () => {

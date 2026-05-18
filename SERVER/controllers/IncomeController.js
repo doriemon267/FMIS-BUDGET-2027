@@ -3,6 +3,7 @@ const Income = require("../models/Income");
 const DiscountSettings = require("../models/DiscountSettings");
 const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeFields, validateNonNegativeInItems, INCOME_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
@@ -469,6 +470,8 @@ exports.getIncomeByParams = async (req, res) => {
     const baseQuery = {};
     
     // ✅ Primary filter: if proposalId is provided, use it
+    const isProposalContext = Boolean(proposalId);
+    
     if (proposalId) {
       // Accept either legacy Proposal _id or NewProposalWorkflow _id
       // Normalize to ObjectId so query matches workflowRef field type
@@ -479,7 +482,13 @@ exports.getIncomeByParams = async (req, res) => {
         } catch (_) {}
       }
       try {
-        baseQuery.$or = [{ workflowRef: workflowId }];
+        // ALWAYS check both workflowRef and proposalId for the provided ID
+        // (New workflow records might use either field for the workflow ID)
+        baseQuery.$or = [
+          { workflowRef: workflowId },
+          { proposalId: workflowId }
+        ];
+        
         const legacy = await Proposal.findOne({ workflowRef: workflowId }).select('_id').lean();
         if (legacy?._id) {
           baseQuery.$or.push({ proposalId: legacy._id });
@@ -506,7 +515,9 @@ exports.getIncomeByParams = async (req, res) => {
 
     let query = { ...baseQuery };
 
-    if (budgetRoleVisibilityFilter && Object.keys(budgetRoleVisibilityFilter).length > 0) {
+    // When viewing a specific proposal (Proposal Context), bypass organizational filters.
+    // Access to the proposal itself implies access to its line items.
+    if (budgetRoleVisibilityFilter && Object.keys(budgetRoleVisibilityFilter).length > 0 && !isProposalContext) {
       if (budgetRoleVisibilityFilter.$and || budgetRoleVisibilityFilter.$or) {
         const conditions = [];
         // expand baseQuery into individual conditions
@@ -515,7 +526,7 @@ exports.getIncomeByParams = async (req, res) => {
       } else {
         query = { ...baseQuery, ...budgetRoleVisibilityFilter };
       }
-    } else if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+    } else if (submissionFilters && Object.keys(submissionFilters).length > 0 && !isProposalContext) {
       if (submissionFilters.$and) {
         const conditions = [];
         Object.entries(baseQuery).forEach(([k, v]) => conditions.push({ [k]: v }));
@@ -523,7 +534,7 @@ exports.getIncomeByParams = async (req, res) => {
       } else {
         query = { ...baseQuery, ...submissionFilters };
       }
-    } else if (hierarchicalFilters && Object.keys(hierarchicalFilters).length > 0) {
+    } else if (hierarchicalFilters && Object.keys(hierarchicalFilters).length > 0 && !isProposalContext) {
       if (hierarchicalFilters.$and) {
         const conditions = [];
         Object.entries(baseQuery).forEach(([k, v]) => conditions.push({ [k]: v }));
@@ -539,10 +550,32 @@ exports.getIncomeByParams = async (req, res) => {
     // not just when linked records are missing. This ensures centralized/bulk-uploaded income 
     // (no workflowRef) shows up alongside proposal-specific entries.
     if (proposalId && (req.query.fiscalYear || req.query.budgetType)) {
+      // Fetch the proposal to get its region if not provided in the request
+      let proposalRegion = req.query.region;
+      if (!proposalRegion) {
+        try {
+          // Check legacy Proposal first
+          const proposal = await Proposal.findById(proposalId).select('region').lean();
+          if (proposal) {
+            proposalRegion = proposal.region;
+          } else {
+            // Check NewProposalWorkflow if legacy not found
+            const workflow = await NewProposalWorkflow.findById(proposalId)
+              .populate('region', 'Region RegionName region')
+              .lean();
+            if (workflow) {
+              proposalRegion = workflow.region?.Region || workflow.region?.RegionName || workflow.region?.region || workflow.region;
+            }
+          }
+        } catch (err) {
+          console.warn('[Income] Failed to fetch proposal for region fallback:', err.message);
+        }
+      }
+
       // Build regional search array including special regions
       const searchRegions = [null, ""];
-      if (req.query.region) {
-        const reg = String(req.query.region).trim();
+      if (proposalRegion) {
+        const reg = String(proposalRegion).trim();
         searchRegions.push(reg);
         
         // Handle Region 10 / Region X equivalence
@@ -550,23 +583,40 @@ exports.getIncomeByParams = async (req, res) => {
         if (reg === 'Region X') searchRegions.push('Region 10');
       }
 
-      const unlinkedQuery = {
-        $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }],
-        ...(req.query.fiscalYear && { fiscalYear: req.query.fiscalYear }),
-        ...(req.query.budgetType && { budgetType: req.query.budgetType }),
-        region: { $in: searchRegions }
-      };
-
+      // Resilient Division/Department matching: Match if either field matches either provided value
+      const orgClauses = [];
       if (req.query.division) {
         const div = String(req.query.division).trim();
-        unlinkedQuery.$and = [
-          {
-            $or: [
-              { division: div },
-              { $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] }
-            ]
-          }
-        ];
+        orgClauses.push({ division: div });
+        orgClauses.push({ department: div });
+      }
+      if (req.query.department) {
+        const dept = String(req.query.department).trim();
+        orgClauses.push({ department: dept });
+        orgClauses.push({ division: dept });
+      }
+      // Also include records that have NO division/department (Central/Region level income)
+      orgClauses.push({ $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] });
+
+      const unlinkedQuery = {
+        $and: [
+          { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
+          { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] },
+          { $or: orgClauses },
+          { region: { $in: searchRegions } }
+        ]
+      };
+
+      if (req.query.fiscalYear) {
+        const fyNum = Number(req.query.fiscalYear);
+        const fyOr = [{ fiscalYear: String(req.query.fiscalYear) }];
+        if (!Number.isNaN(fyNum)) {
+          fyOr.push({ fiscalYear: fyNum });
+        }
+        unlinkedQuery.$and.push({ $or: fyOr });
+      }
+      if (req.query.budgetType) {
+        unlinkedQuery.$and.push({ budgetType: req.query.budgetType });
       }
 
       const unlinkedIncome = await Income.find(unlinkedQuery).populate('incomecategory').lean();
@@ -585,8 +635,6 @@ exports.getIncomeByParams = async (req, res) => {
 
     // When proposalId is provided we're viewing a specific proposal (e.g. Proposal Details dialog).
     // Return all income linked to that proposal; access is already controlled by who can open the proposal.
-    const isProposalContext = Boolean(proposalId);
-    
     if (!isProposalContext) {
       // RESPONSIBILITY CENTER FILTERING: Only when NOT scoped to a single proposal
       const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;

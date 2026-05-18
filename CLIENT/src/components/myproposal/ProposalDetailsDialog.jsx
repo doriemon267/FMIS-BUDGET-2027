@@ -478,6 +478,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 budgetType: proposal?.budgetType,
                 processBy: proposal?.processBy,
                 region: proposal?.region,
+                proposalId: proposalKey,
                 // Status removed: Line items retain original status when proposal status changes
               };
               // console.log('📋 Fetching with params (status excluded for reviewer):', params);

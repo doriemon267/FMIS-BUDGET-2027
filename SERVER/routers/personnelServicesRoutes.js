@@ -115,7 +115,13 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
     // ✅ Primary filter: if proposalId is provided, accept either legacy Proposal _id or NewProposalWorkflow _id
     if (proposalId) {
       try {
-        query.$or = [{ workflowRef: proposalId }];
+        // ALWAYS check both workflowRef and proposalId for the provided ID
+        // (New workflow records might use either field for the workflow ID)
+        query.$or = [
+          { workflowRef: proposalId },
+          { proposalId: proposalId }
+        ];
+        
         const Proposal = require('../models/Proposal');
         const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
         if (legacy?._id) {
@@ -217,7 +223,13 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
     // ✅ Primary filter: if proposalId is provided, accept either legacy Proposal _id or NewProposalWorkflow _id
     if (proposalId) {
       try {
-        query.$or = [{ workflowRef: proposalId }];
+        // ALWAYS check both workflowRef and proposalId for the provided ID
+        // (New workflow records might use either field for the workflow ID)
+        query.$or = [
+          { workflowRef: proposalId },
+          { proposalId: proposalId }
+        ];
+        
         const Proposal = require('../models/Proposal');
         const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
         if (legacy?._id) {

@@ -38,38 +38,92 @@ const getPersonnelByParams = async (req, res) => {
 
     let personnel = await PersonnelServices.find(query).lean();
 
-    // If proposalId but no results, try workflowRef/proposalId only (in case fiscalYear/budgetType/division format differs)
-    if (proposalId && personnel.length === 0 && query.$or) {
-      const simpleQuery = { $or: query.$or };
-      personnel = await PersonnelServices.find(simpleQuery).lean();
-    }
-
-    // Fallback: unlinked personnel (no workflowRef) with same fiscalYear + budgetType + division
-    if (proposalId && personnel.length === 0 && (fiscalYear || budgetType)) {
-      const conditions = [
-        { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] }
-      ];
-      if (fiscalYear) {
-        conditions.push({ $or: [{ fiscalYear: String(fiscalYear) }, { fiscalYear: Number(fiscalYear) }, { fiscal_year: Number(fiscalYear) }] });
-      }
-      if (budgetType) {
-        conditions.push({ budgetType: new RegExp(`^${String(budgetType).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
-      }
-      if (division) conditions.push({ division: new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
-
-      let fallbackPersonnel = await PersonnelServices.find({ $and: conditions }).lean();
-      if (fallbackPersonnel.length === 0 && division) {
-        conditions.pop();
-        fallbackPersonnel = await PersonnelServices.find({ $and: conditions }).lean();
-      }
-      if (fallbackPersonnel.length === 0 && budgetType) {
-        conditions = conditions.filter((c) => !c.budgetType);
-        if (conditions.length > 0) {
-          fallbackPersonnel = await PersonnelServices.find({ $and: conditions }).lean();
+    // ✅ ENHANCED FALLBACK: Always merge relevant unlinked records when viewing a proposal,
+    // not just when linked records are missing. This ensures centralized/bulk-uploaded personnel 
+    // (no workflowRef) shows up alongside proposal-specific entries.
+    if (proposalId && (req.query.fiscalYear || req.query.budgetType)) {
+      // Fetch the proposal to get its region if not provided in the request
+      let proposalRegion = req.query.region;
+      if (!proposalRegion) {
+        try {
+          // Check legacy Proposal first
+          const Proposal = require('../models/Proposal');
+          const proposal = await Proposal.findById(proposalId).select('region').lean();
+          if (proposal) {
+            proposalRegion = proposal.region;
+          } else {
+            // Check NewProposalWorkflow if legacy not found
+            const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+            const workflow = await NewProposalWorkflow.findById(proposalId)
+              .populate('region', 'Region RegionName region')
+              .lean();
+            if (workflow) {
+              proposalRegion = workflow.region?.Region || workflow.region?.RegionName || workflow.region?.region || workflow.region;
+            }
+          }
+        } catch (err) {
+          console.warn('[Personnel] Failed to fetch proposal for region fallback:', err.message);
         }
       }
-      if (fallbackPersonnel.length > 0) {
-        personnel = fallbackPersonnel;
+
+      // Build regional search array including special regions
+      const searchRegions = [null, ""];
+      if (proposalRegion) {
+        const reg = String(proposalRegion).trim();
+        searchRegions.push(reg);
+        
+        // Handle Region 10 / Region X equivalence
+        if (reg === 'Region 10') searchRegions.push('Region X');
+        if (reg === 'Region X') searchRegions.push('Region 10');
+      }
+
+      // Resilient Division/Department matching: Match if either field matches either provided value
+      const orgClauses = [];
+      if (req.query.division) {
+        const div = String(req.query.division).trim();
+        orgClauses.push({ division: div });
+        orgClauses.push({ department: div });
+      }
+      if (req.query.department) {
+        const dept = String(req.query.department).trim();
+        orgClauses.push({ department: dept });
+        orgClauses.push({ division: dept });
+      }
+      // Also include records that have NO division/department (Central/Region level personnel)
+      orgClauses.push({ $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] });
+
+      const unlinkedQuery = {
+        $and: [
+          { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
+          { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] },
+          { $or: orgClauses },
+          { region: { $in: searchRegions } }
+        ]
+      };
+
+      if (req.query.fiscalYear) {
+        const fyNum = Number(req.query.fiscalYear);
+        const fyOr = [{ fiscalYear: String(req.query.fiscalYear) }];
+        if (!Number.isNaN(fyNum)) {
+          fyOr.push({ fiscalYear: fyNum });
+        }
+        unlinkedQuery.$and.push({ $or: fyOr });
+      }
+      if (req.query.budgetType) {
+        unlinkedQuery.$and.push({ budgetType: req.query.budgetType });
+      }
+
+      const unlinkedPersonnel = await PersonnelServices.find(unlinkedQuery).lean();
+      
+      if (unlinkedPersonnel.length > 0) {
+        // Merge and deduplicate by _id to avoid showing the same record twice 
+        // (though unlinked records by definition shouldn't be in the first 'personnel' array)
+        const existingIds = new Set(personnel.map(p => String(p._id)));
+        const uniqueUnlinked = unlinkedPersonnel.filter(p => !existingIds.has(String(p._id)));
+        
+        if (uniqueUnlinked.length > 0) {
+          personnel = [...personnel, ...uniqueUnlinked];
+        }
       }
     }
 

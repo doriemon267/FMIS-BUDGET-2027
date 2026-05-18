@@ -85,7 +85,13 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
         } catch (_) {}
       }
       try {
-        query.$or = [{ workflowRef: workflowId }];
+        // ALWAYS check both workflowRef and proposalId for the provided ID
+        // (New workflow records might use either field for the workflow ID)
+        query.$or = [
+          { workflowRef: workflowId },
+          { proposalId: workflowId }
+        ];
+        
         const Proposal = require('../models/Proposal');
         const legacy = await Proposal.findOne({ workflowRef: workflowId }).select('_id').lean();
         if (legacy?._id) {
@@ -107,17 +113,92 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
     
     let capitalOutlay = await CapitalOutlay.find(query).populate('category', 'categoryName').lean();
 
-    // Fallback: unlinked records (no workflowRef) with same fiscalYear + budgetType + division
-    if (proposalId && capitalOutlay.length === 0 && (req.query.fiscalYear || req.query.budgetType)) {
-      const fallbackQuery = {
-        $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }],
-        ...(req.query.fiscalYear && { fiscalYear: req.query.fiscalYear }),
-        ...(req.query.budgetType && { budgetType: req.query.budgetType }),
-        ...(req.query.division && { division: req.query.division }),
+    // ✅ ENHANCED FALLBACK: Always merge relevant unlinked records when viewing a proposal,
+    // not just when linked records are missing. This ensures centralized/bulk-uploaded capital outlay 
+    // (no workflowRef) shows up alongside proposal-specific entries.
+    if (proposalId && (req.query.fiscalYear || req.query.budgetType)) {
+      // Fetch the proposal to get its region if not provided in the request
+      let proposalRegion = req.query.region;
+      if (!proposalRegion) {
+        try {
+          // Check legacy Proposal first
+          const Proposal = require('../models/Proposal');
+          const proposal = await Proposal.findById(proposalId).select('region').lean();
+          if (proposal) {
+            proposalRegion = proposal.region;
+          } else {
+            // Check NewProposalWorkflow if legacy not found
+            const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+            const workflow = await NewProposalWorkflow.findById(proposalId)
+              .populate('region', 'Region RegionName region')
+              .lean();
+            if (workflow) {
+              proposalRegion = workflow.region?.Region || workflow.region?.RegionName || workflow.region?.region || workflow.region;
+            }
+          }
+        } catch (err) {
+          console.warn('[CapitalOutlay] Failed to fetch proposal for region fallback:', err.message);
+        }
+      }
+
+      // Build regional search array including special regions
+      const searchRegions = [null, ""];
+      if (proposalRegion) {
+        const reg = String(proposalRegion).trim();
+        searchRegions.push(reg);
+        
+        // Handle Region 10 / Region X equivalence
+        if (reg === 'Region 10') searchRegions.push('Region X');
+        if (reg === 'Region X') searchRegions.push('Region 10');
+      }
+
+      // Resilient Division/Department matching: Match if either field matches either provided value
+      const orgClauses = [];
+      if (req.query.division) {
+        const div = String(req.query.division).trim();
+        orgClauses.push({ division: div });
+        orgClauses.push({ department: div });
+      }
+      if (req.query.department) {
+        const dept = String(req.query.department).trim();
+        orgClauses.push({ department: dept });
+        orgClauses.push({ division: dept });
+      }
+      // Also include records that have NO division/department (Central/Region level capital outlay)
+      orgClauses.push({ $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] });
+
+      const unlinkedQuery = {
+        $and: [
+          { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
+          { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] },
+          { $or: orgClauses },
+          { region: { $in: searchRegions } }
+        ]
       };
-      const fallbackCO = await CapitalOutlay.find(fallbackQuery).populate('category', 'categoryName').lean();
-      if (fallbackCO.length > 0) {
-        capitalOutlay = fallbackCO;
+
+      if (req.query.fiscalYear) {
+        const fyNum = Number(req.query.fiscalYear);
+        const fyOr = [{ fiscalYear: String(req.query.fiscalYear) }];
+        if (!Number.isNaN(fyNum)) {
+          fyOr.push({ fiscalYear: fyNum });
+        }
+        unlinkedQuery.$and.push({ $or: fyOr });
+      }
+      if (req.query.budgetType) {
+        unlinkedQuery.$and.push({ budgetType: req.query.budgetType });
+      }
+
+      const unlinkedCapitalOutlay = await CapitalOutlay.find(unlinkedQuery).populate('category', 'categoryName').lean();
+      
+      if (unlinkedCapitalOutlay.length > 0) {
+        // Merge and deduplicate by _id to avoid showing the same record twice 
+        // (though unlinked records by definition shouldn't be in the first 'capitalOutlay' array)
+        const existingIds = new Set(capitalOutlay.map(co => String(co._id)));
+        const uniqueUnlinked = unlinkedCapitalOutlay.filter(co => !existingIds.has(String(co._id)));
+        
+        if (uniqueUnlinked.length > 0) {
+          capitalOutlay = [...capitalOutlay, ...uniqueUnlinked];
+        }
       }
     }
     
