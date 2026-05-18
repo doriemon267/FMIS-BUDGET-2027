@@ -26,8 +26,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  AppBar,
-  Toolbar,
   Checkbox,
   FormGroup,
   Divider,
@@ -92,6 +90,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
+  const [expandedRows, setExpandedRows] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [selectedFilters, setSelectedFilters] = useState({
@@ -123,57 +122,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
-
-  // --- ROLE-BASED SCOPING LOGIC ---
-  const hierarchical = currentUser?.hierarchicalAccess || {};
-  const scope = hierarchical.scope; // FULL, REGION, DEPARTMENT, DIVISION
-  const isBRDLevel = scope === "FULL" || (currentUser?.Roles || []).some(r => String(r).toUpperCase().includes("BRD") || String(r).toUpperCase().includes("PLANNING"));
-  
-  // Check if user is Budget Preparer
-  const isPreparer = (currentUser?.Roles || []).some(r => 
-    String(r || '').toUpperCase().replace(/\s+/g, '_') === 'BUDGET_PREPARER'
-  );
-
-  // Enforce restrictions based on role/scope
-  useEffect(() => {
-    if (!isBRDLevel && scope) {
-      if (consolidationType !== 'current') {
-        setConsolidationType('current');
-      }
-      
-      // For Budget Preparer: auto-populate and lock Department and Division
-      if (isPreparer) {
-        // Restrict Department
-        if (hierarchical.accessibleDepartments?.[0]) {
-          const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
-          if (selectedDepartment !== userDeptId) {
-            setSelectedDepartment(userDeptId);
-          }
-        }
-        
-        // Restrict Division
-        if (hierarchical.accessibleDivisions?.[0]) {
-          const userDiv = hierarchical.accessibleDivisions[0];
-          if (selectedDivision !== userDiv) {
-            setSelectedDivision(userDiv);
-          }
-        }
-      } else if ((scope === 'DEPARTMENT' || scope === 'DIVISION') && hierarchical.accessibleDepartments?.[0]) {
-        const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
-        if (selectedDepartment !== userDeptId) {
-          setSelectedDepartment(userDeptId);
-        }
-      }
-      
-      // Restrict Division for non-preparer users
-      if (!isPreparer && scope === 'DIVISION' && hierarchical.accessibleDivisions?.[0]) {
-        const userDiv = hierarchical.accessibleDivisions[0];
-        if (selectedDivision !== userDiv) {
-          setSelectedDivision(userDiv);
-        }
-      }
-    }
-  }, [isBRDLevel, scope, consolidationType, hierarchical, selectedDepartment, selectedDivision, isPreparer]);
 
   // Revoke blob URL on unmount
   React.useEffect(() => {
@@ -518,6 +466,14 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
     return filtered;
   }, [consolidatedData, searchTerm]);
 
+  const toggleExpandRow = useCallback((rowId) => {
+    setExpandedRows(prev =>
+      prev.includes(rowId)
+        ? prev.filter(id => id !== rowId)
+        : [...prev, rowId]
+    );
+  }, []);
+
   const handleRegionChange = (event) => {
     setSelectedRegions(event.target.value);
   };
@@ -554,12 +510,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   const isLoading = consolidatedLoading;
   const hasReportData = Array.isArray(consolidatedData) && consolidatedData.length > 0;
   const canPreviewPdf = !pdfLoading && !isLoading && hasReportData;
-
-  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
-    'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
-  const fmtPHP = (n) => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const CELL_STYLE = { border: '1px solid #c8d8c8', padding: '5px 10px', fontSize: '0.82rem' };
-  const HEADER_STYLE = { ...CELL_STYLE, backgroundColor: '#eaf2ea', fontWeight: 700, textAlign: 'center', fontSize: '0.78rem' };
 
   return (
     <ReportPageLayout
@@ -618,7 +568,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
-                disabled={!isBRDLevel && !!scope}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
                 <MenuItem value="all">All Regions</MenuItem>
@@ -634,7 +583,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                   multiple
                   value={selectedRegions}
                   onChange={handleRegionChange}
-                  disabled={!isBRDLevel && !!scope}
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {selected.map((value) => (
@@ -655,65 +603,47 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
           )}
           {/* Department filter */}
           <Grid item xs={12} md={3}>
-            {isPreparer ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%' }}>
-                <Typography variant="caption" color="textSecondary">Department</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500, color: '#375e38' }}>
-                  {departments.find(d => String(d._id) === String(selectedDepartment))?.Department || selectedDepartmentName || 'N/A'}
-                </Typography>
-              </Box>
-            ) : (
-              <FormControl fullWidth size="small">
-                <InputLabel>Department</InputLabel>
-                <Select
-                  value={String(selectedDepartment ?? "")}
-                  onChange={(e) => { setSelectedDepartment(e.target.value || ""); setSelectedDivision(""); }}
-                  label="Department"
-                  disabled={!activeRegion || departments.length === 0 || (!isBRDLevel && (scope === 'DEPARTMENT' || scope === 'DIVISION'))}
-                >
-                  <MenuItem value=""><em>All Departments</em></MenuItem>
-                  {departments.map((dept, idx) => {
-                    const val = dept._id != null ? String(dept._id) : `dept-${idx}`;
-                    return (
-                      <MenuItem key={val} value={val}>
-                        {dept.Department || dept.name || "Unnamed Department"}
-                      </MenuItem>
-                    );
-                  })}
-                </Select>
-              </FormControl>
-            )}
+            <FormControl fullWidth size="small">
+              <InputLabel>Department</InputLabel>
+              <Select
+                value={String(selectedDepartment ?? "")}
+                onChange={(e) => { setSelectedDepartment(e.target.value || ""); setSelectedDivision(""); }}
+                label="Department"
+                disabled={!activeRegion || departments.length === 0}
+              >
+                <MenuItem value=""><em>All Departments</em></MenuItem>
+                {departments.map((dept, idx) => {
+                  const val = dept._id != null ? String(dept._id) : `dept-${idx}`;
+                  return (
+                    <MenuItem key={val} value={val}>
+                      {dept.Department || dept.name || "Unnamed Department"}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
           </Grid>
           {/* Division filter */}
           <Grid item xs={12} md={3}>
-            {isPreparer ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%' }}>
-                <Typography variant="caption" color="textSecondary">Division</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 500, color: '#375e38' }}>
-                  {divisions.find(d => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name || selectedDivisionName || 'N/A'}
-                </Typography>
-              </Box>
-            ) : (
-              <FormControl fullWidth size="small">
-                <InputLabel>Division</InputLabel>
-                <Select
-                  value={String(selectedDivision ?? "")}
-                  onChange={(e) => setSelectedDivision(e.target.value || "")}
-                  label="Division"
-                  disabled={!selectedDepartment || divisions.length === 0 || (!isBRDLevel && scope === 'DIVISION')}
-                >
-                  <MenuItem value=""><em>All Divisions</em></MenuItem>
-                  {divisions.map((div, idx) => {
-                    const val = div.name != null && div.name !== "" ? String(div.name) : (div._id != null ? String(div._id) : `div-${idx}`);
-                    return (
-                      <MenuItem key={val} value={val}>
-                        {div.name || "Unnamed Division"}
-                      </MenuItem>
-                    );
-                  })}
-                </Select>
-              </FormControl>
-            )}
+            <FormControl fullWidth size="small">
+              <InputLabel>Division</InputLabel>
+              <Select
+                value={String(selectedDivision ?? "")}
+                onChange={(e) => setSelectedDivision(e.target.value || "")}
+                label="Division"
+                disabled={!selectedDepartment || divisions.length === 0}
+              >
+                <MenuItem value=""><em>All Divisions</em></MenuItem>
+                {divisions.map((div, idx) => {
+                  const val = div.name != null && div.name !== "" ? String(div.name) : (div._id != null ? String(div._id) : `div-${idx}`);
+                  return (
+                    <MenuItem key={val} value={val}>
+                      {div.name || "Unnamed Division"}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
           </Grid>
           <Grid item xs={12} md={4}>
             <TextField
@@ -759,11 +689,20 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
           </Grid>
         </Grid>
 
-        {/* PDF Button row */}
+        {/* ── Second toolbar row: expand controls + PDF button on the right ── */}
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 2, flexWrap: 'wrap', gap: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            Showing {filteredData.length} categories
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Button
+              variant="outlined"
+              onClick={toggleExpandAll}
+              size="small"
+            >
+              {expandedRows.length === filteredData.length ? "Collapse All" : "Expand All"}
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Showing {filteredData.length} categories
+            </Typography>
+          </Box>
           <Button
             variant="contained"
             color="error"
@@ -839,7 +778,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
           </Card>
         </Grid>
       </Grid>
-      <Paper elevation={1} sx={{ overflowX: 'auto' }}>
+      <Paper elevation={1}>
         {isLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
             <CircularProgress />
@@ -851,90 +790,159 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               {consolidationType === "all"
-                ? "No consolidated capital outlay data found for all regions."
+                ? "No consolidated capital outlay data found for all regions. Please check if regions have data."
                 : consolidationType === "current" && !activeRegion
                 ? "Please select a region first."
                 : "No data found for the selected criteria."}
             </Typography>
-            <Button variant="outlined" onClick={handleRefresh} sx={{ mt: 2 }} startIcon={<RefreshIcon />}>
+            <Button
+              variant="outlined"
+              onClick={handleRefresh}
+              sx={{ mt: 2 }}
+              startIcon={<RefreshIcon />}
+            >
               Refresh Data
             </Button>
           </Box>
         ) : (
-          <TableContainer>
-            <Table size="small" sx={{ borderCollapse: 'collapse', minWidth: 700 }}>
+          <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
+            <Table stickyHeader>
+              <colgroup>
+                <col style={{ width: '5%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '35%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '10%' }} />
+              </colgroup>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "center", fontSize: "0.875rem" }}></TableCell>
+                  <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "center", fontSize: "0.875rem" }}>REGION</TableCell>
+                  <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "center", fontSize: "0.875rem" }}>UACS CODE</TableCell>
+                  <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "center", fontSize: "0.875rem" }}>PROJECT TITLE / PARTICULARS</TableCell>
+                  <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "center", fontSize: "0.875rem" }}>INCOME</TableCell>
+                  <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "center", fontSize: "0.875rem" }}>SUBSIDY</TableCell>
+                  <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "center", fontSize: "0.875rem" }}>TOTAL COST</TableCell>
+                </TableRow>
+              </TableHead>
               <TableBody>
-                {filteredData.map((row, catIdx) => {
+                {filteredData?.map((row, index) => {
                   if (!row) return null;
-                  const catTotal = (row.children || []).reduce((s, c) => s + parseFloat(c.cost || c.subsidy || 0), 0);
                   return (
-                    <React.Fragment key={row.id || catIdx}>
-                      {/* ── Category Header Row ── */}
-                      <TableRow>
-                        <TableCell
-                          colSpan={3}
-                          sx={{
-                            ...CELL_STYLE,
-                            backgroundColor: '#375e38',
-                            color: '#fff',
-                            fontWeight: 700,
-                            fontSize: '0.85rem',
-                            letterSpacing: '0.02em',
-                            py: '7px',
-                          }}
-                        >
-                          {ROMAN[catIdx] || (catIdx + 1)}.&nbsp;&nbsp;{row.category}
+                    <React.Fragment key={row.id}>
+                      <TableRow
+                        sx={{
+                          backgroundColor: expandedRows.includes(row.id) ? "rgba(55, 94, 56, 0.08)" : "rgba(55, 94, 56, 0.04)",
+                          '&:hover': { backgroundColor: "rgba(55, 94, 56, 0.12)" }
+                        }}
+                      >
+                        <TableCell sx={{ padding: "8px 12px" }}>
+                          <IconButton
+                            size="small"
+                            onClick={() => toggleExpandRow(row.id)}
+                            sx={{ color: "#375e38" }}
+                          >
+                            {expandedRows.includes(row.id) ? <RemoveCircleOutlineIcon /> : <AddCircleOutlineIcon />}
+                          </IconButton>
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "bold", textAlign: "center", padding: "8px 12px", fontSize: "0.875rem" }}>
+                          {row.region}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "bold", textAlign: "center", padding: "8px 12px" }}>
+                          <Chip label="CAPITAL OUTLAY" size="small" color="secondary" sx={{ fontSize: "0.75rem" }} />
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
+                          {row.category}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
+                          ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.income || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
+                          ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.subsidy || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
+                          ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.cost || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
-                      {/* ── Sub-header Row ── */}
-                      <TableRow>
-                        <TableCell sx={{ ...HEADER_STYLE, width: '20%' }}>RESPONSIBILITY CENTER</TableCell>
-                        <TableCell sx={{ ...HEADER_STYLE, width: '60%' }}>PARTICULARS</TableCell>
-                        <TableCell sx={{ ...HEADER_STYLE, width: '20%', textAlign: 'right' }}>AMOUNT</TableCell>
-                      </TableRow>
-                      {/* ── Data Rows ── */}
-                      {(row.children || []).map((child, childIdx) => (
-                        <TableRow
-                          key={child.id || childIdx}
-                          sx={{ '&:hover': { backgroundColor: 'rgba(55,94,56,0.04)' } }}
-                        >
-                          <TableCell sx={{ ...CELL_STYLE, color: '#375e38', fontWeight: 500, verticalAlign: 'top' }}>
-                            {child.department || child.region || row.region || ''}
+                      {expandedRows.includes(row.id) && (row.children || []).map((child) => (
+                        <TableRow key={child.id} sx={{ '&:hover': { backgroundColor: "rgba(55, 94, 56, 0.04)" } }}>
+                          <TableCell sx={{ padding: "6px 12px" }}>
+                            {/* Remove delete icon for reports */}
                           </TableCell>
-                          <TableCell sx={{ ...CELL_STYLE, verticalAlign: 'top' }}>
-                            {child.particulars || child.projectTitle || ''}
+                          <TableCell sx={{ textAlign: "center", fontSize: "0.8rem", color: "#666", padding: "6px 12px" }}>
+                            {child.region || row.region}
                           </TableCell>
-                          <TableCell sx={{ ...CELL_STYLE, textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>
-                            {fmtPHP(child.cost || child.subsidy || 0)}
+                          <TableCell sx={{ textAlign: "center", fontSize: "0.8rem", color: "#666", padding: "6px 12px" }}>
+                            {child.uacsCode || ""}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: "0.8rem", paddingLeft: "20px", padding: "6px 12px 6px 20px" }}>
+                            {child.projectTitle || child.particulars}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
+                            ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
+                            ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
+                            ₱{parseFloat(child.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                         </TableRow>
                       ))}
-                      {/* ── Category TOTAL Row ── */}
-                      <TableRow>
-                        <TableCell sx={{ ...CELL_STYLE, fontWeight: 700, color: '#555' }}></TableCell>
-                        <TableCell sx={{ ...CELL_STYLE, fontWeight: 700, color: '#375e38' }}>TOTAL</TableCell>
-                        <TableCell sx={{ ...CELL_STYLE, fontWeight: 700, textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderTop: '2px solid #375e38' }}>
-                          {fmtPHP(catTotal)}
-                        </TableCell>
-                      </TableRow>
-                      {/* ── Spacer Row ── */}
-                      <TableRow><TableCell colSpan={3} sx={{ border: 'none', py: 1 }} /></TableRow>
                     </React.Fragment>
                   );
                 })}
-                {/* ── GRAND TOTAL CAPITAL OUTLAY ── */}
-                <TableRow>
-                  <TableCell colSpan={2} sx={{ ...CELL_STYLE, fontWeight: 700, fontSize: '0.88rem', backgroundColor: '#f0f7f0', borderTop: '2px solid #375e38' }}>
-                    TOTAL CAPITAL OUTLAY
-                  </TableCell>
-                  <TableCell sx={{ ...CELL_STYLE, fontWeight: 700, fontSize: '0.88rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', backgroundColor: '#f0f7f0', borderTop: '2px solid #375e38' }}>
-                    {fmtPHP(grandTotals.cost)}
-                  </TableCell>
-                </TableRow>
               </TableBody>
             </Table>
           </TableContainer>
         )}
+        <Fade in={true} timeout={1000}>
+          <Table
+            sx={{
+              position: 'sticky',
+              bottom: 0,
+              width: '100%',
+              tableLayout: 'fixed',
+              borderCollapse: 'separate',
+              borderSpacing: 0,
+              marginTop: '-2px',
+              zIndex: 2,
+              boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            <colgroup>
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '35%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
+            <TableFooter>
+              <TableRow>
+                <TableCell sx={{ backgroundColor: "#375e38", border: "1px solid white" }} />
+                <TableCell sx={{ backgroundColor: "#375e38", border: "1px solid white" }} />
+                <TableCell sx={{ backgroundColor: "#375e38", border: "1px solid white" }} />
+                <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "right", fontSize: "0.875rem" }}>
+                  GRAND TOTAL:
+                </TableCell>
+                <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "right", fontSize: "0.875rem" }}>
+                  ₱{(grandTotals && typeof grandTotals.income === 'number' ? grandTotals.income : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </TableCell>
+                <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "right", fontSize: "0.875rem" }}>
+                  ₱{(grandTotals && typeof grandTotals.subsidy === 'number' ? grandTotals.subsidy : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </TableCell>
+                <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "right", fontSize: "0.875rem" }}>
+                  ₱{(grandTotals && typeof grandTotals.cost === 'number' ? grandTotals.cost : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </Fade>
       </Paper>
       <Dialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)}>
         <DialogTitle>Export Consolidated Capital Outlay Report</DialogTitle>
@@ -968,21 +976,12 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
 
       {/* ── PDF Preview Dialog ─────────────────────────────────────────────── */}
       <Dialog
-        fullScreen
         open={pdfDialogOpen}
         onClose={closePdfDialog}
+        fullScreen
       >
-        <AppBar sx={{ position: "relative" }}>
-          <Toolbar>
-            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
-              <CloseIcon />
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              Consolidated Capital Outlay PDF Preview
-            </Typography>
-          </Toolbar>
-        </AppBar>
-        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
+        <DialogTitle>Consolidated Capital Outlay PDF Preview</DialogTitle>
+        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
           {pdfPreviewUrl ? (
             <iframe
               src={pdfPreviewUrl}
@@ -995,6 +994,9 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
             </Box>
           )}
         </DialogContent>
+        <DialogActions>
+          <Button onClick={closePdfDialog}>Close</Button>
+        </DialogActions>
       </Dialog>
     </ReportPageLayout>
   );

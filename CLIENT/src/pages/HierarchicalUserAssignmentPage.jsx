@@ -116,7 +116,7 @@ const HierarchicalUserAssignmentPage = () => {
   const { data: fiscalYearsData } = useQuery({
     queryKey: ['fiscal-years'],
     queryFn: async () => {
-      const res = await api.get('/settings/settings/fiscal-years');
+      const res = await api.get('/settings/fiscal-years');
       return res.data?.data || [];
     }
   });

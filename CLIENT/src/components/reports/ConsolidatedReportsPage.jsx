@@ -26,8 +26,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  AppBar,
-  Toolbar,
   Checkbox,
   FormGroup,
   Divider,
@@ -58,7 +56,6 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import HomeIcon from "@mui/icons-material/Home";
 import AssessmentIcon from "@mui/icons-material/Assessment";
-import CloseIcon from "@mui/icons-material/Close";
 
 // Custom component for numeric input formatting
 const NumberFormatCustom = React.memo(React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -115,43 +112,6 @@ const ConsolidatedReportsPage = () => {
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
-
-  // --- ROLE-BASED SCOPING LOGIC ---
-  const hierarchical = currentUser?.hierarchicalAccess || {};
-  const scope = hierarchical.scope; // FULL, REGION, DEPARTMENT, DIVISION
-  const isBRDLevel = scope === "FULL" || (currentUser?.Roles || []).some(r => String(r).toUpperCase().includes("BRD") || String(r).toUpperCase().includes("PLANNING"));
-  
-  // Enforce restrictions based on role/scope
-  useEffect(() => {
-    if (!isBRDLevel && scope) {
-      // 1. Force "current" consolidation for non-BRD
-      if (consolidationType !== "current") {
-        setConsolidationType("current");
-      }
-      
-      // 2. Restrict region selection
-      const userRegion = hierarchical.accessibleRegions?.[0]?.regionName || activeRegion?.name || activeRegion?.Region;
-      if (userRegion && selectedCurrentRegion !== userRegion) {
-        setSelectedCurrentRegion(userRegion);
-      }
-      
-      // 3. Restrict Department
-      if ((scope === "DEPARTMENT" || scope === "DIVISION") && hierarchical.accessibleDepartments?.[0]) {
-        const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
-        if (selectedDepartment !== userDeptId) {
-          setSelectedDepartment(userDeptId);
-        }
-      }
-      
-      // 4. Restrict Division
-      if (scope === "DIVISION" && hierarchical.accessibleDivisions?.[0]) {
-        const userDiv = hierarchical.accessibleDivisions[0];
-        if (selectedDivision !== userDiv) {
-          setSelectedDivision(userDiv);
-        }
-      }
-    }
-  }, [isBRDLevel, scope, consolidationType, hierarchical, activeRegion, selectedCurrentRegion, selectedDepartment, selectedDivision]);
 
   useEffect(() => {
     return () => {
@@ -647,7 +607,6 @@ const ConsolidatedReportsPage = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
-                disabled={!isBRDLevel && !!scope}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
                 <MenuItem value="all">All Regions</MenuItem>
@@ -664,7 +623,6 @@ const ConsolidatedReportsPage = () => {
                   value={selectedCurrentRegion || effectiveCurrentRegion || ""}
                   onChange={handleCurrentRegionChange}
                   label="Region"
-                  disabled={!isBRDLevel && !!scope}
                 >
                   {(regions || []).map((region) => {
                     const name = region.name || region.Region || "";
@@ -687,7 +645,6 @@ const ConsolidatedReportsPage = () => {
                   multiple
                   value={selectedRegions}
                   onChange={handleRegionChange}
-                  disabled={!isBRDLevel && !!scope}
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {selected.map((value) => (
@@ -717,7 +674,7 @@ const ConsolidatedReportsPage = () => {
                   setSelectedDivision("");
                 }}
                 label="Department"
-                disabled={consolidationType !== "current" || !effectiveCurrentRegion || departments.length === 0 || (!isBRDLevel && (scope === 'DEPARTMENT' || scope === 'DIVISION'))}
+                disabled={consolidationType !== "current" || !effectiveCurrentRegion || departments.length === 0}
               >
                 <MenuItem value=""><em>All Departments</em></MenuItem>
                 {departments.map((dept, idx) => {
@@ -739,7 +696,7 @@ const ConsolidatedReportsPage = () => {
                 value={String(selectedDivision ?? "")}
                 onChange={(e) => setSelectedDivision(e.target.value || "")}
                 label="Division"
-                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0 || (!isBRDLevel && scope === 'DIVISION')}
+                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
               >
                 <MenuItem value=""><em>All Divisions</em></MenuItem>
                 {divisions.map((div, idx) => {
@@ -1178,22 +1135,9 @@ const ConsolidatedReportsPage = () => {
         </Fade>
       </Paper>
 
-      <Dialog
-        fullScreen
-        open={pdfDialogOpen}
-        onClose={closePdfDialog}
-      >
-        <AppBar sx={{ position: "relative" }}>
-          <Toolbar>
-            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
-              <CloseIcon />
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              Consolidated MOOE PDF Preview
-            </Typography>
-          </Toolbar>
-        </AppBar>
-        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
+      <Dialog open={pdfDialogOpen} onClose={closePdfDialog} fullScreen>
+        <DialogTitle>Consolidated MOOE PDF Preview</DialogTitle>
+        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
           {pdfPreviewUrl ? (
             <iframe
               title="Consolidated MOOE PDF Preview"
@@ -1201,11 +1145,14 @@ const ConsolidatedReportsPage = () => {
               style={{ width: "100%", height: "100%", border: "none" }}
             />
           ) : (
-            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
-              <CircularProgress />
+            <Box sx={{ p: 3 }}>
+              <Typography variant="body2">No PDF preview available.</Typography>
             </Box>
           )}
         </DialogContent>
+        <DialogActions>
+          <Button onClick={closePdfDialog}>Close</Button>
+        </DialogActions>
       </Dialog>
 
     </ReportPageLayout>

@@ -13,6 +13,7 @@ import { setNavigate } from "./global/navigation";
 import { installPnpkiSignerBridge } from "./utils/pnpkiSignerBridge.js";
 import "./index.css";
 import "./global/silenceConsole";
+import "./global/extensionMessageHandler"; // Handle extension communication gracefully
 import "./global/components/GlobalNotifications"; // Initialize global notifications
 
 // Setup the region interceptor

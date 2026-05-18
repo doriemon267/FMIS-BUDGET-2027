@@ -24,8 +24,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  AppBar,
-  Toolbar,
   FormGroup,
   Divider,
   Alert,
@@ -55,7 +53,6 @@ import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import HomeIcon from "@mui/icons-material/Home";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import PeopleIcon from "@mui/icons-material/People";
-import CloseIcon from "@mui/icons-material/Close";
 
 const ConsolidatedPersonnelServicesReportsPage = () => {
   const { currentUser } = useUser();
@@ -79,31 +76,6 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   const selectedDivisionName = selectedDivision
     ? (divisions.find((d) => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
     : "";
-
-  const [isScopeRestricted, setIsScopeRestricted] = useState(false);
-
-  useEffect(() => {
-    if (!currentUser?.hierarchicalAccess || currentUser.hierarchicalAccess.scope === "FULL") {
-      setIsScopeRestricted(false);
-      return;
-    }
-
-    const { scope, departments: userDepts, divisions: userDivs } = currentUser.hierarchicalAccess;
-    setIsScopeRestricted(true);
-    setConsolidationType("current");
-
-    if (scope === "DEPARTMENT" || scope === "DIVISION") {
-      if (userDepts && userDepts.length > 0) {
-        setSelectedDepartment(String(userDepts[0]));
-      }
-    }
-
-    if (scope === "DIVISION") {
-      if (userDivs && userDivs.length > 0) {
-        setSelectedDivision(userDivs[0]);
-      }
-    }
-  }, [currentUser]);
 
   useEffect(() => {
     return () => {
@@ -416,11 +388,10 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
-                disabled={isScopeRestricted}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
-                {!isScopeRestricted && <MenuItem value="all">All Regions</MenuItem>}
-                {!isScopeRestricted && <MenuItem value="custom">Custom Selection</MenuItem>}
+                <MenuItem value="all">All Regions</MenuItem>
+                <MenuItem value="custom">Custom Selection</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -454,7 +425,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                   setSelectedDivision("");
                 }}
                 label="Department"
-                disabled={isScopeRestricted || consolidationType !== "current" || !activeRegion || departments.length === 0}
+                disabled={consolidationType !== "current" || !activeRegion || departments.length === 0}
               >
                 <MenuItem value=""><em>All Departments</em></MenuItem>
                 {departments.map((dept, idx) => {
@@ -476,7 +447,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 value={String(selectedDivision ?? "")}
                 onChange={(e) => setSelectedDivision(e.target.value || "")}
                 label="Division"
-                disabled={isScopeRestricted || consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
+                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
               >
                 <MenuItem value=""><em>All Divisions</em></MenuItem>
                 {divisions.map((div, idx) => {
@@ -756,22 +727,9 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         </Fade>
       </Paper>
 
-      <Dialog
-        fullScreen
-        open={pdfDialogOpen}
-        onClose={closePdfDialog}
-      >
-        <AppBar sx={{ position: "relative" }}>
-          <Toolbar>
-            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
-              <CloseIcon />
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              Consolidated Personnel Services PDF Preview
-            </Typography>
-          </Toolbar>
-        </AppBar>
-        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
+      <Dialog open={pdfDialogOpen} onClose={closePdfDialog} fullScreen>
+        <DialogTitle>Consolidated Personnel Services PDF Preview</DialogTitle>
+        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
           {pdfPreviewUrl ? (
             <iframe
               title="Consolidated Personnel Services PDF Preview"
@@ -779,11 +737,14 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
               style={{ width: "100%", height: "100%", border: "none" }}
             />
           ) : (
-            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
-              <CircularProgress />
+            <Box sx={{ p: 3 }}>
+              <Typography variant="body2">No PDF preview available.</Typography>
             </Box>
           )}
         </DialogContent>
+        <DialogActions>
+          <Button onClick={closePdfDialog}>Close</Button>
+        </DialogActions>
       </Dialog>
 
     </ReportPageLayout>

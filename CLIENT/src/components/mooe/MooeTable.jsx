@@ -101,6 +101,9 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
 import BulkUploadModal from "../common/BulkUploadModal";
 
 const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, fiscalYear = null }) => {  // ADDED: Accept region, proposalId, fiscalYear from parent
@@ -118,6 +121,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
   const [expandedRows, setExpandedRows] = useState([]);
   const [disableIncomeInputs, setDisableIncomeInputs] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [manualOverrideSubsidy, setManualOverrideSubsidy] = useState({}); // Track which items have manual subsidy override
   const { workflowRef, headerConfig } = useWorkflowRef();
   const effectiveProposalId = proposalId || workflowRef;  // ADDED: Use prop first, then hook
   const hasWorkflowRef = Boolean(effectiveProposalId);
@@ -574,19 +578,22 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
         const updatedChildren = row.children.map(child => {
           if (child.uacsCode === '5-02-99-990-3') {
-            const currentSubsidy = parseCurrency(child.subsidy);
-            if (Math.abs(currentSubsidy - cosGrandTotal) > 0.009) {
-              rowChanged = true;
-              changed = true;
-              childIds.push(child.id);
-              const incomeValue = parseCurrency(child.income);
-              const amountValue = incomeValue + cosGrandTotal;
+            // Only auto-calculate if manual override is NOT enabled for this child
+            if (!manualOverrideSubsidy[child.id]) {
+              const currentSubsidy = parseCurrency(child.subsidy);
+              if (Math.abs(currentSubsidy - cosGrandTotal) > 0.009) {
+                rowChanged = true;
+                changed = true;
+                childIds.push(child.id);
+                const incomeValue = parseCurrency(child.income);
+                const amountValue = incomeValue + cosGrandTotal;
 
-              return {
-                ...child,
-                subsidy: subsidyString,
-                amount: amountValue.toFixed(2)
-              };
+                return {
+                  ...child,
+                  subsidy: subsidyString,
+                  amount: amountValue.toFixed(2)
+                };
+              }
             }
           }
           return child;
@@ -644,7 +651,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
       }
       trackChanges();
     }
-  }, [cosGrandTotal, data?.formattedData, activeRegion?.name, parseCurrency, queryClient, trackChanges]);
+  }, [cosGrandTotal, data?.formattedData, activeRegion?.name, manualOverrideSubsidy, parseCurrency, queryClient, trackChanges]);
 
   const toggleExpandRow = useCallback((rowId) => {
     setExpandedRows(prev => 
@@ -892,6 +899,68 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     trackChanges();
     setHasUnsavedChanges(true);
   }, 300), [queryClient, trackChanges, activeRegion?.name]);
+
+  const handleTransferSubsidyToIncome = useCallback((childId, currentSubsidy, currentIncome) => {
+    // Find row that contains this child
+    const queryKey = ["mooeData", activeRegion?.name];
+    const currentData = queryClient.getQueryData(queryKey);
+    let rowId = null;
+    if (currentData?.formattedData) {
+      for (const row of currentData.formattedData) {
+        if (row.children.some(c => c.id === childId)) {
+          rowId = row.id;
+          break;
+        }
+      }
+    }
+    if (rowId == null) {
+      toast.error("Failed to find the row for this item");
+      return;
+    }
+
+    const subsidyAmount = parseFloat(currentSubsidy || 0);
+    const newIncome = (parseFloat(currentIncome || 0) + subsidyAmount).toFixed(2);
+    const newAmount = newIncome; // Amount = Income + Subsidy, now Subsidy is 0
+
+    queryClient.setQueryData(queryKey, (old) => {
+      if (!old) return old;
+
+      return {
+        ...old,
+        formattedData: old.formattedData.map(row => {
+          if (row.id !== rowId) return row;
+
+          return {
+            ...row,
+            children: row.children.map(child => {
+              if (child.id === childId) {
+                return {
+                  ...child,
+                  income: newIncome,
+                  subsidy: "0", // Clear subsidy
+                  amount: newAmount
+                };
+              }
+              return child;
+            })
+          };
+        })
+      };
+    });
+
+    // Clear draft inputs
+    setDraftInputs(prev => {
+      const next = { ...prev };
+      if (next[childId]) {
+        delete next[childId];
+      }
+      return next;
+    });
+
+    trackChanges();
+    setHasUnsavedChanges(true);
+    toast.success(`Transferred ₱${subsidyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} from Subsidy to Income`);
+  }, [queryClient, trackChanges, activeRegion?.name]);
 
   const handleTitleChange = useCallback((rowId, childId, value) => {
     queryClient.setQueryData(["mooeData"], (old) => {
@@ -1796,6 +1865,16 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   borderRight: "1px solid white",
                   textAlign: "right"
                 }}>AMOUNT</TableCell>
+                {isEditable && <TableCell width="8%" sx={{ 
+                  backgroundColor: "#375e38", 
+                  color: "#fff",
+                  fontWeight: "bold",
+                  padding: "12px 16px",
+                  borderBottom: "1px solid white",
+                  borderTop: "1px solid white",
+                  borderRight: "1px solid white",
+                  textAlign: "center"
+                }}>ACTIONS</TableCell>}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1874,6 +1953,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                         return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
+                    {isEditable && <TableCell></TableCell>}
                   </TableRow>
 
                   {/* Child rows - skip any blank "mother" row (no label, with or without UACS) so total appears only in 5-02-99-990 row */}
@@ -1974,38 +2054,65 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                               ₱{hierarchicalSubsidySum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </Typography>
                           ) : (
-                            <TextField
-                              fullWidth
-                              size="small"
-                              value={(() => {
-                                // Prefer local draft value while typing
-                                const draft = draftInputs[child.id]?.subsidy;
-                                if (draft !== undefined) return draft;
-                                const val = child.subsidy;
-                                if (val === "0" || val === 0) return "";
-                                if (val === null || val === undefined) return "";
-                                return val.toString();
-                              })()}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setDraftInputs(prev => ({
-                                  ...prev,
-                                  [child.id]: { ...(prev[child.id]||{}), subsidy: v }
-                                }));
-                                handleSubsidyChange(child.id, v);
-                              }}
-                              disabled={!isSuperAdmin && !isEditable}
-                              placeholder="0.00"
-                              InputProps={{
-                                startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                                inputComponent: NumberFormatCustom,
-                                inputProps: { style: { textAlign: 'right' } }
-                              }}
-                              sx={{
-                                backgroundColor: !isSuperAdmin && !isEditable ? "#f5f5f5" : "white",
-                                '& .MuiInputBase-input': { textAlign: 'right' }
-                              }}
-                            />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <TextField
+                                fullWidth
+                                size="small"
+                                value={(() => {
+                                  // Prefer local draft value while typing
+                                  const draft = draftInputs[child.id]?.subsidy;
+                                  if (draft !== undefined) return draft;
+                                  const val = child.subsidy;
+                                  if (val === "0" || val === 0) return "";
+                                  if (val === null || val === undefined) return "";
+                                  return val.toString();
+                                })()}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setDraftInputs(prev => ({
+                                    ...prev,
+                                    [child.id]: { ...(prev[child.id]||{}), subsidy: v }
+                                  }));
+                                  handleSubsidyChange(child.id, v);
+                                }}
+                                disabled={(!isSuperAdmin && !isEditable) || (child.uacsCode === '5-02-99-990-3' && !manualOverrideSubsidy[child.id])}
+                                placeholder="0.00"
+                                InputProps={{
+                                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                                  inputComponent: NumberFormatCustom,
+                                  inputProps: { style: { textAlign: 'right' } }
+                                }}
+                                sx={{
+                                  backgroundColor: (!isSuperAdmin && !isEditable) || (child.uacsCode === '5-02-99-990-3' && !manualOverrideSubsidy[child.id]) ? "#f5f5f5" : "white",
+                                  '& .MuiInputBase-input': { textAlign: 'right' }
+                                }}
+                              />
+                              {/* Toggle button for 5-02-99-990-3 to enable/disable manual override */}
+                              {isEditable && child.uacsCode === '5-02-99-990-3' && (
+                                <Tooltip title={manualOverrideSubsidy[child.id] ? "Back to auto-calculated" : "Enable manual entry"}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      setManualOverrideSubsidy(prev => ({
+                                        ...prev,
+                                        [child.id]: !prev[child.id]
+                                      }));
+                                    }}
+                                    sx={{
+                                      color: manualOverrideSubsidy[child.id] ? "#d32f2f" : "#375e38",
+                                      padding: "4px",
+                                      minWidth: "32px"
+                                    }}
+                                  >
+                                    {manualOverrideSubsidy[child.id] ? (
+                                      <LockOpenIcon fontSize="small" />
+                                    ) : (
+                                      <LockIcon fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
                           )}
                         </TableCell>
 
@@ -2025,6 +2132,30 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                             })()}
                           </Typography>
                         </TableCell>
+
+                        {/* Actions column - Transfer button for 5-02-99-990-3 */}
+                        {isEditable && (
+                          <TableCell align="center">
+                            {child.uacsCode === '5-02-99-990-3' && parseFloat(child.subsidy || 0) > 0 && (
+                              <Tooltip title="Transfer Subsidy to Income">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleTransferSubsidyToIncome(
+                                    child.id, 
+                                    draftInputs[child.id]?.subsidy ?? child.subsidy,
+                                    draftInputs[child.id]?.income ?? child.income
+                                  )}
+                                  sx={{ 
+                                    color: "#375e38",
+                                    '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.1)' }
+                                  }}
+                                >
+                                  <SwapHorizIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </TableCell>
+                        )}
                       </TableRow>
                     );
                   })}
