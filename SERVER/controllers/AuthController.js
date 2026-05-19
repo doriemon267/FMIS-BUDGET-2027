@@ -53,11 +53,22 @@ exports.getUser = (req, res) => {
 };
 
 exports.logout = (req, res) => {
-  const isProd = process.env.NODE_ENV === 'production';
-  const options = { path: '/', httpOnly: true, secure: isProd, sameSite: isProd ? 'None' : 'Lax' };
+  const isProd = process.env.NODE_ENV === 'production' || 
+                 (process.env.PRODUCTION_MODE && String(process.env.PRODUCTION_MODE).trim().length > 0);
+                 
+  const options = { 
+    path: '/', 
+    httpOnly: true, 
+    secure: isProd, 
+    sameSite: isProd ? 'None' : 'Lax' 
+  };
+  
   if (process.env.COOKIE_DOMAIN) options.domain = process.env.COOKIE_DOMAIN;
 
-  // I-clear ang 'jwt' dahil ito ang primary na ginagamit natin
+  // I-clear lahat ng posibleng cookies na hinahanap ng unified middleware mo
   res.clearCookie('jwt', options);
-  res.json({ ok: true });
+  res.clearCookie('jwtToken', options);
+  res.clearCookie('authToken', options);
+  
+  res.json({ ok: true, message: "Logged out successfully" });
 };
