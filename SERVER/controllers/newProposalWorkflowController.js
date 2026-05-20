@@ -2174,7 +2174,7 @@ exports.getProposals = async (req, res) => {
       if (req.user?.division) orgScope.division = req.user.division;
     }
 
-    let query = {};
+    let query = { isSystemGenerated: { $ne: true } };
 
     // Apply standard filters
     if (status) {

@@ -36,8 +36,10 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   ExpandMore as ExpandMoreIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
+import * as XLSX from 'xlsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../config/api';
 import DashboardHeader from '../global/components/DashboardHeader';
@@ -233,6 +235,77 @@ const OrganizationSetupPage = () => {
     if (deleteDialog.type === 'region') deleteRegion.mutate(deleteDialog.id);
     if (deleteDialog.type === 'department') deleteDepartment.mutate(deleteDialog.id);
     if (deleteDialog.type === 'mapping') deleteMapping.mutate(deleteDialog.id);
+  };
+
+  const handleExportExcel = () => {
+    let exportData = [];
+    let filename = '';
+    let sheetName = '';
+
+    if (tabValue === 0) { // Regions
+      exportData = filteredRegions.map(r => ({
+        'Region Name': r.Region
+      }));
+      filename = `regions_${new Date().toISOString().split('T')[0]}.xlsx`;
+      sheetName = 'Regions';
+    } else if (tabValue === 1) { // Departments
+      exportData = filteredDepartments.map(d => ({
+        'Department Name': d.Department,
+        'Display Order': d.displayOrder
+      }));
+      filename = `departments_${new Date().toISOString().split('T')[0]}.xlsx`;
+      sheetName = 'Departments';
+    } else if (tabValue === 2) { // Structure Mappings
+      exportData = [];
+      filteredMappings.forEach(m => {
+        const region = m.regionId?.Region || 'Central Office';
+        const dept = m.departmentName || m.departmentId?.Department || '';
+        
+        if (!m.divisions || m.divisions.length === 0) {
+          exportData.push({
+            'Region': region,
+            'Department': dept,
+            'Division': 'No divisions mapped',
+            'Units/Sections': ''
+          });
+        } else {
+          m.divisions.forEach(div => {
+            const units = div.sections?.map(s => s.name).join(', ') || 'No units defined';
+            exportData.push({
+              'Region': region,
+              'Department': dept,
+              'Division': div.name,
+              'Units/Sections': units
+            });
+          });
+        }
+      });
+      filename = `organization_structure_${new Date().toISOString().split('T')[0]}.xlsx`;
+      sheetName = 'Organization Structure';
+    }
+
+    if (exportData.length === 0) {
+      setSnackbar({ open: true, message: 'No data to export', severity: 'warning' });
+      return;
+    }
+
+    try {
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Auto-size columns
+      const colWidths = Object.keys(exportData[0]).map(key => ({
+        wch: Math.max(key.length, 20)
+      }));
+      worksheet['!cols'] = colWidths;
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+      XLSX.writeFile(workbook, filename);
+      setSnackbar({ open: true, message: 'Excel file exported successfully', severity: 'success' });
+    } catch (error) {
+      console.error('Export error:', error);
+      setSnackbar({ open: true, message: 'Failed to export Excel file', severity: 'error' });
+    }
   };
 
   // Region Dialog Component
@@ -477,9 +550,19 @@ const OrganizationSetupPage = () => {
               }}
               sx={{ width: 300 }}
             />
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setRegionDialog({ open: true, data: null })}>
-              Add Region
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button 
+                variant="outlined" 
+                color="success" 
+                startIcon={<DownloadIcon />} 
+                onClick={handleExportExcel}
+              >
+                Export Excel
+              </Button>
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => setRegionDialog({ open: true, data: null })}>
+                Add Region
+              </Button>
+            </Box>
           </Box>
           {loadingRegions ? <CircularProgress /> : (
             <Paper elevation={0} variant="outlined">
@@ -544,9 +627,19 @@ const OrganizationSetupPage = () => {
               }}
               sx={{ width: 300 }}
             />
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDepartmentDialog({ open: true, data: null })}>
-              Add Department
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button 
+                variant="outlined" 
+                color="success" 
+                startIcon={<DownloadIcon />} 
+                onClick={handleExportExcel}
+              >
+                Export Excel
+              </Button>
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => setDepartmentDialog({ open: true, data: null })}>
+                Add Department
+              </Button>
+            </Box>
           </Box>
           {loadingDepartments ? <CircularProgress /> : (
             <Paper elevation={0} variant="outlined">
@@ -613,9 +706,19 @@ const OrganizationSetupPage = () => {
               }}
               sx={{ width: 300 }}
             />
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setMappingDialog({ open: true, data: null })}>
-              Add Mapping
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button 
+                variant="outlined" 
+                color="success" 
+                startIcon={<DownloadIcon />} 
+                onClick={handleExportExcel}
+              >
+                Export Excel
+              </Button>
+              <Button variant="contained" startIcon={<AddIcon />} onClick={() => setMappingDialog({ open: true, data: null })}>
+                Add Mapping
+              </Button>
+            </Box>
           </Box>
           {loadingMappings ? <CircularProgress /> : (
             <Box>

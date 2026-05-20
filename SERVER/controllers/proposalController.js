@@ -1254,11 +1254,11 @@ exports.getProposals = async (req, res) => {
       }
     }
     // Build the query
-    let query = {};
+    let query = { isSystemGenerated: { $ne: true } };
     
     // Apply budget role visibility filters FIRST (most restrictive)
     if (req.budgetRoleVisibilityFilter && Object.keys(req.budgetRoleVisibilityFilter).length > 0) {
-      query = { ...req.budgetRoleVisibilityFilter };
+      query = { ...query, ...req.budgetRoleVisibilityFilter };
     }
     
     // Apply submission workflow filters (combine with AND if both exist)
@@ -4268,7 +4268,7 @@ exports.getProposals = async (req, res) => {
       }
     }
     // Build the query
-    let query = {};
+    let query = { isSystemGenerated: { $ne: true } };
     
     // Apply budget role visibility filters FIRST (most restrictive)
     if (req.budgetRoleVisibilityFilter && Object.keys(req.budgetRoleVisibilityFilter).length > 0) {

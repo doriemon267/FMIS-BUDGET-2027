@@ -151,10 +151,12 @@ async function computeModuleTotals(filterKeys, proposalId, workflowRefId) {
     
     // Build a resilient unlinked match for Income (matching IncomeController.js logic)
     // This allows centralized/bulk-uploaded income to be included in proposal totals
+    // EXCLUDE system-generated uploads from regular proposal totals
     const unlinkedIncomeMatch = {
       $and: [
         { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
-        { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] }
+        { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] },
+        { isSystemGenerated: { $ne: true } } // Exclude administrative uploads
       ]
     };
 

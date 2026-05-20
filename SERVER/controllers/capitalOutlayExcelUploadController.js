@@ -336,6 +336,8 @@ exports.uploadCapitalOutlay = async (req, res) => {
           budgetType: activeSettings.budgetType
         });
 
+        const isSuperAdmin = req.user?.Roles?.includes('SUPER_ADMIN');
+
         if (!masterRecord) {
           masterRecord = await CapitalOutlay.create({
             category: categoryDoc._id,
@@ -355,7 +357,8 @@ exports.uploadCapitalOutlay = async (req, res) => {
             processBy: req.user?.username || req.user?.name || req.user?.id || "System",
             processDate: new Date(),
             createdBy: req.user?.id || req.user?.userId || "system",
-            status: "Draft",
+            status: isSuperAdmin ? "System Upload" : "Draft",
+            isSystemGenerated: isSuperAdmin,
             proposalId: targetProposal?._id
           });
         }

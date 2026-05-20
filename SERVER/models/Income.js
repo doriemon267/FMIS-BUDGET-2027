@@ -69,7 +69,8 @@ const incomeSchema = new mongoose.Schema(
         'Under Review by Officer',
         'Under Review by Manager',
         'Office',
-        'Office Submitted'
+        'Office Submitted',
+        'System Upload'
       ],
       default: "Draft",
     },
@@ -152,6 +153,10 @@ const incomeSchema = new mongoose.Schema(
     },
     createdBy: {
       type: String
+    },
+    isSystemGenerated: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }

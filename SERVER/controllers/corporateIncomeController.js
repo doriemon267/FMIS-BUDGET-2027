@@ -256,6 +256,8 @@ exports.uploadCorporateIncome = async (req, res) => {
           continue;
         }
 
+        const isSuperAdmin = req.user?.Roles?.includes('SUPER_ADMIN');
+
         const income = new Income({
           particulars: particulars || categoryName,
           incomecategory: category._id,
@@ -273,7 +275,8 @@ exports.uploadCorporateIncome = async (req, res) => {
           createdBy: userIdString,
           processBy: req.user?.userName || req.user?.username || req.user?.id || 'System Upload',
           processDate: new Date(),
-          status: 'Draft' // Reverted to Draft per user request
+          status: isSuperAdmin ? 'System Upload' : 'Draft', // Set System Upload if Super Admin
+          isSystemGenerated: isSuperAdmin // Tag as system generated if Super Admin
         });
         await income.save();
         results.successfullyProcessed++;

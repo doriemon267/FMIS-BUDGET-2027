@@ -236,6 +236,8 @@ exports.uploadMooe = async (req, res) => {
           throw new Error('Mission region/organizational context. Please specify REGION or RESPONSIBILITY CENTER.');
         }
 
+        const isSuperAdmin = req.user?.Roles?.includes('SUPER_ADMIN');
+
         await MooeProposal.create({
           sublineItem,
           accountingTitle: resolvedMapping.accountingTitle || accountingTitle,
@@ -251,7 +253,9 @@ exports.uploadMooe = async (req, res) => {
           budgetType: activeSettings.budgetType,
           processBy: req.user?.username || req.user?.name || req.user?.id || 'System',
           processDate: new Date(),
-          createdBy: req.user?.id || req.user?.userId || 'system'
+          createdBy: req.user?.id || req.user?.userId || 'system',
+          status: isSuperAdmin ? 'System Upload' : 'Draft',
+          isSystemGenerated: isSuperAdmin
         });
         success++;
       } catch (error) {

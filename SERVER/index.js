@@ -145,6 +145,7 @@ const medicalAllowanceRouter = require("./routers/medicalAllowanceRoutes");
 const incomeRouter = require("./routers/incomeRoutes");
 const incomeExcelUploadRouter = require("./routers/incomeExcelUploadRoutes");
 const capitalOutlayExcelUploadRoutes = require("./routers/capitalOutlayExcelUploadRoutes");
+const mooeExcelUploadRoutes = require("./routers/mooeExcelUploadRoutes");
 const discountSettingsRouter = require("./routes/discountSettings");
 const retireeRouter = require("./routers/retireeRoutes");
 const budgetarySupportRoutes = require("./routers/budgetarySupportRoutes");
@@ -158,6 +159,7 @@ const consolidatedCapitalOutlayRouter = require("./routers/consolidatedCapitalOu
 const consolidatedPersonnelServicesRouter = require("./routers/consolidatedPersonnelServicesRoutes");
 const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes");
 const databaseBackupRouter = require("./routers/databaseBackupRoutes");
+const bulkUploadManagementRoutes = require("./routers/bulkUploadManagementRoutes");
 const budgetOfficerEditRouter = require("./routers/budgetOfficerEditRoutes");
 const personnelServicesPDFRouter = require("./routers/personnelServicesPDFRoutes");
 const isAuth = require("./middleware/is_auth");
@@ -509,14 +511,16 @@ app.use(apiPrefix, medicalAllowanceRouter);
 // CRITICAL FIX: Fixed namespace collision for endpoints using /income prefix
 app.use(apiPrefix, attachWorkflowRef, incomeRouter);
 app.use(apiPrefix, income_categories);
-app.use(`${apiPrefix}/income-upload`, incomeExcelUploadRouter); // Remapped endpoint wrapper prefix
-app.use(`${apiPrefix}/mooe-upload`, excelUploadRouter); // Remapped endpoint wrapper prefix
+app.use(`${apiPrefix}/income`, attachWorkflowRef, incomeExcelUploadRouter); // Remapped endpoint wrapper prefix
+app.use(`${apiPrefix}/income`, attachWorkflowRef, mooeExcelUploadRoutes);
+app.use(`${apiPrefix}/mooe-upload`, excelUploadRouter); // Keep for legacy if any, but re-evaluate later
 
 app.use(`${apiPrefix}/consolidated-reports`, consolidatedReportsRouter);
 app.use(`${apiPrefix}/consolidated-reports`, consolidatedCapitalOutlayRouter);
 app.use(`${apiPrefix}/consolidated-reports`, consolidatedPersonnelServicesRouter);
 app.use(`${apiPrefix}/comprehensive-reports`, comprehensiveReportsRouter);
 app.use(`${apiPrefix}/database-backup`, databaseBackupRouter);
+app.use(`${apiPrefix}/bulk-upload-management`, bulkUploadManagementRoutes);
 app.use(`${apiPrefix}/discount-settings`, discountSettingsRouter);
 app.use(apiPrefix, retireeRouter);
 app.use(apiPrefix, budgetarySupportRoutes);
