@@ -167,6 +167,7 @@ const income_categories = require("./routers/income_categories");
 const myProposalsRoutes = require("./routes/myProposalsRoutes");
 const budgetManagerOrgRoutes = require("./routers/BudgetManagerOrgRoutes");
 const hierarchicalRBACRoutes = require("./routers/hierarchicalRBACRoutes");
+const proposalLockingRouter = require("./routers/proposalLockingRouter");
 
 // Database Trigger Connection
 connectMongo();
@@ -529,6 +530,7 @@ app.use(`${apiPrefix}/user-activity-logs`, require("./routers/userActivityLogRou
 app.use(apiPrefix, budgetManagerOrgRoutes);
 app.use(`${apiPrefix}/hierarchical-rbac`, hierarchicalRBACRoutes);
 app.use(apiPrefix, employeeMasterRouter);
+app.use(`${apiPrefix}/proposals`, proposalLockingRouter);
 
 let isShuttingDown = false;
 

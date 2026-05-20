@@ -341,6 +341,30 @@ const proposalSchema = new mongoose.Schema({
   regionApprovedBy: String,
   regionApprovedDate: Date,
   rejectionReason: String,
+  // --- Concurrency Control (Proposal Locking) ---
+  isLocked: {
+    type: Boolean,
+    default: false
+  },
+  lockedBy: {
+    userId: String,
+    userName: String,
+    userRole: String,
+    userEmail: String
+  },
+  lockedAt: {
+    type: Date,
+    default: null
+  },
+  lockExpiry: {
+    type: Date,
+    default: null
+  },
+  lockTimeout: {
+    type: Number,
+    default: 900000 // 15 minutes default
+  },
+  // ----------------------------------------------
   cobExpenditures: {
     type: String
   },

@@ -67,6 +67,7 @@ import ErrorAlert from '../components/common/ErrorAlert';
 import { preventNegativeNumericKey, toNonNegativeNumber } from '../utils/preventNegativeInput';
 import ProposalVersionHistoryDialog from '../components/myproposal/ProposalVersionHistoryDialog';
 import { createWorkflowDigitalSignature, actionRequiresDigitalSignature } from '../utils/digitalSignature';
+import { useProposalLock } from "../hooks/useProposalLock";
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -315,6 +316,12 @@ const NewProposalWorkflowPage = () => {
   const [analystsForProposal, setAnalystsForProposal] = useState([]);
   const [targetAnalystId, setTargetAnalystId] = useState(null);
   const [analystsForMenuProposal, setAnalystsForMenuProposal] = useState([]);
+
+  // Proposal Lock Management
+  const { lockStatus, acquireLock, releaseLock, hasLock } = useProposalLock(
+    selectedProposal?._id,
+    { autoRenew: true, showNotifications: true }
+  );
 
   // SUPER ADMIN: default to "show all regions" so they see proposals without selecting a region
   useEffect(() => {
@@ -616,6 +623,9 @@ const NewProposalWorkflowPage = () => {
   // Check if user can edit the current proposal based on their role and proposal status
   const canUserEdit = () => {
     if (!selectedProposal) return false;
+
+    // Concurrency Control: Prevent edits if locked by someone else
+    if (lockStatus?.isLocked && !hasLock) return false;
 
     const userRoles = currentUser?.Roles || [];
     const status = selectedProposal.status;
@@ -924,6 +934,19 @@ const NewProposalWorkflowPage = () => {
 
     return false;
   };
+
+  // Auto acquire/release lock when viewing proposal details
+  useEffect(() => {
+    if (viewDetailsDialogOpen && selectedProposal) {
+      if (canUserEditProposal(selectedProposal)) {
+        acquireLock();
+      }
+    } else {
+      if (hasLock) {
+        releaseLock();
+      }
+    }
+  }, [viewDetailsDialogOpen, selectedProposal, acquireLock, releaseLock, hasLock]);
 
   const mapActionToBackend = (frontendAction) => {
     const actionMapping = {
@@ -2882,32 +2905,23 @@ const NewProposalWorkflowPage = () => {
                                         },
                                       }}
                                     >
-                                      {availableActionsForMenu.map((action) => (
+                                      {availableActionsForMenu.map((action) => {
+                                        const isViewOnlyAction = ['view-details', 'view-history', 'view-audit-trail', 'open-tier'].includes(action.value);
+                                        return (
                                         <MenuItem
                                           key={action.value}
                                           onClick={async () => {
                                             setActionType(action.value);
                                             setActionMenuAnchor(null);
-                                            if (
-                                              action.value === "view-details"
-                                            ) {
+                                            if (action.value === "view-details") {
                                               await handleViewDetails(proposal);
-                                            } else if (
-                                              action.value === "view-history"
-                                            ) {
+                                            } else if (action.value === "view-history") {
                                               setSelectedProposal(proposal);
                                               setHistoryPage(0);
                                               setHistoryDialogOpen(true);
-                                            } else if (
-                                              action.value ===
-                                              "view-audit-trail"
-                                            ) {
-                                              await handleViewAuditTrail(
-                                                proposal
-                                              );
-                                            } else if (
-                                              action.value === "open-tier"
-                                            ) {
+                                            } else if (action.value === "view-audit-trail") {
+                                              await handleViewAuditTrail(proposal);
+                                            } else if (action.value === "open-tier") {
                                               const params = new URLSearchParams();
                                               if (proposal.fiscalYear != null) params.set("fiscalYear", String(proposal.fiscalYear));
                                               if (proposal.region) params.set("region", String(proposal.region));
@@ -2915,6 +2929,21 @@ const NewProposalWorkflowPage = () => {
                                               if (proposal.division || proposal.responsibilityCenter) params.set("division", String(proposal.division || proposal.responsibilityCenter));
                                               navigate(`/tier?${params.toString()}`);
                                             } else {
+                                              // Real-time lock check before allowing any workflow action (submit/return/etc.)
+                                              try {
+                                                const lockCheck = await api.get(`/proposals/${proposal._id}/lock/status`, { hideErrorToast: true });
+                                                const lockData = lockCheck.data;
+                                                const myUserId = String(currentUser?.Username || currentUser?.Id || currentUser?.id || '');
+                                                if (lockData?.isLocked && lockData?.lockedBy?.userId && String(lockData.lockedBy.userId) !== myUserId) {
+                                                  toast.warning(
+                                                    `Submission unavailable: This proposal is currently being edited by ${lockData.lockedBy.userName || 'other user'}. Please wait for them to finish.`,
+                                                    { autoClose: 6000 }
+                                                  );
+                                                  return;
+                                                }
+                                              } catch (_) {
+                                                // Lock check failed — proceed anyway (non-blocking)
+                                              }
                                               setActionDialogOpen(true);
                                             }
                                           }}
@@ -2963,7 +2992,8 @@ const NewProposalWorkflowPage = () => {
                                           </Box>
                                           {action.label}
                                         </MenuItem>
-                                      ))}
+                                        );
+                                      })}
                                     </Menu>
                                   </>
                                 )}
@@ -3278,6 +3308,11 @@ const NewProposalWorkflowPage = () => {
           </Box>
         </DialogTitle>
         <DialogContent sx={{ p: 0 }}>
+          {lockStatus?.isLocked && !hasLock && (
+            <Alert severity="warning" sx={{ m: 2 }}>
+              This proposal is currently being edited by {lockStatus.lockedBy?.userName || 'another user'} ({lockStatus.lockedBy?.userRole || 'User'}). You can only view the details.
+            </Alert>
+          )}
           {detailsLoading ? (
             <Box
               sx={{

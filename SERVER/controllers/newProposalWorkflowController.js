@@ -1868,6 +1868,43 @@ exports.createProposal = async (req, res) => {
       }
     } catch (_e) { /* non-fatal */ }
 
+    // ============ PREVENT DUPLICATE PROPOSAL CREATION ============
+    const duplicateQuery = {
+      $and: [
+        { fiscalYear: parseInt(fiscalYear, 10) },
+        { modelType: normalizedModelType }
+      ]
+    };
+
+    if (finalRegionId) {
+      duplicateQuery.$and.push({ region: finalRegionId });
+    }
+
+    if (derivedDepartment) {
+      duplicateQuery.$and.push({ department: derivedDepartment });
+    } else {
+      duplicateQuery.$and.push({ 
+        $or: [{ department: null }, { department: "" }, { department: { $exists: false } }] 
+      });
+    }
+
+    if (derivedDivision) {
+      duplicateQuery.$and.push({ division: derivedDivision });
+    } else {
+      duplicateQuery.$and.push({ 
+        $or: [{ division: null }, { division: "" }, { division: { $exists: false } }] 
+      });
+    }
+
+    const existingProposal = await NewProposalWorkflow.findOne(duplicateQuery).lean();
+    if (existingProposal) {
+      return res.status(409).json({
+        success: false,
+        message: 'A budget proposal already exists for this organizational scope (Region/Department/Division) and Fiscal Year. Please refresh the page to view and co-edit the existing proposal.'
+      });
+    }
+    // ==============================================================
+
     const proposalData = {
       title,
       description,
@@ -2075,8 +2112,13 @@ const checkProposalOrgAccess = async (proposal, userId, userRole) => {
     // Restrictive check (Intersection)
     if (userRegion && proposal.regionName !== userRegion && proposal.region !== userRegion) {
       // Handle cases where region might be stored as name string or object
-      const propRegion = proposal.regionName || proposal.region;
-      if (propRegion && String(propRegion) !== userRegion) return false;
+      const propRegion = proposal.region?.Region || proposal.region?.regionName || proposal.region?.RegionName || proposal.regionName || proposal.region;
+      if (propRegion && String(propRegion) !== userRegion) {
+        // Additional fallback: sometimes userRegion is stored with different casing
+        if (String(propRegion).toUpperCase() !== String(userRegion).toUpperCase()) {
+          return false;
+        }
+      }
     }
     
     if (userDepartment && proposal.department !== userDepartment) return false;
@@ -2160,24 +2202,48 @@ exports.getProposals = async (req, res) => {
     
     switch (view) {
       case 'my-proposals':
-        // Strict identity matching first to avoid cross-user collisions on display names.
-        if (strictIdentityCandidates.length > 0) {
-          query.$or = [
-            { createdBy: { $in: strictIdentityCandidates } },
-            { createdByName: { $in: strictIdentityCandidates } }
-          ];
+        if (isSuperAdmin) {
+          // Super Admin: strict identity matching
+          if (strictIdentityCandidates.length > 0) {
+            query.$or = [
+              { createdBy: { $in: strictIdentityCandidates } },
+              { createdByName: { $in: strictIdentityCandidates } }
+            ];
+          } else {
+            query.$or = [{ createdByName: userName }];
+          }
         } else {
-          query.$or = [{ createdByName: userName }];
+          // Allow co-editing: Users with the EXACT same organizational scope share the same drafts
+          if (Object.keys(orgScope).length > 0) {
+            const { region, ...orgScopeWithoutRegion } = orgScope;
+            query = { ...query, ...orgScopeWithoutRegion };
+            
+            // Strict exact level matching to prevent seeing lower-level drafts
+            if (!orgScope.division) query.division = { $in: [null, ""] };
+            if (!orgScope.department) query.department = { $in: [null, ""] };
+            
+            if (region) {
+              const regionDoc = await require('../models/Region').findOne({
+                $or: [{ Region: region }, { regionName: region }, { RegionName: region }]
+              });
+              if (regionDoc) {
+                query.region = regionDoc._id;
+              }
+            }
+          } else {
+            // Fallback for users with no org scope
+            if (strictIdentityCandidates.length > 0) {
+              query.$or = [
+                { createdBy: { $in: strictIdentityCandidates } },
+                { createdByName: { $in: strictIdentityCandidates } }
+              ];
+            } else {
+              query.$or = [{ createdByName: userName }];
+            }
+          }
         }
 
-        // Apply organizational scope restriction (intersection)
-        // Note: Exclude region from spread since region field is ObjectId, not String
-        if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
-          const { region, ...orgScopeWithoutRegion } = orgScope;
-          query = { ...query, ...orgScopeWithoutRegion };
-        }
-
-        query.status = 'DRAFT';     // Use DRAFT enum value
+        query.status = { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] };
         break;
       case 'pending-review':
         // Ensure BRD roles only see items that were actually forwarded to them (exclude drafts)
@@ -2410,23 +2476,23 @@ exports.getProposals = async (req, res) => {
       const { region, ...orgScopeWithoutRegion } = orgScope;
       const fallbackQuery = { createdBy: userIdString, ...orgScopeWithoutRegion };
   const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
-      newProposals = fallbackAll.filter(p => p.status === 'DRAFT');
+      newProposals = fallbackAll.filter(p => p.status === 'DRAFT' || p.status === 'RETURNED_TO_PREPARER');
       // Second fallback: try createdByName if still empty
       if (newProposals.length === 0) {
         const { region: _r, ...orgScopeWithoutRegion } = orgScope;
-  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
         newProposals = nameFallback;
       }
       // Final fallback: only return user-specific drafts. Do NOT return ALL drafts to avoid exposure.
       if (newProposals.length === 0) {
         const { region: _r2, ...orgScopeWithoutRegion } = orgScope;
-        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: 'DRAFT', ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
+        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
         // Also try createdByName fallback, but do not broaden to all drafts
         if (allUserDrafts.length > 0) {
           newProposals = allUserDrafts;
         } else {
           const { region: _r3, ...orgScopeWithoutRegion } = orgScope;
-          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT', ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
           newProposals = nameFallback;
         }
       }
@@ -2859,7 +2925,7 @@ exports.getProposalById = async (req, res) => {
   try {
     const { id } = req.params;
     const userRole = getUserRole(req);
-    const userId = req.user.id;
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
 
     // CRITICAL: First try to fetch from Proposal model (fmis_budget) which has projectedSubsidy
     // This is needed for BudgetarySupportTable which passes Proposal._id, not NewProposalWorkflow._id

@@ -60,7 +60,34 @@ router.get('/proposals/my-proposals', newProposalWorkflowController.getMyProposa
 router.get('/proposals/pending-review', newProposalWorkflowController.getPendingReview);
 // Specific routes with parameters must come BEFORE generic /:id routes
 router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
-router.post('/proposals/:id/action', newProposalWorkflowController.performAction);
+router.post('/proposals/:id/action', async (req, res, next) => {
+  // Lock enforcement: block workflow actions if proposal is currently locked by a different user
+  try {
+    const ProposalLockingService = require('../services/ProposalLockingService');
+    const lockStatus = await ProposalLockingService.getLockStatus(req.params.id);
+    // Determine calling user's ID from auth token (req.user set by isAuth)
+    const requestingUserId = String(
+      req.user?.particularID || req.user?.Username || req.user?.Id || req.user?.id || ''
+    );
+    if (
+      lockStatus &&
+      !lockStatus.error &&
+      lockStatus.isLocked &&
+      lockStatus.lockedBy?.userId &&
+      String(lockStatus.lockedBy.userId) !== requestingUserId
+    ) {
+      return res.status(409).json({
+        success: false,
+        error: `Proposal is currently being edited by ${lockStatus.lockedBy.userName || 'another user'}. Please wait for them to finish before submitting.`,
+        lockedBy: lockStatus.lockedBy,
+        lockedAt: lockStatus.lockedAt
+      });
+    }
+  } catch (_) {
+    // Lock check error — allow action to proceed (non-blocking)
+  }
+  next();
+}, newProposalWorkflowController.performAction);
 // NEW: Get proposal totals by workflow ref (for BudgetarySupportTable)
 router.get('/proposals/:workflowRefId/totals', newProposalWorkflowController.getProposalTotalsByWorkflowRef);
 

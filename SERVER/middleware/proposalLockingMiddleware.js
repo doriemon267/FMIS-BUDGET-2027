@@ -1,8 +1,10 @@
 const ProposalLockingService = require('../services/ProposalLockingService');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 
 /**
  * Middleware to verify proposal lock on update operations
- * Ensures that only the user who locked the proposal can update it
+ * Scope-aware: Only blocks locks from users with overlapping scope
+ * If lock owner has different scope, allows the update (no conflict)
  */
 async function checkProposalLockMiddleware(req, res, next) {
   try {
@@ -24,23 +26,48 @@ async function checkProposalLockMiddleware(req, res, next) {
       });
     }
 
-    // Get lock status
+    // Get lock status and proposal
     const lockStatus = await ProposalLockingService.getLockStatus(proposalId);
+    const proposal = await NewProposalWorkflow.findById(proposalId);
+
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        error: 'Proposal not found'
+      });
+    }
 
     if (lockStatus.success === false && lockStatus.error) {
       return res.status(404).json(lockStatus);
     }
 
-    // If proposal is locked by another user, deny the update
-    if (lockStatus.isLocked && lockStatus.lockedBy.userId !== userId) {
-      return res.status(423).json({
-        success: false,
-        error: `Proposal is locked for editing by ${lockStatus.lockedBy.userName} (${lockStatus.lockedBy.userRole})`,
-        lockedBy: lockStatus.lockedBy,
-        lockedAt: lockStatus.lockedAt,
-        timeRemaining: lockStatus.timeRemaining,
-        statusCode: 423
-      });
+    // If proposal is locked by another user, check scope compatibility
+    if (lockStatus.isLocked && lockStatus.lockedBy && lockStatus.lockedBy.userId !== userId) {
+      // Get scopes of both lock owner and current user
+      const lockedByScope = await ProposalLockingService.getUserOrgScope(lockStatus.lockedBy.userId);
+      const currentUserScope = await ProposalLockingService.getUserOrgScope(userId);
+
+      // Check if scopes overlap
+      const scopesOverlap = ProposalLockingService.scopesOverlap(lockedByScope, currentUserScope);
+      const proposalMatchesLockedByScope = ProposalLockingService.proposalMatchesScope(proposal, lockedByScope);
+
+      // Only block if both scopes can access this proposal (true concurrent editing conflict)
+      if (scopesOverlap && proposalMatchesLockedByScope) {
+        return res.status(423).json({
+          success: false,
+          error: `Proposal is locked for editing by ${lockStatus.lockedBy.userName} (${lockStatus.lockedBy.userRole})`,
+          lockedBy: lockStatus.lockedBy,
+          lockedAt: lockStatus.lockedAt,
+          timeRemaining: lockStatus.timeRemaining,
+          statusCode: 423,
+          scopeInfo: {
+            lockOwnerScope: lockedByScope,
+            currentUserScope: currentUserScope,
+            scopesOverlap: true
+          }
+        });
+      }
+      // Different scope - allow update (no real conflict)
     }
 
     // Attach lock information to request for later use

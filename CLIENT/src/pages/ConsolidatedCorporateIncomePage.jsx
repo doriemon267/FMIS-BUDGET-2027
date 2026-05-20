@@ -4,7 +4,6 @@ import {
   Button,
   Typography,
   Paper,
-  Container,
   Grid,
   FormControl,
   InputLabel,
@@ -19,18 +18,19 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Divider,
   Card,
   CardContent,
-  TextField,
   Tab,
   Tabs,
   Chip,
   Stack,
   Switch,
   FormControlLabel,
-  Collapse,
   IconButton,
+  Dialog,
+  DialogContent,
+  AppBar,
+  Toolbar,
 } from '@mui/material';
 import { 
   Refresh, 
@@ -39,13 +39,13 @@ import {
   ExpandLess,
   Summarize,
   ViewList,
-  Analytics
+  Analytics,
+  Close,
 } from '@mui/icons-material';
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
 import { useUser } from '../context/UserContext';
 import IncomeReportSummary from '../components/reports/IncomeReportSummary';
-import EnhancedPDFPreviewDialog from '../components/EnhancedPDFPreviewDialog';
 import ReportPageLayout from '../components/reports/ReportPageLayout';
 
 const ConsolidatedCorporateIncomePage = () => {
@@ -61,11 +61,13 @@ const ConsolidatedCorporateIncomePage = () => {
   const [selectedRegions, setSelectedRegions] = useState('');
   const [consolidationType, setConsolidationType] = useState('current'); // current | all
   const [availableRegions, setAvailableRegions] = useState([]);
-  const { activeRegion } = useRegion();
-  const activeRegionName = activeRegion?.name || activeRegion?.regionName || activeRegion?.Region || '';
+  const { activeRegion: regionFromContext } = useRegion();
+  const activeRegionName = regionFromContext?.name || regionFromContext?.regionName || regionFromContext?.Region || '';
   const [showPercentages, setShowPercentages] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState(new Set());
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [lastGeneratedParamsKey, setLastGeneratedParamsKey] = useState('');
   const [organizationStructure, setOrganizationStructure] = useState(null);
   const [departments, setDepartments] = useState([]);
@@ -74,7 +76,7 @@ const ConsolidatedCorporateIncomePage = () => {
   const [selectedDivision, setSelectedDivision] = useState('');
 
   // --- ROLE-BASED SCOPING LOGIC ---
-  const hierarchical = currentUser?.hierarchicalAccess || {};
+  const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
   const scope = hierarchical.scope; // FULL, REGION, DEPARTMENT, DIVISION
   const isBRDLevel = scope === "FULL" || (currentUser?.Roles || []).some(r => String(r).toUpperCase().includes("BRD") || String(r).toUpperCase().includes("PLANNING"));
 
@@ -161,7 +163,7 @@ const ConsolidatedCorporateIncomePage = () => {
             setFiscalYear(activeYear.toString());
             return; // Exit if we successfully got the active fiscal year
           }
-        } catch (activeErr) {
+        } catch (_) {
           // Continue to try other methods
         }
         
@@ -181,7 +183,7 @@ const ConsolidatedCorporateIncomePage = () => {
               return; // Exit if we successfully got fiscal years
             }
           }
-        } catch (settingsErr) {
+        } catch (_) {
           // Continue to try other methods
         }
         
@@ -221,7 +223,9 @@ const ConsolidatedCorporateIncomePage = () => {
       try {
         const res = await api.get('/api/hierarchical-rbac/organization-structure', { params: { structure: 'old' } });
         setOrganizationStructure(res.data?.data || res.data);
-      } catch (_) {}
+      } catch (err) {
+        console.warn('Failed to fetch organization structure', err);
+      }
     };
     fetchOrgStructure();
   }, []);
@@ -334,6 +338,22 @@ const ConsolidatedCorporateIncomePage = () => {
     setSelectedDivision('');
   }, [selectedDepartment, selectedRegions, consolidationType, organizationStructure]);
 
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl) {
+        window.URL.revokeObjectURL(pdfPreviewUrl);
+      }
+    };
+  }, [pdfPreviewUrl]);
+
+  const closePdfDialog = () => {
+    setPdfPreviewOpen(false);
+    if (pdfPreviewUrl) {
+      window.URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl('');
+    }
+  };
+
   // Fetch report data
   const fetchReportData = async () => {
     if (!fiscalYear) {
@@ -391,9 +411,39 @@ const ConsolidatedCorporateIncomePage = () => {
     }
   };
 
-  const handleExportToPDF = () => {
+  const handleExportToPDF = async () => {
     if (!canPreviewPdf) return;
-    setPdfPreviewOpen(true);
+    
+    try {
+      setPdfLoading(true);
+      setError(null);
+      
+      const params = {
+        fiscalYear,
+        budgetType,
+        selectedRegions: consolidationType === 'all' ? 'all' : selectedRegions,
+        activeTab,
+        showPercentages
+      };
+
+      const response = await api.post(
+        '/reports/consolidated-corporate-income/export-pdf',
+        params,
+        { responseType: 'blob' }
+      );
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      
+      if (pdfPreviewUrl) window.URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(url);
+      setPdfPreviewOpen(true);
+    } catch (err) {
+      console.error('Error generating PDF preview:', err);
+      setError('Failed to generate PDF preview. Please try again.');
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   return (
@@ -588,11 +638,11 @@ const ConsolidatedCorporateIncomePage = () => {
                     variant="outlined"
                     color="error"
                     onClick={handleExportToPDF}
-                    disabled={!canPreviewPdf}
-                    startIcon={<PictureAsPdf />}
+                    disabled={!canPreviewPdf || pdfLoading}
+                    startIcon={pdfLoading ? <CircularProgress size={20} color="inherit" /> : <PictureAsPdf />}
                     sx={{ minWidth: 140, fontWeight: 600 }}
                   >
-                    PDF Preview
+                    {pdfLoading ? 'Preparing PDF...' : 'PDF Preview'}
                   </Button>
                 </Stack>
                 {hasReportData && !canPreviewPdf && (
@@ -1019,14 +1069,49 @@ const ConsolidatedCorporateIncomePage = () => {
         )}
       </Paper>
 
-      <EnhancedPDFPreviewDialog
+      <Dialog
+        fullScreen
         open={pdfPreviewOpen}
-        onClose={() => setPdfPreviewOpen(false)}
-        reportData={reportData}
-        activeTab={activeTab}
-        selectedRegions={selectedRegions}
-        showPercentages={showPercentages}
-      />
+        onClose={closePdfDialog}
+      >
+        <AppBar sx={{ position: "relative" }}>
+          <Toolbar>
+            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
+              <Close />
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              Consolidated Corporate Income PDF Preview
+            </Typography>
+            <Button 
+              autoFocus 
+              color="inherit" 
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = pdfPreviewUrl;
+                link.download = `Consolidated_Corporate_Income_${fiscalYear}_${budgetType}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+            >
+              Download
+            </Button>
+          </Toolbar>
+        </AppBar>
+        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
+          {pdfPreviewUrl ? (
+            <iframe
+              title="Consolidated Corporate Income PDF Preview"
+              src={pdfPreviewUrl}
+              style={{ width: "100%", height: "100%", border: "none" }}
+            />
+          ) : (
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
     </ReportPageLayout>
   );
 };

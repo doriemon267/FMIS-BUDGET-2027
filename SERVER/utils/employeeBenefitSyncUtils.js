@@ -93,6 +93,27 @@ async function ensurePersonnelRecordEditable(params, sourceLabel = 'benefit upda
   const personnel = await findScopedPersonnelService(params);
   if (!personnel) return null;
 
+  // CONCURRENCY CHECK: Prevent edits if the parent proposal is currently being edited
+  let proposalIdToCheck = personnel.proposalId;
+  if (!proposalIdToCheck && personnel.workflowRef) {
+    const p = await Proposal.findOne({ workflowRef: personnel.workflowRef }).select('_id').lean();
+    if (p) proposalIdToCheck = p._id;
+  }
+
+  if (proposalIdToCheck) {
+    const proposal = await Proposal.findById(proposalIdToCheck).select('isLocked lockedBy lockExpiry').lean();
+    if (proposal && proposal.isLocked) {
+      // Ensure the lock hasn't expired yet
+      const now = new Date();
+      if (!proposal.lockExpiry || now < new Date(proposal.lockExpiry)) {
+        const lockedByStr = proposal.lockedBy?.userName ? ` by ${proposal.lockedBy.userName}` : '';
+        const err = new Error(`Cannot modify ${sourceLabel}. The main budget proposal is currently locked and being edited${lockedByStr}.`);
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+  }
+
   const locked = await isPersonnelRecordLocked(personnel);
   if (locked) {
     const err = new Error(`Cannot modify ${sourceLabel} because proposal is already in a locked workflow status.`);

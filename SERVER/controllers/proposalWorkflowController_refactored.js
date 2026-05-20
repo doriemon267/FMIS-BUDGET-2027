@@ -1,6 +1,4 @@
 const mongoose = require('mongoose');
-const fs = require('fs');
-const path = require('path');
 const Proposal = require('../models/Proposal');
 const Notification = require('../models/Notification');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -13,17 +11,11 @@ const ProposalEditLog = require('../models/ProposalEditLog');
 const { applyEditsToOriginalDocuments } = require('./budgetOfficerEditController');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 
-const DEBUG_LOG_FILE = path.join(__dirname, '../logs/role-debug.log');
+// Debug logging disabled for production safety (writes to console only)
 function writeDebugLog(msg) {
-  try {
-    const logDir = path.dirname(DEBUG_LOG_FILE);
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
+  if (process.env.DEBUG_MODE === 'true') {
     const timestamp = new Date().toISOString();
-    fs.appendFileSync(DEBUG_LOG_FILE, `[${timestamp}] ${JSON.stringify(msg)}\n`);
-  } catch (err) {
-    console.error('❌ Failed to write to role-debug.log:', err.message);
+    console.log(`[${timestamp}] WORKFLOW_DEBUG:`, msg);
   }
 }
 

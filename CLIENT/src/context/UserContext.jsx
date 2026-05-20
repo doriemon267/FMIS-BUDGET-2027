@@ -40,6 +40,18 @@ const UserProvider = ({ children }) => {
         user = { ...user, Roles: user.Roles.map(r => String(r || '').replace(/\s+/g, '_').toUpperCase()).filter(Boolean) };
       }
 
+      // Normalize array-valued identity fields to plain strings (auth server may return arrays)
+      const flatStr = (val) => Array.isArray(val) ? (String(val[0] || '')) : (val != null ? String(val) : val);
+      user = {
+        ...user,
+        Username:    flatStr(user.Username),
+        Id:          flatStr(user.Id),
+        Email:       flatStr(user.Email),
+        DisplayName: flatStr(user.DisplayName),
+        FirstName:   flatStr(user.FirstName),
+        LastName:    flatStr(user.LastName),
+      };
+
       const devHeaders = {};
       const devUserId = (Array.isArray(user?.Username) ? user.Username[0] : user?.Username) || user?.Id || user?.id || user?.userId;
       if (devUserId) devHeaders['X-Dev-User-Id'] = String(devUserId);

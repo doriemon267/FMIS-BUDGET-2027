@@ -32,17 +32,23 @@ export function useProposalLock(proposalId, options = {}) {
     if (!proposalId || !user) return;
 
     try {
-      const userId = user.Username || user.Id || user.id || user.particularID;
-      const userName = user.DisplayName || (user.FirstName && user.LastName ? `${user.FirstName} ${user.LastName}` : (user.name || user.email || "Unknown User"));
-      const userRole = (Array.isArray(user.Roles) ? user.Roles[0] : user.Roles) || user.role || "User";
-      const userEmail = user.Email || user.email || "";
+    // Helper: some user fields (e.g. Username, Roles) are stored as arrays
+    const toStr = (val) => Array.isArray(val) ? (val[0] || '') : (val || '');
+
+    const userId   = toStr(user.Username) || toStr(user.Id) || toStr(user.id) || toStr(user.particularID);
+    const userName = toStr(user.DisplayName) ||
+      ((user.FirstName && user.LastName)
+        ? `${toStr(user.FirstName)} ${toStr(user.LastName)}`
+        : (toStr(user.name) || toStr(user.email) || 'Unknown User'));
+    const userRole  = toStr(Array.isArray(user.Roles) ? user.Roles[0] : user.Roles) || toStr(user.role) || 'User';
+    const userEmail = toStr(user.Email) || toStr(user.email) || '';
 
       const response = await api.post(`/proposals/${proposalId}/lock`, {
         userId,
         userName,
         userRole,
         userEmail
-      });
+      }, { hideErrorToast: true });
 
       if (response.data.success) {
         setLockStatus({
@@ -57,35 +63,37 @@ export function useProposalLock(proposalId, options = {}) {
         hasLockRef.current = true;
         setError(null);
         return true;
-      } else {
-        // Lock already held by another user
-        setLockStatus({
-          isLocked: true,
-          lockedBy: response.data.lockedBy,
-          lockExpiry: response.data.lockedAt
-        });
-        
-        if (onLockConflict) {
-          onLockConflict(response.data);
-        }
-
-        if (showNotifications) {
-          toast.warning(
-            `Cannot edit: Proposal is being edited by ${response.data.lockedBy?.userName} (${response.data.lockedBy?.userRole})`,
-            { autoClose: 5000 }
-          );
-        }
-
-        setError(response.data.error);
-        return false;
       }
     } catch (err) {
-      console.error('Error acquiring lock:', err);
+      // Handle 409 Conflict (Lock already held by another user)
+      if (err.response && err.response.status === 409 && err.response.data) {
+        const data = err.response.data;
+        setLockStatus({
+          isLocked: true,
+          lockedBy: data.lockedBy,
+          lockExpiry: data.lockedAt
+        });
+        if (onLockConflict) {
+          onLockConflict(data);
+        }
+        if (showNotifications) {
+          let warningMsg = data.error || 'Cannot edit: Proposal is being edited by another user';
+          if (warningMsg.includes('undefined')) {
+            warningMsg = 'Cannot edit: Proposal is currently locked and being edited by another user.';
+          }
+          toast.warning(warningMsg, { autoClose: 5000 });
+        }
+        setError(data.error);
+        return false;
+      }
+      // Handle 404 silently - proposal not found (stale session ref), no action needed
+      if (err.response && err.response.status === 404) {
+        setError(null);
+        return false;
+      }
+      // All other errors: set error state but do NOT show toast (avoid duplicate popups)
       const errorMsg = err.response?.data?.error || 'Failed to acquire lock';
       setError(errorMsg);
-      if (showNotifications) {
-        toast.error(errorMsg);
-      }
       return false;
     }
   }, [proposalId, user, onLockConflict, showNotifications]);
@@ -97,11 +105,11 @@ export function useProposalLock(proposalId, options = {}) {
     if (!proposalId || !user || !hasLockRef.current) return;
 
     try {
-      const userId = user.Username || user.Id || user.id || user.particularID;
+      const toStr = (val) => Array.isArray(val) ? (val[0] || '') : (val || '');
+      const userId = toStr(user.Username) || toStr(user.Id) || toStr(user.id) || toStr(user.particularID);
       const response = await api.delete(`/proposals/${proposalId}/lock`, {
-        data: {
-          userId
-        }
+        data: { userId },
+        hideErrorToast: true
       });
 
       if (response.data.success) {
@@ -123,12 +131,7 @@ export function useProposalLock(proposalId, options = {}) {
         return false;
       }
     } catch (err) {
-      console.error('Error releasing lock:', err);
-      const errorMsg = err.response?.data?.error || 'Failed to release lock';
-      setError(errorMsg);
-      if (showNotifications) {
-        toast.error(errorMsg);
-      }
+      // Silent release failure — user navigated away, lock will expire automatically
       return false;
     }
   }, [proposalId, user, showNotifications]);
@@ -140,10 +143,11 @@ export function useProposalLock(proposalId, options = {}) {
     if (!proposalId || !user || !hasLockRef.current) return;
 
     try {
-      const userId = user.Username || user.Id || user.id || user.particularID;
+      const toStr = (val) => Array.isArray(val) ? (val[0] || '') : (val || '');
+      const userId = toStr(user.Username) || toStr(user.Id) || toStr(user.id) || toStr(user.particularID);
       const response = await api.post(`/proposals/${proposalId}/lock/renew`, {
         userId
-      });
+      }, { hideErrorToast: true });
 
       if (response.data.success) {
         setLockStatus(prev => ({
@@ -157,8 +161,7 @@ export function useProposalLock(proposalId, options = {}) {
         return false;
       }
     } catch (err) {
-      console.error('Error renewing lock:', err);
-      setError(err.response?.data?.error || 'Failed to renew lock');
+      // Silent renew failure — lock will expire, user will be notified next interaction
       return false;
     }
   }, [proposalId, user]);
@@ -207,7 +210,7 @@ export function useProposalLock(proposalId, options = {}) {
     return () => {
       // Try to release lock on unmount if we have it
       if (hasLockRef.current) {
-        releaseLock().catch(err => console.error('Error releasing lock on unmount:', err));
+        releaseLock().catch(() => {}); // Silent — normal on page navigation
       }
 
       // Clear renewal interval

@@ -40,6 +40,7 @@ import DashboardAnalytics from '../components/dashboard/DashboardAnalytics';
 import InAppHelp from '../components/common/InAppHelp';
 import DeadlineReminder from '../components/common/DeadlineReminder';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import InboxIcon from '@mui/icons-material/Inbox';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 // --- ENHANCED REUSABLE COMPONENTS ---
@@ -455,7 +456,7 @@ const HomePage = () => {
                   <Typography variant='overline' sx={{ letterSpacing: 3, fontWeight: 800, color: THEME_COLORS.primary, fontSize: '0.75rem' }}>
                     OFFICIAL BUDGET SYSTEM
                   </Typography>
-                  <Typography variant='h3' fontWeight={900} sx={{ mt: 0.5, letterSpacing: -1.2, fontSize: { xs: '1.75rem', md: '2.2rem' }, lineHeight: 1.2, color: isDarkMode ? '#fff' : '#1a1a1a' }}>
+                  <Typography variant='h4' fontWeight={900} sx={{ mt: 0.5, letterSpacing: -0.8, fontSize: { xs: '1.5rem', md: '1.8rem' }, lineHeight: 1.2, color: isDarkMode ? '#fff' : '#1a1a1a' }}>
                     Mabuhay, {formatDisplayName(currentUser)}!
                   </Typography>
                 </Stack>
@@ -583,7 +584,7 @@ const HomePage = () => {
 
           {/* --- STATS CARDS --- */}
           <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4, ml: 0.5 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
               <Typography variant='h5' fontWeight='900' sx={{ display: 'flex', alignItems: 'center', gap: 2, letterSpacing: -0.5 }}>
                 <AssessmentIcon sx={{ color: THEME_COLORS.primary, fontSize: 32 }} /> Key Performance Indicators
               </Typography>
@@ -615,17 +616,9 @@ const HomePage = () => {
   container 
   spacing={4} 
   alignItems="stretch" 
-  sx={{ 
-    width: '100%', 
-    margin: 0, // Sinisiguro na walang extra margin na hihila sa Grid
-    '& .MuiGrid-item': {
-      paddingTop: 4, // Manual override para sa spacing alignment
-      paddingBottom: 0
-    }
-  }}
 >
   {/* LEFT COLUMN: Proposal Distribution */}
-  <Grid item xs={12} md={7} sx={{ pl: '0 !important' }}> {/* Tinanggal ang padding-left sa leftmost item */}
+  <Grid item xs={12} md={7}>
     <Paper 
       elevation={0} 
       sx={{ 
@@ -653,26 +646,34 @@ const HomePage = () => {
         </Button>
       </Stack>
 
-      <Stack spacing={4} sx={{ mt: 'auto', mb: 'auto' }}>
-        {statusBreakdown.map((status) => (
-          <Box key={status.label}>
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-end" sx={{ mb: 1.5 }}>
-              <Typography variant="body2" fontWeight="700">{status.label}</Typography>
-              <Typography variant="body2" fontWeight="900" sx={{ color: status.color }}>{status.value}</Typography>
-            </Stack>
-            <LinearProgress 
-              variant="determinate" 
-              value={totalProposals ? (status.value / totalProposals) * 100 : 0} 
-              sx={{ height: 10, borderRadius: 5, bgcolor: alpha(status.color, 0.08) }}
-            />
+      <Stack spacing={4} sx={{ mt: 'auto', mb: 'auto', flexGrow: 1, display: 'flex', justifyContent: 'center' }}>
+        {totalProposals > 0 ? (
+          statusBreakdown.map((status) => (
+            <Box key={status.label}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" sx={{ mb: 1.5 }}>
+                <Typography variant="body2" fontWeight="700">{status.label}</Typography>
+                <Typography variant="body2" fontWeight="900" sx={{ color: status.color }}>{status.value}</Typography>
+              </Stack>
+              <LinearProgress 
+                variant="determinate" 
+                value={(status.value / totalProposals) * 100} 
+                sx={{ height: 10, borderRadius: 5, bgcolor: alpha(status.color, 0.08) }}
+              />
+            </Box>
+          ))
+        ) : (
+          <Box sx={{ textAlign: 'center', py: 4, opacity: 0.6 }}>
+            <InboxIcon sx={{ fontSize: 64, mb: 2, color: 'text.disabled' }} />
+            <Typography variant="body1" fontWeight="700" color="text.secondary">No Proposals Yet</Typography>
+            <Typography variant="caption" color="text.secondary">Data will appear once submissions begin.</Typography>
           </Box>
-        ))}
+        )}
       </Stack>
     </Paper>
   </Grid>
 
   {/* RIGHT COLUMN: System Context */}
-  <Grid item xs={12} md={5} sx={{ pr: '0 !important' }}> {/* Tinanggal ang padding-right sa rightmost item */}
+  <Grid item xs={12} md={5}>
     <Paper 
       elevation={0} 
       sx={{ 
@@ -728,7 +729,7 @@ const HomePage = () => {
           <Paper 
             elevation={0} 
             sx={{ 
-              p: 5, 
+              p: 4, 
               borderRadius: 6, 
               bgcolor: isDarkMode ? alpha('#fff', 0.01) : alpha(THEME_COLORS.primary, 0.02),
               border: `1px solid ${alpha(THEME_COLORS.primary, 0.08)}`,
@@ -766,7 +767,7 @@ const HomePage = () => {
 
           {/* --- QUICK ACTIONS --- */}
           <Box sx={{ pb: 6 }}>
-            <Box sx={{ mb: 4, ml: 0.5 }}>
+            <Box sx={{ mb: 4 }}>
               <Typography variant='h5' fontWeight='900' sx={{ letterSpacing: -0.5 }}>🚀 Quick Operations</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Common tasks and shortcuts for your role</Typography>
             </Box>

@@ -69,6 +69,23 @@ const redactionFormat = winston.format((info) => {
   return cloned;
 });
 
+// Build transports array - exclude file logs in production by default
+const transports = [
+  new winston.transports.Console(), // Lalabas pa rin sa terminal
+];
+
+// Only enable file logging if explicitly enabled via ENV variable
+// Default: disabled in production, enabled in development
+const enableFileLogs = process.env.ENABLE_FILE_LOGS === 'true' || 
+  (process.env.NODE_ENV !== 'production' && process.env.ENABLE_FILE_LOGS !== 'false');
+
+if (enableFileLogs) {
+  transports.push(
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' })
+  );
+}
+
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || (process.env.DEBUG_MODE === "true" ? "debug" : "info"),
   defaultMeta: { service: "fmis-budget-server" },
@@ -77,15 +94,7 @@ const logger = winston.createLogger({
     redactionFormat(),
     winston.format.json() // Mas maganda ang JSON format para sa file logs
   ),
-  transports: [
-    new winston.transports.Console(), // Lalabas pa rin sa terminal
-    
-    // BAGONG DAGDAG: I-save ang lahat ng errors sa error.log
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    
-    // BAGONG DAGDAG: I-save lahat (info, warn, error) sa combined.log
-    new winston.transports.File({ filename: 'logs/combined.log' }),
-  ],
+  transports,
 });
 
 function normalizeArgs(args) {

@@ -238,7 +238,30 @@ const newProposalWorkflowSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     }
-  }]
+  }],
+  // Concurrency control - pessimistic locking for safe multi-user editing
+  isLocked: {
+    type: Boolean,
+    default: false
+  },
+  lockedBy: {
+    userId: { type: String },
+    userName: { type: String },
+    userRole: { type: String },
+    userEmail: { type: String }
+  },
+  lockedAt: {
+    type: Date,
+    default: null
+  },
+  lockExpiry: {
+    type: Date,
+    default: null
+  },
+  lockTimeout: {
+    type: Number,
+    default: 900000 // 15 minutes in ms
+  }
 }, {
   timestamps: true
 });

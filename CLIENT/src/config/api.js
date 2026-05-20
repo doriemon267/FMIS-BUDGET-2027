@@ -247,7 +247,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
-    if (error?.response && status !== 401 && status !== 403) {
+    if (error?.response && status !== 401 && status !== 403 && !error?.config?.hideErrorToast) {
       const message = getErrorMessage(error);
       toast.error(message, { autoClose: 12000, closeButton: true, draggable: true });
     }

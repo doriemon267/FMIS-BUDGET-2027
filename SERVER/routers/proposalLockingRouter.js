@@ -29,7 +29,10 @@ router.post('/:proposalId/lock', authMiddleware, async (req, res) => {
     );
 
     if (!result.success) {
-      return res.status(409).json(result); // 409 Conflict
+      if (result.error === 'Proposal not found') {
+        return res.status(404).json(result);
+      }
+      return res.status(409).json(result); // 409 Conflict for actual locks
     }
 
     res.json(result);

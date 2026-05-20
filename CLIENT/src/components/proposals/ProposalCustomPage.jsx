@@ -88,6 +88,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 import { useUserRestrictions } from "../../hooks/useUserRestrictions";
+import { useProposalLock } from "../../hooks/useProposalLock";
 import { styled } from "@mui/material/styles";
 
 const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
@@ -140,6 +141,24 @@ const ProposalCustomPage = ({
   const [divisionCeilingInfo, setDivisionCeilingInfo] = useState(null); // { division, department, ceilingAmount }
   const [budgetDeficit, setBudgetDeficit] = useState(null);
   const [currentProposalId, setCurrentProposalId] = useState(null);
+  const [isResumingDraft, setIsResumingDraft] = useState(true);
+
+  // ================= CONCURRENCY CONTROL =================
+  const { lockStatus, acquireLock, releaseLock, hasLock } = useProposalLock(currentProposalId);
+
+  useEffect(() => {
+    if (currentProposalId) {
+      acquireLock();
+    }
+    return () => {
+      releaseLock();
+    };
+  }, [currentProposalId, acquireLock, releaseLock]);
+
+  // If locked by someone else, make the page strictly read-only
+  const isEffectivelyReadOnly = readOnly || (lockStatus.isLocked && !hasLock);
+  // ========================================================
+
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -417,6 +436,12 @@ const ProposalCustomPage = ({
           error.response?.data?.message || error.message
         }`
       );
+      if (error.response?.status === 409) {
+        // A duplicate proposal exists, auto-refresh the page to load it
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
+      }
     },
   });
 
@@ -597,7 +622,10 @@ const ProposalCustomPage = ({
     const storedWorkflowRef =
       sessionStorage.getItem("activeWorkflowRef") ||
       localStorage.getItem("activeWorkflowRef");
-    if (storedWorkflowRef) return; // Let the restore effect above handle it.
+    if (storedWorkflowRef) {
+      setIsResumingDraft(false);
+      return; // Let the restore effect above handle it.
+    }
 
     const resumeLatestDraft = async () => {
       try {
@@ -623,6 +651,8 @@ const ProposalCustomPage = ({
         } catch (_) {}
       } catch (err) {
         logger.warn("Resume latest draft check failed", err);
+      } finally {
+        setIsResumingDraft(false);
       }
     };
     resumeLatestDraft();
@@ -1991,6 +2021,18 @@ const ProposalCustomPage = ({
       </Paper>
 
       <StyledBox>
+        {/* Concurrency Lock Banner */}
+        {!hasLock && lockStatus.isLocked && lockStatus.lockedBy && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight="bold">
+              🔒 Locked by {lockStatus.lockedBy.userName && lockStatus.lockedBy.userName !== 'undefined' ? lockStatus.lockedBy.userName : 'Another User'} {lockStatus.lockedBy.userRole && lockStatus.lockedBy.userRole !== 'undefined' ? `(${lockStatus.lockedBy.userRole})` : ''}
+            </Typography>
+            <Typography variant="caption" display="block">
+              This proposal is currently being edited by another user. You can view the data, but saving is disabled to prevent conflicts.
+            </Typography>
+          </Alert>
+        )}
+
         {/* Create Proposal Dialog */}
         <Dialog
           open={isCreateDialogOpen}
@@ -2366,9 +2408,9 @@ const ProposalCustomPage = ({
                     variant="contained"
                     size="small"
                     onClick={() => setCreateDialogOpen(true)}
-                    disabled={createProposalMutation.isLoading || (isDueDatePassed && !isSuperAdmin)}
+                    disabled={isResumingDraft || createProposalMutation.isLoading || (isDueDatePassed && !isSuperAdmin)}
                     startIcon={
-                      createProposalMutation.isLoading ? (
+                      isResumingDraft || createProposalMutation.isLoading ? (
                         <CircularProgress size={16} />
                       ) : null
                     }
@@ -2392,7 +2434,9 @@ const ProposalCustomPage = ({
                   },
                 }}
                   >
-                    {createProposalMutation.isLoading
+                    {isResumingDraft 
+                      ? "Loading..."
+                      : createProposalMutation.isLoading
                       ? "Creating..."
                       : isDueDatePassed && !isSuperAdmin
                       ? "Due Date Passed"
@@ -3131,6 +3175,7 @@ const ProposalCustomPage = ({
                 region={activeRegion}
                 fiscalYear={resolvedFiscalYear}
                 budgetType={resolvedBudgetType}
+                locked={isEffectivelyReadOnly}
                 onGrandTotalUpdate={handleIncomeGrandTotalUpdate}
                 onGroupedItemsUpdate={handleGroupedItemsUpdate}
               />
@@ -3142,6 +3187,7 @@ const ProposalCustomPage = ({
                 schema={schema}
                 region={activeRegion}
                 fiscalYear={resolvedFiscalYear}
+                locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3157,6 +3203,7 @@ const ProposalCustomPage = ({
                 schema={schema}
                 region={activeRegion}
                 fiscalYear={resolvedFiscalYear}
+                locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3172,6 +3219,7 @@ const ProposalCustomPage = ({
                 schema={schema}
                 region={activeRegion}
                 fiscalYear={resolvedFiscalYear}
+                locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3187,6 +3235,7 @@ const ProposalCustomPage = ({
                 schema={schema}
                 region={activeRegion}
                 fiscalYear={resolvedFiscalYear}
+                locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3202,6 +3251,7 @@ const ProposalCustomPage = ({
                 schema={schema}
                 region={activeRegion}
                 fiscalYear={resolvedFiscalYear}
+                locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
                   sessionStorage.getItem("activeWorkflowRef") ||
@@ -3218,6 +3268,7 @@ const ProposalCustomPage = ({
                   schema={schema}
                   region={activeRegion}
                   fiscalYear={resolvedFiscalYear}
+                  locked={isEffectivelyReadOnly}
                   proposalId={
                     currentProposalId ||
                     sessionStorage.getItem("activeWorkflowRef") ||
@@ -3231,6 +3282,7 @@ const ProposalCustomPage = ({
                   schema={schema}
                   region={activeRegion}
                   fiscalYear={resolvedFiscalYear}
+                  locked={isEffectivelyReadOnly}
                   proposalId={
                     currentProposalId ||
                     sessionStorage.getItem("activeWorkflowRef") ||

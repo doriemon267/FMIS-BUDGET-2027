@@ -15,25 +15,12 @@ const { hasFullAccess } = require('./securityMiddleware');
 /**
  * Apply budget role-based visibility filters
  */
-const fs = require('fs');
-const path = require('path');
 
-// Log to file
+// Log to console only (file logging disabled for production safety)
 const logToFile = (message) => {
-  try {
-    const logPath = path.join(__dirname, '..', 'logs', 'middleware-debug.log');
-    
-    // Ensure logs directory exists
-    const logDir = path.dirname(logPath);
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-    
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
-  } catch (error) {
-    // Fallback to console if file logging fails
-    console.error('❌ Failed to write to log file:', error.message);
+  // File logging disabled - use console only
+  if (process.env.DEBUG_MODE === 'true') {
+    console.log('📋 BUDGET_ROLE_VISIBILITY:', message);
   }
 };
 
