@@ -68,6 +68,7 @@ const consolidatedReportsController = {
         mooeQuery.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
       }
       const mooeData = await MooeProposal.find(mooeQuery).lean();
+      
       if (!Array.isArray(mooeData) || mooeData.length === 0) {
         return res.status(200).json({
           success: true,
@@ -75,22 +76,32 @@ const consolidatedReportsController = {
           summary: { totalRegions: 0, totalCategories: 0, totalEntries: 0, grandTotal: 0 }
         });
       }
+
       const grouped = {};
       let grandTotal = 0;
       let regionSet = new Set();
       let categorySet = new Set();
+      let validEntriesCount = 0;
+
       mooeData.forEach((item) => {
+        const total =
+          Number(item.income || 0) + Number(item.subsidy || 0) + Number(item.amount || 0) +
+          Number(item.nis || 0) + Number(item.cis || 0);
+        
+        // Skip rows with no financial value (0 or null)
+        if (total <= 0) return;
+
         const region = item.region || 'Unspecified';
         const category = item.sublineItem || 'Uncategorized';
         regionSet.add(region);
         categorySet.add(category);
+        validEntriesCount++;
+
         const key = `${region}||${category}`;
         if (!grouped[key]) {
           grouped[key] = { region, category, items: [], total: 0 };
         }
-        const total =
-          Number(item.income || 0) + Number(item.subsidy || 0) + Number(item.amount || 0) +
-          Number(item.nis || 0) + Number(item.cis || 0);
+        
         grouped[key].items.push({
           uacsCode: item.uacsCode || '',
           accountingTitle: item.accountingTitle || '',
@@ -121,7 +132,24 @@ const consolidatedReportsController = {
             })
           : [];
         return { region: g.region, category: g.category, total: g.total, items: sortedItems };
-      }).sort((a, b) => a.region.localeCompare(b.region) || a.category.localeCompare(b.category));
+      }).sort((a, b) => {
+        // Sort groups by the minimum UACS code of their items, then by category name
+        const aMinUacs = (a.items && a.items.length > 0)
+          ? a.items.reduce((min, item) => {
+              const u = (item.uacsCode || '').toString();
+              return (!min || u.padStart(20, '0') < min.padStart(20, '0')) ? u : min;
+            }, '')
+          : '';
+        const bMinUacs = (b.items && b.items.length > 0)
+          ? b.items.reduce((min, item) => {
+              const u = (item.uacsCode || '').toString();
+              return (!min || u.padStart(20, '0') < min.padStart(20, '0')) ? u : min;
+            }, '')
+          : '';
+        const uacsCompare = aMinUacs.padStart(20, '0').localeCompare(bMinUacs.padStart(20, '0'));
+        if (uacsCompare !== 0) return uacsCompare;
+        return a.category.localeCompare(b.category);
+      });
       const safeResult = Array.isArray(result)
         ? result.map(g => ({ ...g, items: Array.isArray(g.items) ? g.items : [] }))
         : [];
@@ -131,7 +159,7 @@ const consolidatedReportsController = {
         summary: {
           totalRegions: regionSet.size,
           totalCategories: categorySet.size,
-          totalEntries: mooeData.length,
+          totalEntries: validEntriesCount,
           grandTotal
         }
       });
@@ -228,43 +256,61 @@ const consolidatedReportsController = {
     try {
       const { regions, fiscalYear, budgetType } = req.query;
       let { department, division } = req.query;
-      const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
 
-      if (!department || !division) {
-        const sFilters = req.submissionWorkflowFilters || {};
-        const hAccess = req.hierarchicalAccess || req.hierarchicalAccessInfo || {};
-        
-        if (!department) {
-          if (sFilters.department) department = sFilters.department;
-          else if (hAccess.accessibleDepartments?.[0]?.departmentName) department = hAccess.accessibleDepartments[0].departmentName;
-          else if (hAccess.accessibleDepartments?.[0] && typeof hAccess.accessibleDepartments[0] === 'string') department = hAccess.accessibleDepartments[0];
-          else if (hAccess.accessibleOffices?.[0]) department = hAccess.accessibleOffices[0];
-          else if (req.user?.department) department = req.user.department;
-          else if (sFilters.$and) {
-            const df = sFilters.$and.find(f => f.department);
-            if (df) department = df.department;
-            else {
-              const of = sFilters.$and.find(f => f.region && !f.division);
-              if (of && of.region) department = of.region;
+      // --- SECURITY OVERRIDE: Enforce scope based on user roles and assignments ---
+      const userId = req.user?.id || req.user?.userId || req.user?._id || req.user?.UserId;
+      const userRoles = req.user?.roles || req.user?.Roles || [];
+
+      // Region-wide roles (Super Admins + BRD roles)
+      const REGION_WIDE_ROLES = [
+        'SUPER_ADMIN', 'SUPER ADMIN', 'BUDGET_MANAGER',
+        'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST',
+        'BUDGET_OFFICER', 'BUDGET OFFICER',
+        'OVERALL_BUDGET_APPROVER', 'OVERALL BUDGET APPROVER',
+        'BUDGET_ADMIN', 'BUDGET ADMIN',
+      ];
+      let isSuperAdmin = userRoles.some(r => REGION_WIDE_ROLES.includes(r));
+
+      if (!isSuperAdmin) {
+        let assignedDept = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName
+          || req.submissionWorkflowFilters?.department;
+        let assignedDiv = req.hierarchicalAccess?.accessibleDivisions?.[0]
+          || req.submissionWorkflowFilters?.division;
+
+        // Emergency DB lookup if middleware didn't provide dept
+        if (userId && !assignedDept) {
+          try {
+            const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+            const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+              .populate('departmentId').lean();
+            if (assignment) {
+              const level = assignment.assignmentLevel || '';
+              const isRegionLevel = ['BUDGET_AND_REVENUE_DIVISION', 'REGION', 'FULL'].includes(level);
+              if (isRegionLevel) {
+                isSuperAdmin = true;
+              } else if (!assignedDept) {
+                assignedDept = assignment.departmentId?.departmentName
+                  || assignment.departmentId?.Department
+                  || assignment.departmentId?.DepartmentName;
+                assignedDiv = assignedDiv || assignment.divisionName || assignment.division;
+              }
             }
-          }
+          } catch (_) {}
         }
-        
-        if (!division) {
-          if (sFilters.division) division = sFilters.division;
-          else if (hAccess.accessibleDivisions?.[0]) division = hAccess.accessibleDivisions[0];
-          else if (hAccess.accessibleResponsibilityCenters?.[0]) division = hAccess.accessibleResponsibilityCenters[0];
-          else if (req.user?.division) division = req.user.division;
-          else if (sFilters.$and) {
-            const df = sFilters.$and.find(f => f.division);
-            if (df) division = df.division;
-            else {
-              const dptf = sFilters.$and.find(f => f.department);
-              if (dptf && dptf.department) division = dptf.department;
-            }
+
+        if (!isSuperAdmin) {
+          if (!assignedDept) {
+            return res.status(403).json({
+              message: 'Cannot generate PDF: your organizational scope could not be determined.'
+            });
           }
+          // Override query params with scoped values
+          department = assignedDept;
+          if (assignedDiv) division = assignedDiv;
         }
       }
+
+      const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
 
       let regionFilter = {};
       if (regionList && regionList.length) {
@@ -305,6 +351,13 @@ const consolidatedReportsController = {
       // --- Group data by Responsibility Center > category ---
       const grouped = {};
       mooeData.forEach((item) => {
+        const income = Number(item.income || 0);
+        const subsidy = Number(item.subsidy || 0);
+        const amount = Number(item.amount || 0);
+
+        // Skip rows with no financial value (0 or null)
+        if (income === 0 && subsidy === 0 && amount === 0) return;
+
         const rcName = item.division || item.department || item.region || 'Unknown Responsibility Center';
         const categoryName = item.sublineItem || 'Uncategorized';
         if (!grouped[rcName]) grouped[rcName] = {};
@@ -312,9 +365,9 @@ const consolidatedReportsController = {
         grouped[rcName][categoryName].push({
           uacsCode: item.uacsCode || '',
           accountingTitle: item.accountingTitle || '',
-          income: Number(item.income || 0),
-          subsidy: Number(item.subsidy || 0),
-          amount: Number(item.amount || 0),
+          income,
+          subsidy,
+          amount,
         });
       });
 
@@ -341,11 +394,11 @@ const consolidatedReportsController = {
       // A4 Landscape — more horizontal space for columns
       const PAGE_WIDTH  = 841.89;
       const PAGE_HEIGHT = 595.28;
-      const MARGIN      = 36;
+      const MARGIN      = 18;
       const CONTENT_LEFT  = MARGIN;
       const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
       const CONTENT_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
-      const FOOTER_Y      = PAGE_HEIGHT - MARGIN - 14;
+      const FOOTER_Y      = PAGE_HEIGHT - 14;
 
       // Row heights
       const ROW_H        = 14;   // standard data row
@@ -471,10 +524,7 @@ const consolidatedReportsController = {
       // Called once per page (no colored fills, just lines & text)
       // ----------------------------------------------------------
       const drawPageChrome = () => {
-        // Single thin outer border — minimal ink
-        pdfDoc.rectangle(MARGIN, MARGIN, CONTENT_WIDTH, PAGE_HEIGHT - MARGIN * 2, {
-          stroke: BORDER_BOLD, lineWidth: 0.8
-        });
+        // Border disabled as requested
 
         // Faint confidentiality stamp in center — text only, no box
         const wmX = PAGE_WIDTH / 2;
@@ -660,7 +710,22 @@ const consolidatedReportsController = {
         let regionIncome  = 0;
         let regionSubsidy = 0;
         let regionAmount  = 0;
-        const catNames = Object.keys(categories).sort();
+        // Sort categories by their minimum UACS code instead of alphabetically
+        const catNames = Object.keys(categories).sort((a, b) => {
+          const aItems = categories[a] || [];
+          const bItems = categories[b] || [];
+          const aMinUacs = aItems.reduce((min, item) => {
+            const u = (item.uacsCode || '').toString();
+            return (!min || u.padStart(20, '0') < min.padStart(20, '0')) ? u : min;
+          }, '');
+          const bMinUacs = bItems.reduce((min, item) => {
+            const u = (item.uacsCode || '').toString();
+            return (!min || u.padStart(20, '0') < min.padStart(20, '0')) ? u : min;
+          }, '');
+          const uacsCompare = aMinUacs.padStart(20, '0').localeCompare(bMinUacs.padStart(20, '0'));
+          if (uacsCompare !== 0) return uacsCompare;
+          return a.localeCompare(b);
+        });
 
         for (const catName of catNames) {
           const rows = categories[catName];

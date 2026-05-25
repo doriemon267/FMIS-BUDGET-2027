@@ -45,6 +45,7 @@ import {
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
 import { useUser } from '../context/UserContext';
+import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from '../constants/roles';
 import IncomeReportSummary from '../components/reports/IncomeReportSummary';
 import ReportPageLayout from '../components/reports/ReportPageLayout';
 
@@ -77,12 +78,21 @@ const ConsolidatedCorporateIncomePage = () => {
 
   // --- ROLE-BASED SCOPING LOGIC ---
   const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
-  const scope = hierarchical.scope; // FULL, REGION, DEPARTMENT, DIVISION
-  const isBRDLevel = scope === "FULL" || (currentUser?.Roles || []).some(r => String(r).toUpperCase().includes("BRD") || String(r).toUpperCase().includes("PLANNING"));
+  const scope = useMemo(() => String(hierarchical.scope || hierarchical.assignmentLevel || "").toUpperCase(), [hierarchical]);
+  const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
+  const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
+
+  // Unified restriction check: Preparers or unit-restricted Approvers
+  const isRestricted = useMemo(() => {
+    if (!isHighLevel) return true; // Preparers are always restricted
+    if (isBRD) return false; // BRD Level (Analyst/Super Admin) is never restricted
+    // Non-BRD high levels are restricted if they have unit-level scope
+    return ['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY_CENTER'].includes(scope);
+  }, [isHighLevel, isBRD, scope]);
 
   // Enforce restrictions based on role/scope
   useEffect(() => {
-    if (!isBRDLevel && scope) {
+    if (isRestricted) {
       if (consolidationType !== 'current') {
         setConsolidationType('current');
       }
@@ -103,7 +113,7 @@ const ConsolidatedCorporateIncomePage = () => {
         }
       }
     }
-  }, [isBRDLevel, scope, consolidationType, hierarchical, activeRegionName, selectedRegions, selectedDepartment, selectedDivision]);
+  }, [isRestricted, scope, consolidationType, hierarchical, activeRegionName, selectedRegions, selectedDepartment, selectedDivision]);
 
   const selectedDepartmentName = selectedDepartment
     ? (departments.find((d) => String(d._id) === String(selectedDepartment))?.Department || selectedDepartment)
@@ -411,6 +421,17 @@ const ConsolidatedCorporateIncomePage = () => {
     }
   };
 
+  // Auto-fetch report data once fiscalYear and region are available
+  const autoFetchedRef = React.useRef(false);
+  useEffect(() => {
+    if (autoFetchedRef.current) return;
+    if (!fiscalYear) return;
+    // For 'current' consolidation type, wait until region is resolved
+    if (consolidationType === 'current' && !selectedRegions) return;
+    autoFetchedRef.current = true;
+    fetchReportData();
+  }, [fiscalYear, consolidationType, selectedRegions]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleExportToPDF = async () => {
     if (!canPreviewPdf) return;
     
@@ -423,7 +444,9 @@ const ConsolidatedCorporateIncomePage = () => {
         budgetType,
         selectedRegions: consolidationType === 'all' ? 'all' : selectedRegions,
         activeTab,
-        showPercentages
+        showPercentages,
+        ...(selectedDepartmentName && consolidationType === 'current' ? { department: selectedDepartmentName } : {}),
+        ...(selectedDivisionName && consolidationType === 'current' ? { division: selectedDivisionName } : {})
       };
 
       const response = await api.post(
@@ -474,7 +497,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="consolidation-type-label"
                     value={consolidationType}
                     label="Consolidation Type"
-                    disabled={!isBRDLevel && !!scope}
+                    disabled={isRestricted}
                     onChange={(e) => {
                       const nextType = e.target.value;
                       setConsolidationType(nextType);
@@ -533,7 +556,7 @@ const ConsolidatedCorporateIncomePage = () => {
 
               {/* Region Selector */}
               <Grid item xs={12} md={3}>
-                <FormControl fullWidth size="small" disabled={consolidationType === 'all' || (!isBRDLevel && !!scope)}>
+                <FormControl fullWidth size="small" disabled={consolidationType === 'all' || isRestricted}>
                   <InputLabel id="region-filter-label">Region</InputLabel>
                   <Select
                     labelId="region-filter-label"
@@ -566,7 +589,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="department-filter-label"
                     value={String(selectedDepartment ?? '')}
                     label="Department"
-                    disabled={consolidationType === 'all' || departments.length === 0 || (!isBRDLevel && (scope === 'DEPARTMENT' || scope === 'DIVISION'))}
+                    disabled={consolidationType === 'all' || departments.length === 0 || isRestricted}
                     onChange={(e) => {
                       setSelectedDepartment(e.target.value || '');
                       setSelectedDivision('');
@@ -592,7 +615,7 @@ const ConsolidatedCorporateIncomePage = () => {
                     labelId="division-filter-label"
                     value={String(selectedDivision ?? '')}
                     label="Division"
-                    disabled={consolidationType === 'all' || !selectedDepartment || divisions.length === 0 || (!isBRDLevel && scope === 'DIVISION')}
+                    disabled={consolidationType === 'all' || !selectedDepartment || divisions.length === 0 || (isRestricted && scope === 'DIVISION')}
                     onChange={(e) => setSelectedDivision(e.target.value || '')}
                   >
                     <MenuItem value=""><em>All Divisions</em></MenuItem>

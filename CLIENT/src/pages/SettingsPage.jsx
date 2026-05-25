@@ -4,9 +4,11 @@ import DatabaseBackupSettingsDialog from "../components/settings/DatabaseBackupS
 import ProposalActionsButton from "../global/components/ProposalActionsButton";
 import CustomPage from "../global/components/CustomPage";
 import { Button, Box, Typography, Card, CardContent, Grid } from "@mui/material";
-import { Storage, Settings, Add } from "@mui/icons-material";
+import { Storage, Settings, Add, Security } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
 
 const SettingsPage = () => {
+  const navigate = useNavigate();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isBackupDialogOpen, setIsBackupDialogOpen] = useState(false);
 
@@ -183,6 +185,27 @@ const SettingsPage = () => {
                   fullWidth
                 >
                   Backup Settings
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} sm={6} md={4}>
+            <Card variant="outlined" sx={{ height: '100%' }}>
+              <CardContent>
+                <Box display="flex" alignItems="center" gap={1} mb={2}>
+                  <Security color="primary" />
+                  <Typography variant="h6">Route Permissions</Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Manage dynamic access control for system routes
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate("/route-permissions")}
+                  fullWidth
+                >
+                  Manage Permissions
                 </Button>
               </CardContent>
             </Card>

@@ -34,16 +34,41 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
+import { useUser } from '../context/UserContext';
+import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from '../constants/roles';
 import ReportPageLayout from '../components/reports/ReportPageLayout';
 
 const ComparativeReportPage = () => {
   const { selectedRegion } = useRegion();
+  const { currentUser } = useUser();
   const [regions, setRegions] = useState([]);
   const [selectedRegionForReport, setSelectedRegionForReport] = useState(selectedRegion || '');
   const [currentFiscalYear, setCurrentFiscalYear] = useState('');
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState(null);
   const [error, setError] = useState(null);
+
+  const isHighLevel = React.useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
+  const isBRD = React.useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
+  const scope = React.useMemo(() => String(currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel || "").toUpperCase(), [currentUser]);
+
+  // Unified restriction check: Preparers or unit-restricted Approvers
+  const isRestricted = React.useMemo(() => {
+    if (!isHighLevel) return true; // Preparers are always restricted
+    if (isBRD) return false; // BRD Level (Analyst/Super Admin) is never restricted
+    // Non-BRD high levels are restricted if they have unit-level scope
+    return ['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY_CENTER'].includes(scope);
+  }, [isHighLevel, isBRD, scope]);
+
+  // Enforce restrictions based on role/scope
+  useEffect(() => {
+    if (isRestricted) {
+      const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName || selectedRegion;
+      if (userRegion && selectedRegionForReport !== userRegion) {
+        setSelectedRegionForReport(userRegion);
+      }
+    }
+  }, [isRestricted, currentUser, selectedRegion, selectedRegionForReport]);
 
   // Fetch regions on component mount
   useEffect(() => {
@@ -173,6 +198,7 @@ const ComparativeReportPage = () => {
                 value={selectedRegionForReport}
                 onChange={(e) => setSelectedRegionForReport(e.target.value)}
                 label="Region"
+                disabled={isRestricted}
               >
                 {regions.map((region) => (
                   <MenuItem key={region} value={region}>

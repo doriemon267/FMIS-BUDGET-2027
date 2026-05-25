@@ -89,6 +89,8 @@ export const BRD_LEVEL_ROLES = [
   ...BUDGET_STAFF_ROLES,
   JOB_ROLES.SUPER_ADMIN,
   JOB_ROLES.SUPER_ADMIN_ALT,
+  "SUPERADMIN",
+  "SUPER_ADMIN",
 ];
 
 export const ROLE_SCOPES = {
@@ -141,13 +143,37 @@ export function hasBRDLevelJobRole(roles = []) {
 /** Check if user is BRD-level (hierarchical scope or job role) */
 export function isBRDLevelUser(currentUser) {
   if (!currentUser) return false;
-  const scope = currentUser.hierarchicalAccess?.scope;
-  const assignmentLevel = currentUser.hierarchicalAccess?.assignmentLevel;
+
   const roles = (currentUser.Roles || []).map(String);
+  const hierarchical = currentUser.hierarchicalAccess || {};
+  const scope = String(hierarchical.scope || "").toUpperCase();
+  const assignmentLevel = String(hierarchical.assignmentLevel || "").toUpperCase();
+
+  // Super Admin check - always BRD level
+  const isSuperAdmin = roles.some((r) => {
+    const nr = normalizeRole(r);
+    return (
+      nr === JOB_ROLES.SUPER_ADMIN ||
+      nr === "SUPERADMIN" ||
+      nr === "SUPER_ADMIN" ||
+      nr.includes("SUPERADMIN") ||
+      nr.includes("SUPER_ADMIN")
+    );
+  });
+  if (isSuperAdmin) return true;
+
   return (
+    scope === ROLE_SCOPES.FULL ||
     scope === ROLE_SCOPES.BUDGET_AND_REVENUE_DIVISION ||
+    assignmentLevel === ROLE_SCOPES.FULL ||
     assignmentLevel === ROLE_SCOPES.BUDGET_AND_REVENUE_DIVISION ||
     roles.some((r) => String(r).toUpperCase().includes("BRD")) ||
     hasBRDLevelJobRole(roles)
   );
+}
+
+/** Check if user has high-level access (BRD level or Approver) */
+export function isHighLevelAccess(currentUser) {
+  if (!currentUser) return false;
+  return isBRDLevelUser(currentUser) || hasApproverRole(currentUser.Roles, currentUser.hierarchicalAccess?.workflowRoles);
 }

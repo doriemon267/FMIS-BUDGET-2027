@@ -165,7 +165,7 @@ const CustomTable = ({
   const handleSelectAll = (event) => {
     if (!setSelectedRows) return;
     if (event.target.checked) {
-      const allRows = data[dataListName].map((row) => row);
+      const allRows = (effectiveData?.[dataListName] || []).map((row) => row);
       setSelectedRows(allRows);
     } else {
       setSelectedRows([]);
@@ -667,7 +667,7 @@ const CustomTable = ({
               <TableBodyLoading numCell={columns.length} />
             ) : (
               <TableBody>
-                {effectiveData?.[dataListName]?.length === 0 ? (
+                {!effectiveData?.[dataListName] || effectiveData[dataListName].length === 0 ? (
                   <TableRow sx={{ height: "70vh" }}>
                     <TableCell
                       colSpan={columns.length}
@@ -816,11 +816,11 @@ const CustomTable = ({
           </Table>
         </TableContainer>
 
-        {!isLoading && (
+        {!isEffectiveLoading && (
           <TablePagination
             rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
             component="div"
-            count={data?.totalRecords || 0}
+            count={effectiveData?.totalRecords || 0}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
+import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from "../../constants/roles";
 import {
   Box,
   Paper,
@@ -58,6 +59,8 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
+
+  // State management (Moved up to avoid ReferenceError in hooks below)
   const [expandedRows, setExpandedRows] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRegions, setSelectedRegions] = useState([]);
@@ -67,6 +70,42 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   const [divisions, setDivisions] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedDivision, setSelectedDivision] = useState("");
+
+  // --- ROLE-BASED SCOPING LOGIC ---
+  const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
+  const scope = useMemo(() => String(hierarchical.scope || hierarchical.assignmentLevel || "").toUpperCase(), [hierarchical]);
+  const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
+  const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
+
+  // Unified restriction check: Preparers or unit-restricted Approvers
+  const isRestricted = useMemo(() => {
+    if (!isHighLevel) return true; // Preparers are always restricted
+    if (isBRD) return false; // BRD Level (Analyst/Super Admin) is never restricted
+    // Non-BRD high levels are restricted if they have unit-level scope
+    return ['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY_CENTER'].includes(scope);
+  }, [isHighLevel, isBRD, scope]);
+
+  // Enforce restrictions based on role/scope
+  useEffect(() => {
+    if (isRestricted) {
+      if (consolidationType !== 'current') {
+        setConsolidationType('current');
+      }
+      
+      if ((scope === 'DEPARTMENT' || scope === 'DIVISION') && hierarchical.accessibleDepartments?.[0]) {
+        const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
+        if (selectedDepartment !== userDeptId) {
+          setSelectedDepartment(userDeptId);
+        }
+      }
+      if (scope === 'DIVISION' && hierarchical.accessibleDivisions?.[0]) {
+        const userDiv = hierarchical.accessibleDivisions[0];
+        if (selectedDivision !== userDiv) {
+          setSelectedDivision(userDiv);
+        }
+      }
+    }
+  }, [isRestricted, scope, consolidationType, hierarchical, selectedDepartment, selectedDivision]);
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -388,6 +427,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
+                disabled={isRestricted}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
                 <MenuItem value="all">All Regions</MenuItem>
@@ -404,6 +444,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                   value={selectedRegions}
                   onChange={handleRegionChange}
                   label="Select Regions"
+                  disabled={isRestricted}
                 >
                   {regions.map((region) => (
                     <MenuItem key={region} value={region}>
@@ -425,7 +466,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                   setSelectedDivision("");
                 }}
                 label="Department"
-                disabled={consolidationType !== "current" || !activeRegion || departments.length === 0}
+                disabled={consolidationType !== "current" || !activeRegion || departments.length === 0 || isRestricted}
               >
                 <MenuItem value=""><em>All Departments</em></MenuItem>
                 {departments.map((dept, idx) => {
@@ -447,7 +488,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 value={String(selectedDivision ?? "")}
                 onChange={(e) => setSelectedDivision(e.target.value || "")}
                 label="Division"
-                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
+                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0 || (isRestricted && scope === 'DIVISION')}
               >
                 <MenuItem value=""><em>All Divisions</em></MenuItem>
                 {divisions.map((div, idx) => {

@@ -2,6 +2,7 @@ import React from "react";
 import { Route, Routes } from "react-router-dom";
 import UserProvider from "./context/UserContext";
 import { RegionProvider } from "./context/RegionContext";
+import { RoutePermissionProvider } from "./context/RoutePermissionContext";
 import Dashboard from "./layout/Dashboard";
 import RootRedirect from "./components/RootRedirect";
 import AccessGuard from "./components/guards/AccessGuard";
@@ -44,6 +45,7 @@ import SubsidyMonitoringPage from "./pages/SubsidyMonitoringPage";
 import CapitalOutlayTitleMappingPage from "./pages/CategoryPage";
 import RegionSelectionPage from "./pages/RegionSelectionPage";
 import CorporateIncomeUploadPage from "./pages/CorporateIncomeUploadPage";
+import BulkUploadManagementPage from "./pages/BulkUploadManagementPage";
 import ConsolidatedCorporateIncomePage from "./pages/ConsolidatedCorporateIncomePage";
 import MooeUploadPage from "./pages/MooeUploadPage";
 import EmployeeBenefitsPage from "./pages/EmployeeBenefitsPage";
@@ -62,6 +64,7 @@ import ComparativeReportPage from "./pages/ComparativeReportPage";
 import NEPCeilingPage from "./pages/NEPCeilingPage";
 import TierPage from "./pages/TierPage";
 import UserActivityLogsPage from "./pages/UserActivityLogsPage";
+import RoutePermissionManagementPage from "./pages/RoutePermissionManagementPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import VerifyDocumentPage from "./pages/VerifyDocumentPage";
 const App = () => {
@@ -75,11 +78,13 @@ const App = () => {
         path="/"
         element={
           <UserProvider>
-            <RegionProvider>
-              <AccessGuard>
-                <Dashboard />
-              </AccessGuard>
-            </RegionProvider>
+            <RoutePermissionProvider>
+              <RegionProvider>
+                <AccessGuard>
+                  <Dashboard />
+                </AccessGuard>
+              </RegionProvider>
+            </RoutePermissionProvider>
           </UserProvider>
         }
       >
@@ -88,6 +93,7 @@ const App = () => {
           path="/tier"
           element={
             <ProtectedRoute
+              routeKey="/tier"
               requiredWorkflowRoles={["superAdmin"]}
             >
               <TierPage />
@@ -110,6 +116,7 @@ const App = () => {
           path="/employee"
           element={
             <ProtectedRoute
+              routeKey="/employee"
               requiredPermissions={[]}
               requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}
             >
@@ -124,8 +131,9 @@ const App = () => {
           path="/categories"
           element={
             <ProtectedRoute
+              routeKey="/categories"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <Categories />
             </ProtectedRoute>
@@ -135,8 +143,9 @@ const App = () => {
           path="/rata"
           element={
             <ProtectedRoute
+              routeKey="/rata"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <RataPage />
             </ProtectedRoute>
@@ -146,22 +155,22 @@ const App = () => {
           path="/fysettings"
           element={
             <ProtectedRoute
+              routeKey="/fysettings"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
-              excludeRoles={["preparer", "reviewer", "approver"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <FiscalYearSettingsPage />
             </ProtectedRoute>
           }
         />
 
- <Route
+        <Route
           path="/compensation-management"
           element={
             <ProtectedRoute
+              routeKey="/compensation-management"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
-              excludeRoles={["preparer", "reviewer", "approver"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <CompensationManagementPage />
             </ProtectedRoute>
@@ -169,12 +178,24 @@ const App = () => {
         />
 
         <Route
+          path="/route-permissions"
+          element={
+            <ProtectedRoute
+              routeKey="/route-permissions"
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["superAdmin"]}
+            >
+              <RoutePermissionManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/settings"
           element={
             <ProtectedRoute
+              routeKey="/settings"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
-              excludeRoles={["preparer", "reviewer", "approver"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <SettingsManagement />
             </ProtectedRoute>
@@ -183,15 +204,20 @@ const App = () => {
         <Route
           path="/audit-logs"
           element={
-            <ProtectedRoute requiredWorkflowRoles={["superAdmin"]}>
+            <ProtectedRoute 
+              routeKey="/audit-logs"
+              requiredWorkflowRoles={["superAdmin"]}
+            >
               <UserActivityLogsPage />
             </ProtectedRoute>
           }
         />
+
         {/* <Route
           path="/AllProposals"
           element={
             <ProtectedRoute
+              routeKey="/AllProposals"
               requiredPermissions={[]}
               requiredWorkflowRoles={["superAdmin", "preparer", "reviewer", "approver", "overallBudgetApprover", "budgetAnalyst"]}
             >
@@ -203,6 +229,7 @@ const App = () => {
           path="/proposal-details/:proposalId"
           element={
             <ProtectedRoute
+              routeKey="/proposal-details"
               requiredPermissions={[]}
               requiredWorkflowRoles={["superAdmin", "preparer", "reviewer", "approver", "overallBudgetApprover", "budgetAnalyst"]}
             >
@@ -214,8 +241,9 @@ const App = () => {
           path="/income-management"
           element={
             <ProtectedRoute
+              routeKey="/income-management"
               requiredPermissions={["EditAllProposals"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <IncomeManagementPage />
             </ProtectedRoute>
@@ -226,8 +254,9 @@ const App = () => {
           path="/salary-management"
           element={
             <ProtectedRoute
+              routeKey="/salary-management"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <SalaryManagement />
             </ProtectedRoute>
@@ -237,10 +266,11 @@ const App = () => {
           path="/salary-table"
           element={
             <ProtectedRoute
+              routeKey="/salary-table"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
-              <SalaryTablePage />
+              <EmployeeSalaryTablePage />
             </ProtectedRoute>
           }
         />
@@ -248,10 +278,11 @@ const App = () => {
           path="/employee-salary-table"
           element={
             <ProtectedRoute
+              routeKey="/employee-salary-table"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
-              <EmployeeSalaryTablePage />
+              <SalaryTablePage />
             </ProtectedRoute>
           }
         />
@@ -259,8 +290,9 @@ const App = () => {
           path="/cos-salary-table"
           element={
             <ProtectedRoute
+              routeKey="/cos-salary-table"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <CosSalaryTablePage />
             </ProtectedRoute>
@@ -271,8 +303,9 @@ const App = () => {
           path="/grouped-income-categories"
           element={
             <ProtectedRoute
+              routeKey="/grouped-income-categories"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <GroupedIncomeCategoryPage />
             </ProtectedRoute>
@@ -286,6 +319,7 @@ const App = () => {
           path="/employeeBenefits"
           element={
             <ProtectedRoute
+              routeKey="/employeeBenefits"
               requiredPermissions={[]}
               requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}
             >
@@ -296,52 +330,52 @@ const App = () => {
 
         {/* Sub-routes for Employee Benefits tabs — same access as /employeeBenefits */}
         <Route path="/courtAppearance" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/courtAppearance" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/overTime" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/overTime" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/subsistenceAllowanceMDS" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/subsistenceAllowanceMDS" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/subsistenceAllowanceST" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/subsistenceAllowanceST" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/subsistenceAllowance" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/subsistenceAllowance" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/loyaltyPay" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/loyaltyPay" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/mealallowance" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/mealallowance" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/medicalAllowance" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/medicalAllowance" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/childrenAllowance" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/childrenAllowance" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
         <Route path="/retirees" element={
-          <ProtectedRoute requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
+          <ProtectedRoute routeKey="/retirees" requiredPermissions={[]} requiredWorkflowRoles={["superAdmin", "preparer", "overallBudgetApprover"]}>
             <EmployeeBenefitsPage />
           </ProtectedRoute>
         } />
@@ -350,7 +384,7 @@ const App = () => {
         <Route
           path="/allproposal"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute routeKey="/allproposal">
               <NewProposalWorkflowPage />
             </ProtectedRoute>
           }
@@ -359,6 +393,7 @@ const App = () => {
           path="/brd-consolidation"
           element={
             <ProtectedRoute
+              routeKey="/brd-consolidation"
               requiredWorkflowRoles={["BUDGET_PLANNING_ANALYST", "budgetAnalyst", "BUDGET_OFFICER", "BUDGET_MANAGER", "overallBudgetApprover", "superAdmin"]}
             >
               <BRDConsolidationPage />
@@ -369,6 +404,7 @@ const App = () => {
           path="/tier-comparison"
           element={
             <ProtectedRoute
+              routeKey="/tier-comparison"
               requiredWorkflowRoles={["BUDGET_PLANNING_ANALYST", "budgetAnalyst", "BUDGET_OFFICER", "BUDGET_MANAGER", "overallBudgetApprover", "superAdmin"]}
             >
               <TierComparisonPage />
@@ -379,7 +415,8 @@ const App = () => {
           path="/comparative-report"
           element={
             <ProtectedRoute
-              requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
+              routeKey="/comparative-report"
+              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
             >
               <ComparativeReportPage />
             </ProtectedRoute>
@@ -400,9 +437,9 @@ const App = () => {
           path="/hierarchical-user-assignments"
           element={
             <ProtectedRoute 
+              routeKey="/hierarchical-user-assignments"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={[]}
-              excludeRoles={["preparer", "reviewer", "approver"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <HierarchicalUserAssignmentPage />
             </ProtectedRoute>
@@ -412,9 +449,9 @@ const App = () => {
           path="/setup/organization"
           element={
             <ProtectedRoute 
+              routeKey="/setup/organization"
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={[]}
-              excludeRoles={["preparer", "reviewer", "approver"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <OrganizationSetupPage />
             </ProtectedRoute>
@@ -423,7 +460,7 @@ const App = () => {
         <Route
           path="/subsidy-monitoring"
           element={
-            <ProtectedRoute requiredWorkflowRoles={["superAdmin"]}>
+            <ProtectedRoute routeKey="/subsidy-monitoring" requiredWorkflowRoles={["superAdmin"]}>
               <SubsidyMonitoringPage />
             </ProtectedRoute>
           }
@@ -433,10 +470,7 @@ const App = () => {
         <Route
           path="/corporate-income-upload"
           element={
-            <ProtectedRoute
-              requiredPermissions={["EditAllProposals"]}
-              requiredWorkflowRoles={["superAdmin"]}
-            >
+            <ProtectedRoute routeKey="/corporate-income-upload">
               <CorporateIncomeUploadPage />
             </ProtectedRoute>
           }
@@ -445,6 +479,7 @@ const App = () => {
           path="/consolidated-corporate-income"
           element={
             <ProtectedRoute
+              routeKey="/consolidated-corporate-income"
               requiredPermissions={["ViewReports"]}
               requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
@@ -456,6 +491,7 @@ const App = () => {
           path="/mooe-upload"
           element={
             <ProtectedRoute
+              routeKey="/mooe-upload"
               requiredPermissions={["EditAllProposals"]}
               requiredWorkflowRoles={["superAdmin"]}
             >
@@ -467,8 +503,9 @@ const App = () => {
           path="/consolidated-reports"
           element={
             <ProtectedRoute
+              routeKey="/consolidated-reports"
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
+              requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedReportsPage />
             </ProtectedRoute>
@@ -478,6 +515,7 @@ const App = () => {
           path="/consolidated-capital-outlay-reports"
           element={
             <ProtectedRoute
+              routeKey="/consolidated-capital-outlay-reports"
               requiredPermissions={["ViewReports"]}
               requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
@@ -489,6 +527,7 @@ const App = () => {
           path="/consolidated-personnel-services-reports"
           element={
             <ProtectedRoute
+              routeKey="/consolidated-personnel-services-reports"
               requiredPermissions={["ViewReports"]}
               requiredWorkflowRoles={["preparer","reviewer","approver","superAdmin", "budgetAnalyst"]}
             >
@@ -499,7 +538,11 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin", "budgetAnalyst", "preparer", "approver", "reviewer"]}>
+            <ProtectedRoute 
+              routeKey="/comprehensive-reports"
+              requiredPermissions={["ViewReports"]} 
+              requiredWorkflowRoles={["superAdmin", "budgetAnalyst", "preparer", "approver", "reviewer"]}
+            >
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }
@@ -508,6 +551,7 @@ const App = () => {
           path="/database-backup"
           element={
             <ProtectedRoute
+              routeKey="/database-backup"
               requiredPermissions={["ManageSettings"]}
               requiredWorkflowRoles={["superAdmin"]}
             >
@@ -518,8 +562,22 @@ const App = () => {
         <Route
           path="/user-activity-logs"
           element={
-            <ProtectedRoute requiredWorkflowRoles={["superAdmin"]}>
+            <ProtectedRoute 
+              routeKey="/user-activity-logs"
+              requiredWorkflowRoles={["superAdmin"]}
+            >
               <UserActivityLogsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bulk-upload-management"
+          element={
+            <ProtectedRoute 
+              routeKey="/bulk-upload-management"
+              requiredWorkflowRoles={["superAdmin"]}
+            >
+              <BulkUploadManagementPage />
             </ProtectedRoute>
           }
         />

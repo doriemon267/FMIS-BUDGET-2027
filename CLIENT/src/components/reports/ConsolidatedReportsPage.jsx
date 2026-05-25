@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
+import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from "../../constants/roles";
 import {
   Box,
   Paper,
@@ -89,8 +90,8 @@ const ConsolidatedReportsPage = () => {
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
-  
-  // State management
+
+  // State management (Moved up to avoid ReferenceError in hooks below)
   const [expandedRows, setExpandedRows] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
@@ -109,6 +110,47 @@ const ConsolidatedReportsPage = () => {
   const [divisions, setDivisions] = useState([]);
   const [selectedDepartment, setSelectedDepartment] = useState("");
   const [selectedDivision, setSelectedDivision] = useState("");
+  
+  // --- ROLE-BASED SCOPING LOGIC ---
+  const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
+  const scope = useMemo(() => String(hierarchical.scope || hierarchical.assignmentLevel || "").toUpperCase(), [hierarchical]);
+  const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
+  const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
+
+  // Unified restriction check: Preparers or unit-restricted Approvers
+  const isRestricted = useMemo(() => {
+    if (!isHighLevel) return true; // Preparers are always restricted
+    if (isBRD) return false; // BRD Level (Analyst/Super Admin) is never restricted
+    // Non-BRD high levels are restricted if they have unit-level scope
+    return ['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY_CENTER'].includes(scope);
+  }, [isHighLevel, isBRD, scope]);
+
+  // Enforce restrictions based on role/scope
+  useEffect(() => {
+    if (isRestricted) {
+      if (consolidationType !== 'current') {
+        setConsolidationType('current');
+      }
+      
+      const userRegion = hierarchical.accessibleRegions?.[0]?.regionName || activeRegion?.name || activeRegion?.Region;
+      if (userRegion && selectedCurrentRegion !== userRegion) {
+        setSelectedCurrentRegion(userRegion);
+      }
+      
+      if ((scope === 'DEPARTMENT' || scope === 'DIVISION') && hierarchical.accessibleDepartments?.[0]) {
+        const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
+        if (selectedDepartment !== userDeptId) {
+          setSelectedDepartment(userDeptId);
+        }
+      }
+      if (scope === 'DIVISION' && hierarchical.accessibleDivisions?.[0]) {
+        const userDiv = hierarchical.accessibleDivisions[0];
+        if (selectedDivision !== userDiv) {
+          setSelectedDivision(userDiv);
+        }
+      }
+    }
+  }, [isRestricted, scope, consolidationType, hierarchical, activeRegion, selectedCurrentRegion, selectedDepartment, selectedDivision]);
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -482,6 +524,22 @@ const ConsolidatedReportsPage = () => {
       }
     });
 
+    // Sort category groups by their minimum UACS code
+    filtered.sort((a, b) => {
+      const getMinUacs = (row) => {
+        if (!row.children || !Array.isArray(row.children) || row.children.length === 0) return '';
+        return row.children.reduce((min, child) => {
+          const u = (child.uacsCode || '').toString();
+          return (!min || u.padStart(20, '0') < min.padStart(20, '0')) ? u : min;
+        }, '');
+      };
+      const aMinUacs = getMinUacs(a);
+      const bMinUacs = getMinUacs(b);
+      const uacsCompare = aMinUacs.padStart(20, '0').localeCompare(bMinUacs.padStart(20, '0'));
+      if (uacsCompare !== 0) return uacsCompare;
+      return (a.category || '').localeCompare(b.category || '');
+    });
+
     return filtered;
   }, [consolidatedData, searchTerm, selectedFilters]);
 
@@ -607,6 +665,7 @@ const ConsolidatedReportsPage = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
+                disabled={isRestricted}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
                 <MenuItem value="all">All Regions</MenuItem>
@@ -623,6 +682,7 @@ const ConsolidatedReportsPage = () => {
                   value={selectedCurrentRegion || effectiveCurrentRegion || ""}
                   onChange={handleCurrentRegionChange}
                   label="Region"
+                  disabled={isRestricted}
                 >
                   {(regions || []).map((region) => {
                     const name = region.name || region.Region || "";
@@ -645,6 +705,7 @@ const ConsolidatedReportsPage = () => {
                   multiple
                   value={selectedRegions}
                   onChange={handleRegionChange}
+                  disabled={isRestricted}
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {selected.map((value) => (
@@ -674,7 +735,7 @@ const ConsolidatedReportsPage = () => {
                   setSelectedDivision("");
                 }}
                 label="Department"
-                disabled={consolidationType !== "current" || !effectiveCurrentRegion || departments.length === 0}
+                disabled={consolidationType !== "current" || !effectiveCurrentRegion || departments.length === 0 || isRestricted}
               >
                 <MenuItem value=""><em>All Departments</em></MenuItem>
                 {departments.map((dept, idx) => {
@@ -696,7 +757,7 @@ const ConsolidatedReportsPage = () => {
                 value={String(selectedDivision ?? "")}
                 onChange={(e) => setSelectedDivision(e.target.value || "")}
                 label="Division"
-                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0}
+                disabled={consolidationType !== "current" || !selectedDepartment || divisions.length === 0 || (isRestricted && scope === 'DIVISION')}
               >
                 <MenuItem value=""><em>All Divisions</em></MenuItem>
                 {divisions.map((div, idx) => {

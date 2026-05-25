@@ -599,7 +599,63 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     }
 
     const { fiscalYear, budgetType, selectedRegions, activeTab, showPercentages } = req.body;
-    console.error('[PDF EXPORT] Parsed values - fiscalYear:', fiscalYear, 'activeTab:', activeTab, 'selectedRegions:', selectedRegions);
+    
+    // --- SECURITY OVERRIDE: Enforce scope based on user roles and assignments ---
+    const userId = req.user?.id || req.user?.userId || req.user?._id || req.user?.UserId;
+    const userRoles = req.user?.roles || req.user?.Roles || [];
+
+    // Region-wide roles (Super Admins + BRD roles)
+    const REGION_WIDE_ROLES = [
+      'SUPER_ADMIN', 'SUPER ADMIN', 'BUDGET_MANAGER',
+      'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST',
+      'BUDGET_OFFICER', 'BUDGET OFFICER',
+      'OVERALL_BUDGET_APPROVER', 'OVERALL BUDGET APPROVER',
+      'BUDGET_ADMIN', 'BUDGET ADMIN',
+    ];
+    let isSuperAdmin = userRoles.some(r => REGION_WIDE_ROLES.includes(r));
+
+    let department = req.body.department;
+    let division = req.body.division;
+
+    if (!isSuperAdmin) {
+      let assignedDept = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName
+        || req.submissionWorkflowFilters?.department;
+      let assignedDiv = req.hierarchicalAccess?.accessibleDivisions?.[0]
+        || req.submissionWorkflowFilters?.division;
+
+      // Emergency DB lookup if middleware didn't provide dept
+      if (userId && !assignedDept) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+            .populate('departmentId').lean();
+          if (assignment) {
+            const level = assignment.assignmentLevel || '';
+            const isRegionLevel = ['BUDGET_AND_REVENUE_DIVISION', 'REGION', 'FULL'].includes(level);
+            if (isRegionLevel) {
+              isSuperAdmin = true;
+            } else if (!assignedDept) {
+              assignedDept = assignment.departmentId?.departmentName
+                || assignment.departmentId?.Department
+                || assignment.departmentId?.DepartmentName;
+              assignedDiv = assignedDiv || assignment.divisionName || assignment.division;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!isSuperAdmin) {
+        if (!assignedDept) {
+          return res.status(403).json({
+            error: 'Cannot generate PDF: your organizational scope could not be determined.',
+            code: 'SCOPE_NOT_DETERMINED'
+          });
+        }
+        // Override with scoped values
+        department = assignedDept;
+        division = assignedDiv;
+      }
+    }
     
     const user = req.user || { name: 'System', email: 'system@fmis.gov.ph' };
     
@@ -617,6 +673,13 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       regionFilter = req.hierarchicalFilters.region;
     } else if (selectedRegions && selectedRegions !== 'all') {
       regionFilter = selectedRegions;
+    }
+
+    // Enforce accessible region if not super admin and not specified
+    if (!isSuperAdmin && !regionFilter) {
+      const accessibleRegion = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName
+        || req.hierarchicalAccessInfo?.accessibleRegions?.[0]?.regionName;
+      if (accessibleRegion) regionFilter = accessibleRegion;
     }
     
     // Fetch data from database
@@ -654,6 +717,23 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     if (regionFilter) {
       incomeQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
     }
+    if (department) {
+      incomeQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    }
+    if (division) {
+      incomeQuery.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    }
+
+    // Apply hierarchical filters if present
+    const hFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    if (Object.keys(hFilters).length > 0) {
+      if (hFilters.$and) {
+        Object.assign(incomeQuery, { $and: [ ...hFilters.$and ] });
+      } else {
+        Object.assign(incomeQuery, hFilters);
+      }
+    }
+
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
 
     // Resolve workflow signatories from linked NewProposalWorkflow
@@ -833,22 +913,19 @@ const exportConsolidatedIncomePDF = async (req, res) => {
 
     const PAGE_WIDTH = 842;
     const PAGE_HEIGHT = 595;
-    const MARGIN = 30;
-    const MARGIN_TOP = 40;
-    const MARGIN_BOTTOM = 40;
+    const MARGIN = 18;
+    const MARGIN_TOP = 25;
+    const MARGIN_BOTTOM = 25;
     const LINE_HEIGHT = 14;
-    const CONTENT_LEFT = MARGIN + 6;
-    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN - 6;
+    const CONTENT_LEFT = MARGIN;
+    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
     const TABLE_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
 
     let currentPage = 0;
 
     const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
     const drawBorder = () => {
-      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, {
-        stroke: '#000000',
-        lineWidth: 1
-      });
+      // Border disabled as requested
     };
     const resolveLogoPath = (name) => {
       const serverAsset = path.join(__dirname, `../assets/${name}`);
@@ -878,22 +955,28 @@ const exportConsolidatedIncomePDF = async (req, res) => {
 
     const rows = [];
     reportData.hierarchicalData.forEach((category) => {
+      const categoryTotal = reportData.categoryTotals?.[category.id] || 0;
+      if (categoryTotal <= 0) return; // Skip categories with 0 total
+
       rows.push({
         label: String(category.name || ''),
         bold: true,
         valuesByRegion: (regionName) => reportData.regionData?.[regionName]?.categoryAmounts?.[category.id] || 0,
-        total: reportData.categoryTotals?.[category.id] || 0,
+        total: categoryTotal,
       });
 
       const subcategories = Array.isArray(category.subcategories)
         ? category.subcategories
         : (Array.isArray(category.subCategories) ? category.subCategories : []);
       subcategories.forEach((subcat) => {
+        const subcatTotal = reportData.subcategoryTotals?.[subcat.id] || 0;
+        if (subcatTotal <= 0) return; // Skip subcategories with 0 total
+
         rows.push({
           label: `  • ${String(subcat.name || '')}`,
           bold: false,
           valuesByRegion: (regionName) => reportData.regionData?.[regionName]?.subcategoryAmounts?.[subcat.id] || 0,
-          total: reportData.subcategoryTotals?.[subcat.id] || 0,
+          total: subcatTotal,
         });
       });
     });
@@ -934,8 +1017,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       pdfDoc.text(`Regions: ${groupRegions.join(', ')}`, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 22, textOpt({ fontSize: 8, align: 'center' }));
       pdfDoc.text('ANNEX A', CONTENT_RIGHT - 46, headerY + 24, textOpt({ fontSize: 9, bold: true }));
 
-      pdfDoc.text(`Doc ID: ${reportData.documentId}`, CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 7 }));
-      pdfDoc.text(`Page ${pageNo} of ${totalPages}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 7 }));
+      pdfDoc.text(`Doc ID: ${reportData.documentId}`, CONTENT_LEFT, PAGE_HEIGHT - 12, textOpt({ fontSize: 7 }));
+      pdfDoc.text(`Page ${pageNo} of ${totalPages}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - 12, textOpt({ fontSize: 7 }));
 
       return headerY + 40;
     };
@@ -1034,7 +1117,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ 
         error: 'Failed to generate PDF report',
-        details: process.env.NODE_ENV === 'development' ? err.message : undefined
+        details: err.message
       });
     } else {
       // If headers already sent, end the response

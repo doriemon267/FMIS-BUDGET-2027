@@ -235,18 +235,22 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         id: 'ps-all-regions',
         region: 'ALL REGIONS',
         totalEmployees: consolidatedEmployees,
-        categories: Object.entries(consolidatedCategories).map(([categoryKey, categoryData]) => ({
-          id: `all-regions-${categoryKey}`,
-          key: categoryKey,
-          name: categoryData.name,
-          total: categoryData.total,
-          items: Object.entries(categoryData.items).map(([itemKey, itemData]) => ({
-            id: `all-regions-${categoryKey}-${itemKey}`,
-            key: itemData.key,
-            name: itemData.name,
-            amount: itemData.amount
+        categories: Object.entries(consolidatedCategories)
+          .filter(([_, categoryData]) => categoryData.total > 0)
+          .map(([categoryKey, categoryData]) => ({
+            id: `all-regions-${categoryKey}`,
+            key: categoryKey,
+            name: categoryData.name,
+            total: categoryData.total,
+            items: Object.entries(categoryData.items)
+              .filter(([_, itemData]) => itemData.amount > 0)
+              .map(([itemKey, itemData]) => ({
+                id: `all-regions-${categoryKey}-${itemKey}`,
+                key: itemData.key,
+                name: itemData.name,
+                amount: itemData.amount
+              }))
           }))
-        }))
       }];
     } else {
       // Individual regions case
@@ -254,18 +258,22 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         id: `ps-${regionData.region}`,
         region: regionData.region,
         totalEmployees: regionData.totalEmployees,
-        categories: Object.entries(regionData.categories).map(([categoryKey, categoryData]) => ({
-          id: `${regionData.region}-${categoryKey}`,
-          key: categoryKey,
-          name: categoryData.name,
-          total: categoryData.total,
-          items: Object.entries(categoryData.items).map(([itemKey, itemData]) => ({
-            id: `${regionData.region}-${categoryKey}-${itemKey}`,
-            key: `${categoryKey}.${itemKey}`,
-            name: itemData.name,
-            amount: itemData.amount
+        categories: Object.entries(regionData.categories)
+          .filter(([_, categoryData]) => categoryData.total > 0)
+          .map(([categoryKey, categoryData]) => ({
+            id: `${regionData.region}-${categoryKey}`,
+            key: categoryKey,
+            name: categoryData.name,
+            total: categoryData.total,
+            items: Object.entries(categoryData.items)
+              .filter(([_, itemData]) => itemData.amount > 0)
+              .map(([itemKey, itemData]) => ({
+                id: `${regionData.region}-${categoryKey}-${itemKey}`,
+                key: `${categoryKey}.${itemKey}`,
+                name: itemData.name,
+                amount: itemData.amount
+              }))
           }))
-        }))
       })).sort((a, b) => a.region.localeCompare(b.region));
     }
     res.status(200).json({
@@ -346,39 +354,56 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     const { regions, region, fiscalYear, budgetType } = req.query;
     let { department, division } = req.query;
 
-    if (!department || !division) {
-      const sFilters = req.submissionWorkflowFilters || {};
-      const hAccess = req.hierarchicalAccess || req.hierarchicalAccessInfo || {};
-      
-      if (!department) {
-        if (sFilters.department) department = sFilters.department;
-        else if (hAccess.accessibleDepartments?.[0]?.departmentName) department = hAccess.accessibleDepartments[0].departmentName;
-        else if (hAccess.accessibleDepartments?.[0] && typeof hAccess.accessibleDepartments[0] === 'string') department = hAccess.accessibleDepartments[0];
-        else if (hAccess.accessibleOffices?.[0]) department = hAccess.accessibleOffices[0];
-        else if (req.user?.department) department = req.user.department;
-        else if (sFilters.$and) {
-          const df = sFilters.$and.find(f => f.department);
-          if (df) department = df.department;
-          else {
-            const of = sFilters.$and.find(f => f.region && !f.division);
-            if (of && of.region) department = of.region;
+    // --- SECURITY OVERRIDE: Enforce scope based on user roles and assignments ---
+    const userId = req.user?.id || req.user?.userId || req.user?._id || req.user?.UserId;
+    const userRoles = req.user?.roles || req.user?.Roles || [];
+
+    // Region-wide roles (Super Admins + BRD roles)
+    const REGION_WIDE_ROLES = [
+      'SUPER_ADMIN', 'SUPER ADMIN', 'BUDGET_MANAGER',
+      'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST',
+      'BUDGET_OFFICER', 'BUDGET OFFICER',
+      'OVERALL_BUDGET_APPROVER', 'OVERALL BUDGET APPROVER',
+      'BUDGET_ADMIN', 'BUDGET ADMIN',
+    ];
+    let isSuperAdmin = userRoles.some(r => REGION_WIDE_ROLES.includes(r));
+
+    if (!isSuperAdmin) {
+      let assignedDept = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName
+        || req.submissionWorkflowFilters?.department;
+      let assignedDiv = req.hierarchicalAccess?.accessibleDivisions?.[0]
+        || req.submissionWorkflowFilters?.division;
+
+      // Emergency DB lookup if middleware didn't provide dept
+      if (userId && !assignedDept) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId) })
+            .populate('departmentId').lean();
+          if (assignment) {
+            const level = assignment.assignmentLevel || '';
+            const isRegionLevel = ['BUDGET_AND_REVENUE_DIVISION', 'REGION', 'FULL'].includes(level);
+            if (isRegionLevel) {
+              isSuperAdmin = true;
+            } else if (!assignedDept) {
+              assignedDept = assignment.departmentId?.departmentName
+                || assignment.departmentId?.Department
+                || assignment.departmentId?.DepartmentName;
+              assignedDiv = assignedDiv || assignment.divisionName || assignment.division;
+            }
           }
-        }
+        } catch (_) {}
       }
-      
-      if (!division) {
-        if (sFilters.division) division = sFilters.division;
-        else if (hAccess.accessibleDivisions?.[0]) division = hAccess.accessibleDivisions[0];
-        else if (hAccess.accessibleResponsibilityCenters?.[0]) division = hAccess.accessibleResponsibilityCenters[0];
-        else if (req.user?.division) division = req.user.division;
-        else if (sFilters.$and) {
-          const df = sFilters.$and.find(f => f.division);
-          if (df) division = df.division;
-          else {
-            const dptf = sFilters.$and.find(f => f.department);
-            if (dptf && dptf.department) division = dptf.department;
-          }
+
+      if (!isSuperAdmin) {
+        if (!assignedDept) {
+          return res.status(403).json({
+            message: 'Cannot generate PDF: your organizational scope could not be determined.'
+          });
         }
+        // Override query params with scoped values
+        department = assignedDept;
+        if (assignedDiv) division = assignedDiv;
       }
     }
 
@@ -389,6 +414,13 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     if (regionList && regionList.length) query.region = { $in: regionList };
     else if (region) query.region = region;
+    
+    // Enforce accessible region if not super admin and not specified
+    if (!isSuperAdmin && !query.region) {
+      const accessibleRegion = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName
+        || req.hierarchicalAccessInfo?.accessibleRegions?.[0]?.regionName;
+      if (accessibleRegion) query.region = accessibleRegion;
+    }
 
     if (department) query.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     if (division) query.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
@@ -455,7 +487,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
               amount = Number(employee[itemData.field]) || 0;
             }
           }
-          grouped[regionName][categoryName][itemKey].amount += amount;
+          grouped[rcName][categoryName][itemKey].amount += amount;
         });
       });
     });
@@ -467,7 +499,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     const PAGE_WIDTH = 595.28;
     const PAGE_HEIGHT = 841.89;
-    const MARGIN = 36;
+    const MARGIN = 18;
     const CONTENT_LEFT = MARGIN;
     const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
     const LINE_H = 13;
@@ -482,6 +514,39 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       for (const c of candidates) { if (c && fs.existsSync(c)) return c; }
       return null;
     };
+    const wrapText = (text, maxWidth, fontSize) => {
+      const words = String(text || '').split(' ');
+      const lines = [];
+      let currentLine = '';
+      const getWidth = (t) => {
+        try { return pdfDoc.calculateTextDimensions(t, { fontSize }).width; }
+        catch (e) { return t.length * (fontSize * 0.55); }
+      };
+      words.forEach(word => {
+        let testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (getWidth(testLine) > maxWidth) {
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            let part = '';
+            for (let char of word) {
+              if (getWidth(part + char) > maxWidth) {
+                lines.push(part);
+                part = char;
+              } else {
+                part += char;
+              }
+            }
+            currentLine = part;
+          }
+        } else {
+          currentLine = testLine;
+        }
+      });
+      if (currentLine) lines.push(currentLine);
+      return lines;
+    };
     const sealPath = resolveExisting(path.join(__dirname, '../assets/Seal.png'), path.join(process.cwd(), 'SERVER/assets/Seal.png'), path.join(process.cwd(), 'CLIENT/public/Seal.png'));
     const nialogoPath = resolveExisting(path.join(__dirname, '../assets/logo.png'), path.join(process.cwd(), 'SERVER/assets/logo.png'), path.join(process.cwd(), 'CLIENT/public/logo.png'));
     const bagongPath = resolveExisting(path.join(__dirname, '../assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png'));
@@ -489,11 +554,11 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     const drawPage = (isFirst) => {
       const cx = PAGE_WIDTH / 2;
       const cy = PAGE_HEIGHT / 2;
-      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, { stroke: '#4d4c4c', lineWidth: 1.5 });
+      // Border disabled as requested
       pdfDoc.text(watermarkText, cx, cy - 18, textOpt({ fontSize: 30, color: '#d9d9d9', align: 'center' }));
       pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, cx, cy + 15, textOpt({ fontSize: 12, color: '#dddddd', align: 'center' }));
-      pdfDoc.text('Annex B.1.1 (Personnel Services)', CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 8 }));
+      pdfDoc.text('Annex B.1.1 (Personnel Services)', CONTENT_LEFT + 10, PAGE_HEIGHT - 12, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - 12, textOpt({ fontSize: 8 }));
       if (!isFirst) return;
 
       const logoW = 44, logoH = 44, logoY = MARGIN + 2;
@@ -568,6 +633,9 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     for (const [rcName, categories] of Object.entries(grouped)) {
       let regionFirstRow = true;
       for (const [categoryName, itemsMap] of Object.entries(categories)) {
+        const filteredItems = Object.values(itemsMap).filter(item => Number(item.amount || 0) > 0);
+        if (filteredItems.length === 0) continue;
+
         ensureSpace(2);
         pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 2, { stroke: '#c0d0c0', lineWidth: 0.3 });
         
@@ -582,7 +650,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
         regionFirstRow = false;
 
         let catTotal = 0;
-        Object.values(itemsMap).forEach((item) => {
+        filteredItems.forEach((item) => {
           ensureSpace(1);
           pdfDoc.text(safeStr(item.key), colX.item + 3, curY, textOpt({ fontSize: 7.5 }));
           pdfDoc.text(safeStr(item.name), colX.particulars + 3, curY, textOpt({ fontSize: 7.5 }), { columnWidth: COL_PARTICULARS - 6, overflow: 'truncate' });

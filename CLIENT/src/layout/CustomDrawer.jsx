@@ -567,6 +567,12 @@ const CustomDrawer = () => {
                 isAllow: isSuperAdmin(currentUser),
                 icon: <LuHistory size={18} />,
               },
+              {
+                link: '/bulk-upload-management',
+                name: 'Bulk Upload Management',
+                isAllow: isSuperAdmin(currentUser),
+                icon: <LuDatabase size={18} />,
+              },
             ]}
           />
 

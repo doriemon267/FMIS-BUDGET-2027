@@ -220,19 +220,18 @@ const CustomCreateUpdateDialog = ({
               return null; // Skip non-renderable / action fields
 
             if (field.type === "array") {
-              if (key === "regions") {
-                return (
-                  <CustomAutocompleteField
-                    key={key}
-                    control={control}
-                    fieldName={key}
-                    label={field.label}
-                    options={regions}
-                    multiple={true}
-                    sx={{ mb: 2 }}
-                  />
-                );
-              }
+              const options = key === "regions" ? regions : (field.options || []);
+              return (
+                <CustomAutocompleteField
+                  key={key}
+                  control={control}
+                  fieldName={key}
+                  label={field.label}
+                  options={options}
+                  multiple={true}
+                  sx={{ mb: 2 }}
+                />
+              );
             }
 
             if (field.type === "date") {

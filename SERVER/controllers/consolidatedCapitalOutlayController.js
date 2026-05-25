@@ -98,6 +98,11 @@ const consolidatedCapitalOutlayController = {
             const incomeAmt = Number(d.income_amount) || 0;
             const subsidyAmt = Number(d.subsidy_amount) || 0;
             const amount = incomeAmt + subsidyAmt;
+            
+            // Skip items with zero total
+            if (amount <= 0) return;
+
+            if (!titleGroups[titleKey]) titleGroups[titleKey] = [];
             titleGroups[titleKey].push({
               _id: d._id,
               particulars: d.particulars || '',
@@ -113,7 +118,14 @@ const consolidatedCapitalOutlayController = {
             grandTotal += amount;
           });
         } else {
-          const amount = (Number(parent.amount) || 0) || ((Number(parent.income) || 0) + (Number(parent.subsidy) || 0));
+          const incomeAmt = Number(parent.income) || 0;
+          const subsidyAmt = Number(parent.subsidy) || 0;
+          const amount = (Number(parent.amount) || 0) || (incomeAmt + subsidyAmt);
+
+          // Skip items with zero total
+          if (amount <= 0) return;
+
+          if (!titleGroups[titleKey]) titleGroups[titleKey] = [];
           titleGroups[titleKey].push({
             _id: parent._id,
             particulars: parent.sublineItem || parent.accountingTitle || titleKey,
@@ -121,8 +133,8 @@ const consolidatedCapitalOutlayController = {
             division: parent.division || '',
             region: parent.region || '',
             uacsCode: parent.uacsCode || '',
-            income: Number(parent.income) || 0,
-            subsidy: Number(parent.subsidy) || amount,
+            income: incomeAmt,
+            subsidy: subsidyAmt || amount,
             cost: amount,
             amount,
           });
@@ -305,17 +317,23 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const catGroups = {};
     coData.forEach((parent) => {
       const catKey = (parent.category?.categoryName) || parent.accountingTitle || parent.sublineItem || 'Other';
-      if (!catGroups[catKey]) catGroups[catKey] = [];
       const rcName = parent.department || parent.division || parent.region || '';
       const details = detailsByParentId[parent._id.toString()];
+
       if (Array.isArray(details) && details.length > 0) {
         details.forEach((d) => {
           const amt = (Number(d.income_amount) || 0) + (Number(d.subsidy_amount) || 0);
-          catGroups[catKey].push({ rc: rcName, particulars: d.particulars || '', amount: amt });
+          if (amt > 0) {
+            if (!catGroups[catKey]) catGroups[catKey] = [];
+            catGroups[catKey].push({ rc: rcName, particulars: d.particulars || '', amount: amt });
+          }
         });
       } else {
         const amt = (Number(parent.income) || 0) + (Number(parent.subsidy) || 0);
-        catGroups[catKey].push({ rc: rcName, particulars: parent.sublineItem || parent.accountingTitle || '', amount: amt });
+        if (amt > 0) {
+          if (!catGroups[catKey]) catGroups[catKey] = [];
+          catGroups[catKey].push({ rc: rcName, particulars: parent.sublineItem || parent.accountingTitle || '', amount: amt });
+        }
       }
     });
 
