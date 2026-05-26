@@ -224,8 +224,13 @@ const consolidatedReportsController = {
       }
       const mooeRegions = await MooeProposal.distinct('region', query);
       const allRegions = mooeRegions.filter(Boolean);
-      const regionDetails = await Region.find({ name: { $in: allRegions } }).lean();
-      res.status(200).json({ success: true, regions: regionDetails, availableRegions: allRegions });
+      const regionDetails = await Region.find({ Region: { $in: allRegions } }).lean();
+      
+      // Return both the region details (if any) and the raw region strings as a fallback
+      // The frontend can handle both objects and raw strings.
+      const returnedRegions = regionDetails.length > 0 ? regionDetails : allRegions;
+      
+      res.status(200).json({ success: true, regions: returnedRegions, availableRegions: allRegions });
     } catch (error) {
       console.error('Error fetching available regions:', error);
       res.status(500).json({
@@ -358,23 +363,35 @@ const consolidatedReportsController = {
         // Skip rows with no financial value (0 or null)
         if (income === 0 && subsidy === 0 && amount === 0) return;
 
-        const rcName = item.division || item.department || item.region || 'Unknown Responsibility Center';
+        const rcName = item.department || item.division || item.region || 'Unknown Responsibility Center';
         const categoryName = item.sublineItem || 'Uncategorized';
+        const uacs = item.uacsCode || '';
+        const title = item.accountingTitle || '';
+
         if (!grouped[rcName]) grouped[rcName] = {};
-        if (!grouped[rcName][categoryName]) grouped[rcName][categoryName] = [];
-        grouped[rcName][categoryName].push({
-          uacsCode: item.uacsCode || '',
-          accountingTitle: item.accountingTitle || '',
-          income,
-          subsidy,
-          amount,
-        });
+        if (!grouped[rcName][categoryName]) grouped[rcName][categoryName] = {};
+        
+        const rowKey = `${uacs}_${title}`;
+        if (!grouped[rcName][categoryName][rowKey]) {
+          grouped[rcName][categoryName][rowKey] = {
+            uacsCode: uacs,
+            accountingTitle: title,
+            income: 0,
+            subsidy: 0,
+            amount: 0,
+          };
+        }
+        
+        grouped[rcName][categoryName][rowKey].income += income;
+        grouped[rcName][categoryName][rowKey].subsidy += subsidy;
+        grouped[rcName][categoryName][rowKey].amount += amount;
       });
 
-      // Sort items within each category by uacsCode
+      // Convert objects back to sorted arrays
       for (const rcName of Object.keys(grouped)) {
         for (const catName of Object.keys(grouped[rcName])) {
-          grouped[rcName][catName].sort((a, b) => {
+          const rows = Object.values(grouped[rcName][catName]);
+          rows.sort((a, b) => {
             const aUacs = (a.uacsCode || '').toString();
             const bUacs = (b.uacsCode || '').toString();
             if (/^\d[\d\-]*$/.test(aUacs) && /^\d[\d\-]*$/.test(bUacs)) {
@@ -382,6 +399,7 @@ const consolidatedReportsController = {
             }
             return aUacs.localeCompare(bUacs);
           });
+          grouped[rcName][catName] = rows;
         }
       }
 

@@ -10,7 +10,8 @@ import {
   Menu,
   MenuItem,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Box
 } from "@mui/material";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LuChevronDown, LuChevronUp, LuChevronRight } from "react-icons/lu";
@@ -86,7 +87,7 @@ const LinkTo = ({
         sx={{
           ...itemSx,
           bgcolor: active ? "rgba(255, 255, 255, 0.1) !important" : "transparent",
-          color: active ? "white" : "rgba(255,255,255,0.6)",
+          color: active ? "white" : "rgba(255,255,255,0.75)",
           cursor: "pointer",
           position: "relative",
           px: 0,
@@ -111,7 +112,7 @@ const LinkTo = ({
           display: "flex", 
           justifyContent: "center", 
           color: "inherit",
-          opacity: active ? 1 : 0.6,
+          opacity: active ? 1 : 0.75,
           transition: "all 0.2s",
         }}>
           {promoteChild && promotedLink ? promotedLink.icon || icon : icon}
@@ -182,7 +183,7 @@ const LinkTo = ({
             PaperProps={{
               sx: {
                 mt: -0.5,
-                ml: 1,
+                ml: 2.5,
                 minWidth: 240,
                 borderRadius: "12px",
                 border: "1px solid rgba(255, 255, 255, 0.08)",
@@ -193,7 +194,12 @@ const LinkTo = ({
               },
             }}
           >
-            {allowedSubLinks.map((subLink) => {
+            {allowedSubLinks.map((subLink, index) => {
+              if (subLink.isDivider) {
+                return (
+                  <Box key={`div-${index}`} sx={{ my: 1, mx: 2, borderBottom: '1px solid rgba(255,255,255,0.08)' }} />
+                );
+              }
               const subActive = location.pathname === subLink.link;
               return (
                 <MenuItem
@@ -211,7 +217,7 @@ const LinkTo = ({
                     mx: 0.75,
                     borderRadius: "8px",
                     minHeight: 40,
-                    color: subActive ? "white" : "rgba(255,255,255,0.6)",
+                    color: subActive ? "white" : "rgba(255,255,255,0.75)",
                     bgcolor: subActive ? "rgba(255, 255, 255, 0.1) !important" : "transparent",
                     "&:hover": {
                       bgcolor: "rgba(255, 255, 255, 0.08)",
@@ -223,7 +229,7 @@ const LinkTo = ({
                     "& .MuiListItemIcon-root": {
                       minWidth: 34,
                       color: "inherit",
-                      opacity: subActive ? 1 : 0.6,
+                      opacity: subActive ? 1 : 0.75,
                     },
                     "& .MuiListItemText-primary": {
                       fontSize: "0.8rem",
@@ -259,7 +265,7 @@ const LinkTo = ({
         sx={{
           ...itemSx,
           bgcolor: active ? "rgba(255, 255, 255, 0.1) !important" : "transparent",
-          color: active ? "white" : "rgba(255,255,255,0.6)",
+          color: active ? "white" : "rgba(255,255,255,0.75)",
           borderRadius: "8px",
           mb: 0.5,
           py: 1.25,
@@ -276,7 +282,7 @@ const LinkTo = ({
       >
         <ListItemIcon sx={{ 
           color: "inherit",
-          opacity: active ? 1 : 0.6,
+          opacity: active ? 1 : 0.75,
           transition: "all 0.2s",
         }}>
           {promotedLink.icon || icon}
@@ -328,7 +334,7 @@ const LinkTo = ({
         sx={{
           ...itemSx,
           bgcolor: isActive ? "rgba(255, 255, 255, 0.1) !important" : "transparent",
-          color: isActive ? "white" : "rgba(255,255,255,0.6)",
+          color: isActive ? "white" : "rgba(255,255,255,0.75)",
           borderRadius: "8px",
           mb: 0.5,
           py: 1.25,
@@ -345,7 +351,7 @@ const LinkTo = ({
       >
         <ListItemIcon sx={{ 
           color: "inherit",
-          opacity: isActive ? 1 : 0.6,
+          opacity: isActive ? 1 : 0.75,
           transition: "all 0.2s",
         }}>
           {icon}
@@ -381,7 +387,12 @@ const LinkTo = ({
       {subLinks.length > 0 && (
         <Collapse in={effectiveOpen} timeout="auto" unmountOnExit sx={{ ml: 2 }}>
           <List component="div" disablePadding>
-            {allowedSubLinks.map((subLink) => {
+            {allowedSubLinks.map((subLink, index) => {
+              if (subLink.isDivider) {
+                return (
+                  <Box key={`div-${index}`} sx={{ my: 1, mx: 3, borderBottom: '1px solid rgba(255,255,255,0.08)' }} />
+                );
+              }
               const subActive = location.pathname === subLink.link;
               return (
                 <ListItem
@@ -396,13 +407,13 @@ const LinkTo = ({
                     borderRadius: "8px",
                     mb: 0.5,
                     transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                    color: subActive ? "white" : "rgba(255,255,255,0.6)",
+                    color: subActive ? "white" : "rgba(255,255,255,0.75)",
                     bgcolor: subActive ? "rgba(255, 255, 255, 0.1)" : "transparent",
                     cursor: "pointer",
                     py: 1,
                     "& .MuiListItemIcon-root": {
                       color: "inherit",
-                      opacity: subActive ? 1 : 0.6,
+                      opacity: subActive ? 1 : 0.75,
                       minWidth: 35,
                     },
                     "& .MuiTypography-root": {

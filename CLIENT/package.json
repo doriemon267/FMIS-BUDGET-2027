@@ -21,19 +21,20 @@
     "@mui/icons-material": "^6.4.6",
     "@mui/material": "^6.1.5",
     "@mui/system": "^6.1.5",
+    "@mui/x-charts": "^7.1.0",
     "@mui/x-data-grid": "^8.13.1",
     "@mui/x-date-pickers": "^8.3.1",
     "@react-pdf/renderer": "^4.3.0",
     "@tanstack/react-query": "^5.59.15",
     "auth-client": "file:",
-    "axios": "^1.7.7",
+    "axios": "^1.16.1",
     "client": "file:",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.13",
     "decimal.js": "^10.5.0",
-    "exceljs": "^3.4.0",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.4.4",
@@ -81,6 +82,7 @@
     "vitest": "^4.0.14"
   },
   "overrides": {
-    "@tootallnate/once": "^3.0.1"
+    "@tootallnate/once": "^3.0.1",
+    "uuid": "^11.1.1"
   }
 }

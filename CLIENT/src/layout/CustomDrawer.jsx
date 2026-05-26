@@ -33,6 +33,12 @@ import {
   LuWallet,
   LuCoins,
   LuPenTool,
+  LuClock,
+  LuTrendingUp,
+  LuCar,
+  LuBuilding,
+  LuNetwork,
+  LuUserCog,
 } from 'react-icons/lu';
 
 import { useNavigate } from 'react-router-dom';
@@ -292,20 +298,21 @@ const CustomDrawer = () => {
               top: 70, // Aligned exactly with the bottom border
               transform: 'translateY(-50%)',
               zIndex: 10,
-              width: 24,
-              height: 24,
+              width: 28,
+              height: 28,
               borderRadius: '50%',
-              bgcolor: '#041C0F',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: 'rgba(255, 255, 255, 0.7)',
+              bgcolor: '#69d892',
+              border: '2px solid #041C0F',
+              color: '#041C0F',
               display: { xs: 'none', md: 'flex' },
               alignItems: 'center',
               justifyContent: 'center',
               '&:hover': {
-                bgcolor: 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
+                bgcolor: '#55c07b',
+                color: '#041C0F',
+                transform: 'translateY(-50%) scale(1.1)',
               },
-              boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
               transition: 'all 0.2s',
             }}
           >
@@ -358,25 +365,27 @@ const CustomDrawer = () => {
             <Avatar
               sx={{
                 background: 'rgba(105, 216, 146, 0.1)',
-                width: 28,
-                height: 28,
+                width: 32,
+                height: 32,
                 color: '#69d892',
-                fontSize: '0.8rem',
-                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              {displayRole.charAt(0)}
+              <LuShieldCheck size={18} />
             </Avatar>
             {!collapsed && (
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Typography
                   variant="caption"
                   sx={{
-                    color: 'rgba(255,255,255,0.4)',
+                    color: '#69d892',
                     fontWeight: 700,
-                    fontSize: '0.6rem',
+                    fontSize: '0.65rem',
                     textTransform: 'uppercase',
                     display: 'block',
+                    letterSpacing: '0.05em',
                   }}
                 >
                   CURRENT ROLE
@@ -516,62 +525,64 @@ const CustomDrawer = () => {
                 link: '/fysettings',
                 name: 'Set Cut-Off',
                 isAllow: true,
-                icon: <LuSettings size={18} />,
+                icon: <LuClock size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/compensation-management',
                 name: 'Compensation Management Settings',
                 isAllow: true,
-                icon: <LuSettings size={18} />,
+                icon: <LuTrendingUp size={18} strokeWidth={1.5} />,
               },
-              { link: '/rata', name: 'RATA', isAllow: true, icon: <LuSettings size={18} /> },
+              { link: '/rata', name: 'RATA', isAllow: true, icon: <LuCar size={18} strokeWidth={1.5} /> },
               {
                 link: '/categories',
                 name: 'Capital Outlay',
                 isAllow: true,
-                icon: <LuSettings size={18} />,
+                icon: <LuBuilding size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/income-management',
                 name: 'Income Management',
                 isAllow: true,
-                icon: <LuLayoutDashboard size={18} />,
+                icon: <LuWallet size={18} strokeWidth={1.5} />,
               },
+              { isDivider: true },
               {
                 link: '/salary-table',
                 name: 'Permanent & Casual Salary Table',
                 isAllow: true,
-                icon: <LuBanknote size={18} />,
+                icon: <LuBanknote size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/cos-salary-table',
                 name: 'COS Salary Table (SSL4)',
                 isAllow: true,
-                icon: <LuBanknote size={18} />,
+                icon: <LuBanknote size={18} strokeWidth={1.5} />,
               },
+              { isDivider: true },
               {
                 link: '/setup/organization',
                 name: 'Organization Structure Setup',
                 isAllow: true,
-                icon: <LuSettings size={18} />,
+                icon: <LuNetwork size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/hierarchical-user-assignments',
                 name: 'Hierarchical User Assignments',
                 isAllow: true,
-                icon: <LuSettings size={18} />,
+                icon: <LuUserCog size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/user-activity-logs',
                 name: 'User Activity Logs',
                 isAllow: isSuperAdmin(currentUser),
-                icon: <LuHistory size={18} />,
+                icon: <LuHistory size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/bulk-upload-management',
                 name: 'Bulk Upload Management',
                 isAllow: isSuperAdmin(currentUser),
-                icon: <LuDatabase size={18} />,
+                icon: <LuDatabase size={18} strokeWidth={1.5} />,
               },
             ]}
           />

@@ -717,23 +717,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     if (regionFilter) {
       incomeQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
     }
-    if (department) {
-      incomeQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    }
-    if (division) {
-      incomeQuery.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    }
-
-    // Apply hierarchical filters if present
-    const hFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
-    if (Object.keys(hFilters).length > 0) {
-      if (hFilters.$and) {
-        Object.assign(incomeQuery, { $and: [ ...hFilters.$and ] });
-      } else {
-        Object.assign(incomeQuery, hFilters);
-      }
-    }
-
+    
+    // Fetch data using the same query as the screen report (reports.controller.js)
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
 
     // Resolve workflow signatories from linked NewProposalWorkflow
@@ -833,12 +818,17 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     
     // Process income entries
     incomeEntries.forEach(entry => {
-      const region = entry.region || 'Unspecified';
+      const entryRegion = (entry.region || 'Unspecified').trim();
       const amount = Number(entry.amount) || 0;
       const subcategoryName = entry.subcategory || 'Uncategorized';
       const entryCategory = entry.incomecategory;
       
-      if (!reportData.regionData[region]) return;
+      // Case-insensitive region matching
+      const targetRegion = Object.keys(reportData.regionData).find(
+        r => r.toLowerCase() === entryRegion.toLowerCase()
+      );
+      
+      if (!targetRegion) return;
       
       let categoryId = null;
       let categoryName = 'Uncategorized';
@@ -849,7 +839,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
           : 'Uncategorized';
         
         const matchingCat = incomeCategories.find(c => 
-          c.name === categoryName || c.name?.toLowerCase() === categoryName?.toLowerCase()
+          c.name?.trim().toLowerCase() === categoryName.trim().toLowerCase()
         );
         if (matchingCat) categoryId = matchingCat._id.toString();
       }
@@ -857,20 +847,20 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       if (!categoryId || reportData.categoryTotals[categoryId] === undefined) return;
       
       // Update amounts
-      reportData.regionData[region].categoryAmounts[categoryId] += amount;
-      reportData.regionData[region].total += amount;
+      reportData.regionData[targetRegion].categoryAmounts[categoryId] += amount;
+      reportData.regionData[targetRegion].total += amount;
       reportData.categoryTotals[categoryId] += amount;
       reportData.grandTotal += amount;
       
       // Handle subcategories
       if (subcategoryName && subcategoryName !== 'Uncategorized') {
         const matchingSub = allSubcategories.find(s => 
-          (s.incomeSubcategoryName || s.name)?.toLowerCase() === subcategoryName.toLowerCase()
+          (s.incomeSubcategoryName || s.name)?.trim().toLowerCase() === subcategoryName.trim().toLowerCase()
         );
         if (matchingSub) {
           const subId = matchingSub._id.toString();
-          if (reportData.regionData[region].subcategoryAmounts[subId] !== undefined) {
-            reportData.regionData[region].subcategoryAmounts[subId] += amount;
+          if (reportData.regionData[targetRegion].subcategoryAmounts[subId] !== undefined) {
+            reportData.regionData[targetRegion].subcategoryAmounts[subId] += amount;
           }
           if (reportData.subcategoryTotals[subId] !== undefined) {
             reportData.subcategoryTotals[subId] += amount;
@@ -915,7 +905,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     const PAGE_HEIGHT = 595;
     const MARGIN = 18;
     const MARGIN_TOP = 25;
-    const MARGIN_BOTTOM = 25;
+    const MARGIN_BOTTOM = 18;
     const LINE_HEIGHT = 14;
     const CONTENT_LEFT = MARGIN;
     const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
@@ -985,6 +975,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       if (currentPage > 0) {
         pdfDoc.endPage();
       }
+      // Use standard A4 Landscape
       pdfDoc.createPage('A4', 90);
       currentPage += 1;
       drawBorder();
@@ -1017,8 +1008,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       pdfDoc.text(`Regions: ${groupRegions.join(', ')}`, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 22, textOpt({ fontSize: 8, align: 'center' }));
       pdfDoc.text('ANNEX A', CONTENT_RIGHT - 46, headerY + 24, textOpt({ fontSize: 9, bold: true }));
 
-      pdfDoc.text(`Doc ID: ${reportData.documentId}`, CONTENT_LEFT, PAGE_HEIGHT - 12, textOpt({ fontSize: 7 }));
-      pdfDoc.text(`Page ${pageNo} of ${totalPages}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - 12, textOpt({ fontSize: 7 }));
+      pdfDoc.text(`Doc ID: ${reportData.documentId}`, CONTENT_LEFT, PAGE_HEIGHT - 10, textOpt({ fontSize: 7 }));
+      pdfDoc.text(`Page ${pageNo} of ${totalPages}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - 10, textOpt({ fontSize: 7 }));
 
       return headerY + 40;
     };
@@ -1049,7 +1040,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
         pdfDoc.text('TOTAL', CONTENT_RIGHT - 42, y + 4, textOpt({ fontSize: 8, bold: true }));
         y += 18;
 
-        while (rowIndex < rows.length && y <= PAGE_HEIGHT - MARGIN_BOTTOM - 24) {
+        while (rowIndex < rows.length && y <= PAGE_HEIGHT - MARGIN_BOTTOM - 100) {
           const row = rows[rowIndex];
           pdfDoc.text(row.label, CONTENT_LEFT + 3, y, textOpt({ fontSize: row.bold ? 8 : 7, bold: row.bold }));
 
@@ -1081,20 +1072,33 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     }
 
     // Signature block (workflow-based)
-    const sigY = PAGE_HEIGHT - MARGIN_BOTTOM - 80;
-    drawWorkflowSignatureBlock(pdfDoc, reportData.signatoriesInfo || extractSignatoriesFromWorkflow(null), sigY, CONTENT_LEFT, TABLE_WIDTH, tempSignatureImagePaths);
+    if (currentPage > 0) {
+      const sigY = PAGE_HEIGHT - MARGIN_BOTTOM - 80;
+      drawWorkflowSignatureBlock(pdfDoc, reportData.signatoriesInfo || extractSignatoriesFromWorkflow(null), sigY, CONTENT_LEFT, TABLE_WIDTH, tempSignatureImagePaths);
+    }
 
     // Log audit trail
     console.log(`[AUDIT] PDF Generated: ${reportData.documentId} | User: ${reportData.generatedBy} | FY: ${fiscalYear} | Type: ${queryBudgetType}`);
 
-    pdfDoc.endPage().endPDF((err) => {
+    // Finalize PDF
+    if (currentPage > 0) {
+      pdfDoc.endPage();
+    } else {
+      // Create a blank page if no data was found to avoid corrupt PDF
+      pdfDoc.createPage('A4', 90).endPage();
+    }
+
+    pdfDoc.endPDF((err) => {
       if (err) {
         console.error('Error generating consolidated income PDF:', err);
-        return res.status(500).json({ error: 'Failed to generate PDF report' });
+        if (!res.headersSent) {
+          return res.status(500).json({ error: 'Failed to generate PDF report', details: err.message });
+        }
+        return;
       }
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
       res.setHeader('X-Document-ID', reportData.documentId);
 
       const readStream = fs.createReadStream(tmpFilePath);

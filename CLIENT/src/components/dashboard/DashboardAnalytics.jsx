@@ -1,6 +1,6 @@
 /**
  * Dashboard Analytics Component
- * Shows trends, charts, and data visualization
+ * Shows trends, charts, and data visualization using @mui/x-charts
  */
 
 import {
@@ -8,15 +8,17 @@ import {
   Paper,
   Typography,
   Grid,
-  Chip,
   Stack,
-  Divider,
   alpha,
   useTheme
 } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PieChartIcon from '@mui/icons-material/PieChart';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import InboxIcon from '@mui/icons-material/Inbox';
+
+import { BarChart } from '@mui/x-charts/BarChart';
+import { PieChart, pieArcLabelClasses } from '@mui/x-charts/PieChart';
 
 const DashboardAnalytics = ({ data = {} }) => {
   const theme = useTheme();
@@ -27,62 +29,51 @@ const DashboardAnalytics = ({ data = {} }) => {
     success: '#6a994e',
     warning: '#f48c06',
     info: '#0077b6',
-    error: '#d00000'
+    error: '#d00000',
+    legacy: '#8d99ae',
+    newWork: '#2b2d42',
   };
 
   const statusColors = [COLORS.warning, COLORS.success, COLORS.error, COLORS.info, COLORS.primary];
 
+  // Helper for empty states
+  const hasTrends = trends.some(t => t.total > 0);
+  const hasStatus = statusDistribution.some(s => s.value > 0);
+
   return (
     <Grid container spacing={4}>
-      {/* Trends Summary */}
-      <Grid item xs={12} md={trends.length > 0 ? 8 : 12}>
-        <Paper elevation={0} sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 4, height: '100%' }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
+      {/* Trends Summary (Bar Chart) */}
+      <Grid item xs={12} md={7}>
+        <Paper elevation={0} sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 4, height: '100%', minHeight: 380 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 4 }}>
             <TrendingUpIcon sx={{ color: COLORS.primary }} />
             <Typography variant="h6" fontWeight="800">Proposal Trends Summary</Typography>
           </Stack>
           
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {trends.length > 0 ? trends.map((trend, index) => (
-              <Paper 
-                key={index} 
-                elevation={0}
-                sx={{ 
-                  p: 2.5, 
-                  bgcolor: alpha(COLORS.primary, 0.03), 
-                  borderRadius: 3,
-                  border: `1px solid ${alpha(COLORS.primary, 0.08)}`,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 2
+          <Box sx={{ width: '100%', height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {hasTrends ? (
+              <BarChart
+                dataset={trends}
+                xAxis={[{ scaleType: 'band', dataKey: 'date' }]}
+                series={[
+                  { dataKey: 'total', label: 'Total', color: alpha(COLORS.info, 0.7) },
+                  { dataKey: 'approved', label: 'Approved', color: COLORS.success },
+                  { dataKey: 'pending', label: 'Pending', color: COLORS.warning },
+                ]}
+                slotProps={{
+                  legend: {
+                    direction: 'row',
+                    position: { vertical: 'bottom', horizontal: 'middle' },
+                    padding: 0,
+                  }
                 }}
-              >
-                <Box>
-                  <Typography variant="caption" fontWeight="800" color="text.secondary" sx={{ textTransform: 'uppercase' }}>Fiscal Year</Typography>
-                  <Typography variant="h6" fontWeight="900" color="primary">{trend.date}</Typography>
-                </Box>
-                
-                <Stack direction="row" spacing={3} sx={{ flexGrow: 1, justifyContent: 'flex-end' }}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" fontWeight="700" color="text.secondary">Total</Typography>
-                    <Typography variant="body1" fontWeight="900">{trend.total}</Typography>
-                  </Box>
-                  <Divider orientation="vertical" flexItem />
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" fontWeight="700" color="success.main">Approved</Typography>
-                    <Typography variant="body1" fontWeight="900">{trend.approved}</Typography>
-                  </Box>
-                  <Divider orientation="vertical" flexItem />
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" fontWeight="700" color="warning.main">Pending</Typography>
-                    <Typography variant="body1" fontWeight="900">{trend.pending}</Typography>
-                  </Box>
-                </Stack>
-              </Paper>
-            )) : (
-              <Box sx={{ py: 4, textAlign: 'center', opacity: 0.5 }}>
+                margin={{ top: 20, bottom: 60, left: 40, right: 20 }}
+                height={300}
+                borderRadius={6}
+              />
+            ) : (
+              <Box sx={{ textAlign: 'center', opacity: 0.5 }}>
+                <InboxIcon sx={{ fontSize: 48, mb: 1, color: 'text.disabled' }} />
                 <Typography variant="body2">No trend data available for the current period.</Typography>
               </Box>
             )}
@@ -90,70 +81,96 @@ const DashboardAnalytics = ({ data = {} }) => {
         </Paper>
       </Grid>
 
-      {/* Status Distribution */}
-      <Grid item xs={12} md={4}>
-        <Paper elevation={0} sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 4, height: '100%' }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
+      {/* Status Distribution (Donut Chart) */}
+      <Grid item xs={12} md={5}>
+        <Paper elevation={0} sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 4, height: '100%', minHeight: 380 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 4 }}>
             <PieChartIcon sx={{ color: COLORS.primary }} />
             <Typography variant="h6" fontWeight="800">Status Metrics</Typography>
           </Stack>
           
-          <Stack spacing={2}>
-            {statusDistribution.length > 0 ? statusDistribution.map((item, index) => (
-              <Box key={index}>
-                <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body2" fontWeight="700">{item.name}</Typography>
-                  <Chip 
-                    label={item.value} 
-                    size="small" 
-                    sx={{ 
-                      fontWeight: 900,
-                      bgcolor: alpha(statusColors[index % statusColors.length], 0.1), 
-                      color: statusColors[index % statusColors.length],
-                      border: `1px solid ${alpha(statusColors[index % statusColors.length], 0.2)}`
-                    }} 
-                  />
-                </Box>
-                <Divider sx={{ opacity: 0.5 }} />
+          <Box sx={{ width: '100%', height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {hasStatus ? (
+              <PieChart
+                series={[
+                  {
+                    data: statusDistribution.map((item, idx) => ({
+                      id: idx,
+                      value: item.value,
+                      label: item.name,
+                      color: statusColors[idx % statusColors.length]
+                    })).filter(item => item.value > 0),
+                    innerRadius: 65,
+                    outerRadius: 110,
+                    paddingAngle: 4,
+                    cornerRadius: 6,
+                    highlightScope: { faded: 'global', highlighted: 'item' },
+                    faded: { innerRadius: 30, additionalRadius: -30, color: 'gray' },
+                    arcLabel: (item) => `${item.value}`,
+                    arcLabelMinAngle: 20,
+                  },
+                ]}
+                sx={{
+                  [`& .${pieArcLabelClasses.root}`]: {
+                    fill: 'white',
+                    fontWeight: 'bold',
+                    fontSize: 14,
+                  },
+                }}
+                slotProps={{
+                  legend: {
+                    direction: 'column',
+                    position: { vertical: 'middle', horizontal: 'right' },
+                    padding: 0,
+                    labelStyle: {
+                      fontSize: 12,
+                      fontWeight: 600,
+                      fill: theme.palette.text.primary,
+                    }
+                  }
+                }}
+                margin={{ right: 140, top: 20, bottom: 20, left: 20 }}
+                height={300}
+              />
+            ) : (
+              <Box sx={{ textAlign: 'center', opacity: 0.5 }}>
+                <InboxIcon sx={{ fontSize: 48, mb: 1, color: 'text.disabled' }} />
+                <Typography variant="body2">No status data to display.</Typography>
               </Box>
-            )) : (
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                No status data to display.
-              </Typography>
             )}
-          </Stack>
+          </Box>
         </Paper>
       </Grid>
 
-      {/* Budget Type Distribution */}
+      {/* Budget Type Distribution (Horizontal Bar Chart) */}
       {budgetTypeDistribution.length > 0 && (
         <Grid item xs={12}>
           <Paper elevation={0} sx={{ p: 3, border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 4 }}>
             <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
               <AccountTreeIcon sx={{ color: COLORS.primary }} />
-              <Typography variant="h6" fontWeight="800">Budget Classification</Typography>
+              <Typography variant="h6" fontWeight="800">Budget Classification Workflow</Typography>
             </Stack>
             
-            <Grid container spacing={2}>
-              {budgetTypeDistribution.map((item, index) => (
-                <Grid item xs={12} sm={6} md={3} key={index}>
-                  <Box 
-                    sx={{ 
-                      p: 2, 
-                      bgcolor: alpha(theme.palette.background.default, 0.5), 
-                      borderRadius: 3, 
-                      border: `1px solid ${alpha(theme.palette.divider, 0.05)}`,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <Typography variant="body2" fontWeight="700" color="text.secondary">{item.name}</Typography>
-                    <Typography variant="h6" fontWeight="900" color="primary.main">{item.value}</Typography>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
+            <Box sx={{ width: '100%', height: 250 }}>
+              <BarChart
+                dataset={budgetTypeDistribution}
+                yAxis={[{ scaleType: 'band', dataKey: 'name', categoryGapRatio: 0.5 }]}
+                series={[
+                  { 
+                    dataKey: 'value', 
+                    label: 'Proposals Count',
+                    color: COLORS.primary,
+                  }
+                ]}
+                layout="horizontal"
+                margin={{ left: 120, top: 20, bottom: 40, right: 20 }}
+                height={250}
+                borderRadius={4}
+                slotProps={{
+                  legend: { hidden: true }
+                }}
+              />
+            </Box>
           </Paper>
         </Grid>
       )}
@@ -162,3 +179,4 @@ const DashboardAnalytics = ({ data = {} }) => {
 };
 
 export default DashboardAnalytics;
+

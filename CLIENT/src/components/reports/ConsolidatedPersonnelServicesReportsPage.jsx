@@ -43,6 +43,7 @@ import { ToastContainer, toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import ReportPageLayout from "./ReportPageLayout";
+import GenericPdfPreviewDialog from "../GenericPdfPreviewDialog";
 
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
@@ -768,25 +769,13 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         </Fade>
       </Paper>
 
-      <Dialog open={pdfDialogOpen} onClose={closePdfDialog} fullScreen>
-        <DialogTitle>Consolidated Personnel Services PDF Preview</DialogTitle>
-        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
-          {pdfPreviewUrl ? (
-            <iframe
-              title="Consolidated Personnel Services PDF Preview"
-              src={pdfPreviewUrl}
-              style={{ width: "100%", height: "100%", border: "none" }}
-            />
-          ) : (
-            <Box sx={{ p: 3 }}>
-              <Typography variant="body2">No PDF preview available.</Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closePdfDialog}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <GenericPdfPreviewDialog
+        open={pdfDialogOpen}
+        onClose={closePdfDialog}
+        pdfUrl={pdfPreviewUrl}
+        title="Consolidated Personnel Services PDF Preview"
+        downloadFilename={`Consolidated_Personnel_Services_${activeSettings?.fiscalYear || new Date().getFullYear()}.pdf`}
+      />
 
     </ReportPageLayout>
   );

@@ -33,6 +33,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { alpha } from "@mui/material/styles";
+import GenericPdfPreviewDialog from "../components/GenericPdfPreviewDialog";
 
 const EmployeeCourtAppearancePage = () => {
   const { currentUser, assignmentLevel } = useUser();
@@ -87,8 +88,10 @@ const EmployeeCourtAppearancePage = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [selectedRows, setSelectedRows] = useState([]);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
-
-  // 1) Load active settings
+  
+  // PDF Preview State
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -217,18 +220,13 @@ const EmployeeCourtAppearancePage = () => {
         { responseType: 'blob' }
       );
 
-      // Create download link
+      // Create blob URL and show in preview dialog
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `court-appearance-report-${Date.now()}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      setPdfPreviewUrl(url);
+      setPdfPreviewOpen(true);
 
-      toast.success("PDF exported successfully", { id: 'pdf-export' });
+      toast.success("PDF generated successfully", { id: 'pdf-export' });
       setExportMenuAnchor(null);
     } catch (error) {
       console.error('PDF export error:', error);
@@ -686,6 +684,21 @@ const EmployeeCourtAppearancePage = () => {
           </ul>
         </Alert>
       )}
+
+      {/* Generic PDF Preview Dialog */}
+      <GenericPdfPreviewDialog
+        open={pdfPreviewOpen}
+        onClose={() => {
+          setPdfPreviewOpen(false);
+          if (pdfPreviewUrl) {
+            window.URL.revokeObjectURL(pdfPreviewUrl);
+            setPdfPreviewUrl('');
+          }
+        }}
+        pdfUrl={pdfPreviewUrl}
+        title="Court Appearance PDF Preview"
+        downloadFilename={`Court_Appearance_Report_${Date.now()}.pdf`}
+      />
     </>
   );
 };

@@ -902,6 +902,13 @@ const generateTierPDF = async (req, res) => {
       return true;
     });
 
+    const generateDocumentId = () => {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2, 8);
+      return `TIER-${timestamp}-${random}`.toUpperCase();
+    };
+    const documentId = generateDocumentId();
+
     const filename = `Tier_Report_${fiscalYear}_${regionDisplay}_${departmentDisplay}_${divisionDisplay}.pdf`;
     const tmpFilePath = path.join(os.tmpdir(), `tier_report_${Date.now()}.pdf`);
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
@@ -942,7 +949,8 @@ const generateTierPDF = async (req, res) => {
       });
     };
     const drawFooter = () => {
-      pdfDoc.text('Tier Budget Report', CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
+      pdfDoc.text('Tier Budget Report', CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 25, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
       pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 45, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
     };
     const resolveLogoPath = (name) => {
@@ -1083,6 +1091,7 @@ const generateTierPDF = async (req, res) => {
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      res.setHeader('X-Document-ID', documentId);
 
       const readStream = fs.createReadStream(tmpFilePath);
       readStream.on('error', (streamErr) => {

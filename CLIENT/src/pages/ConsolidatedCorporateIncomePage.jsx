@@ -40,7 +40,6 @@ import {
   Summarize,
   ViewList,
   Analytics,
-  Close,
 } from '@mui/icons-material';
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
@@ -48,6 +47,7 @@ import { useUser } from '../context/UserContext';
 import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from '../constants/roles';
 import IncomeReportSummary from '../components/reports/IncomeReportSummary';
 import ReportPageLayout from '../components/reports/ReportPageLayout';
+import GenericPdfPreviewDialog from '../components/GenericPdfPreviewDialog';
 
 const ConsolidatedCorporateIncomePage = () => {
   const { currentUser } = useUser();
@@ -454,6 +454,19 @@ const ConsolidatedCorporateIncomePage = () => {
         params,
         { responseType: 'blob' }
       );
+
+      // Verify we actually got a PDF blob
+      if (response.data.type !== 'application/pdf') {
+        // Try to parse the blob as JSON to see if it's an error message
+        const text = await response.data.text();
+        try {
+          const json = JSON.parse(text);
+          setError(json.error || json.message || 'Failed to generate PDF. Server returned an invalid response.');
+        } catch (_) {
+          setError('Failed to generate PDF. Server returned an invalid file type.');
+        }
+        return;
+      }
 
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
@@ -1092,49 +1105,13 @@ const ConsolidatedCorporateIncomePage = () => {
         )}
       </Paper>
 
-      <Dialog
-        fullScreen
+      <GenericPdfPreviewDialog
         open={pdfPreviewOpen}
         onClose={closePdfDialog}
-      >
-        <AppBar sx={{ position: "relative" }}>
-          <Toolbar>
-            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
-              <Close />
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              Consolidated Corporate Income PDF Preview
-            </Typography>
-            <Button 
-              autoFocus 
-              color="inherit" 
-              onClick={() => {
-                const link = document.createElement('a');
-                link.href = pdfPreviewUrl;
-                link.download = `Consolidated_Corporate_Income_${fiscalYear}_${budgetType}.pdf`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }}
-            >
-              Download
-            </Button>
-          </Toolbar>
-        </AppBar>
-        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
-          {pdfPreviewUrl ? (
-            <iframe
-              title="Consolidated Corporate Income PDF Preview"
-              src={pdfPreviewUrl}
-              style={{ width: "100%", height: "100%", border: "none" }}
-            />
-          ) : (
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-              <CircularProgress />
-            </Box>
-          )}
-        </DialogContent>
-      </Dialog>
+        pdfUrl={pdfPreviewUrl}
+        title="Consolidated Corporate Income PDF Preview"
+        downloadFilename={`Consolidated_Corporate_Income_${fiscalYear}_${budgetType}.pdf`}
+      />
     </ReportPageLayout>
   );
 };

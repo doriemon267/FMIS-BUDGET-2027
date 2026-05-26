@@ -307,6 +307,12 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     }
   }
 
+  // Normalize other strings
+  if (record.PositionTitle) record.PositionTitle = String(record.PositionTitle).trim();
+  if (record.Department) record.Department = String(record.Department).trim();
+  if (record.Division) record.Division = String(record.Division).trim();
+  if (record.Section) record.Section = String(record.Section).trim();
+
   // Process dates
   if (record.DateOfAppointment) {
     if (typeof record.DateOfAppointment === 'number') {

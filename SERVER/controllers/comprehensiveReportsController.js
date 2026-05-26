@@ -1519,6 +1519,13 @@ const getComprehensiveReportPdf = async (req, res) => {
       });
     }
 
+    const generateDocumentId = () => {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2, 8);
+      return `CR-${timestamp}-${random}`.toUpperCase();
+    };
+    const documentId = generateDocumentId();
+
     // Create temp file path for PDF output
     const tmpFilePath = path.join(
       os.tmpdir(),
@@ -1577,7 +1584,8 @@ const getComprehensiveReportPdf = async (req, res) => {
     };
 
     const drawFooter = () => {
-      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN_BOTTOM - 15, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN_BOTTOM - 25, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN_BOTTOM - 15, textOpt({ fontSize: 8 }));
       pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - MARGIN_BOTTOM - 15, textOpt({ fontSize: 8 }));
     };
 
@@ -2166,6 +2174,7 @@ const getComprehensiveReportPdf = async (req, res) => {
         'Content-Disposition',
         `inline; filename=Comprehensive_Report_${String(fiscalYear || 'AllYears')}_${String(budgetType || 'AllTypes')}.pdf`
       );
+      res.setHeader('X-Document-ID', documentId);
 
       const readStream = fs.createReadStream(tmpFilePath);
       readStream.on('error', (streamErr) => {

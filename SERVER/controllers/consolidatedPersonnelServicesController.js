@@ -449,6 +449,13 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     if (!department && psData.length > 0) department = psData[0].department;
     if (!division && psData.length > 0) division = psData[0].division;
 
+    const generateDocumentId = () => {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2, 8);
+      return `CPS-${timestamp}-${random}`.toUpperCase();
+    };
+    const documentId = generateDocumentId();
+
     let signatoriesInfo = extractSignatoriesFromWorkflow(null);
     const workflowRefId = psData.map((m) => m.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
@@ -462,7 +469,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     const grouped = {};
     psData.forEach((employee) => {
-      const rcName = employee.division || employee.department || employee.region || 'Unknown Responsibility Center';
+      const rcName = employee.department || employee.division || employee.region || 'Unknown Responsibility Center';
       if (!grouped[rcName]) grouped[rcName] = {};
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         const categoryName = `${categoryKey} ${categoryData.name}`;
@@ -557,7 +564,8 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       // Border disabled as requested
       pdfDoc.text(watermarkText, cx, cy - 18, textOpt({ fontSize: 30, color: '#d9d9d9', align: 'center' }));
       pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, cx, cy + 15, textOpt({ fontSize: 12, color: '#dddddd', align: 'center' }));
-      pdfDoc.text('Annex B.1.1 (Personnel Services)', CONTENT_LEFT + 10, PAGE_HEIGHT - 12, textOpt({ fontSize: 8 }));
+      pdfDoc.text('Annex B.1.1 (Personnel Services)', CONTENT_LEFT + 10, PAGE_HEIGHT - 22, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT + 10, PAGE_HEIGHT - 12, textOpt({ fontSize: 8 }));
       pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - 12, textOpt({ fontSize: 8 }));
       if (!isFirst) return;
 
@@ -687,6 +695,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       if (res.headersSent) return;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename=Consolidated_PS_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
+      res.setHeader('X-Document-ID', documentId);
       const stream = fs.createReadStream(tmpFilePath);
       stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
       res.on('finish', () => {

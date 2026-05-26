@@ -123,6 +123,17 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     const processedRecords = [];
     const warningRecords = [];
 
+    // Fetch all existing employees for this region and fiscal year to use for matching/consumption
+    // This allows multiple vacant slots of the same type while preventing duplicates on re-upload
+    const regionRegex = new RegExp(`^${String(activeRegion).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const fiscalYearVal = activeSettings.fiscalYear;
+    const escapeRegex = (str) => String(str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").trim();
+    
+    let existingEmployees = await Employee.find({
+      Region: regionRegex,
+      fiscalYear: fiscalYearVal
+    }).lean();
+
     for (const result of validationResults) {
       if (result.warnings.length > 0) {
         warningRecords.push({
@@ -136,8 +147,6 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         const rec = result.record;
         const isVacant = rec.EmployeeFullName && 
                  ['VACANT', 'TO-BE-FILLED'].includes(String(rec.EmployeeFullName).toUpperCase().trim());
-        const regionRegex = new RegExp(`^${String(activeRegion).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-        const fiscalYearVal = activeSettings.fiscalYear;
 
         // Auto-generate Employee Number when missing: VACANT → V00001, regular → E00001
         const hasEmployeeNo = rec.EmployeeID && String(rec.EmployeeID).trim() !== '' || rec.Employee_No && String(rec.Employee_No).trim() !== '';
@@ -151,40 +160,43 @@ router.post("/upload", upload.single("file"), async (req, res) => {
           rec.EmployeeID = rec.EmployeeID || String(rec.Employee_No).trim();
         }
 
-        // For VACANT: each position is a separate record — match by ItemNumber or by position details so we don't overwrite one VACANT for all
-        let matchQuery;
-        if (isVacant) {
-  const itemNo = (rec.itemNumber || rec.ItemNumber || '').toString().trim();
-  
-  // Regex pattern na tatanggap sa VACANT o TO-BE-FILLED
-  const vacantRegex = /^VACANT$|^TO-BE-FILLED$/i;
+        // Try to find a match from existingEmployees list (consumption logic)
+        let existingEmployee = null;
+        const vacantRegex = /^VACANT$|^TO-BE-FILLED$/i;
 
-  if (itemNo) {
-    matchQuery = {
-      EmployeeFullName: vacantRegex,
-      fiscalYear: fiscalYearVal,
-      Region: regionRegex,
-      itemNumber: itemNo
-    };
-  } else {
-    matchQuery = {
-      EmployeeFullName: vacantRegex,
-      fiscalYear: fiscalYearVal,
-      Region: regionRegex,
-      PositionTitle: rec.PositionTitle,
-      Department: rec.Department,
-      Division: (rec.Division || ''),
-      Section: (rec.Section || '')
-    };
-  }
-} else {
-          matchQuery = {
-            EmployeeFullName: new RegExp(`^${String(rec.EmployeeFullName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
-            fiscalYear: fiscalYearVal,
-            Region: regionRegex
-          };
+        let matchIndex = -1;
+        if (isVacant) {
+          const itemNo = (rec.itemNumber || rec.ItemNumber || "").toString().trim();
+          if (itemNo) {
+            matchIndex = existingEmployees.findIndex(
+              (emp) => vacantRegex.test(emp.EmployeeFullName) && emp.itemNumber === itemNo
+            );
+          } else {
+            // Match by position details if no item number
+            matchIndex = existingEmployees.findIndex((emp) => {
+              const posMatch = new RegExp(`^${escapeRegex(rec.PositionTitle)}$`, "i").test(emp.PositionTitle);
+              const deptMatch = new RegExp(`^${escapeRegex(rec.Department)}$`, "i").test(emp.Department);
+              const divMatch =
+                rec.Division && String(rec.Division).trim()
+                  ? new RegExp(`^${escapeRegex(rec.Division)}$`, "i").test(emp.Division)
+                  : !emp.Division || String(emp.Division).trim() === "";
+              const sectMatch =
+                rec.Section && String(rec.Section).trim()
+                  ? new RegExp(`^${escapeRegex(rec.Section)}$`, "i").test(emp.Section)
+                  : !emp.Section || String(emp.Section).trim() === "";
+
+              return vacantRegex.test(emp.EmployeeFullName) && posMatch && deptMatch && divMatch && sectMatch;
+            });
+          }
+        } else {
+          const fullNameRegex = new RegExp(`^${String(rec.EmployeeFullName).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+          matchIndex = existingEmployees.findIndex((emp) => fullNameRegex.test(emp.EmployeeFullName));
         }
-        const existingEmployee = await Employee.findOne(matchQuery);
+
+        if (matchIndex !== -1) {
+          // Found a match, consume it so it's not used by another row in this batch
+          existingEmployee = existingEmployees.splice(matchIndex, 1)[0];
+        }
 
         if (existingEmployee) {
           await Employee.updateOne(

@@ -46,6 +46,7 @@ import {
 import PesoIcon from "../icons/PesoIcon";
 import api from "../../config/api";
 import ReportPageLayout from "./ReportPageLayout";
+import GenericPdfPreviewDialog from "../GenericPdfPreviewDialog";
 import { toast } from "react-toastify";
 import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from "../../constants/roles";
 
@@ -822,35 +823,13 @@ const ComprehensiveReportsPage = () => {
         </Box>
       )}
 
-      <Dialog
-        fullScreen
+      <GenericPdfPreviewDialog
         open={pdfDialogOpen}
         onClose={closePdfDialog}
-      >
-        <AppBar sx={{ position: "relative" }}>
-          <Toolbar>
-            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
-              <Close />
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              Comprehensive Report PDF Preview
-            </Typography>
-          </Toolbar>
-        </AppBar>
-        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
-          {pdfPreviewUrl ? (
-            <iframe
-              title="Comprehensive Report PDF"
-              src={pdfPreviewUrl}
-              style={{ width: "100%", height: "100%", border: "none" }}
-            />
-          ) : (
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-              <CircularProgress />
-            </Box>
-          )}
-        </DialogContent>
-      </Dialog>
+        pdfUrl={pdfPreviewUrl}
+        title="Comprehensive Report PDF Preview"
+        downloadFilename={`Comprehensive_Report_${selectedFiscalYear}_${selectedBudgetType}.pdf`}
+      />
 
       {!reportData && !loading && (
         <Card elevation={0} sx={{ borderStyle: 'dashed', borderWidth: '2px', borderColor: 'divider' }}>

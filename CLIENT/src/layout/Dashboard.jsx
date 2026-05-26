@@ -169,34 +169,11 @@ const DashboardContent = () => {
               </IconButton>
             )}
             
-            {/* Modern Search Bar */}
-            <Box ref={searchRef} sx={{ position: "relative", ml: isMobile ? 0 : 2, display: { xs: "none", sm: "block" } }}>
-              <Box sx={{
-                display: "flex", alignItems: "center", bgcolor: "white",
-                border: "1px solid", borderColor: "rgba(0,0,0,0.08)", borderRadius: 2, px: 2, py: 0.75, width: 350,
-                transition: "all 0.2s ease",
-                "&:focus-within": { borderColor: "#4ade80", boxShadow: "0 0 0 3px rgba(74, 222, 128, 0.1)" }
-              }}>
-                <FaSearch size={14} color="#64748b" />
-                <InputBase
-                  placeholder="Search resources..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => setIsSearchOpen(true)}
-                  sx={{ ml: 1.5, flex: 1, fontSize: "0.875rem" }}
-                />
-              </Box>
-              {isSearchOpen && filteredResults.length > 0 && (
-                <Paper elevation={12} sx={{ position: "absolute", top: "115%", width: "100%", borderRadius: 2, zIndex: 1000, overflow: "hidden", border: "1px solid rgba(0,0,0,0.05)" }}>
-                  <List disablePadding>
-                    {filteredResults.map((r, i) => (
-                      <ListItemButton key={i} onClick={() => { nav(r.path); setIsSearchOpen(false); }} sx={{ py: 1.5 }}>
-                        <ListItemText primary={r.title} secondary={r.category} primaryTypographyProps={{ fontSize: "0.875rem", fontWeight: 600 }} secondaryTypographyProps={{ fontSize: "0.75rem" }} />
-                      </ListItemButton>
-                    ))}
-                  </List>
-                </Paper>
-              )}
+            {/* Application Title */}
+            <Box sx={{ ml: isMobile ? 0 : 2, display: { xs: "none", sm: "block" } }}>
+              <Typography variant="h6" fontWeight="800" sx={{ color: theme.palette.text.primary, letterSpacing: -0.5 }}>
+                {env("APP_FULL_TITLE") || "Online Submission of Budget Proposal Information System"}
+              </Typography>
             </Box>
           </Box>
 

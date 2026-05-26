@@ -47,6 +47,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import RestoreIcon from '@mui/icons-material/Restore';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import GenericPdfPreviewDialog from '../components/GenericPdfPreviewDialog';
 
 const TierPage = () => {
   const queryClient = useQueryClient();
@@ -912,44 +913,13 @@ const TierPage = () => {
         </>
       )}
 
-      <Dialog
-        fullScreen
+      <GenericPdfPreviewDialog
         open={pdfViewerOpen}
         onClose={handleClosePdfViewer}
-      >
-        <AppBar sx={{ position: "relative" }}>
-          <Toolbar>
-            <IconButton edge="start" color="inherit" onClick={handleClosePdfViewer} aria-label="close">
-              <CloseIcon />
-            </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
-              Tier Report (PDF Preview)
-            </Typography>
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<OpenInNewIcon />}
-              onClick={() => pdfBlobUrl && window.open(pdfBlobUrl, '_blank', 'width=1200,height=800')}
-              sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.7)', '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' } }}
-            >
-              Buksan sa bagong tab
-            </Button>
-          </Toolbar>
-        </AppBar>
-        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%", overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {pdfBlobUrl ? (
-            <iframe
-              title="Tier Report PDF"
-              src={pdfBlobUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
-          ) : (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <CircularProgress />
-            </Box>
-          )}
-        </DialogContent>
-      </Dialog>
+        pdfUrl={pdfBlobUrl}
+        title="Tier Report PDF Preview"
+        downloadFilename={`Tier_Report_${activeFiscalYear}_${selectedRegion}.pdf`}
+      />
 
       <Dialog
         open={revisionsDrawerOpen}

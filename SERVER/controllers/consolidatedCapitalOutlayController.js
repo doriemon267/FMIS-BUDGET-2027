@@ -184,6 +184,13 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
   }
 
   try {
+    const generateDocumentId = () => {
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2, 8);
+      return `CCO-${timestamp}-${random}`.toUpperCase();
+    };
+    const documentId = generateDocumentId();
+
     const { regions, fiscalYear, budgetType } = req.query;
     let { department, division } = req.query;
     
@@ -324,18 +331,35 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
         details.forEach((d) => {
           const amt = (Number(d.income_amount) || 0) + (Number(d.subsidy_amount) || 0);
           if (amt > 0) {
-            if (!catGroups[catKey]) catGroups[catKey] = [];
-            catGroups[catKey].push({ rc: rcName, particulars: d.particulars || '', amount: amt });
+            if (!catGroups[catKey]) catGroups[catKey] = {};
+            const particulars = d.particulars || '';
+            const rowKey = `${rcName}_${particulars}`;
+            
+            if (!catGroups[catKey][rowKey]) {
+              catGroups[catKey][rowKey] = { rc: rcName, particulars: particulars, amount: 0 };
+            }
+            catGroups[catKey][rowKey].amount += amt;
           }
         });
       } else {
         const amt = (Number(parent.income) || 0) + (Number(parent.subsidy) || 0);
         if (amt > 0) {
-          if (!catGroups[catKey]) catGroups[catKey] = [];
-          catGroups[catKey].push({ rc: rcName, particulars: parent.sublineItem || parent.accountingTitle || '', amount: amt });
+          if (!catGroups[catKey]) catGroups[catKey] = {};
+          const particulars = parent.sublineItem || parent.accountingTitle || '';
+          const rowKey = `${rcName}_${particulars}`;
+          
+          if (!catGroups[catKey][rowKey]) {
+            catGroups[catKey][rowKey] = { rc: rcName, particulars: particulars, amount: 0 };
+          }
+          catGroups[catKey][rowKey].amount += amt;
         }
       }
     });
+
+    // Convert to arrays
+    for (const catKey of Object.keys(catGroups)) {
+      catGroups[catKey] = Object.values(catGroups[catKey]);
+    }
 
     const tmpFilePath = path.join(os.tmpdir(), `co_report_${Date.now()}.pdf`);
     const tempSignatureImagePaths = [];
@@ -441,7 +465,8 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       const cx = PAGE_WIDTH / 2;
 
       // Footer — near the very bottom edge of the paper
-      pdfDoc.text('Annex E (Capital Outlay)', CONTENT_LEFT, PAGE_HEIGHT - 10, textOpt({ fontSize: 7, font: F_CAMBRIA }));
+      pdfDoc.text('Annex E (Capital Outlay)', CONTENT_LEFT, PAGE_HEIGHT - 20, textOpt({ fontSize: 7, font: F_CAMBRIA }));
+      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT, PAGE_HEIGHT - 10, textOpt({ fontSize: 7, font: F_CAMBRIA }));
       pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 40, PAGE_HEIGHT - 10, textOpt({ fontSize: 7, align: 'right', font: F_CAMBRIA }));
 
       if (!isFirst) return;
@@ -603,6 +628,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       if (res.headersSent) return;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename=Capital_Outlay_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
+      res.setHeader('X-Document-ID', documentId);
       const stream = fs.createReadStream(tmpFilePath);
       stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
       res.on('finish', () => {

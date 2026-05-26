@@ -714,12 +714,16 @@ const ConsolidatedReportsPage = () => {
                     </Box>
                   )}
                 >
-                  {regions.map((region) => (
-                    <MenuItem key={region.id} value={region.name}>
-                      <Checkbox checked={selectedRegions.indexOf(region.name) > -1} />
-                      {region.name}
-                    </MenuItem>
-                  ))}
+                  {regions.map((region, idx) => {
+                    const regionName = region.name || region.Region || (typeof region === 'string' ? region : '');
+                    const key = region.id || region._id || regionName || idx;
+                    return (
+                      <MenuItem key={key} value={regionName}>
+                        <Checkbox checked={selectedRegions.indexOf(regionName) > -1} />
+                        {regionName}
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
               </FormControl>
             </Grid>

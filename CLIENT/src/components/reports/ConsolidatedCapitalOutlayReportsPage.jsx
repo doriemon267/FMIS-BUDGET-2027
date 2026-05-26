@@ -46,6 +46,7 @@ import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import { NumericFormat } from "react-number-format";
 import ReportPageLayout from "./ReportPageLayout";
+import GenericPdfPreviewDialog from "../GenericPdfPreviewDialog";
 
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
@@ -1016,29 +1017,13 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
       </Dialog>
 
       {/* ── PDF Preview Dialog ─────────────────────────────────────────────── */}
-      <Dialog
+      <GenericPdfPreviewDialog
         open={pdfDialogOpen}
         onClose={closePdfDialog}
-        fullScreen
-      >
-        <DialogTitle>Consolidated Capital Outlay PDF Preview</DialogTitle>
-        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
-          {pdfPreviewUrl ? (
-            <iframe
-              src={pdfPreviewUrl}
-              title="Capital Outlay PDF Preview"
-              style={{ width: '100%', height: '100%', border: 'none' }}
-            />
-          ) : (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-              <CircularProgress />
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closePdfDialog}>Close</Button>
-        </DialogActions>
-      </Dialog>
+        pdfUrl={pdfPreviewUrl}
+        title="Consolidated Capital Outlay PDF Preview"
+        downloadFilename={`Consolidated_Capital_Outlay_${selectedFiscalYear || activeSettings?.fiscalYear || new Date().getFullYear()}.pdf`}
+      />
     </ReportPageLayout>
   );
 };
