@@ -40,6 +40,7 @@ import {
   InputLabel,
   Breadcrumbs,
   Link,
+  Skeleton,
 } from "@mui/material";
 import { ToastContainer, toast } from "react-toastify";
 import api from "../../config/api";
@@ -53,10 +54,18 @@ import FilterListIcon from "@mui/icons-material/FilterList";
 import ClearIcon from "@mui/icons-material/Clear";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
-import RefreshIcon from "@mui/icons-material/Refresh";
+import PrintIcon from "@mui/icons-material/Print";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import GenericPdfPreviewDialog from '../GenericPdfPreviewDialog';
+import RefreshIcon from "@mui/icons-material/Refresh";
 import HomeIcon from "@mui/icons-material/Home";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import CategoryIcon from "@mui/icons-material/Category";
+import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import SavingsIcon from "@mui/icons-material/Savings";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 
 // Custom component for numeric input formatting
 const NumberFormatCustom = React.memo(React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -842,85 +851,80 @@ const ConsolidatedReportsPage = () => {
 
       {/* Summary Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={2}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Categories
-              </Typography>
-              <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                {filteredData?.length || 0}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={2}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Line Items
-              </Typography>
-              <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                {filteredData?.reduce((sum, row) => sum + (row.children?.length || 0), 0) || 0}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={2}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Income
-              </Typography>
-              <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.income === 'number' ? grandTotals.income : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={2}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Subsidy
-              </Typography>
-              <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.subsidy === 'number' ? grandTotals.subsidy : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={2}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Total Amount
-              </Typography>
-              <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.amount === 'number' ? grandTotals.amount : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={2}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Grand Total
-              </Typography>
-              <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.total === 'number' ? grandTotals.total : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+        {[
+          {
+            title: "Total Categories",
+            value: filteredData?.length || 0,
+            icon: <CategoryIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
+            bgColor: "linear-gradient(135deg, #4776E6 0%, #8E54E9 100%)",
+          },
+          {
+            title: "Total Line Items",
+            value: filteredData?.reduce((sum, row) => sum + (row.children?.length || 0), 0) || 0,
+            icon: <FormatListBulletedIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
+            bgColor: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
+          },
+          {
+            title: "Total Income",
+            value: `₱${(grandTotals?.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <AttachMoneyIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
+            bgColor: "linear-gradient(135deg, #f2994a 0%, #f2c94c 100%)",
+          },
+          {
+            title: "Total Subsidy",
+            value: `₱${(grandTotals?.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <SavingsIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
+            bgColor: "linear-gradient(135deg, #ee0979 0%, #ff6a00 100%)",
+          },
+          {
+            title: "Total Amount",
+            value: `₱${(grandTotals?.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <ReceiptLongIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
+            bgColor: "linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%)",
+          },
+          {
+            title: "Grand Total",
+            value: `₱${(grandTotals?.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <AccountBalanceWalletIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
+            bgColor: "linear-gradient(135deg, #1f4037 0%, #99f2c8 100%)",
+          },
+        ].map((metric, index) => (
+          <Grid item xs={12} md={2} key={index}>
+            <Card
+              sx={{
+                background: metric.bgColor,
+                color: "#fff",
+                borderRadius: 2,
+                boxShadow: "0 4px 20px 0 rgba(0,0,0,0.1)",
+                transition: "transform 0.2s",
+                "&:hover": { transform: "translateY(-4px)" },
+              }}
+            >
+              <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9, mb: 1 }}>
+                      {metric.title}
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                      {metric.value}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ opacity: 0.8 }}>{metric.icon}</Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
       {/* Main Table */}
-      <Paper elevation={1}>
+      <Paper elevation={1} sx={{ borderRadius: 2, overflow: "hidden" }}>
         {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
+          <Box sx={{ p: 3 }}>
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} variant="rectangular" height={40} sx={{ mb: 1, borderRadius: 1 }} />
+            ))}
           </Box>
         ) : !filteredData || filteredData.length === 0 ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 4 }}>
@@ -957,69 +961,32 @@ const ConsolidatedReportsPage = () => {
               </colgroup>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
-                    textAlign: "center",
-                    fontSize: "0.875rem"
-                  }}></TableCell>
-                  <TableCell sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
-                    textAlign: "center",
-                    fontSize: "0.875rem"
-                  }}>REGION</TableCell>
-                  <TableCell sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
-                    textAlign: "center",
-                    fontSize: "0.875rem"
-                  }}>UACS CODE</TableCell>
-                  <TableCell sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
-                    textAlign: "center",
-                    fontSize: "0.875rem"
-                  }}>ACCOUNTING TITLE / LINE ITEM</TableCell>
-                  <TableCell sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
-                    textAlign: "center",
-                    fontSize: "0.875rem"
-                  }}>INCOME</TableCell>
-                  <TableCell sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
-                    textAlign: "center",
-                    fontSize: "0.875rem"
-                  }}>SUBSIDY</TableCell>
-                  <TableCell sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
-                    textAlign: "center",
-                    fontSize: "0.875rem"
-                  }}>AMOUNT</TableCell>
+                  {[
+                    "",
+                    "REGION",
+                    "UACS CODE",
+                    "ACCOUNTING TITLE / LINE ITEM",
+                    "INCOME",
+                    "SUBSIDY",
+                    "AMOUNT",
+                  ].map((headCell, index) => (
+                    <TableCell
+                      key={index}
+                      sx={{
+                        backgroundColor: "#f8fafc",
+                        color: "#475569",
+                        fontWeight: 700,
+                        padding: "12px",
+                        borderBottom: "2px solid #e2e8f0",
+                        textAlign: index >= 4 ? "right" : "center",
+                        fontSize: "0.75rem",
+                        letterSpacing: "0.5px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {headCell}
+                    </TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -1131,18 +1098,19 @@ const ConsolidatedReportsPage = () => {
             <TableFooter>
               <TableRow>
                 {/* Empty cells for first 4 columns */}
-                <TableCell sx={{ backgroundColor: "#375e38", border: "1px solid white" }} />
-                <TableCell sx={{ backgroundColor: "#375e38", border: "1px solid white" }} />
-                <TableCell sx={{ backgroundColor: "#375e38", border: "1px solid white" }} />
+                <TableCell sx={{ backgroundColor: "#f8fafc", borderTop: "2px solid #cbd5e1", borderBottom: "none" }} />
+                <TableCell sx={{ backgroundColor: "#f8fafc", borderTop: "2px solid #cbd5e1", borderBottom: "none" }} />
+                <TableCell sx={{ backgroundColor: "#f8fafc", borderTop: "2px solid #cbd5e1", borderBottom: "none" }} />
                 
                 {/* GRAND TOTAL label */}
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
+                    backgroundColor: "#f8fafc",
+                    color: "#1e293b",
+                    fontWeight: 800,
+                    padding: "16px 12px",
+                    borderTop: "2px solid #cbd5e1",
+                    borderBottom: "none",
                     textAlign: "right",
                     fontSize: "0.875rem"
                   }}
@@ -1153,11 +1121,12 @@ const ConsolidatedReportsPage = () => {
                 {/* Income total - nakatapat sa INCOME column */}
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
+                    backgroundColor: "#f8fafc",
+                    color: "#1e293b",
+                    fontWeight: 800,
+                    padding: "16px 12px",
+                    borderTop: "2px solid #cbd5e1",
+                    borderBottom: "none",
                     textAlign: "right",
                     fontSize: "0.875rem"
                   }}
@@ -1168,11 +1137,12 @@ const ConsolidatedReportsPage = () => {
                 {/* Subsidy total - nakatapat sa SUBSIDY column */}
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
+                    backgroundColor: "#f8fafc",
+                    color: "#1e293b",
+                    fontWeight: 800,
+                    padding: "16px 12px",
+                    borderTop: "2px solid #cbd5e1",
+                    borderBottom: "none",
                     textAlign: "right",
                     fontSize: "0.875rem"
                   }}
@@ -1183,11 +1153,12 @@ const ConsolidatedReportsPage = () => {
                 {/* Amount total - nakatapat sa AMOUNT column */}
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#375e38", 
-                    color: "#fff",
-                    fontWeight: "bold",
-                    padding: "8px 12px",
-                    border: "1px solid white",
+                    backgroundColor: "#f8fafc",
+                    color: "#1e293b",
+                    fontWeight: 800,
+                    padding: "16px 12px",
+                    borderTop: "2px solid #cbd5e1",
+                    borderBottom: "none",
                     textAlign: "right",
                     fontSize: "0.875rem"
                   }}
@@ -1200,25 +1171,13 @@ const ConsolidatedReportsPage = () => {
         </Fade>
       </Paper>
 
-      <Dialog open={pdfDialogOpen} onClose={closePdfDialog} fullScreen>
-        <DialogTitle>Consolidated MOOE PDF Preview</DialogTitle>
-        <DialogContent dividers sx={{ p: 0, height: "100vh" }}>
-          {pdfPreviewUrl ? (
-            <iframe
-              title="Consolidated MOOE PDF Preview"
-              src={pdfPreviewUrl}
-              style={{ width: "100%", height: "100%", border: "none" }}
-            />
-          ) : (
-            <Box sx={{ p: 3 }}>
-              <Typography variant="body2">No PDF preview available.</Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closePdfDialog}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <GenericPdfPreviewDialog
+        open={pdfDialogOpen}
+        onClose={closePdfDialog}
+        pdfUrl={pdfPreviewUrl}
+        title="Consolidated MOOE PDF Preview"
+        downloadFilename={`Consolidated_MOOE_${activeSettings?.fiscalYear || "All"}_${activeSettings?.budgetType || "All"}.pdf`}
+      />
 
     </ReportPageLayout>
   );

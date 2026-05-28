@@ -193,6 +193,24 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     return 0;
   }, []);
 
+  // Fetch proposal workflow status to align editability rules
+  const { data: proposalWorkflow } = useQuery({
+    queryKey: ["proposalWorkflow", effectiveProposalId],
+    queryFn: async () => {
+      if (!effectiveProposalId) return null;
+      try {
+        const response = await api.get(`/api/allproposal/proposals/${effectiveProposalId}`, {
+          withCredentials: true
+        });
+        return response.data?.data || null;
+      } catch (err) {
+        console.warn("Failed to fetch proposal workflow status:", err.message);
+        return null;
+      }
+    },
+    enabled: Boolean(effectiveProposalId)
+  });
+
   // Fetch data using React Query
   const { data, isLoading, error } = useQuery({
     queryKey: ["mooeData", activeRegion?.name], // Add region ID to query key to refetch when region changes
@@ -1388,9 +1406,43 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     );
   }
 
-  const isEditable = hasWorkflowRef && ["Not Submitted", "Returned", "Draft"].includes(
-    data?.status
-  ) && !locked;
+  const isEditable = (() => {
+    console.log("🔍 MOOE Edit Check:", {
+      hasWorkflowRef,
+      locked,
+      statusFromData: data?.status,
+      workflowStatus: proposalWorkflow?.status,
+      isSuperAdmin
+    });
+    if (!hasWorkflowRef || locked) return false;
+    
+    // 1. Prefer actual Proposal Workflow Status if loaded
+    if (proposalWorkflow && proposalWorkflow.status) {
+      const wStatus = String(proposalWorkflow.status).trim().toUpperCase();
+      const allowedWorkflow = [
+        "DRAFT",
+        "INITIAL",
+        "RETURNED",
+        "RETURNED TO PREPARER",
+        "RETURNED_TO_PREPARER"
+      ].includes(wStatus) || wStatus.includes("PREPARER");
+      console.log("🔍 MOOE isEditable (workflowStatus):", allowedWorkflow);
+      return allowedWorkflow;
+    }
+
+    // 2. Fallback to record status (legacy & bulk upload compatibility)
+    const status = String(data?.status || '').trim().toUpperCase();
+    const allowed = [
+      "NOT SUBMITTED",
+      "NOT_SUBMITTED",
+      "DRAFT",
+      "RETURNED",
+      "RETURNED TO PREPARER",
+      "RETURNED_TO_PREPARER"
+    ].includes(status) || status.includes("PREPARER");
+    console.log("🔍 MOOE isEditable (recordStatus fallback):", allowed);
+    return allowed;
+  })();
 
   // Enhanced export functionality with multiple formats
   const handleExportToExcel = () => {

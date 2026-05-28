@@ -70,6 +70,36 @@ capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
     message: "This endpoint is deprecated. Chart of Accounts data now comes directly from the FMIS main database (MONGODB_MAIN_URL). Update the source dataset there if changes are needed.",
   });
 });
+// Helper to resolve region to its string name from ObjectId, populated object, or string format
+const resolveRegionName = async (regionInput) => {
+  if (!regionInput) return '';
+  
+  if (typeof regionInput === 'string' && !/^[0-9a-fA-F]{24}$/.test(regionInput)) {
+    return regionInput;
+  }
+  
+  try {
+    const Region = require('../models/Region');
+    let regionId = regionInput;
+    
+    if (typeof regionInput === 'object') {
+      if (regionInput.Region || regionInput.RegionName || regionInput.regionName || regionInput.region) {
+        return regionInput.Region || regionInput.RegionName || regionInput.regionName || regionInput.region;
+      }
+      regionId = regionInput._id || regionInput.id;
+    }
+    
+    if (regionId && require('mongoose').Types.ObjectId.isValid(regionId)) {
+      const regionDoc = await Region.findById(regionId).lean();
+      return regionDoc?.Region || '';
+    }
+  } catch (err) {
+    console.warn('[resolveRegionName] Error resolving region name:', err.message);
+  }
+  
+  return String(regionInput);
+};
+
 // Get Capital Outlay by parameters
 capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl('read'), async (req, res) => {
   try {
@@ -119,13 +149,22 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
     if (proposalId && (req.query.fiscalYear || req.query.budgetType)) {
       // Fetch the proposal to get its region if not provided in the request
       let proposalRegion = req.query.region;
-      if (!proposalRegion) {
+      let proposalCreatorId = null;
+      let proposalCreatedBy = null;
+      let proposalFiscalYear = req.query.fiscalYear;
+      let proposalBudgetType = req.query.budgetType;
+      
+      let resolvedRegionName = await resolveRegionName(proposalRegion);
+      if (!resolvedRegionName) {
         try {
           // Check legacy Proposal first
           const Proposal = require('../models/Proposal');
-          const proposal = await Proposal.findById(proposalId).select('region').lean();
+          const proposal = await Proposal.findById(proposalId).select('region createdByUserId processBy fiscalYear budgetType').lean();
           if (proposal) {
-            proposalRegion = proposal.region;
+            resolvedRegionName = proposal.region;
+            proposalCreatorId = proposal.createdByUserId || proposal.processBy;
+            proposalFiscalYear = proposalFiscalYear || String(proposal.fiscalYear || '');
+            proposalBudgetType = proposalBudgetType || proposal.budgetType;
           } else {
             // Check NewProposalWorkflow if legacy not found
             const NewProposalWorkflow = require('../models/NewProposalWorkflow');
@@ -133,13 +172,18 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
               .populate('region', 'Region RegionName region')
               .lean();
             if (workflow) {
-              proposalRegion = workflow.region?.Region || workflow.region?.RegionName || workflow.region?.region || workflow.region;
+              resolvedRegionName = await resolveRegionName(workflow.region);
+              proposalCreatorId = workflow.createdByUserId || workflow.processBy;
+              proposalCreatedBy = workflow.createdBy;
+              proposalFiscalYear = proposalFiscalYear || String(workflow.fiscalYear || '');
+              proposalBudgetType = proposalBudgetType || workflow.budgetType || workflow.modelType;
             }
           }
         } catch (err) {
           console.warn('[CapitalOutlay] Failed to fetch proposal for region fallback:', err.message);
         }
       }
+      proposalRegion = resolvedRegionName;
 
       // Build regional search array including special regions
       const searchRegions = [null, ""];
@@ -184,8 +228,10 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
         }
         unlinkedQuery.$and.push({ $or: fyOr });
       }
-      if (req.query.budgetType) {
-        unlinkedQuery.$and.push({ budgetType: req.query.budgetType });
+      
+      const finalBudgetType = req.query.budgetType || proposalBudgetType;
+      if (finalBudgetType) {
+        unlinkedQuery.$and.push({ budgetType: new RegExp(`^${finalBudgetType}$`, 'i') });
       }
 
       const unlinkedCapitalOutlay = await CapitalOutlay.find(unlinkedQuery).populate('category', 'categoryName').lean();

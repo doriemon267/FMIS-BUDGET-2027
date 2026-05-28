@@ -792,8 +792,18 @@ const ConsolidatedCorporateIncomePage = () => {
                     <TableContainer component={Paper} sx={{ backgroundColor: '#fafafa' }}>
                       <Table size="small" stickyHeader>
                         <TableHead>
-                          <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
-                            <TableCell sx={{ fontWeight: 'bold', width: '300px' }}>
+                          <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+                            <TableCell 
+                              sx={{ 
+                                fontWeight: 700, 
+                                color: '#475569',
+                                borderBottom: '2px solid #e2e8f0',
+                                width: '300px',
+                                textTransform: 'uppercase',
+                                fontSize: '0.75rem',
+                                letterSpacing: '0.5px'
+                              }}
+                            >
                               Income Category / Subcategory
                             </TableCell>
                             {reportData.regions
@@ -802,21 +812,44 @@ const ConsolidatedCorporateIncomePage = () => {
                                 <TableCell 
                                   key={region} 
                                   align="right"
-                                  sx={{ fontWeight: 'bold' }}
+                                  sx={{ 
+                                    fontWeight: 700, 
+                                    color: '#475569',
+                                    borderBottom: '2px solid #e2e8f0',
+                                    textTransform: 'uppercase',
+                                    fontSize: '0.75rem',
+                                    letterSpacing: '0.5px'
+                                  }}
                                 >
                                   {region}
                                 </TableCell>
                               ))}
                             <TableCell 
                               align="right"
-                              sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}
+                              sx={{ 
+                                fontWeight: 800, 
+                                backgroundColor: '#f8fafc',
+                                color: '#1e293b',
+                                borderBottom: '2px solid #e2e8f0',
+                                textTransform: 'uppercase',
+                                fontSize: '0.75rem',
+                                letterSpacing: '0.5px'
+                              }}
                             >
                               Total
                             </TableCell>
                             {showPercentages && (
                               <TableCell 
                                 align="right"
-                                sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}
+                                sx={{ 
+                                  fontWeight: 800, 
+                                  backgroundColor: '#f8fafc',
+                                  color: '#1e293b',
+                                  borderBottom: '2px solid #e2e8f0',
+                                  textTransform: 'uppercase',
+                                  fontSize: '0.75rem',
+                                  letterSpacing: '0.5px'
+                                }}
                               >
                                 %
                               </TableCell>
@@ -833,8 +866,14 @@ const ConsolidatedCorporateIncomePage = () => {
                             
                             // Add the category row with expand/collapse functionality
                             categoryRows.push(
-                              <TableRow key={`category-${category.id}`} sx={{ backgroundColor: '#f8f9fa' }}>
-                                <TableCell sx={{ fontWeight: 'bold' }}>
+                              <TableRow 
+                                key={`category-${category.id}`} 
+                                sx={{ 
+                                  backgroundColor: '#ffffff',
+                                  '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.04)' }
+                                }}
+                              >
+                                <TableCell sx={{ fontWeight: 600, color: '#1e293b' }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                     {category.subcategories && category.subcategories.length > 0 && (
                                       <IconButton 
@@ -903,19 +942,31 @@ const ConsolidatedCorporateIncomePage = () => {
                           })}
                           
                           {/* Total Row */}
-                          <TableRow sx={{ backgroundColor: '#e8f5e8', fontWeight: 'bold' }}>
-                            <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                          <TableRow 
+                            sx={{ 
+                              backgroundColor: '#f8fafc', 
+                              borderTop: '2px solid #cbd5e1'
+                            }}
+                          >
+                            <TableCell sx={{ fontWeight: 800, fontSize: '0.875rem', color: '#1e293b', borderBottom: 'none' }}>
                               GRAND TOTAL
                             </TableCell>
                             {reportData.regions
                               .filter(region => consolidationType === 'all' || selectedRegions === region)
                               .map((region) => (
-                                <TableCell key={`total-${region}`} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                                <TableCell 
+                                  key={`total-${region}`} 
+                                  align="right" 
+                                  sx={{ fontWeight: 800, fontSize: '0.875rem', color: '#1e293b', borderBottom: 'none' }}
+                                >
                                   ₱{(reportData.regionData[region]?.total || 0)
                                     .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </TableCell>
                               ))}
-                            <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1976d2' }}>
+                            <TableCell 
+                              align="right" 
+                              sx={{ fontWeight: 800, fontSize: '0.875rem', color: '#375e38', borderBottom: 'none' }}
+                            >
                               ₱{reportData.grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
                             {showPercentages && (
@@ -950,8 +1001,18 @@ const ConsolidatedCorporateIncomePage = () => {
                           <TableContainer component={Paper} sx={{ backgroundColor: '#fafafa' }}>
                             <Table size="small" stickyHeader>
                               <TableHead>
-                                <TableRow sx={{ backgroundColor: '#e3f2fd' }}>
-                                  <TableCell sx={{ fontWeight: 'bold', width: '300px' }}>
+                                <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+                                  <TableCell 
+                                    sx={{ 
+                                      fontWeight: 700, 
+                                      color: '#475569',
+                                      borderBottom: '2px solid #e2e8f0',
+                                      width: '300px',
+                                      textTransform: 'uppercase',
+                                      fontSize: '0.75rem',
+                                      letterSpacing: '0.5px'
+                                    }}
+                                  >
                                     Income Category / Subcategory (Tree View)
                                   </TableCell>
                                   {reportData.regions
@@ -960,24 +1021,47 @@ const ConsolidatedCorporateIncomePage = () => {
                                       <TableCell 
                                         key={region} 
                                         align="right"
-                                        sx={{ fontWeight: 'bold' }}
+                                        sx={{ 
+                                          fontWeight: 700, 
+                                          color: '#475569',
+                                          borderBottom: '2px solid #e2e8f0',
+                                          textTransform: 'uppercase',
+                                          fontSize: '0.75rem',
+                                          letterSpacing: '0.5px'
+                                        }}
                                       >
                                         {region}
                                       </TableCell>
                                     ))}
                                   <TableCell 
                                     align="right"
-                                    sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}
+                                    sx={{ 
+                                      fontWeight: 800, 
+                                      backgroundColor: '#f8fafc',
+                                      color: '#1e293b',
+                                      borderBottom: '2px solid #e2e8f0',
+                                      textTransform: 'uppercase',
+                                      fontSize: '0.75rem',
+                                      letterSpacing: '0.5px'
+                                    }}
                                   >
                                     Total
                                   </TableCell>
                                   {showPercentages && (
                                     <TableCell 
                                       align="right"
-                                      sx={{ fontWeight: 'bold', backgroundColor: '#c8e6c9' }}
-                                    >
-                                      %
-                                  </TableCell>
+                                    sx={{ 
+                                      fontWeight: 800, 
+                                      backgroundColor: '#f8fafc',
+                                      color: '#1e293b',
+                                      borderBottom: '2px solid #e2e8f0',
+                                      textTransform: 'uppercase',
+                                      fontSize: '0.75rem',
+                                      letterSpacing: '0.5px'
+                                    }}
+                                  >
+                                    %
+                                </TableCell>
                                   )}
                                 </TableRow>
                               </TableHead>
@@ -1065,19 +1149,31 @@ const ConsolidatedCorporateIncomePage = () => {
                                   })}
                                 
                                 {/* Total Row */}
-                                <TableRow sx={{ backgroundColor: '#e8f5e8', borderTop: '2px solid #4caf50' }}>
-                                  <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#2e7d32' }}>
+                                <TableRow 
+                                  sx={{ 
+                                    backgroundColor: '#f8fafc', 
+                                    borderTop: '2px solid #cbd5e1' 
+                                  }}
+                                >
+                                  <TableCell sx={{ fontWeight: 800, fontSize: '0.875rem', color: '#1e293b', borderBottom: 'none' }}>
                                     🏆 GRAND TOTAL
                                   </TableCell>
                                   {reportData.regions
                                     .filter(region => consolidationType === 'all' || selectedRegions === region)
                                     .map((region) => (
-                                      <TableCell key={`total-${region}`} align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                                      <TableCell 
+                                        key={`total-${region}`} 
+                                        align="right" 
+                                        sx={{ fontWeight: 800, fontSize: '0.875rem', color: '#1e293b', borderBottom: 'none' }}
+                                      >
                                         ₱{(reportData.regionData[region]?.total || 0)
                                           .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </TableCell>
                                     ))}
-                                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#1976d2' }}>
+                                  <TableCell 
+                                    align="right" 
+                                    sx={{ fontWeight: 800, fontSize: '0.875rem', color: '#375e38', borderBottom: 'none' }}
+                                  >
                                     ₱{reportData.grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </TableCell>
                                   {showPercentages && (

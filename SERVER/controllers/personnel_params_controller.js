@@ -27,14 +27,39 @@ const getPersonnelByParams = async (req, res) => {
       } catch (_e) {
         query.proposalId = workflowId;
       }
-    }
+    } else {
+      if (fiscalYear) query.fiscalYear = String(fiscalYear);
+      if (budgetType) query.budgetType = budgetType;
+      if (processBy) query.processBy = processBy;
+      if (status) query.status = status;
 
-    if (fiscalYear) query.fiscalYear = String(fiscalYear);
-    if (budgetType) query.budgetType = budgetType;
-    if (processBy) query.processBy = processBy;
-    if (region) query.region = region;
-    if (status) query.status = status;
-    if (division) query.division = division;
+      if (region) {
+        const reg = String(region).trim();
+        const cleanReg = reg.replace(/^TEST\s+/i, '').trim();
+        if (cleanReg) {
+          const regionRegex = new RegExp(cleanReg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+          const searchRegions = [reg];
+          if (reg === 'Region 10') searchRegions.push('Region X');
+          if (reg === 'Region X') searchRegions.push('Region 10');
+          query.$and = query.$and || [];
+          query.$and.push({ $or: [{ region: { $in: searchRegions } }, { region: regionRegex }] });
+        } else {
+          query.region = region;
+        }
+      }
+
+      if (division) {
+        const div = String(division).trim();
+        const cleanDiv = div.replace(/^TEST\s+/i, '').trim();
+        if (cleanDiv) {
+          const divRegex = new RegExp(cleanDiv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+          query.$and = query.$and || [];
+          query.$and.push({ $or: [{ division: divRegex }, { department: divRegex }, { division: div }, { department: div }] });
+        } else {
+          query.division = division;
+        }
+      }
+    }
 
     let personnel = await PersonnelServices.find(query).lean();
 
@@ -67,7 +92,9 @@ const getPersonnelByParams = async (req, res) => {
       }
 
       // Build regional search array including special regions
+      // Build regional search array including special regions and regex support
       const searchRegions = [null, ""];
+      let regionRegex = null;
       if (proposalRegion) {
         const reg = String(proposalRegion).trim();
         searchRegions.push(reg);
@@ -75,29 +102,47 @@ const getPersonnelByParams = async (req, res) => {
         // Handle Region 10 / Region X equivalence
         if (reg === 'Region 10') searchRegions.push('Region X');
         if (reg === 'Region X') searchRegions.push('Region 10');
+
+        // Create substring regex (e.g. "MARIIS" matches "MARIIS - Division 1" or vice versa)
+        const cleanReg = reg.replace(/^TEST\s+/i, '').trim();
+        if (cleanReg) {
+          regionRegex = new RegExp(cleanReg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        }
       }
 
-      // Resilient Division/Department matching: Match if either field matches either provided value
+      // Resilient Division/Department matching: Match if either field substring-matches either provided value
       const orgClauses = [];
       if (req.query.division) {
         const div = String(req.query.division).trim();
+        const cleanDiv = div.replace(/^TEST\s+/i, '').trim();
+        const divRegex = new RegExp(cleanDiv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        orgClauses.push({ division: divRegex });
+        orgClauses.push({ department: divRegex });
         orgClauses.push({ division: div });
         orgClauses.push({ department: div });
       }
       if (req.query.department) {
         const dept = String(req.query.department).trim();
+        const cleanDept = dept.replace(/^TEST\s+/i, '').trim();
+        const deptRegex = new RegExp(cleanDept.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        orgClauses.push({ department: deptRegex });
+        orgClauses.push({ division: deptRegex });
         orgClauses.push({ department: dept });
         orgClauses.push({ division: dept });
       }
       // Also include records that have NO division/department (Central/Region level personnel)
       orgClauses.push({ $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] });
 
+      const regionQueryClause = regionRegex 
+        ? { $or: [{ region: { $in: searchRegions } }, { region: regionRegex }] }
+        : { region: { $in: searchRegions } };
+
       const unlinkedQuery = {
         $and: [
           { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
           { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] },
           { $or: orgClauses },
-          { region: { $in: searchRegions } }
+          regionQueryClause
         ]
       };
 
@@ -110,7 +155,7 @@ const getPersonnelByParams = async (req, res) => {
         unlinkedQuery.$and.push({ $or: fyOr });
       }
       if (req.query.budgetType) {
-        unlinkedQuery.$and.push({ budgetType: req.query.budgetType });
+        unlinkedQuery.$and.push({ budgetType: { $in: [req.query.budgetType, null, ""] } });
       }
 
       const unlinkedPersonnel = await PersonnelServices.find(unlinkedQuery).lean();
@@ -124,6 +169,46 @@ const getPersonnelByParams = async (req, res) => {
         if (uniqueUnlinked.length > 0) {
           personnel = [...personnel, ...uniqueUnlinked];
         }
+      }
+    }
+
+    // DIAGNOSTIC LOGGING: Inspect what records were matched
+    console.log(`[DIAGNOSTIC] Proposal Details fetch for ID: ${proposalId}`);
+    console.log(`- Request params: Region="${region}", Division="${division}", FiscalYear="${fiscalYear}", BudgetType="${budgetType}"`);
+    console.log(`- Matched total records count: ${personnel.length}`);
+    if (personnel.length > 0) {
+      const breakdown = personnel.reduce((acc, p) => {
+        const status = String(p.statusOfAppointment || p.StatusOfAppointment || 'N/A').toUpperCase();
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {});
+      console.log(`- Breakdown by Appointment Status:`, breakdown);
+      
+      const sampleCasual = personnel.find(p => String(p.statusOfAppointment || p.StatusOfAppointment || '').toUpperCase() === 'CASUAL');
+      if (sampleCasual) {
+        console.log(`- Sample CASUAL record found: Name="${sampleCasual.employeeFullName}", Division="${sampleCasual.division}", Region="${sampleCasual.region}", ChargedToIncome=${sampleCasual.chargedToIncomeEligible}`);
+      } else {
+        console.log(`- NO CASUAL record found in the matched list.`);
+        // Let's do a quick global check on the database for CASUAL records to see if any exist at all
+        try {
+          const globalCasualCount = await PersonnelServices.countDocuments({
+            $or: [
+              { statusOfAppointment: { $regex: '^casual$', $options: 'i' } },
+              { StatusOfAppointment: { $regex: '^casual$', $options: 'i' } }
+            ]
+          });
+          console.log(`- GLOBAL DATABASE CHECK: Total CASUAL records in database = ${globalCasualCount}`);
+        } catch (dbErr) {
+          console.log(`- Global database check failed: ${dbErr.message}`);
+        }
+      }
+    } else {
+      console.log(`- NO records matched query filters at all.`);
+      try {
+        const totalCount = await PersonnelServices.countDocuments({});
+        console.log(`- GLOBAL DATABASE CHECK: Total records in entire personnelservices collection = ${totalCount}`);
+      } catch (dbErr) {
+        console.log(`- Global database count check failed: ${dbErr.message}`);
       }
     }
 

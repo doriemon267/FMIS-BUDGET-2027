@@ -65,28 +65,52 @@ const IncomeReportSummary = ({ reportData, showPercentages = false }) => {
     };
   }).sort((a, b) => b.total - a.total) || [];
 
-  const SummaryCard = ({ icon, title, value, subtitle, color = 'primary' }) => (
-    <Card sx={{ height: '100%', backgroundColor: '#f8f9fa', border: '1px solid #e9ecef' }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Box sx={{ color: `${color}.main`, mr: 1 }}>
-            {icon}
+  const SummaryCard = ({ icon, title, value, subtitle, color = 'primary' }) => {
+    // Map basic color names to gradient backgrounds
+    const gradients = {
+      primary: "linear-gradient(135deg, #4776E6 0%, #8E54E9 100%)",
+      secondary: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
+      info: "linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%)",
+      success: "linear-gradient(135deg, #1f4037 0%, #99f2c8 100%)",
+      warning: "linear-gradient(135deg, #f2994a 0%, #f2c94c 100%)",
+      error: "linear-gradient(135deg, #ee0979 0%, #ff6a00 100%)",
+    };
+    
+    return (
+      <Card 
+        sx={{ 
+          height: '100%', 
+          background: gradients[color] || gradients.primary,
+          color: '#fff',
+          borderRadius: 2,
+          boxShadow: '0 4px 20px 0 rgba(0,0,0,0.1)',
+          transition: 'transform 0.2s',
+          '&:hover': { transform: 'translateY(-4px)' }
+        }}
+      >
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9, mb: 1 }}>
+                {title}
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 700, lineHeight: 1.2, mb: 0.5 }}>
+                {value}
+              </Typography>
+              {subtitle && (
+                <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                  {subtitle}
+                </Typography>
+              )}
+            </Box>
+            <Box sx={{ opacity: 0.8, '& svg': { fontSize: 40, color: '#e2e8f0' } }}>
+              {icon}
+            </Box>
           </Box>
-          <Typography variant="subtitle2" color="text.secondary">
-            {title}
-          </Typography>
-        </Box>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', color: `${color}.main` }}>
-          {value}
-        </Typography>
-        {subtitle && (
-          <Typography variant="body2" color="text.secondary">
-            {subtitle}
-          </Typography>
-        )}
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   // Safe number formatting function
   const formatCurrency = (amount, options = {}) => {

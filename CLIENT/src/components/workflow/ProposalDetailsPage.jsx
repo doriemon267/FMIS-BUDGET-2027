@@ -47,6 +47,7 @@ const ProposalDetailsPage = () => {
   const [mooeData, setMooeData] = useState([]);
   const [capitalOutlayData, setCapitalOutlayData] = useState([]);
   const [incomeData, setIncomeData] = useState([]);
+  const [discountSettings, setDiscountSettings] = useState(null);
   const [tabLoading, setTabLoading] = useState({});
   const [expandedRows, setExpandedRows] = useState({});
   const [error, setError] = useState('');
@@ -128,14 +129,23 @@ const ProposalDetailsPage = () => {
     }
   }, [tabValue, proposal?.fiscalYear, proposal?.region, proposal?.budgetType, proposal?.modelType]);
 
+  const getProposalRegionStr = () => {
+    const rawRegion = proposal?.region || "";
+    if (rawRegion && typeof rawRegion === 'object') {
+      return rawRegion.RegionName || rawRegion.Region || rawRegion.regionName || rawRegion.region || rawRegion.name || "";
+    }
+    return String(rawRegion || "");
+  };
+
   const fetchPersonnelServices = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 0: true }));
+      const proposalRegion = getProposalRegionStr();
       const response = await api.get('/getpersonnels/byParams', {
         params: { 
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
-          region: proposal.region, 
+          region: proposalRegion, 
           budgetType: proposal.modelType || proposal.budgetType
         }
       });
@@ -151,11 +161,12 @@ const ProposalDetailsPage = () => {
   const fetchMooeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 1: true }));
+      const proposalRegion = getProposalRegionStr();
       const response = await api.get('/mooe/getByParams', {
         params: { 
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
-          region: proposal.region, 
+          region: proposalRegion, 
           budgetType: proposal.modelType || proposal.budgetType
         }
       });
@@ -171,11 +182,12 @@ const ProposalDetailsPage = () => {
   const fetchCapitalOutlayData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 2: true }));
+      const proposalRegion = getProposalRegionStr();
       const response = await api.get('/capital-outlay/getByParams', {
         params: { 
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
-          region: proposal.region, 
+          region: proposalRegion, 
           budgetType: proposal.modelType || proposal.budgetType
         }
       });
@@ -191,11 +203,12 @@ const ProposalDetailsPage = () => {
   const fetchIncomeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 3: true }));
+      const proposalRegion = getProposalRegionStr();
       const response = await api.get('/income/getByParams', {
         params: { 
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
-          region: proposal.region, 
+          region: proposalRegion, 
           budgetType: proposal.modelType || proposal.budgetType  // Use modelType for new workflow, fallback to budgetType for legacy
         }
       });
@@ -246,11 +259,111 @@ const ProposalDetailsPage = () => {
     }, { income: 0, subsidy: 0, cost: 0 });
   }, [capitalOutlayData]);
 
-  const incomeTotals = useMemo(() => {
-    return incomeData.reduce((acc, item) => ({
-      amount: acc.amount + (Number(item.amount || item.income) || 0)
-    }), { amount: 0 });
-  }, [incomeData]);
+  const normalizeName = (value) => {
+    if (!value) return '';
+    return String(value)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9\s\-()/]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const toNumber = (value) => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (typeof value === 'string') {
+      const parsed = Number(value.replace(/,/g, '').trim());
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
+
+  const incomeSummary = useMemo(() => {
+    const summary = {
+      irrigation: 0,
+      rent: 0,
+      water: 0,
+      misc: 0,
+      total: 0,
+      irrigationLabel: 'IRRIGATION SERVICE FEES'
+    };
+
+    const items = Array.isArray(incomeData) ? incomeData : [];
+    let irrigationGross = 0;
+    let irrigationNetItems = 0;
+    let currentAccountTotal = 0;
+
+    items.forEach((item) => {
+      const categoryName =
+        item.incomecategory?.name ||
+        item.incomecategory?.incomeCategoryName ||
+        item.categoryName ||
+        item.category ||
+        item.type ||
+        '';
+      const normalized = normalizeName(categoryName);
+      const amount = toNumber(item.amount ?? item.totalAmount ?? 0);
+
+      if (normalized.includes('net irrigation service fees')) {
+        irrigationNetItems += amount;
+        return;
+      }
+
+      if (normalized.includes('irrigation service fees')) {
+        irrigationGross += amount;
+        const subcategory = normalizeName(item.subcategory || item.subCategory || '');
+        if (subcategory.includes('current account')) {
+          currentAccountTotal += amount;
+        }
+        return;
+      }
+
+      if (normalized.includes('rent')) {
+        summary.rent += amount;
+        return;
+      }
+
+      if (normalized.includes('water service fee')) {
+        summary.water += amount;
+        return;
+      }
+
+      summary.misc += amount;
+    });
+
+    const discountType = discountSettings?.discountType || 'percentage';
+    const discountValue = toNumber(discountSettings?.discountValue || 0);
+    const applyDiscount = Boolean(discountSettings?.applyDiscount);
+    const rawProposalRegion = proposal?.region || "";
+    const proposalRegionStr = rawProposalRegion && typeof rawProposalRegion === 'object'
+      ? (rawProposalRegion.RegionName || rawProposalRegion.Region || rawProposalRegion.regionName || rawProposalRegion.region || rawProposalRegion.name || "")
+      : String(rawProposalRegion || "");
+    const regionMatches =
+      normalizeName(discountSettings?.region) === normalizeName(proposalRegionStr);
+
+    let irrigationNetFromDiscount = irrigationGross;
+    const discountBase =
+      currentAccountTotal > 0 ? currentAccountTotal : irrigationGross;
+    if (applyDiscount && regionMatches && irrigationGross > 0 && discountBase > 0) {
+      const discountAmount =
+        discountType === 'percentage'
+          ? discountBase * (discountValue / 100)
+          : Math.min(discountValue, discountBase);
+      irrigationNetFromDiscount = irrigationGross - discountAmount;
+    }
+
+    const useNet = irrigationNetItems > 0 || (applyDiscount && regionMatches);
+    summary.irrigation = useNet
+      ? (irrigationNetItems > 0 ? irrigationNetItems : irrigationNetFromDiscount)
+      : irrigationGross;
+    summary.irrigationLabel = useNet ? 'NET IRRIGATION SERVICE FEES' : 'IRRIGATION SERVICE FEES';
+
+    summary.total =
+      summary.irrigation + summary.rent + summary.water + summary.misc;
+
+    return summary;
+  }, [incomeData, discountSettings, proposal?.region]);
 
   const getPaginatedData = (data, page) => {
     const start = page * itemsPerPage;
@@ -328,7 +441,7 @@ const ProposalDetailsPage = () => {
             Proposal Details
           </Typography>
           <Typography variant="body2" color="textSecondary">
-            FY {proposal.fiscalYear} | {proposal.region} | {proposal.modelType || proposal.budgetType}
+            FY {proposal.fiscalYear} | {getProposalRegionStr()} | {proposal.modelType || proposal.budgetType}
           </Typography>
         </Box>
         <Box sx={{ width: 100 }} />
@@ -751,6 +864,41 @@ const ProposalDetailsPage = () => {
             {tabLoading[3] ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box> :
              incomeData.length === 0 ? <Alert severity="info">No Income data</Alert> :
              <>
+               <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1, mb: 3 }}>
+                 <Table size="small">
+                   <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                     <TableRow>
+                       <TableCell sx={{ fontWeight: 'bold' }}>Category</TableCell>
+                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                     </TableRow>
+                   </TableHead>
+                   <TableBody>
+                     <TableRow>
+                       <TableCell>{incomeSummary.irrigationLabel}</TableCell>
+                       <TableCell align="right">{formatCurrency(incomeSummary.irrigation)}</TableCell>
+                     </TableRow>
+                     <TableRow>
+                       <TableCell>RENT INCOME</TableCell>
+                       <TableCell align="right">{formatCurrency(incomeSummary.rent)}</TableCell>
+                     </TableRow>
+                     <TableRow>
+                       <TableCell>WATER SERVICE FEE</TableCell>
+                       <TableCell align="right">{formatCurrency(incomeSummary.water)}</TableCell>
+                     </TableRow>
+                     <TableRow>
+                       <TableCell>MISCELLANEOUS INCOME</TableCell>
+                       <TableCell align="right">{formatCurrency(incomeSummary.misc)}</TableCell>
+                     </TableRow>
+                     <TableRow sx={{ bgcolor: '#f0f0f0' }}>
+                       <TableCell sx={{ fontWeight: 'bold' }}>TOTAL</TableCell>
+                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                         {formatCurrency(incomeSummary.total)}
+                       </TableCell>
+                     </TableRow>
+                   </TableBody>
+                 </Table>
+               </TableContainer>
+
                <TableContainer sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
                  <Table>
                    <TableHead sx={{ 
@@ -810,7 +958,7 @@ const ProposalDetailsPage = () => {
                      <TableRow sx={{ bgcolor: '#f9fafb' }}>
                        <TableCell colSpan={2} sx={{ fontWeight: 'bold', textAlign: 'right' }}>TOTAL INCOME</TableCell>
                        <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: theme.palette.secondary.main, color: '#fff' }}>
-                         {formatCurrency(incomeTotals.amount)}
+                         {formatCurrency(incomeSummary.total)}
                        </TableCell>
                      </TableRow>
                    </TableFooter>

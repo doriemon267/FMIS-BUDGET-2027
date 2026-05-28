@@ -83,7 +83,8 @@ export function isBudgetPreparerEditableStatus(status) {
     normalizedStatus === 'DRAFT' ||
     normalizedStatus === 'INITIAL' ||
     normalizedStatus === 'RETURNED' ||
-    normalizedStatus === 'RETURNED_TO_PREPARER'
+    normalizedStatus === 'RETURNED_TO_PREPARER' ||
+    normalizedStatus === 'NOT_SUBMITTED'
   ) {
     return true;
   }

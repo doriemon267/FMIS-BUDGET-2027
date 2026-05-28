@@ -236,7 +236,7 @@ const DashboardContent = () => {
       >
         <ToastContainer position="top-right" />
         
-        <Box sx={{ flex: 1, p: { xs: 2, md: 4 } }}>
+        <Box sx={{ flex: 1, p: { xs: 2, md: 2 }, pt: { xs: 2, md: 2 } }}>
           <ErrorBoundary FallbackComponent={({ error }) => <Typography color="error">Error: {error.message}</Typography>}>
             <AppTrayLauncher />
           </ErrorBoundary>

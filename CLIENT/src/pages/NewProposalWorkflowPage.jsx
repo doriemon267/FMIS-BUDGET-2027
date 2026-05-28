@@ -93,7 +93,7 @@ const TABLE_CONTAINER_PS = {
   overflowX: "auto",
   overflow: "auto",
 };
-const PS_TABLE_MIN_WIDTH = 1800;
+const PS_TABLE_MIN_WIDTH = 3500;
 const PS_HEADER_CELL = {
   expand: { width: 50, minWidth: 50 },
   name: { minWidth: 160 },
@@ -103,6 +103,46 @@ const PS_HEADER_CELL = {
   jg: { minWidth: 56 },
   amount: { minWidth: 130 },
 };
+
+const renderPSTableHead = () => (
+  <TableHead>
+    <TableRow sx={TABLE_HEADER_ROW}>
+      <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
+      <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
+      <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
+      <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
+      <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
+      <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>No. of Dependents</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Uniform Allowance</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Productivity Incentive</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Honoraria</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Medical Allowance</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Additional Medical</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Children Allowance</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Meal Allowance</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Hazard Pay</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Cash Gift</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Midyear Bonus</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Year End Bonus</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>GSIS Premium</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Provident Fund</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG (Pag-ibig)</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Philhealth Premium</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Employee Compensation</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Loyalty Award</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Earned Leaves</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Retirement Benefits</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Terminal Leave</TableCell>
+      <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
+    </TableRow>
+  </TableHead>
+);
 
 // Sum Other Compensation and Government Share from personnel row (for PS tab display)
 const getOtherCompensation = (p) =>
@@ -367,12 +407,15 @@ const NewProposalWorkflowPage = () => {
     const fetchDiscountSettings = async () => {
       const fiscalYear = selectedProposal?.fiscalYear || proposalDetails?.fiscalYear;
       const budgetType = selectedProposal?.budgetType || proposalDetails?.budgetType;
-      const region =
+      const regionRaw =
         selectedProposal?.region ||
         proposalDetails?.region ||
         proposalDetails?.income?.[0]?.region ||
         proposalDetails?.income?.[0]?.Region ||
         "";
+      const region = regionRaw && typeof regionRaw === "object"
+        ? (regionRaw.RegionName || regionRaw.Region || regionRaw.regionName || regionRaw.region || regionRaw.name || "")
+        : String(regionRaw || "");
       if (!fiscalYear || !budgetType || !region) {
         setDiscountSettings(null);
         return;
@@ -765,6 +808,9 @@ const NewProposalWorkflowPage = () => {
     }
     setDetailsTab("income");
     setChangedItems(new Set());
+    setPermanentPersonnelPage(0);
+    setCasualPersonnelPage(0);
+    setChargedPersonnelPage(0);
     // Initialize inline edit form values
     setProposalEditValues({
       title: proposal.title || "",
@@ -777,7 +823,8 @@ const NewProposalWorkflowPage = () => {
         proposalId: proposal._id,
         _t: Date.now(), // Cache buster - force fresh data
         ...(proposal.fiscalYear != null && { fiscalYear: String(proposal.fiscalYear) }),
-        ...(proposal.budgetType && { budgetType: proposal.budgetType }),
+        budgetType: proposal.budgetType || proposal.modelType || "",
+        region: proposal.regionName || (proposal.region && typeof proposal.region === 'object' ? (proposal.region.Region || proposal.region.RegionName || proposal.region.region) : proposal.region) || "",
         ...((proposal.division || proposal.responsibilityCenter) && {
           division: proposal.division || proposal.responsibilityCenter,
         }),
@@ -806,6 +853,23 @@ const NewProposalWorkflowPage = () => {
         mooe: toArray(mooeRes),
         capitalOutlay: toArray(capitalRes),
       };
+
+      console.log("[DEBUG] Fetched proposal details statistics:", {
+        income: details.income.length,
+        personnel: details.personnel.length,
+        mooe: details.mooe.length,
+        capitalOutlay: details.capitalOutlay.length,
+      });
+
+      if (details.personnel.length > 0) {
+        console.log("[DEBUG] Sample personnel record:", details.personnel[0]);
+        const counts = details.personnel.reduce((acc, p) => {
+          const status = String(p.statusOfAppointment || p.StatusOfAppointment || 'N/A').toUpperCase();
+          acc[status] = (acc[status] || 0) + 1;
+          return acc;
+        }, {});
+        console.log("[DEBUG] Appointment status breakdown counts:", counts);
+      }
 
       setProposalDetails(details);
 
@@ -3275,10 +3339,19 @@ const NewProposalWorkflowPage = () => {
         }}
         maxWidth="lg"
         fullWidth
+        slotProps={{
+          backdrop: {
+            sx: {
+              backdropFilter: "blur(6px)",
+              backgroundColor: "rgba(0, 0, 0, 0.4)",
+            }
+          }
+        }}
         PaperProps={{
           sx: {
-            borderRadius: "12px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+            borderRadius: "16px",
+            boxShadow: "0 20px 48px rgba(0,0,0,0.16)",
+            border: "1px solid rgba(255,255,255,0.08)",
           },
         }}
       >
@@ -3326,129 +3399,172 @@ const NewProposalWorkflowPage = () => {
             </Box>
           ) : (
             <>
-              {/* Proposal Summary */}
+              {/* Proposal Summary Dashboard */}
               <Box
                 sx={{
-                  p: 3,
-                  bgcolor: "#f5f5f5",
-                  borderBottom: "1px solid #e0e0e0",
+                  p: 4,
+                  bgcolor: "rgba(0, 0, 0, 0.01)",
+                  borderBottom: "1px solid rgba(0, 0, 0, 0.06)",
                 }}
               >
-                <Grid container spacing={2}>
+                <Grid container spacing={3}>
                   <Grid item xs={12} md={6}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Responsibility Center
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                      {selectedProposal?.responsibilityCenter ||
-                        selectedProposal?.division ||
-                        selectedProposal?.department ||
-                        proposalDetails?.income?.[0]?.division ||
-                        proposalDetails?.income?.[0]?.department ||
-                        proposalDetails?.income?.[0]?.responsibilityCenter ||
-                        proposalDetails?.personnel?.[0]?.division ||
-                        proposalDetails?.personnel?.[0]?.department ||
-                        proposalDetails?.mooe?.[0]?.division ||
-                        proposalDetails?.mooe?.[0]?.department ||
-                        proposalDetails?.capitalOutlay?.[0]?.division ||
-                        proposalDetails?.capitalOutlay?.[0]?.department ||
-                        proposalDetails?.income?.[0]?.region ||
-                        proposalDetails?.personnel?.[0]?.region ||
-                        proposalDetails?.mooe?.[0]?.region ||
-                        proposalDetails?.capitalOutlay?.[0]?.region ||
-                        "N/A"}
-                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center' }}>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ textTransform: "uppercase", fontWeight: 700, letterSpacing: '0.5px', mb: 0.5 }}
+                      >
+                        Responsibility Center
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#2d5016', fontSize: '1.05rem' }}>
+                        {selectedProposal?.responsibilityCenter ||
+                          selectedProposal?.division ||
+                          selectedProposal?.department ||
+                          proposalDetails?.income?.[0]?.division ||
+                          proposalDetails?.income?.[0]?.department ||
+                          proposalDetails?.income?.[0]?.responsibilityCenter ||
+                          proposalDetails?.personnel?.[0]?.division ||
+                          proposalDetails?.personnel?.[0]?.department ||
+                          proposalDetails?.mooe?.[0]?.division ||
+                          proposalDetails?.mooe?.[0]?.department ||
+                          proposalDetails?.capitalOutlay?.[0]?.division ||
+                          proposalDetails?.capitalOutlay?.[0]?.department ||
+                          proposalDetails?.income?.[0]?.region ||
+                          proposalDetails?.personnel?.[0]?.region ||
+                          proposalDetails?.mooe?.[0]?.region ||
+                          proposalDetails?.capitalOutlay?.[0]?.region ||
+                          "N/A"}
+                      </Typography>
+                    </Box>
                   </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Fiscal Year
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                      {selectedProposal?.fiscalYear}
-                    </Typography>
+                  <Grid item xs={6} md={3}>
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ textTransform: "uppercase", fontWeight: 700, letterSpacing: '0.5px', mb: 0.5 }}
+                      >
+                        Fiscal Year
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#1a1a1a' }}>
+                        {selectedProposal?.fiscalYear}
+                      </Typography>
+                    </Box>
                   </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Budget Type
-                    </Typography>
-                    <Chip
-                      label={selectedProposal?.budgetType?.toUpperCase()}
-                      size="small"
+                  <Grid item xs={6} md={3}>
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ textTransform: "uppercase", fontWeight: 700, letterSpacing: '0.5px', mb: 0.5 }}
+                      >
+                        Budget Type
+                      </Typography>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Chip
+                          label={selectedProposal?.budgetType?.toUpperCase() || selectedProposal?.modelType?.toUpperCase()}
+                          size="small"
+                          sx={{
+                            bgcolor: "#2d5016",
+                            color: "white",
+                            fontWeight: "bold",
+                            borderRadius: '6px',
+                            px: 1,
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  </Grid>
+
+                  {/* Premium Cards Grid for Metrics */}
+                  <Grid item xs={12} md={4}>
+                    <Box
                       sx={{
-                        bgcolor: "#012014ff",
-                        color: "white",
-                        fontWeight: "bold",
-                      }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Projected Income
-                    </Typography>
-                    <Typography
-                      variant="body1"
-                      sx={{ fontWeight: 600, color: "#020b15" }}
-                    >
-                      ₱
-                      {getAuthoritativeProjectedIncome().toLocaleString(
-                        "en-US",
-                        { minimumFractionDigits: 2 }
-                      )}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Projected Subsidy
-                    </Typography>
-                    <Typography
-                      variant="body1"
-                      sx={{ fontWeight: 600, color: "#020b15" }}
-                    >
-                      ₱
-                      {getAuthoritativeProjectedSubsidy().toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Proposed Budget
-                    </Typography>
-                    <Typography
-                      variant="body1"
-                      sx={{
-                        fontWeight: "bold",
-                        color: "#020b15",
-                        fontSize: "1.1rem",
+                        p: 2.5,
+                        borderRadius: "12px",
+                        bgcolor: "rgba(3, 83, 136, 0.03)",
+                        border: "1px solid rgba(3, 83, 136, 0.08)",
+                        boxShadow: "0 2px 8px rgba(3, 83, 136, 0.02)",
+                        transition: "all 0.2s",
+                        "&:hover": { boxShadow: "0 4px 16px rgba(3, 83, 136, 0.06)" }
                       }}
                     >
-                      ₱
-                      {getAuthoritativeProposedBudget().toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#035388", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}
+                      >
+                        Projected Corporate Income
+                      </Typography>
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: 800, color: "#035388", mt: 0.5, fontSize: "1.25rem" }}
+                      >
+                        ₱
+                        {getAuthoritativeProjectedIncome().toLocaleString(
+                          "en-US",
+                          { minimumFractionDigits: 2 }
+                        )}
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} md={4}>
+                    <Box
+                      sx={{
+                        p: 2.5,
+                        borderRadius: "12px",
+                        bgcolor: "rgba(46, 125, 50, 0.03)",
+                        border: "1px solid rgba(46, 125, 50, 0.08)",
+                        boxShadow: "0 2px 8px rgba(46, 125, 50, 0.02)",
+                        transition: "all 0.2s",
+                        "&:hover": { boxShadow: "0 4px 16px rgba(46, 125, 50, 0.06)" }
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#2e7d32", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}
+                      >
+                        Projected Subsidy
+                      </Typography>
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: 800, color: "#2e7d32", mt: 0.5, fontSize: "1.25rem" }}
+                      >
+                        ₱
+                        {getAuthoritativeProjectedSubsidy().toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={12} md={4}>
+                    <Box
+                      sx={{
+                        p: 2.5,
+                        borderRadius: "12px",
+                        bgcolor: "rgba(45, 80, 22, 0.04)",
+                        border: "1px solid rgba(45, 80, 22, 0.1)",
+                        boxShadow: "0 2px 8px rgba(45, 80, 22, 0.02)",
+                        transition: "all 0.2s",
+                        "&:hover": { boxShadow: "0 4px 16px rgba(45, 80, 22, 0.07)" }
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        sx={{ color: "#2d5016", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}
+                      >
+                        Proposed Budget (Grand Total)
+                      </Typography>
+                      <Typography
+                        variant="h6"
+                        sx={{ fontWeight: 800, color: "#2d5016", mt: 0.5, fontSize: "1.3rem" }}
+                      >
+                        ₱
+                        {getAuthoritativeProposedBudget().toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </Typography>
+                    </Box>
                   </Grid>
                   {(() => {
                     const st = selectedProposal?.status;
@@ -3464,7 +3580,13 @@ const NewProposalWorkflowPage = () => {
                     if (!brdOrFinal || !isBRD) return null;
                     const tierParams = new URLSearchParams();
                     if (selectedProposal?.fiscalYear != null) tierParams.set("fiscalYear", String(selectedProposal.fiscalYear));
-                    if (selectedProposal?.region) tierParams.set("region", String(selectedProposal.region));
+                    if (selectedProposal?.region) {
+                      const regRaw = selectedProposal.region;
+                      const regStr = regRaw && typeof regRaw === "object"
+                        ? (regRaw.RegionName || regRaw.Region || regRaw.regionName || regRaw.region || regRaw.name || "")
+                        : String(regRaw || "");
+                      tierParams.set("region", regStr);
+                    }
                     if (selectedProposal?.department) tierParams.set("department", String(selectedProposal.department));
                     if (selectedProposal?.division || selectedProposal?.responsibilityCenter) tierParams.set("division", String(selectedProposal.division || selectedProposal.responsibilityCenter));
                     return (
@@ -3840,6 +3962,7 @@ const NewProposalWorkflowPage = () => {
                                     ₱
                                     {categoryTotal.toLocaleString("en-US", {
                                       minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
                                     })}
                                   </Typography>
                                 </Box>
@@ -3961,7 +4084,7 @@ const NewProposalWorkflowPage = () => {
                                                   ) : (
                                                     `₱${itemAmount.toLocaleString(
                                                       "en-US",
-                                                      { minimumFractionDigits: 2 }
+                                                      { minimumFractionDigits: 2, maximumFractionDigits: 2 }
                                                     )}`
                                                   )}
                                                 </TableCell>
@@ -3975,12 +4098,28 @@ const NewProposalWorkflowPage = () => {
                                                   ₱
                                                   {itemAmount.toLocaleString(
                                                     "en-US",
-                                                    { minimumFractionDigits: 2 }
+                                                    { minimumFractionDigits: 2, maximumFractionDigits: 2 }
                                                   )}
                                                 </TableCell>
                                               </TableRow>
                                             );
                                           })}
+                                           {normalizeName(category).includes("irrigation service fees") && useNet && discountAmount > 0 && (
+                                             <TableRow sx={{ bgcolor: "#fff3f3" }}>
+                                               <TableCell sx={{ color: "#d32f2f", fontWeight: "bold", pl: 2 }}>
+                                                 Less: {discountType === "percentage" ? `${discountValue}%` : "₱" + discountValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Discount on Current Account
+                                               </TableCell>
+                                               <TableCell sx={{ color: "#d32f2f", fontWeight: 500 }}>
+                                                 ISF Discount
+                                               </TableCell>
+                                               <TableCell align="right" sx={{ color: "#d32f2f", fontWeight: "bold" }}>
+                                                 -₱{discountAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                               </TableCell>
+                                               <TableCell align="right" sx={{ color: "#d32f2f", fontWeight: "bold", bgcolor: "#ffebeb" }}>
+                                                 -₱{discountAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                               </TableCell>
+                                             </TableRow>
+                                           )}
                                         </TableBody>
                                       </Table>
                                     </TableContainer>
@@ -4003,6 +4142,7 @@ const NewProposalWorkflowPage = () => {
                                 Grand Total: ₱
                                 {grandTotal.toLocaleString("en-US", {
                                   minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
                                 })}
                               </Typography>
                             </Box>
@@ -4060,7 +4200,7 @@ const NewProposalWorkflowPage = () => {
                 {detailsTab === "ps-permanent" && (() => {
                   const permanentPersonnel = proposalDetails?.personnel?.filter(
                     person =>
-                      String(person.statusOfAppointment || '').toUpperCase() === 'PERMANENT' &&
+                      String(person.statusOfAppointment || person.StatusOfAppointment || '').trim().toUpperCase() === 'PERMANENT' &&
                       person.chargedToIncomeEligible !== true
                   ) || [];
                   
@@ -4082,31 +4222,15 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
-                            </TableRow>
-                          </TableHead>
+                          {renderPSTableHead()}
                           <TableBody>
                             {paginatedPermanentPersonnel.map((item, index) => {
                               const globalIndex = permanentPersonnelPage * permanentPersonnelRowsPerPage + index;
-                              const itemKey = `permanent-${globalIndex}`;
+                              const originalIndex = editableItems.personnel ? editableItems.personnel.findIndex(p => String(p._id) === String(item._id)) : -1;
+                              const finalIndex = originalIndex !== -1 ? originalIndex : globalIndex;
+                              const itemKey = `permanent-${finalIndex}`;
                               const isChanged = changedItems.has(itemKey);
-                              const editedItem = editableItems.personnel[globalIndex];
+                              const editedItem = editableItems.personnel ? editableItems.personnel[finalIndex] : item;
                               const isExpanded = expandedPersonnel[index];
                               
                               return (
@@ -4141,32 +4265,35 @@ const NewProposalWorkflowPage = () => {
                                       </IconButton>
                                     </TableCell>
                                     <TableCell sx={{ fontWeight: 500 }}>
-                                      {item.employeeFullName || "N/A"}
+                                      {item.employeeFullName || item.EmployeeFullName || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.positionTitle || "N/A"}
+                                      {item.positionTitle || item.PositionTitle || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.gradelevel_SG || "N/A"}
+                                      {item.gradelevel_SG || item.SG || item.sg || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.step || "N/A"}
+                                      {item.step || item.Step || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.gradelevel_JG || "N/A"}
+                                      {item.gradelevel_JG || item.JG || item.jg || "N/A"}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                      {item.noOfDependent || item.NoOfDependent || 0}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.monthlySalary || item.MonthlySalary || 0).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                      {`₱${(item.annualSalary || item.AnnualSalary || (item.monthlySalary || item.MonthlySalary || 0) * 12).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.PERA || 0).toLocaleString("en-US", {
+                                      {`₱${(item.PERA || item.pera || 0).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
@@ -4181,7 +4308,7 @@ const NewProposalWorkflowPage = () => {
                                           onKeyDown={preventNegativeNumericKey}
                                           onChange={(e) => {
                                             const numValue = toNonNegativeNumber(e.target.value);
-                                            handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
+                                            handleEditItemAmount("personnel", finalIndex, numValue, null, "RATA");
                                           }}
                                           inputProps={{
                                             style: { textAlign: "right" },
@@ -4195,30 +4322,81 @@ const NewProposalWorkflowPage = () => {
                                           }}
                                         />
                                       ) : (
-                                        `₱${(item.RATA || 0).toLocaleString("en-US", {
+                                        `₱${(item.RATA || item.rata || 0).toLocaleString("en-US", {
                                           minimumFractionDigits: 2,
                                         })}`
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.subsistenceAllowance || item.SubsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.uniformALLOWANCE || item.uniformAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.productivityIncentive || item.ProductivityIncentive || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.honoraria || item.Honoraria || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.medical || item.Medical || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.additionalMedical || item.AdditionalMedical || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.childrenAllowance || item.ChildrenAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.meal || item.Meal || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.hazardPay || item.HazardPay || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.cashGift || item.CashGift || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.midyearBonus || item.MidyearBonus || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.yearEndBonus || item.YearEndBonus || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.gsisPremium || item.GsisPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.providentFund || item.ProvidentFund || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.pagibigPremium || item.PagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.philhealthPremium || item.PhilhealthPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.employeeCompensation || item.EmployeeCompensation || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.loyaltyAward || item.LoyaltyAward || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.earnedLeaves || item.EarnedLeaves || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.retirementBenefits || item.RetirementBenefits || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.terminalLeave || item.TerminalLeave || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={15} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={33} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4276,28 +4454,10 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
-                            </TableRow>
-                          </TableHead>
+                          {renderPSTableHead()}
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={15} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={33} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No permanent personnel services data available
                                 </Typography>
@@ -4309,14 +4469,22 @@ const NewProposalWorkflowPage = () => {
                     </>
                   );
                 })()}
-
-                {/* PS-Casual Tab */}
+{/* PS-Casual Tab */}
                 {detailsTab === "ps-casual" && (() => {
                   const casualPersonnel = proposalDetails?.personnel?.filter(
                     person =>
-                      String(person.statusOfAppointment || '').toUpperCase() === 'CASUAL' &&
+                      String(person.statusOfAppointment || person.StatusOfAppointment || '').trim().toUpperCase() === 'CASUAL' &&
                       person.chargedToIncomeEligible !== true
                   ) || [];
+                  const totalFetched = proposalDetails?.personnel?.length || 0;
+                  const permanentCount = proposalDetails?.personnel?.filter(
+                    p => String(p.statusOfAppointment || p.StatusOfAppointment || '').trim().toUpperCase() === 'PERMANENT' && p.chargedToIncomeEligible !== true
+                  ).length || 0;
+                  const casualCount = casualPersonnel.length;
+                  const chargedCount = proposalDetails?.personnel?.filter(
+                    p => p.chargedToIncomeEligible === true
+                  ).length || 0;
+                  const otherCount = totalFetched - (permanentCount + casualCount + chargedCount);
                   
                   const paginatedCasualPersonnel = casualPersonnel.slice(
                     casualPersonnelPage * casualPersonnelRowsPerPage,
@@ -4336,29 +4504,15 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
-                            </TableRow>
-                          </TableHead>
+                          {renderPSTableHead()}
                           <TableBody>
                             {paginatedCasualPersonnel.map((item, index) => {
                               const globalIndex = casualPersonnelPage * casualPersonnelRowsPerPage + index;
-                              const itemKey = `casual-${globalIndex}`;
+                              const originalIndex = editableItems.personnel ? editableItems.personnel.findIndex(p => String(p._id) === String(item._id)) : -1;
+                              const finalIndex = originalIndex !== -1 ? originalIndex : globalIndex;
+                              const itemKey = `casual-${finalIndex}`;
                               const isChanged = changedItems.has(itemKey);
-                              const editedItem = editableItems.personnel[globalIndex];
+                              const editedItem = editableItems.personnel ? editableItems.personnel[finalIndex] : item;
                               const isExpanded = expandedPersonnel[index];
                               
                               return (
@@ -4393,32 +4547,35 @@ const NewProposalWorkflowPage = () => {
                                       </IconButton>
                                     </TableCell>
                                     <TableCell sx={{ fontWeight: 500 }}>
-                                      {item.employeeFullName || "N/A"}
+                                      {item.employeeFullName || item.EmployeeFullName || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.positionTitle || "N/A"}
+                                      {item.positionTitle || item.PositionTitle || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.gradelevel_SG || "N/A"}
+                                      {item.gradelevel_SG || item.SG || item.sg || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.step || "N/A"}
+                                      {item.step || item.Step || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.gradelevel_JG || "N/A"}
+                                      {item.gradelevel_JG || item.JG || item.jg || "N/A"}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                      {item.noOfDependent || item.NoOfDependent || 0}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.monthlySalary || item.MonthlySalary || 0).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                      {`₱${(item.annualSalary || item.AnnualSalary || (item.monthlySalary || item.MonthlySalary || 0) * 12).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.PERA || 0).toLocaleString("en-US", {
+                                      {`₱${(item.PERA || item.pera || 0).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
@@ -4433,7 +4590,7 @@ const NewProposalWorkflowPage = () => {
                                           onKeyDown={preventNegativeNumericKey}
                                           onChange={(e) => {
                                             const numValue = toNonNegativeNumber(e.target.value);
-                                            handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
+                                            handleEditItemAmount("personnel", finalIndex, numValue, null, "RATA");
                                           }}
                                           inputProps={{
                                             style: { textAlign: "right" },
@@ -4447,30 +4604,81 @@ const NewProposalWorkflowPage = () => {
                                           }}
                                         />
                                       ) : (
-                                        `₱${(item.RATA || 0).toLocaleString("en-US", {
+                                        `₱${(item.RATA || item.rata || 0).toLocaleString("en-US", {
                                           minimumFractionDigits: 2,
                                         })}`
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.subsistenceAllowance || item.SubsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.uniformALLOWANCE || item.uniformAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.productivityIncentive || item.ProductivityIncentive || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.honoraria || item.Honoraria || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.medical || item.Medical || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.additionalMedical || item.AdditionalMedical || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.childrenAllowance || item.ChildrenAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.meal || item.Meal || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.hazardPay || item.HazardPay || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.cashGift || item.CashGift || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.midyearBonus || item.MidyearBonus || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.yearEndBonus || item.YearEndBonus || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.gsisPremium || item.GsisPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.providentFund || item.ProvidentFund || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.pagibigPremium || item.PagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.philhealthPremium || item.PhilhealthPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.employeeCompensation || item.EmployeeCompensation || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.loyaltyAward || item.LoyaltyAward || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.earnedLeaves || item.EarnedLeaves || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.retirementBenefits || item.RetirementBenefits || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.terminalLeave || item.TerminalLeave || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={15} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={33} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4528,30 +4736,15 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
-                            </TableRow>
-                          </TableHead>
+                          {renderPSTableHead()}
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={15} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={33} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No casual personnel services data available
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, fontSize: "0.8rem", fontStyle: "italic" }}>
+                                  Diagnostics (Total Match = {totalFetched}: Permanent = {permanentCount}, Casual = {casualCount}, Charged = {chargedCount}, Others = {otherCount})
                                 </Typography>
                               </TableCell>
                             </TableRow>
@@ -4586,29 +4779,15 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
-                            </TableRow>
-                          </TableHead>
+                          {renderPSTableHead()}
                           <TableBody>
                             {paginatedChargedPersonnel.map((item, index) => {
                               const globalIndex = chargedPersonnelPage * chargedPersonnelRowsPerPage + index;
-                              const itemKey = `charged-${globalIndex}`;
+                              const originalIndex = editableItems.personnel ? editableItems.personnel.findIndex(p => String(p._id) === String(item._id)) : -1;
+                              const finalIndex = originalIndex !== -1 ? originalIndex : globalIndex;
+                              const itemKey = `charged-${finalIndex}`;
                               const isChanged = changedItems.has(itemKey);
-                              const editedItem = editableItems.personnel[globalIndex];
+                              const editedItem = editableItems.personnel ? editableItems.personnel[finalIndex] : item;
                               const isExpanded = expandedPersonnel[index];
                               
                               return (
@@ -4643,32 +4822,35 @@ const NewProposalWorkflowPage = () => {
                                       </IconButton>
                                     </TableCell>
                                     <TableCell sx={{ fontWeight: 500 }}>
-                                      {item.employeeFullName || "N/A"}
+                                      {item.employeeFullName || item.EmployeeFullName || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.positionTitle || "N/A"}
+                                      {item.positionTitle || item.PositionTitle || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.gradelevel_SG || "N/A"}
+                                      {item.gradelevel_SG || item.SG || item.sg || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.step || "N/A"}
+                                      {item.step || item.Step || "N/A"}
                                     </TableCell>
                                     <TableCell>
-                                      {item.gradelevel_JG || "N/A"}
+                                      {item.gradelevel_JG || item.JG || item.jg || "N/A"}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                      {item.noOfDependent || item.NoOfDependent || 0}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.monthlySalary || item.MonthlySalary || 0).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                      {`₱${(item.annualSalary || item.AnnualSalary || (item.monthlySalary || item.MonthlySalary || 0) * 12).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.PERA || 0).toLocaleString("en-US", {
+                                      {`₱${(item.PERA || item.pera || 0).toLocaleString("en-US", {
                                         minimumFractionDigits: 2,
                                       })}`}
                                     </TableCell>
@@ -4683,7 +4865,7 @@ const NewProposalWorkflowPage = () => {
                                           onKeyDown={preventNegativeNumericKey}
                                           onChange={(e) => {
                                             const numValue = toNonNegativeNumber(e.target.value);
-                                            handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
+                                            handleEditItemAmount("personnel", finalIndex, numValue, null, "RATA");
                                           }}
                                           inputProps={{
                                             style: { textAlign: "right" },
@@ -4697,30 +4879,81 @@ const NewProposalWorkflowPage = () => {
                                           }}
                                         />
                                       ) : (
-                                        `₱${(item.RATA || 0).toLocaleString("en-US", {
+                                        `₱${(item.RATA || item.rata || 0).toLocaleString("en-US", {
                                           minimumFractionDigits: 2,
                                         })}`
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.subsistenceAllowance || item.SubsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.uniformALLOWANCE || item.uniformAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.productivityIncentive || item.ProductivityIncentive || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.honoraria || item.Honoraria || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.medical || item.Medical || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.additionalMedical || item.AdditionalMedical || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.childrenAllowance || item.ChildrenAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.meal || item.Meal || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.hazardPay || item.HazardPay || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.cashGift || item.CashGift || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.midyearBonus || item.MidyearBonus || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.yearEndBonus || item.YearEndBonus || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.gsisPremium || item.GsisPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.providentFund || item.ProvidentFund || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.pagibigPremium || item.PagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.philhealthPremium || item.PhilhealthPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.employeeCompensation || item.EmployeeCompensation || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.loyaltyAward || item.LoyaltyAward || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.earnedLeaves || item.EarnedLeaves || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.retirementBenefits || item.RetirementBenefits || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.terminalLeave || item.TerminalLeave || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={15} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={33} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4778,28 +5011,10 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
-                            </TableRow>
-                          </TableHead>
+                          {renderPSTableHead()}
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={15} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={33} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No personnel services charged to income available
                                 </Typography>

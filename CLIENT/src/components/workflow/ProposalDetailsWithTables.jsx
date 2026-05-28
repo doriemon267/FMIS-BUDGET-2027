@@ -125,11 +125,20 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
     }
   }, [tabValue, open, proposal?._id]);
 
+  const getProposalRegionStr = () => {
+    const rawRegion = proposal?.region || "";
+    if (rawRegion && typeof rawRegion === 'object') {
+      return rawRegion.RegionName || rawRegion.Region || rawRegion.regionName || rawRegion.region || rawRegion.name || "";
+    }
+    return String(rawRegion || "");
+  };
+
   const fetchPersonnelServices = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 0: true }));
-      // console.log('📍 Fetching Personnel Services for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
-      const response = await api.get(`/api/personnel/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
+      const proposalRegion = getProposalRegionStr();
+      // console.log('📍 Fetching Personnel Services for proposal:', { fiscalYear: proposal.fiscalYear, region: proposalRegion, budgetType: proposal.budgetType });
+      const response = await api.get(`/api/personnel/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposalRegion}&budgetType=${proposal.budgetType}`);
       // console.log('✅ Personnel Services response:', response.data);
       // console.log('📊 First personnel record sample:', response.data?.[0]);
       // Log all field names from first record for debugging
@@ -148,8 +157,9 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const fetchCapitalOutlayData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 2: true }));
-      // console.log('📍 Fetching Capital Outlay data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
-      const response = await api.get(`/capital-outlay/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
+      const proposalRegion = getProposalRegionStr();
+      // console.log('📍 Fetching Capital Outlay data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposalRegion, budgetType: proposal.budgetType });
+      const response = await api.get(`/capital-outlay/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposalRegion}&budgetType=${proposal.budgetType}`);
       // console.log('✅ Capital Outlay response:', response.data);
       
       // Try to resolve category names if they're just IDs
@@ -186,8 +196,9 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const fetchMooeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 1: true }));
-      // console.log('📍 Fetching MOOE data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
-      const response = await api.get(`/mooe/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
+      const proposalRegion = getProposalRegionStr();
+      // console.log('📍 Fetching MOOE data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposalRegion, budgetType: proposal.budgetType });
+      const response = await api.get(`/mooe/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposalRegion}&budgetType=${proposal.budgetType}`);
       // console.log('✅ MOOE response:', response.data);
       setMooeData(response.data || []);
     } catch (error) {
@@ -201,17 +212,21 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const fetchIncomeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 3: true }));
-      // console.log('📍 Fetching Income data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
-      const response = await api.get(`/income/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
+      const proposalRegion = getProposalRegionStr();
+      // console.log('📍 Fetching Income data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposalRegion, budgetType: proposal.budgetType });
+      const response = await api.get(`/income/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposalRegion}&budgetType=${proposal.budgetType}`);
       // console.log('✅ Income response:', response.data);
       const incomeItems = response.data || [];
       setIncomeData(incomeItems);
       try {
-        const regionCandidate =
+        const rawRegion =
           proposal?.region ||
           incomeItems?.[0]?.region ||
           incomeItems?.[0]?.Region ||
           "";
+        const regionCandidate = rawRegion && typeof rawRegion === 'object'
+          ? (rawRegion.RegionName || rawRegion.Region || rawRegion.regionName || rawRegion.region || rawRegion.name || "")
+          : String(rawRegion || "");
         const settingsResp = await api.get('/api/discount-settings', {
           params: {
             fiscalYear: proposal.fiscalYear,
@@ -315,8 +330,12 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
     const discountType = discountSettings?.discountType || 'percentage';
     const discountValue = toNumber(discountSettings?.discountValue || 0);
     const applyDiscount = Boolean(discountSettings?.applyDiscount);
+    const rawProposalRegion = proposal?.region || "";
+    const proposalRegionStr = rawProposalRegion && typeof rawProposalRegion === 'object'
+      ? (rawProposalRegion.RegionName || rawProposalRegion.Region || rawProposalRegion.regionName || rawProposalRegion.region || rawProposalRegion.name || "")
+      : String(rawProposalRegion || "");
     const regionMatches =
-      normalizeName(discountSettings?.region) === normalizeName(proposal?.region);
+      normalizeName(discountSettings?.region) === normalizeName(proposalRegionStr);
 
     let irrigationNetFromDiscount = irrigationGross;
     const discountBase =
@@ -413,7 +432,7 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
                 </Grid>
                 <Grid item xs={3}>
                   <Typography variant="caption" color="textSecondary">Region</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{proposal.region || '—'}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{getProposalRegionStr() || '—'}</Typography>
                 </Grid>
                 <Grid item xs={3}>
                   <Typography variant="caption" color="textSecondary">Budget Type</Typography>

@@ -1675,6 +1675,36 @@ exports.deleteAllMooeProposals = async (req, res) => {
       .json({ error: 'Internal Server Error' });
   }
 };
+// Helper to resolve region to its string name from ObjectId, populated object, or string format
+const resolveRegionName = async (regionInput) => {
+  if (!regionInput) return '';
+  
+  if (typeof regionInput === 'string' && !/^[0-9a-fA-F]{24}$/.test(regionInput)) {
+    return regionInput;
+  }
+  
+  try {
+    const Region = require('../models/Region');
+    let regionId = regionInput;
+    
+    if (typeof regionInput === 'object') {
+      if (regionInput.Region || regionInput.RegionName || regionInput.regionName || regionInput.region) {
+        return regionInput.Region || regionInput.RegionName || regionInput.regionName || regionInput.region;
+      }
+      regionId = regionInput._id || regionInput.id;
+    }
+    
+    if (regionId && require('mongoose').Types.ObjectId.isValid(regionId)) {
+      const regionDoc = await Region.findById(regionId).lean();
+      return regionDoc?.Region || '';
+    }
+  } catch (err) {
+    console.warn('[resolveRegionName] Error resolving region name:', err.message);
+  }
+  
+  return String(regionInput);
+};
+
 // Get MOOE by parameters
 exports.getMOOEByParams = async (req, res) => {
   try {
@@ -1722,15 +1752,24 @@ exports.getMOOEByParams = async (req, res) => {
     // not just when linked records are missing. This ensures centralized/bulk-uploaded MOOE 
     // (no workflowRef) shows up alongside proposal-specific entries.
     if (proposalId && (req.query.fiscalYear || req.query.budgetType)) {
-      // Fetch the proposal to get its region if not provided in the request
+      // Fetch the proposal to get its region and creator if not provided in the request
       let proposalRegion = req.query.region;
-      if (!proposalRegion) {
+      let proposalCreatorId = null;
+      let proposalCreatedBy = null;
+      let proposalFiscalYear = req.query.fiscalYear;
+      let proposalBudgetType = req.query.budgetType;
+      
+      let resolvedRegionName = await resolveRegionName(proposalRegion);
+      if (!resolvedRegionName) {
         try {
           // Check legacy Proposal first
           const Proposal = require('../models/Proposal');
-          const proposal = await Proposal.findById(proposalId).select('region').lean();
-          if (proposal) {
-            proposalRegion = proposal.region;
+          const legacyProp = await Proposal.findById(proposalId).select('region createdByUserId processBy fiscalYear budgetType').lean();
+          if (legacyProp) {
+            resolvedRegionName = legacyProp.region;
+            proposalCreatorId = legacyProp.createdByUserId || legacyProp.processBy;
+            proposalFiscalYear = proposalFiscalYear || String(legacyProp.fiscalYear || '');
+            proposalBudgetType = proposalBudgetType || legacyProp.budgetType;
           } else {
             // Check NewProposalWorkflow if legacy not found
             const NewProposalWorkflow = require('../models/NewProposalWorkflow');
@@ -1738,13 +1777,18 @@ exports.getMOOEByParams = async (req, res) => {
               .populate('region', 'Region RegionName region')
               .lean();
             if (workflow) {
-              proposalRegion = workflow.region?.Region || workflow.region?.RegionName || workflow.region?.region || workflow.region;
+              resolvedRegionName = await resolveRegionName(workflow.region);
+              proposalCreatorId = workflow.createdByUserId || workflow.processBy;
+              proposalCreatedBy = workflow.createdBy;
+              proposalFiscalYear = proposalFiscalYear || String(workflow.fiscalYear || '');
+              proposalBudgetType = proposalBudgetType || workflow.budgetType || workflow.modelType;
             }
           }
         } catch (err) {
-          console.warn('[MOOE] Failed to fetch proposal for region fallback:', err.message);
+          console.warn('[MOOE] Failed to fetch proposal for region/creator fallback:', err.message);
         }
       }
+      proposalRegion = resolvedRegionName;
 
       // Build regional search array including special regions
       const searchRegions = [null, ""];
@@ -1789,8 +1833,10 @@ exports.getMOOEByParams = async (req, res) => {
         }
         unlinkedQuery.$and.push({ $or: fyOr });
       }
-      if (req.query.budgetType) {
-        unlinkedQuery.$and.push({ budgetType: req.query.budgetType });
+      
+      const finalBudgetType = req.query.budgetType || proposalBudgetType;
+      if (finalBudgetType) {
+        unlinkedQuery.$and.push({ budgetType: new RegExp(`^${finalBudgetType}$`, 'i') });
       }
 
       const unlinkedMooe = await MooeProposal.find(unlinkedQuery).lean();
@@ -1803,6 +1849,49 @@ exports.getMOOEByParams = async (req, res) => {
         
         if (uniqueUnlinked.length > 0) {
           mooe = [...mooe, ...uniqueUnlinked];
+        }
+      }
+
+      // ✅ CREATOR-BASED FALLBACK: When viewing a specific proposal and still no records found,
+      // search by the proposal creator's userId. This handles cases where MOOE records were
+      // saved without a workflowRef (e.g., sessionStorage was empty during entry).
+      if (mooe.length === 0 && (proposalCreatorId || proposalCreatedBy)) {
+        try {
+          const creatorClauses = [];
+          if (proposalCreatorId) {
+            creatorClauses.push({ createdByUserId: String(proposalCreatorId) });
+            creatorClauses.push({ createdBy: String(proposalCreatorId) });
+            creatorClauses.push({ processBy: String(proposalCreatorId) });
+          }
+          if (proposalCreatedBy) {
+            creatorClauses.push({ createdBy: String(proposalCreatedBy) });
+          }
+
+          const creatorQuery = { $and: [{ $or: creatorClauses }] };
+          if (proposalFiscalYear) {
+            const fyNum = Number(proposalFiscalYear);
+            const fyOr = [{ fiscalYear: String(proposalFiscalYear) }];
+            if (!Number.isNaN(fyNum)) fyOr.push({ fiscalYear: fyNum });
+            creatorQuery.$and.push({ $or: fyOr });
+          }
+          if (proposalBudgetType) {
+            creatorQuery.$and.push({ budgetType: proposalBudgetType });
+          }
+          if (searchRegions.length > 2) {
+            creatorQuery.$and.push({ region: { $in: searchRegions } });
+          }
+
+          const creatorMooe = await MooeProposal.find(creatorQuery).lean();
+          if (creatorMooe.length > 0) {
+            const existingIds = new Set(mooe.map(m => String(m._id)));
+            const uniqueCreator = creatorMooe.filter(m => !existingIds.has(String(m._id)));
+            if (uniqueCreator.length > 0) {
+              mooe = [...mooe, ...uniqueCreator];
+              console.log(`[MOOE] Creator-based fallback found ${uniqueCreator.length} record(s) for proposal ${proposalId}`);
+            }
+          }
+        } catch (err) {
+          console.warn('[MOOE] Creator-based fallback failed:', err.message);
         }
       }
     }

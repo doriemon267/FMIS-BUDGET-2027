@@ -249,6 +249,8 @@ const consolidatedReportsController = {
   //   - No watermark fill; just a faint text-only stamp
   //   - Single thin outer border only
   getConsolidatedMooePdf: async (req, res) => {
+    const documentId = 'MOOE-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+
     if (!MuhammaraRecipe) {
       return res.status(500).json({ message: 'PDF generation library (muhammara) is not installed on the server.' });
     }
@@ -556,7 +558,7 @@ const consolidatedReportsController = {
 
         // Footer separator line + text
         drawHRule(FOOTER_Y - 2, 0.5, BORDER_STD);
-        pdfDoc.text('Annex C (MOOE)', CONTENT_LEFT + 4, FOOTER_Y + 4, { color: LIGHT, fontSize: 7 });
+        pdfDoc.text(`Annex C (MOOE)  |  Doc ID: ${documentId}`, CONTENT_LEFT + 4, FOOTER_Y + 4, { color: LIGHT, fontSize: 7 });
         pdfDoc.text(`Generated: ${generatedAt}`, PAGE_WIDTH / 2, FOOTER_Y + 4, {
           color: LIGHT, fontSize: 7, align: 'center'
         });
@@ -865,6 +867,7 @@ const consolidatedReportsController = {
         }
         if (res.headersSent) return;
         res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('X-Document-ID', documentId);
         res.setHeader(
           'Content-Disposition',
           `inline; filename=Consolidated_MOOE_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Grid,
@@ -10,17 +10,17 @@ import {
   Chip,
   Button,
   Paper,
-  Divider,
-  useTheme,
   alpha,
   LinearProgress,
-  CircularProgress
+  CircularProgress,
+  CardActionArea,
+  useTheme
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import api from '../config/api';
-import { StatCardSkeleton } from '../components/common/LoadingSkeleton';
-import { handleApiError } from '../utils/errorHandler';
-import logger from '../utils/logger';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+
+// Icons
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -28,35 +28,41 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import ErrorAlert from '../components/common/ErrorAlert';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import InboxIcon from '@mui/icons-material/Inbox';
+
+// Contexts & Hooks
 import { useThemeContext } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { useRegion } from '../context/RegionContext';
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+
+// Config & Utils
+import api from '../config/api';
+import { handleApiError } from '../utils/errorHandler';
 import { hasPermission } from '../utils/permissions';
+// import logger from '../utils/logger'; // Kept available if needed for debugging
+
+// Components
+import { StatCardSkeleton } from '../components/common/LoadingSkeleton';
 import WorkflowTemplateSelector from '../components/workflow/WorkflowTemplateSelector';
 import DashboardAnalytics from '../components/dashboard/DashboardAnalytics';
 import InAppHelp from '../components/common/InAppHelp';
 import DeadlineReminder from '../components/common/DeadlineReminder';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import InboxIcon from '@mui/icons-material/Inbox';
-import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
-// --- ENHANCED REUSABLE COMPONENTS ---
+// --- ENTERPRISE UTILS ---
 
+/**
+ * Formats user display name securely with fallbacks
+ */
 const formatDisplayName = (user) => {
   if (!user) return "User";
   
-  // 1. Try real name components first
   const first = user.FirstName || user.firstName || "";
   const last = user.LastName || user.lastName || "";
-  if (first && last) {
-    return `${first} ${last}`;
-  }
+  if (first && last) return `${first} ${last}`;
   if (first) return first;
 
-  // 2. Try DisplayName or Username but strictly ignore "Dev User"
   const rawFallback = user.DisplayName || user.displayName || user.Username || user.username;
   const fallback = Array.isArray(rawFallback) ? rawFallback[0] : rawFallback;
 
@@ -64,7 +70,6 @@ const formatDisplayName = (user) => {
     return fallback;
   }
 
-  // 3. Fallback to Role
   const roles = user.Roles || [];
   if (roles.length > 0) {
     const primary = roles[0];
@@ -75,13 +80,27 @@ const formatDisplayName = (user) => {
   return "User";
 };
 
-const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle }) => {
+/**
+ * Formats large numbers for enterprise dashboards (e.g., 1500 -> 1.5k)
+ */
+const formatNumber = (num) => {
+  if (num === null || num === undefined) return 0;
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+  return num.toLocaleString();
+};
+
+// --- ENHANCED REUSABLE COMPONENTS ---
+
+// Ideal for future refactoring: Move StatCard and ActionCard to their own files in /components
+const StatCard = React.memo(({ title, value, color, icon: Icon, isLoading, subtitle }) => {
   const { mode } = useThemeContext();
   const isDarkMode = mode === 'dark';
 
   return (
     <Card
       elevation={0}
+      component="article"
       sx={{
         height: '100%',
         borderRadius: 5,
@@ -118,8 +137,8 @@ const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle }) => {
             >
               {title}
             </Typography>
-            <Typography variant='h3' fontWeight='900' sx={{ color: color, letterSpacing: -0.5 }}>
-              {isLoading ? <CircularProgress size={28} color="inherit" /> : value}
+            <Typography variant='h3' fontWeight='900' sx={{ color: color, letterSpacing: -0.5 }} aria-live="polite">
+              {isLoading ? <CircularProgress size={28} color="inherit" /> : formatNumber(value)}
             </Typography>
           </Box>
           <Box 
@@ -134,7 +153,7 @@ const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle }) => {
               boxShadow: `0 8px 16px -4px ${alpha(color, 0.2)}`
             }}
           >
-            <Icon sx={{ fontSize: 32 }} />
+            <Icon sx={{ fontSize: 32 }} aria-hidden="true" />
           </Box>
         </Stack>
         {subtitle && (
@@ -145,22 +164,15 @@ const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle }) => {
           </Box>
         )}
       </CardContent>
-      {/* Decorative background element */}
       <Box sx={{
-        position: 'absolute',
-        bottom: -20,
-        right: -20,
-        width: 100,
-        height: 100,
-        borderRadius: '50%',
-        bgcolor: alpha(color, 0.03),
-        zIndex: 0
+        position: 'absolute', bottom: -20, right: -20, width: 100, height: 100,
+        borderRadius: '50%', bgcolor: alpha(color, 0.03), zIndex: 0, pointerEvents: 'none'
       }} />
     </Card>
   );
-};
+});
 
-const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText }) => {
+const ActionCard = React.memo(({ title, description, icon: Icon, color, onClick, buttonText }) => {
   const { mode } = useThemeContext();
   const isDarkMode = mode === 'dark';
 
@@ -173,7 +185,6 @@ const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText
         border: `1px solid ${alpha(isDarkMode ? '#fff' : '#000', 0.06)}`,
         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
         background: isDarkMode ? alpha('#1e293b', 0.4) : '#ffffff',
-        cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
         '&:hover': {
@@ -182,31 +193,22 @@ const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText
           transform: 'translateY(-6px)',
           boxShadow: '0 25px 50px -20px rgba(0,0,0,0.12)',
           '& .action-icon-box': { 
-            bgcolor: color, 
-            color: '#fff',
-            transform: 'scale(1.1) rotate(-5deg)'
+            bgcolor: color, color: '#fff', transform: 'scale(1.1) rotate(-5deg)'
           },
           '& .action-button': {
-            bgcolor: color,
-            color: '#fff',
-            transform: 'translateY(-2px)'
+            bgcolor: color, color: '#fff', transform: 'translateY(-2px)'
           }
         },
       }}
-      onClick={onClick}
     >
-      <CardContent sx={{ p: 4, display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', zIndex: 1 }}>
+      {/* CardActionArea ensures enterprise-level keyboard accessibility (Tab + Enter) */}
+      <CardActionArea onClick={onClick} sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', p: 4, zIndex: 1 }}>
         <Box className="action-icon-box" sx={{
-          display: 'inline-flex',
-          p: 2,
-          borderRadius: 3,
-          bgcolor: alpha(color, 0.1),
-          color: color,
-          mb: 3,
-          transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'inline-flex', p: 2, borderRadius: 3, bgcolor: alpha(color, 0.1),
+          color: color, mb: 3, transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
           boxShadow: `0 10px 20px -5px ${alpha(color, 0.2)}`
         }}>
-          <Icon sx={{ fontSize: 30 }} />
+          <Icon sx={{ fontSize: 30 }} aria-hidden="true" />
         </Box>
         <Typography variant='h5' fontWeight='800' gutterBottom sx={{ letterSpacing: -0.5 }}>
           {title}
@@ -215,38 +217,28 @@ const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText
           {description}
         </Typography>
         <Button
+          component="div" // Use div to avoid invalid HTML (nested button inside button/CardActionArea)
           fullWidth
           variant='outlined'
           className="action-button"
+          tabIndex={-1}
           sx={{
-            borderRadius: 3,
-            textTransform: 'none',
-            py: 1.5,
-            fontSize: '1rem',
-            fontWeight: 700,
-            color: color,
-            borderColor: alpha(color, 0.3),
-            transition: 'all 0.3s ease',
-            '&:hover': { borderColor: color, bgcolor: color, color: '#fff' }
+            borderRadius: 3, textTransform: 'none', py: 1.5, fontSize: '1rem',
+            fontWeight: 700, color: color, borderColor: alpha(color, 0.3),
+            transition: 'all 0.3s ease', pointerEvents: 'none' // Let CardActionArea handle the click
           }}
         >
           {buttonText}
         </Button>
-      </CardContent>
-      {/* Decorative gradient blur */}
+      </CardActionArea>
       <Box sx={{
-        position: 'absolute',
-        top: -50,
-        right: -50,
-        width: 150,
-        height: 150,
-        borderRadius: '50%',
-        background: `radial-gradient(circle, ${alpha(color, 0.08)} 0%, transparent 70%)`,
-        zIndex: 0
+        position: 'absolute', top: -50, right: -50, width: 150, height: 150,
+        borderRadius: '50%', background: `radial-gradient(circle, ${alpha(color, 0.08)} 0%, transparent 70%)`,
+        zIndex: 0, pointerEvents: 'none'
       }} />
     </Card>
   );
-};
+});
 
 // --- MAIN PAGE COMPONENT ---
 
@@ -257,25 +249,30 @@ const HomePage = () => {
   const { currentUser } = useUser();
   const { activeRegion, availableRegions } = useRegion();
   const queryClient = useQueryClient();
+  
   const isDarkMode = mode === 'dark';
 
-  const THEME_COLORS = {
-    primary: '#60a561',   // Brighter, fresher green
-    secondary: '#386641', // Refined forest green
+  const THEME_COLORS = useMemo(() => ({
+    primary: '#60a561',
+    secondary: '#386641',
     deepGreen: '#1b4332',
     success: '#6a994e',
     warning: '#f48c06',
     error: '#d00000',
     info: '#0077b6',
     accent: '#a7c957'
-  };
+  }), []);
 
-  const userRoles = Array.isArray(currentUser?.Roles) ? currentUser.Roles : currentUser?.Roles ? [currentUser.Roles] : [];
+  const userRoles = useMemo(() => 
+    Array.isArray(currentUser?.Roles) ? currentUser.Roles : currentUser?.Roles ? [currentUser.Roles] : []
+  , [currentUser]);
+  
   const isPreparer = userRoles.includes('BUDGET_PREPARER');
 
   const rawScope = String(currentUser?.hierarchicalAccess?.scope || 'REGION').toUpperCase();
   const accessibleDivisions = currentUser?.hierarchicalAccess?.accessibleDivisions || [];
   const accessibleDepartments = currentUser?.hierarchicalAccess?.accessibleDepartments || [];
+  
   const hasDivisionAssignment = accessibleDivisions.length > 0;
   const hasDepartmentAssignment = accessibleDepartments.length > 0;
 
@@ -283,8 +280,6 @@ const HomePage = () => {
   let userDivision = accessibleDivisions[0];
   const userDepartment = accessibleDepartments[0]?.departmentName;
 
-  // Normalize scope for users whose backend scope still resolves as REGION
-  // but already have deeper hierarchical assignments.
   if (rawScope === 'BUDGET_AND_REVENUE_DIVISION' || hasDivisionAssignment) {
     userAccessLevel = 'DIVISION';
   } else if (rawScope === 'DEPARTMENT' || hasDepartmentAssignment) {
@@ -297,19 +292,20 @@ const HomePage = () => {
 
   const divisionName = typeof userDivision === 'string' ? userDivision : (userDivision?.name || userDivision?.divisionName);
   const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
-  const isBudgetManager = (currentUser?.Roles || []).some((r) => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER');
+  const isBudgetManager = useMemo(() => 
+    userRoles.some((r) => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER')
+  , [userRoles]);
+  
   const regionName = (isBudgetManager && availableRegions?.length > 1) ? 'All Regions' : (activeRegion?.name || activeRegion?.regionName);
 
-  const getDisplayInfo = () => {
+  const displayInfo = useMemo(() => {
     switch (userAccessLevel) {
       case 'DIVISION': return { level: 'Division', name: divisionName || 'Your Division', scope: `${divisionName || 'Division'} (${userDepartment || 'Dept'}, ${regionName})` };
       case 'DEPARTMENT': return { level: 'Department', name: userDepartment || 'Your Department', scope: `${userDepartment || 'Dept'} (${regionName})` };
       case 'FULL': return { level: 'System', name: 'All Regions', scope: 'Full System Access' };
       default: return { level: 'Region', name: regionName || 'Your Region', scope: `${regionName || 'Region'}` };
     }
-  };
-
-  const displayInfo = getDisplayInfo();
+  }, [userAccessLevel, divisionName, userDepartment, regionName]);
 
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
@@ -337,21 +333,20 @@ const HomePage = () => {
   const [helpOpen, setHelpOpen] = useState(false);
   const [canAccessCreateProposal, setCanAccessCreateProposal] = useState(false);
 
-  const userRolesUpper = useMemo(() => (currentUser?.Roles || []).map((role) => String(role).toUpperCase()), [currentUser]);
-
   const hasCreateProposalEligibility = useMemo(() => {
+    const userRolesUpper = userRoles.map((role) => String(role).toUpperCase());
     const isSuperAdminUser = userRolesUpper.some(r => ['SUPER ADMIN', 'SUPER_ADMIN', 'SUPERADMIN'].includes(r));
     if (isSuperAdminUser) return true;
+    
     const hasCreatePermission = hasPermission(currentUser, 'CreateProposals') || hasPermission(currentUser, 'EditOwnProposals');
     const hasBlockedRole = userRolesUpper.some(r => [
-      'BUDGET MANAGER', 'BUDGET_MANAGER',
-      'BUDGET OFFICER', 'BUDGET_OFFICER',
-      'BUDGET APPROVER', 'BUDGET_APPROVER',
-      'BUDGET REVIEWER', 'BUDGET_REVIEWER',
+      'BUDGET MANAGER', 'BUDGET_MANAGER', 'BUDGET OFFICER', 'BUDGET_OFFICER',
+      'BUDGET APPROVER', 'BUDGET_APPROVER', 'BUDGET REVIEWER', 'BUDGET_REVIEWER',
       'BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST',
     ].includes(r));
+    
     return hasCreatePermission && !hasBlockedRole;
-  }, [currentUser, userRolesUpper]);
+  }, [currentUser, userRoles]);
 
   useEffect(() => {
     let isMounted = true;
@@ -379,84 +374,80 @@ const HomePage = () => {
     },
   });
 
-  const handleCreateProposal = () => canAccessCreateProposal ? navigate('/proposal') : toast.error('Creation restricted.');
-  const handleRefreshStats = () => queryClient.invalidateQueries(['dashboardStats']);
-  const handleGenerateReports = () => navigate('/comprehensive-reports');
+  // Enterprise optimization: Wrap handlers in useCallback
+  const handleCreateProposal = useCallback(() => {
+    if (canAccessCreateProposal) navigate('/proposal');
+    else toast.error('Creation restricted or you have an active proposal pending.');
+  }, [canAccessCreateProposal, navigate]);
+
+  const handleRefreshStats = useCallback(() => {
+    queryClient.invalidateQueries(['dashboardStats']);
+    toast.info('Analytics refreshing...');
+  }, [queryClient]);
+
+  const handleGenerateReports = useCallback(() => navigate('/comprehensive-reports'), [navigate]);
 
   useKeyboardShortcuts({
     'ctrl+r': (e) => { e.preventDefault(); handleRefreshStats(); },
     'ctrl+shift+h': (e) => { e.preventDefault(); setHelpOpen(true); },
-  }, [regionName]);
+  }, [handleRefreshStats]);
 
-  const statusBreakdown = [
+  const statusBreakdown = useMemo(() => [
     { label: 'Pending Review', value: pendingProposals, color: THEME_COLORS.warning },
     { label: 'Approved/Finalized', value: approvedProposals, color: THEME_COLORS.success },
     { label: 'Rejected/Returned', value: rejectedProposals, color: THEME_COLORS.error },
-  ];
+  ], [pendingProposals, approvedProposals, rejectedProposals, THEME_COLORS]);
 
-  const analyticsData = {
+  const analyticsData = useMemo(() => ({
     trends: [{ date: String(fiscalYear), total: totalProposals, approved: approvedProposals, pending: pendingProposals }],
     statusDistribution: statusBreakdown.map((s) => ({ name: s.label, value: s.value })),
     budgetTypeDistribution: [
       stats?.breakdown?.legacy?.total > 0 && { name: 'Legacy', value: stats.breakdown.legacy.total },
       stats?.breakdown?.newWorkflow?.total > 0 && { name: 'New Workflow', value: stats.breakdown.newWorkflow.total },
     ].filter(Boolean),
-  };
+  }), [fiscalYear, totalProposals, approvedProposals, pendingProposals, statusBreakdown, stats]);
 
-  const actionChips = [
+  const actionChips = useMemo(() => [
     { label: `FY: ${fiscalYear}`, icon: '📅' },
     { label: `Access: ${displayInfo.level}`, icon: '🔑' },
     { label: `Region: ${regionName}`, icon: '📍' },
-  ];
+  ], [fiscalYear, displayInfo.level, regionName]);
 
   return (
     <>
-      <Container maxWidth={false} sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, md: 3 } }}>
+      <Container maxWidth={false} sx={{ pt: { xs: 2, md: 1 }, pb: { xs: 4, md: 5 }, px: { xs: 2, md: 3 } }}>
         <Stack spacing={4}>
           
-        {/* --- HERO SECTION --- */}
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2.5, md: 3 },
-            mb: 4,
-            borderRadius: 5,
-            position: 'relative',
-            overflow: 'hidden',
-            bgcolor: isDarkMode ? alpha('#fff', 0.02) : '#fff',
-            border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : alpha('#000', 0.06)}`,
-            boxShadow: '0 4px 20px -10px rgba(0,0,0,0.05)',
-          }}
-        >
-            {/* Subtle Gradient Background Decorations */}
+          {/* --- HERO SECTION --- */}
+          <Paper
+            elevation={0}
+            component="section"
+            sx={{
+              p: { xs: 2.5, md: 3 },
+              borderRadius: 5,
+              position: 'relative',
+              overflow: 'hidden',
+              bgcolor: isDarkMode ? alpha('#fff', 0.02) : '#fff',
+              border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : alpha('#000', 0.06)}`,
+              boxShadow: '0 4px 20px -10px rgba(0,0,0,0.05)',
+            }}
+          >
             <Box sx={{
-              position: 'absolute',
-              top: -100,
-              right: -50,
-              width: 400,
-              height: 400,
-              borderRadius: '50%',
-              background: `radial-gradient(circle, ${alpha(THEME_COLORS.primary, 0.03)} 0%, transparent 70%)`,
-              zIndex: 0
+              position: 'absolute', top: -100, right: -50, width: 400, height: 400,
+              borderRadius: '50%', background: `radial-gradient(circle, ${alpha(THEME_COLORS.primary, 0.03)} 0%, transparent 70%)`, zIndex: 0
             }} />
             <Box sx={{
-              position: 'absolute',
-              bottom: -50,
-              left: -50,
-              width: 300,
-              height: 300,
-              borderRadius: '50%',
-              background: `radial-gradient(circle, ${alpha(THEME_COLORS.accent, 0.05)} 0%, transparent 70%)`,
-              zIndex: 0
+              position: 'absolute', bottom: -50, left: -50, width: 300, height: 300,
+              borderRadius: '50%', background: `radial-gradient(circle, ${alpha(THEME_COLORS.accent, 0.05)} 0%, transparent 70%)`, zIndex: 0
             }} />
 
             <Grid container spacing={4} alignItems="center" sx={{ position: 'relative', zIndex: 1 }}>
               <Grid item xs={12} lg={8}>
                 <Stack spacing={1} sx={{ mb: 3 }}>
-                  <Typography variant='overline' sx={{ letterSpacing: 3, fontWeight: 800, color: THEME_COLORS.primary, fontSize: '0.75rem' }}>
+                  <Typography variant='overline' component="h2" sx={{ letterSpacing: 3, fontWeight: 800, color: THEME_COLORS.primary, fontSize: '0.75rem' }}>
                     OFFICIAL BUDGET SYSTEM
                   </Typography>
-                  <Typography variant='h4' fontWeight={900} sx={{ mt: 0.5, letterSpacing: -0.8, fontSize: { xs: '1.5rem', md: '1.8rem' }, lineHeight: 1.2, color: isDarkMode ? '#fff' : '#1a1a1a' }}>
+                  <Typography variant='h4' component="h1" fontWeight={900} sx={{ mt: 0.5, letterSpacing: -0.8, fontSize: { xs: '1.5rem', md: '1.8rem' }, lineHeight: 1.2, color: isDarkMode ? '#fff' : '#1a1a1a' }}>
                     Mabuhay, {formatDisplayName(currentUser)}!
                   </Typography>
                 </Stack>
@@ -467,7 +458,7 @@ const HomePage = () => {
                     : `Welcome back! Here is an overview of budget submissions for ${displayInfo.name}. You can monitor progress and review pending items in real-time.`}
                 </Typography>
                 
-                <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap sx={{ mb: 4 }}>
+                <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap sx={{ mb: 0 }}>
                   {actionChips.map((chip) => (
                     <Chip
                       key={chip.label}
@@ -477,99 +468,32 @@ const HomePage = () => {
                         bgcolor: isDarkMode ? alpha('#fff', 0.05) : alpha(THEME_COLORS.primary, 0.05),
                         color: isDarkMode ? '#fff' : THEME_COLORS.secondary,
                         border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : alpha(THEME_COLORS.primary, 0.1)}`,
-                        fontWeight: 700,
-                        px: 1,
-                        borderRadius: 2.5,
-                        height: 32,
-                        fontSize: '0.85rem',
-                        transition: 'all 0.2s',
-                        '&:hover': { bgcolor: isDarkMode ? alpha('#fff', 0.1) : alpha(THEME_COLORS.primary, 0.1) }
+                        fontWeight: 700, px: 1, borderRadius: 2.5, height: 32, fontSize: '0.85rem',
+                        transition: 'all 0.2s', '&:hover': { bgcolor: isDarkMode ? alpha('#fff', 0.1) : alpha(THEME_COLORS.primary, 0.1) }
                       }}
                     />
                   ))}
-                </Stack>
-
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                  {isPreparer && canAccessCreateProposal && (
-                    <Button
-                      variant='contained'
-                      size="large"
-                      onClick={handleCreateProposal}
-                      startIcon={<AddCircleOutlineIcon />}
-                      sx={{
-                        bgcolor: THEME_COLORS.primary,
-                        color: '#fff',
-                        fontWeight: 800,
-                        px: 4,
-                        py: 1.5,
-                        borderRadius: 3,
-                        fontSize: '0.95rem',
-                        boxShadow: `0 8px 20px -6px ${alpha(THEME_COLORS.primary, 0.4)}`,
-                        '&:hover': { bgcolor: THEME_COLORS.secondary, transform: 'translateY(-2px)' },
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      New Proposal
-                    </Button>
-                  )}
-                  <Button
-                    variant='outlined'
-                    size="large"
-                    onClick={handleRefreshStats}
-                    sx={{
-                      color: THEME_COLORS.primary,
-                      borderColor: alpha(THEME_COLORS.primary, 0.3),
-                      borderWidth: 2,
-                      fontWeight: 700,
-                      px: 3.5,
-                      py: 1.5,
-                      borderRadius: 3,
-                      fontSize: '0.9rem',
-                      '&:hover': { borderColor: THEME_COLORS.primary, bgcolor: alpha(THEME_COLORS.primary, 0.05), borderWidth: 2, transform: 'translateY(-2px)' },
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    Refresh Analytics
-                  </Button>
                 </Stack>
               </Grid>
 
               <Grid item xs={12} lg={4}>
                 <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  bgcolor: isDarkMode ? alpha('#fff', 0.03) : '#f8fafc',
-                  p: 3,
-                  borderRadius: 5,
-                  border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : 'rgba(0,0,0,0.04)'}`,
-                  textAlign: 'center',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  bgcolor: isDarkMode ? alpha('#fff', 0.03) : '#f8fafc', p: 3, borderRadius: 5,
+                  border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : 'rgba(0,0,0,0.04)'}`, textAlign: 'center',
                   boxShadow: isDarkMode ? 'none' : 'inset 0 2px 4px rgba(0,0,0,0.02)'
                 }}>
                    <Box sx={{ position: 'relative', display: 'inline-flex', mb: 3 }}>
+                      <CircularProgress variant="determinate" value={100} size={120} thickness={5} sx={{ color: isDarkMode ? alpha('#fff', 0.05) : alpha(THEME_COLORS.primary, 0.08) }} />
                       <CircularProgress
-                        variant="determinate"
-                        value={100}
-                        size={120}
-                        thickness={5}
-                        sx={{ color: isDarkMode ? alpha('#fff', 0.05) : alpha(THEME_COLORS.primary, 0.08) }}
-                      />
-                      <CircularProgress
-                        variant="determinate"
-                        value={Number(completionRate)}
-                        size={120}
-                        thickness={5}
+                        variant="determinate" value={Number(completionRate)} size={120} thickness={5}
                         sx={{ 
-                          color: THEME_COLORS.primary, 
-                          position: 'absolute', 
-                          left: 0, 
-                          strokeLinecap: 'round',
+                          color: THEME_COLORS.primary, position: 'absolute', left: 0, strokeLinecap: 'round',
                           filter: `drop-shadow(0 0 10px ${alpha(THEME_COLORS.primary, 0.3)})`
                         }}
                       />
                       <Box sx={{
-                        top: 0, left: 0, bottom: 0, right: 0,
-                        position: 'absolute', display: 'flex',
+                        top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex',
                         flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                       }}>
                         <Typography variant="h3" fontWeight="900" sx={{ letterSpacing: -1, color: isDarkMode ? '#fff' : THEME_COLORS.secondary }}>{completionRate}%</Typography>
@@ -582,10 +506,56 @@ const HomePage = () => {
             </Grid>
           </Paper>
 
+          {/* --- DEADLINE REMINDER --- */}
+          {activeSettings?.dueDate && (
+            <DeadlineReminder deadline={activeSettings.dueDate} label="Budget Submission Deadline" showIcon={true} />
+          )}
+
+          {/* --- QUICK ACTIONS (Moved up for better UX/Enterprise workflow) --- */}
+          <Box component="section">
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-end" sx={{ mb: 3 }}>
+              <Box>
+                <Typography variant='h5' component="h2" fontWeight='900' sx={{ letterSpacing: -0.5 }}>🚀 Quick Operations</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Common tasks and shortcuts for your role</Typography>
+              </Box>
+              <Button
+                variant='outlined'
+                size="small"
+                onClick={handleRefreshStats}
+                sx={{
+                  color: THEME_COLORS.primary, borderColor: alpha(THEME_COLORS.primary, 0.3), fontWeight: 700, borderRadius: 2,
+                  '&:hover': { borderColor: THEME_COLORS.primary, bgcolor: alpha(THEME_COLORS.primary, 0.05) }
+                }}
+              >
+                Refresh Data
+              </Button>
+            </Stack>
+            <Grid container spacing={3}>
+              {isPreparer && (
+                <Grid item xs={12} sm={6} md={4}>
+                  <ActionCard 
+                    title='New Proposal' 
+                    description='Initiate a fresh budget proposal using the official 6-step wizard.' 
+                    icon={AddCircleOutlineIcon} 
+                    color={THEME_COLORS.primary} 
+                    onClick={handleCreateProposal} 
+                    buttonText={canAccessCreateProposal ? 'Start Creation' : 'Creation Restricted'} 
+                  />
+                </Grid>
+              )}
+              <Grid item xs={12} sm={6} md={4}>
+                <ActionCard title='Deep Analytics' description='Explore granular data with customizable reporting tools.' icon={AssessmentIcon} color={THEME_COLORS.info} onClick={handleGenerateReports} buttonText='Open Reports' />
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <ActionCard title='Workflow Tracker' description='Monitor every stage of your submissions in the central pipeline.' icon={ListAltIcon} color={THEME_COLORS.warning} onClick={() => navigate('/allproposal')} buttonText='View Tracker' />
+              </Grid>
+            </Grid>
+          </Box>
+
           {/* --- STATS CARDS --- */}
-          <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
-              <Typography variant='h5' fontWeight='900' sx={{ display: 'flex', alignItems: 'center', gap: 2, letterSpacing: -0.5 }}>
+          <Box component="section">
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+              <Typography variant='h5' component="h2" fontWeight='900' sx={{ display: 'flex', alignItems: 'center', gap: 2, letterSpacing: -0.5 }}>
                 <AssessmentIcon sx={{ color: THEME_COLORS.primary, fontSize: 32 }} /> Key Performance Indicators
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, bgcolor: alpha(theme.palette.divider, 0.05), px: 2, py: 0.8, borderRadius: 2 }}>
@@ -595,7 +565,7 @@ const HomePage = () => {
             {isLoading ? (
               <StatCardSkeleton count={4} />
             ) : (
-              <Grid container spacing={4}>
+              <Grid container spacing={3}>
                 <Grid item xs={12} sm={6} md={3}>
                   <StatCard title='Total Proposals' value={totalProposals} color={THEME_COLORS.info} icon={TrendingUpIcon} />
                 </Grid>
@@ -611,144 +581,126 @@ const HomePage = () => {
               </Grid>
             )}
           </Box>
-{/* --- HEALTH & CONTEXT SECTION --- */}
-<Grid 
-  container 
-  spacing={4} 
-  alignItems="stretch" 
->
-  {/* LEFT COLUMN: Proposal Distribution */}
-  <Grid item xs={12} md={7}>
-    <Paper 
-      elevation={0} 
-      sx={{ 
-        p: 4, 
-        borderRadius: 6, 
-        border: `1px solid ${alpha(theme.palette.divider, 0.08)}`, 
-        height: '100%',
-        bgcolor: isDarkMode ? alpha('#fff', 0.01) : '#fff',
-        display: 'flex',
-        flexDirection: 'column'
-      }}
-    >
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
-        <Box>
-          <Typography variant="h5" fontWeight="900" sx={{ letterSpacing: -0.5 }}>Proposal Distribution</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Real-time status tracking</Typography>
-        </Box>
-        <Button 
-          variant="soft" 
-          size="small"
-          onClick={() => navigate('/allproposal')} 
-          sx={{ fontWeight: 800, bgcolor: alpha(THEME_COLORS.primary, 0.08), color: THEME_COLORS.primary }}
-        >
-          VIEW ALL
-        </Button>
-      </Stack>
 
-      <Stack spacing={4} sx={{ mt: 'auto', mb: 'auto', flexGrow: 1, display: 'flex', justifyContent: 'center' }}>
-        {totalProposals > 0 ? (
-          statusBreakdown.map((status) => (
-            <Box key={status.label}>
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" sx={{ mb: 1.5 }}>
-                <Typography variant="body2" fontWeight="700">{status.label}</Typography>
-                <Typography variant="body2" fontWeight="900" sx={{ color: status.color }}>{status.value}</Typography>
-              </Stack>
-              <LinearProgress 
-                variant="determinate" 
-                value={(status.value / totalProposals) * 100} 
-                sx={{ height: 10, borderRadius: 5, bgcolor: alpha(status.color, 0.08) }}
-              />
-            </Box>
-          ))
-        ) : (
-          <Box sx={{ textAlign: 'center', py: 4, opacity: 0.6 }}>
-            <InboxIcon sx={{ fontSize: 64, mb: 2, color: 'text.disabled' }} />
-            <Typography variant="body1" fontWeight="700" color="text.secondary">No Proposals Yet</Typography>
-            <Typography variant="caption" color="text.secondary">Data will appear once submissions begin.</Typography>
-          </Box>
-        )}
-      </Stack>
-    </Paper>
-  </Grid>
+          {/* --- HEALTH & CONTEXT SECTION --- */}
+          <Grid container spacing={3} alignItems="stretch" component="section">
+            {/* LEFT COLUMN: Proposal Distribution */}
+            <Grid item xs={12} md={7}>
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 4, borderRadius: 6, border: `1px solid ${alpha(theme.palette.divider, 0.08)}`, height: '100%',
+                  bgcolor: isDarkMode ? alpha('#fff', 0.01) : '#fff', display: 'flex', flexDirection: 'column'
+                }}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 4 }}>
+                  <Box>
+                    <Typography variant="h5" component="h3" fontWeight="900" sx={{ letterSpacing: -0.5 }}>Proposal Distribution</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Real-time status tracking</Typography>
+                  </Box>
+                  <Button 
+                    variant="soft" size="small" onClick={() => navigate('/allproposal')} 
+                    sx={{ fontWeight: 800, bgcolor: alpha(THEME_COLORS.primary, 0.08), color: THEME_COLORS.primary }}
+                  >
+                    VIEW ALL
+                  </Button>
+                </Stack>
 
-  {/* RIGHT COLUMN: System Context */}
-  <Grid item xs={12} md={5}>
-    <Paper 
-      elevation={0} 
-      sx={{ 
-        p: 4, 
-        borderRadius: 6, 
-        bgcolor: isDarkMode ? alpha('#fff', 0.02) : '#f8fafc', 
-        border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column'
-      }}
-    >
-      <Typography variant="h5" fontWeight="900" sx={{ mb: 4, letterSpacing: -0.5 }}>System Context</Typography>
-      <Stack spacing={2.5} sx={{ mt: 'auto', mb: 'auto' }}>
-        {[
-          { label: 'Active Region', value: regionName, icon: '📍' },
-          { label: 'Division', value: divisionName || 'N/A', icon: '🏢' },
-          { label: 'Department', value: userDepartment || 'N/A', icon: '📋' },
-          { label: 'Access Scope', value: displayInfo.level, icon: '🔑' }
-        ].map((item, idx) => (
-          <Box 
-            key={idx} 
-            sx={{ 
-              p: 2, 
-              borderRadius: 4, 
-              bgcolor: isDarkMode ? alpha('#fff', 0.03) : '#fff',
-              border: `1px solid ${alpha(theme.palette.divider, 0.05)}`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2.5
-            }}
-          >
-            <Box sx={{ fontSize: '1.3rem', p: 1.2, bgcolor: alpha(THEME_COLORS.primary, 0.05), borderRadius: 3, lineHeight: 1 }}>
-              {item.icon}
-            </Box>
-            <Box>
-              <Typography variant="caption" fontWeight="800" color="text.secondary" sx={{ textTransform: 'uppercase', fontSize: '0.65rem' }}>{item.label}</Typography>
-              <Typography variant="body2" fontWeight="700" sx={{ color: 'text.primary' }}>{item.value}</Typography>
-            </Box>
-          </Box>
-        ))}
-      </Stack>
-    </Paper>
-  </Grid>
-</Grid>
+                <Stack spacing={4} sx={{ mt: 'auto', mb: 'auto', flexGrow: 1, display: 'flex', justifyContent: 'center' }}>
+                  {totalProposals > 0 ? (
+                    statusBreakdown.map((status) => (
+                      <Box key={status.label}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-end" sx={{ mb: 1.5 }}>
+                          <Typography variant="body2" fontWeight="700">{status.label}</Typography>
+                          <Typography variant="body2" fontWeight="900" sx={{ color: status.color }}>{formatNumber(status.value)}</Typography>
+                        </Stack>
+                        <LinearProgress 
+                          variant="determinate" 
+                          value={(status.value / totalProposals) * 100} 
+                          sx={{ height: 10, borderRadius: 5, bgcolor: alpha(status.color, 0.08) }}
+                        />
+                      </Box>
+                    ))
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4, opacity: 0.8 }}>
+                      <InboxIcon sx={{ fontSize: 64, mb: 2, color: 'text.disabled' }} />
+                      <Typography variant="body1" fontWeight="700" color="text.secondary">No Proposals Yet</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>Data will appear once submissions begin.</Typography>
+                      {isPreparer && (
+                        <Button 
+                          variant="outlined" 
+                          onClick={handleCreateProposal}
+                          disabled={!canAccessCreateProposal}
+                          sx={{ borderColor: THEME_COLORS.primary, color: THEME_COLORS.primary }}
+                        >
+                          Create First Proposal
+                        </Button>
+                      )}
+                    </Box>
+                  )}
+                </Stack>
+              </Paper>
+            </Grid>
 
-          {/* --- DEADLINE REMINDER --- */}
-          {activeSettings?.dueDate && (
-            <DeadlineReminder deadline={activeSettings.dueDate} label="Budget Submission Deadline" showIcon={true} />
-          )}
+            {/* RIGHT COLUMN: System Context */}
+            <Grid item xs={12} md={5}>
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 4, borderRadius: 6, bgcolor: isDarkMode ? alpha('#fff', 0.02) : '#f8fafc', 
+                  border: `1px solid ${alpha(theme.palette.divider, 0.08)}`, height: '100%',
+                  display: 'flex', flexDirection: 'column'
+                }}
+              >
+                <Typography variant="h5" component="h3" fontWeight="900" sx={{ mb: 4, letterSpacing: -0.5 }}>System Context</Typography>
+                <Stack spacing={2.5} sx={{ mt: 'auto', mb: 'auto' }}>
+                  {[
+                    { label: 'Active Region', value: regionName, icon: '📍' },
+                    { label: 'Division', value: divisionName || 'N/A', icon: '🏢' },
+                    { label: 'Department', value: userDepartment || 'N/A', icon: '📋' },
+                    { label: 'Access Scope', value: displayInfo.level, icon: '🔑' }
+                  ].map((item, idx) => (
+                    <Box 
+                      key={idx} 
+                      sx={{ 
+                        p: 2, borderRadius: 4, bgcolor: isDarkMode ? alpha('#fff', 0.03) : '#fff',
+                        border: `1px solid ${alpha(theme.palette.divider, 0.05)}`, display: 'flex',
+                        alignItems: 'center', gap: 2.5
+                      }}
+                    >
+                      <Box sx={{ fontSize: '1.3rem', p: 1.2, bgcolor: alpha(THEME_COLORS.primary, 0.05), borderRadius: 3, lineHeight: 1 }}>
+                        {item.icon}
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" fontWeight="800" color="text.secondary" sx={{ textTransform: 'uppercase', fontSize: '0.65rem' }}>{item.label}</Typography>
+                        <Typography variant="body2" fontWeight="700" sx={{ color: 'text.primary' }}>{item.value}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
+            </Grid>
+          </Grid>
 
           {/* --- ANALYTICS --- */}
           <Paper 
             elevation={0} 
+            component="section"
             sx={{ 
-              p: 4, 
-              borderRadius: 6, 
-              bgcolor: isDarkMode ? alpha('#fff', 0.01) : alpha(THEME_COLORS.primary, 0.02),
-              border: `1px solid ${alpha(THEME_COLORS.primary, 0.08)}`,
-              overflow: 'hidden',
-              position: 'relative'
+              p: 4, borderRadius: 6, bgcolor: isDarkMode ? alpha('#fff', 0.01) : alpha(THEME_COLORS.primary, 0.02),
+              border: `1px solid ${alpha(THEME_COLORS.primary, 0.08)}`, overflow: 'hidden', position: 'relative', mb: 6
             }}
           >
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 5 }}>
               <Box>
-                <Typography variant='h5' fontWeight='900' sx={{ letterSpacing: -0.5 }}>📊 Visual Analytics</Typography>
+                <Typography variant='h5' component="h2" fontWeight='900' sx={{ letterSpacing: -0.5 }}>📊 Visual Analytics</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Historical trends and current distribution</Typography>
               </Box>
               <Button 
                 startIcon={<HelpOutlineIcon />} 
                 onClick={() => setHelpOpen(true)}
                 sx={{ 
-                  fontWeight: 700, 
-                  textTransform: 'none',
-                  color: 'text.secondary',
+                  fontWeight: 700, textTransform: 'none', color: 'text.secondary',
                   '&:hover': { color: THEME_COLORS.primary, bgcolor: alpha(THEME_COLORS.primary, 0.05) }
                 }}
               >
@@ -756,35 +708,12 @@ const HomePage = () => {
               </Button>
             </Stack>
             <Box sx={{ 
-              p: 2, 
-              bgcolor: isDarkMode ? alpha('#000', 0.2) : '#fff', 
-              borderRadius: 4,
+              p: 2, bgcolor: isDarkMode ? alpha('#000', 0.2) : '#fff', borderRadius: 4,
               border: `1px solid ${alpha(theme.palette.divider, 0.05)}`
             }}>
               <DashboardAnalytics data={analyticsData} />
             </Box>
           </Paper>
-
-          {/* --- QUICK ACTIONS --- */}
-          <Box sx={{ pb: 6 }}>
-            <Box sx={{ mb: 4 }}>
-              <Typography variant='h5' fontWeight='900' sx={{ letterSpacing: -0.5 }}>🚀 Quick Operations</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>Common tasks and shortcuts for your role</Typography>
-            </Box>
-            <Grid container spacing={4}>
-              {isPreparer && canAccessCreateProposal && (
-                <Grid item xs={12} sm={6} md={4}>
-                  <ActionCard title='New Proposal' description='Initiate a fresh budget proposal using the official 6-step wizard.' icon={AddCircleOutlineIcon} color={THEME_COLORS.primary} onClick={handleCreateProposal} buttonText='Start Creation' />
-                </Grid>
-              )}
-              <Grid item xs={12} sm={6} md={4}>
-                <ActionCard title='Deep Analytics' description='Explore granular data with customizable reporting tools.' icon={AssessmentIcon} color={THEME_COLORS.info} onClick={handleGenerateReports} buttonText='Open Reports' />
-              </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <ActionCard title='Workflow Tracker' description='Monitor every stage of your submissions in the central pipeline.' icon={ListAltIcon} color={THEME_COLORS.warning} onClick={() => navigate('/allproposal')} buttonText='View Tracker' />
-              </Grid>
-            </Grid>
-          </Box>
 
         </Stack>
       </Container>

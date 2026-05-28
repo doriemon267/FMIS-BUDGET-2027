@@ -561,12 +561,27 @@ const ComprehensiveReportsPage = () => {
                     const cats = Object.values(section.categories || {});
                     return (
                       <Stack>
-                        <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
-                          <Typography sx={{ width: '25%' }}>Category</Typography>
-                          <Typography sx={{ width: '25%' }}>Description</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colIncome}</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colSubsidy}</Typography>
-                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{colBudget}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            borderBottom: '2px solid #e2e8f0', 
+                            pb: 1.5, 
+                            pt: 1.5,
+                            mb: 1, 
+                            fontWeight: 700,
+                            backgroundColor: '#f8fafc',
+                            color: '#475569',
+                            textTransform: 'uppercase',
+                            fontSize: '0.75rem',
+                            letterSpacing: '0.5px',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '25%', fontSize: 'inherit', fontWeight: 'inherit' }}>Category</Typography>
+                          <Typography sx={{ width: '25%', fontSize: 'inherit', fontWeight: 'inherit' }}>Description</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colIncome}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colSubsidy}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colBudget}</Typography>
                         </Stack>
                         {cats.map((catData, idx) => (
                           <Stack key={idx} direction="row" sx={{ py: 1, borderBottom: '1px solid #eee' }}>
@@ -577,11 +592,22 @@ const ComprehensiveReportsPage = () => {
                             <Typography sx={{ width: '16%', textAlign: 'right', fontWeight: 'medium' }}>{formatCurrency(catData.total)}</Typography>
                           </Stack>
                         ))}
-                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
-                          <Typography sx={{ width: '50%' }}>Total</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalIncome)}</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalSubsidy)}</Typography>
-                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(section.sectionTotal)}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            py: 2, 
+                            mt: 1, 
+                            borderTop: '2px solid #cbd5e1', 
+                            fontWeight: 800, 
+                            backgroundColor: '#f8fafc',
+                            color: '#1e293b',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '50%', fontWeight: 'inherit' }}>GRAND TOTAL</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontWeight: 'inherit' }}>{formatCurrency(section.sectionTotalIncome)}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontWeight: 'inherit' }}>{formatCurrency(section.sectionTotalSubsidy)}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right', fontWeight: 'inherit', color: '#375e38' }}>{formatCurrency(section.sectionTotal)}</Typography>
                         </Stack>
                       </Stack>
                     );
@@ -594,10 +620,25 @@ const ComprehensiveReportsPage = () => {
                     const singleCategory = categoriesList.length <= 1;
                     return (
                       <Stack>
-                        <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
-                          <Typography sx={{ width: '40%' }}>Category</Typography>
-                          <Typography sx={{ width: '35%' }}>Description</Typography>
-                          <Typography sx={{ width: '25%', textAlign: 'right' }}>{colBudget}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            borderBottom: '2px solid #e2e8f0', 
+                            pb: 1.5, 
+                            pt: 1.5,
+                            mb: 1, 
+                            fontWeight: 700,
+                            backgroundColor: '#f8fafc',
+                            color: '#475569',
+                            textTransform: 'uppercase',
+                            fontSize: '0.75rem',
+                            letterSpacing: '0.5px',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '40%', fontSize: 'inherit', fontWeight: 'inherit' }}>Category</Typography>
+                          <Typography sx={{ width: '35%', fontSize: 'inherit', fontWeight: 'inherit' }}>Description</Typography>
+                          <Typography sx={{ width: '25%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colBudget}</Typography>
                         </Stack>
                         {categoriesList.map((cat, idx) => (
                           <Stack key={idx} direction="row" sx={{ py: 1, bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
@@ -608,9 +649,20 @@ const ComprehensiveReportsPage = () => {
                             </Typography>
                           </Stack>
                         ))}
-                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
-                          <Typography sx={{ width: '75%' }}>Total</Typography>
-                          <Typography sx={{ width: '25%', textAlign: 'right' }}>{formatCurrency(totalAmount)}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            py: 2, 
+                            mt: 1, 
+                            borderTop: '2px solid #cbd5e1', 
+                            fontWeight: 800, 
+                            backgroundColor: '#f8fafc',
+                            color: '#1e293b',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '75%', fontWeight: 'inherit' }}>GRAND TOTAL</Typography>
+                          <Typography sx={{ width: '25%', textAlign: 'right', fontWeight: 'inherit', color: '#375e38' }}>{formatCurrency(totalAmount)}</Typography>
                         </Stack>
                       </Stack>
                     );
@@ -626,12 +678,27 @@ const ComprehensiveReportsPage = () => {
                     });
                     return (
                       <Stack>
-                        <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
-                          <Typography sx={{ width: '25%' }}>Category</Typography>
-                          <Typography sx={{ width: '25%' }}>Description</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colIncome}</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colSubsidy}</Typography>
-                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{colBudget}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            borderBottom: '2px solid #e2e8f0', 
+                            pb: 1.5, 
+                            pt: 1.5,
+                            mb: 1, 
+                            fontWeight: 700,
+                            backgroundColor: '#f8fafc',
+                            color: '#475569',
+                            textTransform: 'uppercase',
+                            fontSize: '0.75rem',
+                            letterSpacing: '0.5px',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '25%', fontSize: 'inherit', fontWeight: 'inherit' }}>Category</Typography>
+                          <Typography sx={{ width: '25%', fontSize: 'inherit', fontWeight: 'inherit' }}>Description</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colIncome}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colSubsidy}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colBudget}</Typography>
                         </Stack>
                         {allRows.map((row, idx) => {
                           if (row.type === 'category') {
@@ -654,11 +721,22 @@ const ComprehensiveReportsPage = () => {
                             </Stack>
                           );
                         })}
-                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
-                          <Typography sx={{ width: '50%' }}>Total</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalIncome)}</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalSubsidy)}</Typography>
-                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(section.sectionTotal)}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            py: 2, 
+                            mt: 1, 
+                            borderTop: '2px solid #cbd5e1', 
+                            fontWeight: 800, 
+                            backgroundColor: '#f8fafc',
+                            color: '#1e293b',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '50%', fontWeight: 'inherit' }}>GRAND TOTAL</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontWeight: 'inherit' }}>{formatCurrency(section.sectionTotalIncome)}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontWeight: 'inherit' }}>{formatCurrency(section.sectionTotalSubsidy)}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right', fontWeight: 'inherit', color: '#375e38' }}>{formatCurrency(section.sectionTotal)}</Typography>
                         </Stack>
                       </Stack>
                     );
@@ -669,12 +747,27 @@ const ComprehensiveReportsPage = () => {
                     const categories = Object.values(section.categories || {});
                     return (
                       <Stack>
-                        <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
-                          <Typography sx={{ width: '25%' }}>Category</Typography>
-                          <Typography sx={{ width: '25%' }}>Subline Item</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colIncome}</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colSubsidy}</Typography>
-                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{colBudget}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            borderBottom: '2px solid #e2e8f0', 
+                            pb: 1.5, 
+                            pt: 1.5,
+                            mb: 1, 
+                            fontWeight: 700,
+                            backgroundColor: '#f8fafc',
+                            color: '#475569',
+                            textTransform: 'uppercase',
+                            fontSize: '0.75rem',
+                            letterSpacing: '0.5px',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '25%', fontSize: 'inherit', fontWeight: 'inherit' }}>Category</Typography>
+                          <Typography sx={{ width: '25%', fontSize: 'inherit', fontWeight: 'inherit' }}>Subline Item</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colIncome}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colSubsidy}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right', fontSize: 'inherit', fontWeight: 'inherit' }}>{colBudget}</Typography>
                         </Stack>
                         {categories.map((catData, catIdx) => {
                           const expandKey = `${section.sectionCode}-${catData.name}`;
@@ -730,11 +823,22 @@ const ComprehensiveReportsPage = () => {
                             </Box>
                           );
                         })}
-                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
-                          <Typography sx={{ width: '50%' }}>Total</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(Object.values(section.categories || {}).reduce((s, c) => s + (parseFloat(c.totalIncome) || 0), 0))}</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(Object.values(section.categories || {}).reduce((s, c) => s + (parseFloat(c.totalSubsidy) || 0), 0))}</Typography>
-                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(section.sectionTotal)}</Typography>
+                        <Stack 
+                          direction="row" 
+                          sx={{ 
+                            py: 2, 
+                            mt: 1, 
+                            borderTop: '2px solid #cbd5e1', 
+                            fontWeight: 800, 
+                            backgroundColor: '#f8fafc',
+                            color: '#1e293b',
+                            px: 2
+                          }}
+                        >
+                          <Typography sx={{ width: '50%', fontWeight: 'inherit' }}>GRAND TOTAL</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontWeight: 'inherit' }}>{formatCurrency(Object.values(section.categories || {}).reduce((s, c) => s + (parseFloat(c.totalIncome) || 0), 0))}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right', fontWeight: 'inherit' }}>{formatCurrency(Object.values(section.categories || {}).reduce((s, c) => s + (parseFloat(c.totalSubsidy) || 0), 0))}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right', fontWeight: 'inherit', color: '#375e38' }}>{formatCurrency(section.sectionTotal)}</Typography>
                         </Stack>
                       </Stack>
                     );

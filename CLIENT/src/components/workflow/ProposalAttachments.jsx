@@ -209,90 +209,261 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
     }
   };
 
+  const [dragOver, setDragOver] = useState(false);
+
+  const uploadFile = async (file) => {
+    const allowed = ['application/pdf', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    if (!allowed.includes(file.type)) {
+      toast.error('Only PDF and Excel files are allowed');
+      return;
+    }
+    
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast.error(`File is too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum allowed size is 10MB.`);
+      return;
+    }
+    
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const resp = await api.post(`/api/allproposal/proposals/${proposal._id}/attachments?module=${moduleName}`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success('Attachment uploaded successfully');
+      
+      try {
+        const proposalRes = await api.get(`/api/allproposal/proposals/${proposal._id}`);
+        const proposalData = proposalRes.data?.data || proposalRes.data;
+        if (proposalData && proposalData.attachments) {
+          setAttachments(proposalData.attachments);
+          if (onChange) onChange(proposalData);
+        }
+      } catch (fetchErr) {
+        const att = resp.data.attachment;
+        setAttachments(prev => [ ...(prev || []), att ]);
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message || '';
+      toast.error(errorMsg || 'Failed to upload attachment');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (canAttachFiles()) {
+      setDragOver(true);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (!canAttachFiles()) return;
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await uploadFile(file);
+    }
+  };
+
   if (!attachments && !canAttachFiles()) return null;
 
   const filtered = (attachments || []).filter(a => (a.module || 'general') === moduleName);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>Supporting Documents</Typography>
-        {canAttachFiles() && (
-          <Box>
-            <input
-              type="file"
-              accept=".pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              id={`attach-file-${moduleName}`}
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
-            <label htmlFor={`attach-file-${moduleName}`}>
-              <Button component="span" variant="outlined" startIcon={<UploadFileIcon />} size="small" disabled={uploading}>
-                {uploading ? 'Uploading...' : 'Attach File'}
-              </Button>
-            </label>
+        <Typography 
+          variant="subtitle2" 
+          sx={{ 
+            fontWeight: 700, 
+            color: '#2d5016', 
+            fontSize: '0.9rem', 
+            textTransform: 'uppercase', 
+            letterSpacing: '0.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1
+          }}
+        >
+          Supporting Documents
+        </Typography>
+      </Box>
+
+      {/* Modern Drag & Drop Zone */}
+      {canAttachFiles() && (
+        <Box
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => document.getElementById(`attach-file-${moduleName}`).click()}
+          sx={{
+            border: `2px dashed ${dragOver ? '#2d5016' : 'rgba(45, 80, 22, 0.25)'}`,
+            borderRadius: '12px',
+            bgcolor: dragOver ? 'rgba(45, 80, 22, 0.05)' : 'rgba(0, 0, 0, 0.015)',
+            p: 3,
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease-in-out',
+            boxShadow: dragOver ? '0 0 16px rgba(45, 80, 22, 0.08)' : 'none',
+            '&:hover': {
+              borderColor: '#2d5016',
+              bgcolor: 'rgba(45, 80, 22, 0.025)'
+            }
+          }}
+        >
+          <input
+            type="file"
+            accept=".pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            id={`attach-file-${moduleName}`}
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadFile(file);
+              e.target.value = null;
+            }}
+          />
+          {uploading ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+              <CircularProgress size={28} sx={{ color: '#2d5016' }} />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                Uploading attachment...
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+              <UploadFileIcon sx={{ fontSize: 36, color: '#2d5016', opacity: 0.85 }} />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                Drag & drop document here, or <span style={{ color: '#2d5016', textDecoration: 'underline' }}>browse</span>
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                PDF or Excel files up to 10MB are supported
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      )}
+      
+      {/* Sleek File Cards List */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {filtered.length === 0 && (
+          <Box sx={{ p: 2, textAlign: 'center', bgcolor: 'rgba(0,0,0,0.01)', border: '1px dashed rgba(0,0,0,0.08)', borderRadius: '8px' }}>
+            <Typography variant="caption" color="text.secondary">No supporting documents attached for this section.</Typography>
           </Box>
         )}
-      </Box>
-      
-      <List dense>
-        {filtered.length === 0 && (
-          <Typography variant="caption" color="text.secondary">No supporting documents</Typography>
-        )}
-        {filtered.map((att) => (
-          <ListItem key={att.attachmentId || att._id} sx={{ pl: 0 }}>
-            <ListItemText
-              primary={att.originalName || att.filename}
-              secondary={(new Date(att.uploadedAt)).toLocaleString()} 
-            />
-            <ListItemSecondaryAction>
-              {att.mimeType === 'application/pdf' && (
-                <Tooltip title="View">
-                  <IconButton size="small" onClick={() => handleView(att)}>
-                    <VisibilityIcon />
+        
+        {filtered.map((att) => {
+          const isPdf = att.mimeType === 'application/pdf';
+          return (
+            <Box
+              key={att.attachmentId || att._id}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                p: 1.5,
+                bgcolor: 'white',
+                border: '1px solid rgba(0,0,0,0.06)',
+                borderRadius: '8px',
+                transition: 'all 0.2s',
+                '&:hover': {
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
+                  borderColor: '#2d5016',
+                }
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box
+                  sx={{
+                    p: 0.75,
+                    borderRadius: '6px',
+                    bgcolor: isPdf ? 'rgba(211, 47, 47, 0.06)' : 'rgba(46, 125, 50, 0.06)',
+                    color: isPdf ? '#d32f2f' : '#2e7d32',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {isPdf ? <PictureAsPdfIcon fontSize="small" /> : <InsertDriveFileIcon fontSize="small" />}
+                </Box>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', wordBreak: 'break-all', fontSize: '0.85rem' }}>
+                    {att.originalName || att.filename}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, fontSize: '0.75rem' }}>
+                    Uploaded on {new Date(att.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(att.uploadedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                {isPdf && (
+                  <Tooltip title="Preview PDF">
+                    <IconButton size="small" onClick={() => handleView(att)} sx={{ color: '#035388', '&:hover': { bgcolor: 'rgba(3, 83, 136, 0.06)' } }}>
+                      <VisibilityIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                <Tooltip title="Download File">
+                  <IconButton size="small" onClick={() => handleDownload(att)} sx={{ color: '#2d5016', '&:hover': { bgcolor: 'rgba(45, 80, 22, 0.06)' } }}>
+                    <DownloadIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-              )}
-              <Tooltip title="Download">
-                <IconButton size="small" onClick={() => handleDownload(att)}>
-                  <DownloadIcon />
-                </IconButton>
-              </Tooltip>
-              {canDeleteAttachments && (
-                <Tooltip title="Delete">
-                  <IconButton size="small" onClick={() => handleDelete(att)}><DeleteIcon /></IconButton>
-                </Tooltip>
-              )}
-            </ListItemSecondaryAction>
-          </ListItem>
-        ))}
-      </List>
+                {canDeleteAttachments && (
+                  <Tooltip title="Delete Document">
+                    <IconButton size="small" onClick={() => handleDelete(att)} sx={{ color: '#d32f2f', '&:hover': { bgcolor: 'rgba(211, 47, 47, 0.06)' } }}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            </Box>
+          );
+        })}
+      </Box>
 
+      {/* PDF View Dialog */}
       <Dialog
         open={viewDialogOpen}
         onClose={handleCloseView}
         maxWidth="md"
         fullWidth
-        PaperProps={{ sx: { minHeight: '80vh' } }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              backdropFilter: "blur(4px)",
+              backgroundColor: "rgba(0, 0, 0, 0.4)",
+            }
+          }
+        }}
+        PaperProps={{ sx: { minHeight: '80vh', borderRadius: '16px' } }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {viewAttachment?.originalName || viewAttachment?.filename || 'Document'}
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 'bold' }}>
+          <PictureAsPdfIcon sx={{ color: '#d32f2f' }} /> {viewAttachment?.originalName || viewAttachment?.filename || 'Document'}
         </DialogTitle>
         <DialogContent dividers sx={{ p: 0, display: 'flex', flexDirection: 'column', minHeight: 400 }}>
           {viewLoading && (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, minHeight: 400 }}>
-              <CircularProgress />
+              <CircularProgress sx={{ color: '#2d5016' }} />
             </Box>
           )}
           {!viewLoading && viewBlobUrl && (
             <Box component="iframe" src={viewBlobUrl} title={viewAttachment?.originalName} sx={{ flex: 1, minHeight: 480, border: 'none' }} />
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseView}>Close</Button>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseView} sx={{ color: 'text.secondary' }}>Close</Button>
           {viewAttachment && (
-            <Button startIcon={<DownloadIcon />} variant="contained" onClick={() => { handleDownload(viewAttachment); }}>
-              Download
+            <Button startIcon={<DownloadIcon />} variant="contained" onClick={() => { handleDownload(viewAttachment); }} sx={{ bgcolor: '#2d5016', '&:hover': { bgcolor: '#1e3a0f' } }}>
+              Download PDF
             </Button>
           )}
         </DialogActions>
