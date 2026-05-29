@@ -197,6 +197,7 @@ const WORKFLOW_STATUSES = {
     color: "warning",
   },
   RETURNED_TO_OFFICER: { label: "Returned to Officer", color: "warning" },
+  MERGED: { label: "Merged (Archived)", color: "default" },
 };
 
 // Base tabs; Monitoring tab will be injected dynamically for Budget Manager
@@ -273,6 +274,11 @@ const NewProposalWorkflowPage = () => {
     ["BUDGET PREPARER", "BUDGET_PREPARER"].includes(String(role || "").toUpperCase())
   );
 
+  // Check if user is Budget Approver
+  const isBudgetApprover = (currentUser?.Roles || []).some((role) =>
+    ["BUDGET APPROVER", "BUDGET_APPROVER"].includes(String(role || "").toUpperCase())
+  );
+
   // Version history: BRD Budget Officer & Budget Manager only (same as backend)
   const canViewVersionHistory = (currentUser?.Roles || []).some((r) =>
     /BUDGET_OFFICER|BUDGET OFFICER|BUDGET_MANAGER|BUDGET MANAGER|OVERALL_BUDGET_APPROVER|SUPER_ADMIN|SUPER ADMIN/i.test(String(r || ''))
@@ -336,6 +342,10 @@ const NewProposalWorkflowPage = () => {
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [availableActionsForMenu, setAvailableActionsForMenu] = useState([]);
   const [proposalDetails, setProposalDetails] = useState(null);
+  // ── Merge proposals state (Budget Approver only) ──────────────────────────
+  const [selectedForMerge, setSelectedForMerge] = useState(new Set());
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [mergeLoading, setMergeLoading] = useState(false);
   const [discountSettings, setDiscountSettings] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsTab, setDetailsTab] = useState("income");
@@ -1846,12 +1856,9 @@ const NewProposalWorkflowPage = () => {
       ];
       
       if (draftStatusVariants.includes(currentStatus)) {
-        // If the current user is a PREPARER assigned at OFFICE level, show Submit to Approver label
-        const assignmentLevel = currentUser?.hierarchicalAccess?.assignmentLevel || currentUser?.assignmentLevel;
-        const isOfficePreparer = assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE';
         actions.push({
-          label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
-          value: isOfficePreparer ? "submit-to-approver" : "submit-to-reviewer",
+          label: "Submit to Budget Reviewer",
+          value: "submit-to-reviewer",
           icon: <SendIcon />,
           color: "primary",
         });
@@ -2054,6 +2061,7 @@ const NewProposalWorkflowPage = () => {
       RETURNED_TO_APPROVER: { bg: "#ef5350", text: "#fff" },
       RETURNED_TO_PLANNING_ANALYST: { bg: "#ef5350", text: "#fff" },
       RETURNED_TO_OFFICER: { bg: "#ef5350", text: "#fff" },
+      MERGED: { bg: "#9e9e9e", text: "#fff" },
     };
 
     const colors = statusColorMap[status] || { bg: "#999", text: "#fff" };
@@ -2075,6 +2083,68 @@ const NewProposalWorkflowPage = () => {
   };
 
   // using shared prettyRole
+
+  // ── Merge proposals: helpers and handler ────────────────────────────────────
+  const MERGEABLE_STATUSES = new Set(["FORWARDED_TO_APPROVER", "RETURNED_TO_APPROVER"]);
+
+  const isProposalMergeable = (proposal) =>
+    isBudgetApprover &&
+    MERGEABLE_STATUSES.has(proposal.status) &&
+    !proposal.isMergedSource &&
+    proposal.status !== "MERGED";
+
+  const handleToggleMergeSelect = (proposalId) => {
+    setSelectedForMerge((prev) => {
+      const next = new Set(prev);
+      if (next.has(proposalId)) next.delete(proposalId);
+      else next.add(proposalId);
+      return next;
+    });
+  };
+
+  const handleSelectAllMergeable = () => {
+    const mergeableIds = filteredProposals
+      .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+      .filter(isProposalMergeable)
+      .map((p) => p._id);
+    const allSelected = mergeableIds.every((id) => selectedForMerge.has(id));
+    if (allSelected) {
+      setSelectedForMerge(new Set());
+    } else {
+      setSelectedForMerge(new Set(mergeableIds));
+    }
+  };
+
+  const handleMergeProposals = async () => {
+    if (selectedForMerge.size < 2) {
+      toast.error("Pumili ng hindi bababa sa 2 proposals para ma-merge.");
+      return;
+    }
+    setMergeLoading(true);
+    try {
+      const response = await api.post(`${WORKFLOW_API_BASE}/merge`, {
+        proposalIds: Array.from(selectedForMerge),
+      });
+      if (response.data?.success) {
+        toast.success(response.data.message || "Matagumpay na na-merge ang mga proposal.");
+        setMergeDialogOpen(false);
+        setSelectedForMerge(new Set());
+        refetchProposals();
+      } else {
+        toast.error(response.data?.message || "Hindi ma-merge ang mga proposal.");
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Error sa pag-merge ng proposals.";
+      toast.error(msg);
+    } finally {
+      setMergeLoading(false);
+    }
+  };
+
+  const selectedMergeProposals = filteredProposals.filter((p) => selectedForMerge.has(p._id));
+  const totalMergeAmount = selectedMergeProposals.reduce(
+    (sum, p) => sum + (Number(p.amount) || Number(p.projectedSubsidy) || 0), 0
+  );
 
   return (
     <Box sx={{ p: 0, bgcolor: "white", minHeight: "100vh" }}>
@@ -2730,6 +2800,36 @@ const NewProposalWorkflowPage = () => {
                         >
                           ACTIONS
                         </TableCell>
+                        {/* Merge checkbox column header — only for Budget Approver */}
+                        {isBudgetApprover && (
+                          <TableCell
+                            sx={{
+                              color: "white",
+                              fontWeight: "bold",
+                              p: 1,
+                              width: 52,
+                              textAlign: "center",
+                            }}
+                          >
+                            <Tooltip title="Piliin lahat para sa merge">
+                              <input
+                                type="checkbox"
+                                id="merge-select-all"
+                                style={{ cursor: "pointer", accentColor: "#fff", width: 16, height: 16 }}
+                                checked={
+                                  filteredProposals
+                                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                    .filter(isProposalMergeable).length > 0 &&
+                                  filteredProposals
+                                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                                    .filter(isProposalMergeable)
+                                    .every((p) => selectedForMerge.has(p._id))
+                                }
+                                onChange={handleSelectAllMergeable}
+                              />
+                            </Tooltip>
+                          </TableCell>
+                        )}
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -2893,6 +2993,22 @@ const NewProposalWorkflowPage = () => {
                             >
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 {renderStatusChip(proposal.status)}
+                                {/* Consolidated badge */}
+                                {proposal.isConsolidated && (
+                                  <Chip
+                                    label="Consolidated"
+                                    size="small"
+                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#1565c0', color: '#fff', fontWeight: 700 }}
+                                  />
+                                )}
+                                {/* Merged source badge */}
+                                {proposal.isMergedSource && (
+                                  <Chip
+                                    label="Archived"
+                                    size="small"
+                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#757575', color: '#fff' }}
+                                  />
+                                )}
                                 {(/returned/i.test(String(proposal.status || '')) && proposal.currentAssigneeRole) && (
                                   <Chip
                                     label={`Returned to ${prettyRole(proposal.currentAssigneeRole)}`}
@@ -4204,6 +4320,12 @@ const NewProposalWorkflowPage = () => {
                       person.chargedToIncomeEligible !== true
                   ) || [];
                   
+                  const grandTotal = permanentPersonnel.reduce((sum, item) => {
+                    const originalIndex = editableItems.personnel ? editableItems.personnel.findIndex(p => String(p._id) === String(item._id)) : -1;
+                    const editedItem = originalIndex !== -1 ? editableItems.personnel[originalIndex] : item;
+                    return sum + (Number(editedItem?.Total) || Number(editedItem?.total) || Number(item?.Total) || Number(item?.total) || 0);
+                  }, 0);
+                  
                   const paginatedPermanentPersonnel = permanentPersonnel.slice(
                     permanentPersonnelPage * permanentPersonnelRowsPerPage,
                     permanentPersonnelPage * permanentPersonnelRowsPerPage + permanentPersonnelRowsPerPage
@@ -4391,7 +4513,7 @@ const NewProposalWorkflowPage = () => {
                                       {`₱${(item.terminalLeave || item.TerminalLeave || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(editedItem?.Total || editedItem?.total || item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
@@ -4441,6 +4563,25 @@ const NewProposalWorkflowPage = () => {
                         }}
                         rowsPerPageOptions={[5, 10, 25, 50]}
                       />
+                      <Box
+                        sx={{
+                          mt: 3,
+                          p: 2,
+                          bgcolor: "#f5f5f5",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        <Typography
+                          variant="h6"
+                          sx={{ fontWeight: "bold", color: "#1976d2" }}
+                        >
+                          Grand Total (PS-Permanent): ₱
+                          {grandTotal.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </Typography>
+                      </Box>
                     </>
                   ) : (
                     <>
@@ -4469,13 +4610,19 @@ const NewProposalWorkflowPage = () => {
                     </>
                   );
                 })()}
-{/* PS-Casual Tab */}
+                {/* PS-Casual Tab */}
                 {detailsTab === "ps-casual" && (() => {
                   const casualPersonnel = proposalDetails?.personnel?.filter(
                     person =>
                       String(person.statusOfAppointment || person.StatusOfAppointment || '').trim().toUpperCase() === 'CASUAL' &&
                       person.chargedToIncomeEligible !== true
                   ) || [];
+                  
+                  const grandTotal = casualPersonnel.reduce((sum, item) => {
+                    const originalIndex = editableItems.personnel ? editableItems.personnel.findIndex(p => String(p._id) === String(item._id)) : -1;
+                    const editedItem = originalIndex !== -1 ? editableItems.personnel[originalIndex] : item;
+                    return sum + (Number(editedItem?.Total) || Number(editedItem?.total) || Number(item?.Total) || Number(item?.total) || 0);
+                  }, 0);
                   const totalFetched = proposalDetails?.personnel?.length || 0;
                   const permanentCount = proposalDetails?.personnel?.filter(
                     p => String(p.statusOfAppointment || p.StatusOfAppointment || '').trim().toUpperCase() === 'PERMANENT' && p.chargedToIncomeEligible !== true
@@ -4673,7 +4820,7 @@ const NewProposalWorkflowPage = () => {
                                       {`₱${(item.terminalLeave || item.TerminalLeave || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(editedItem?.Total || editedItem?.total || item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
@@ -4723,6 +4870,25 @@ const NewProposalWorkflowPage = () => {
                         }}
                         rowsPerPageOptions={[5, 10, 25, 50]}
                       />
+                      <Box
+                        sx={{
+                          mt: 3,
+                          p: 2,
+                          bgcolor: "#f5f5f5",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        <Typography
+                          variant="h6"
+                          sx={{ fontWeight: "bold", color: "#1976d2" }}
+                        >
+                          Grand Total (PS-Casual): ₱
+                          {grandTotal.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </Typography>
+                      </Box>
                     </>
                   ) : (
                     <>
@@ -4760,6 +4926,12 @@ const NewProposalWorkflowPage = () => {
                   const chargedToIncomePersonnel = proposalDetails?.personnel?.filter(
                     person => person.chargedToIncomeEligible === true
                   ) || [];
+                  
+                  const grandTotal = chargedToIncomePersonnel.reduce((sum, item) => {
+                    const originalIndex = editableItems.personnel ? editableItems.personnel.findIndex(p => String(p._id) === String(item._id)) : -1;
+                    const editedItem = originalIndex !== -1 ? editableItems.personnel[originalIndex] : item;
+                    return sum + (Number(editedItem?.Total) || Number(editedItem?.total) || Number(item?.Total) || Number(item?.total) || 0);
+                  }, 0);
                   
                   const paginatedChargedPersonnel = chargedToIncomePersonnel.slice(
                     chargedPersonnelPage * chargedPersonnelRowsPerPage,
@@ -4948,7 +5120,7 @@ const NewProposalWorkflowPage = () => {
                                       {`₱${(item.terminalLeave || item.TerminalLeave || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                      {`₱${(editedItem?.Total || editedItem?.total || item.Total || item.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
@@ -4998,6 +5170,25 @@ const NewProposalWorkflowPage = () => {
                         }}
                         rowsPerPageOptions={[5, 10, 25, 50]}
                       />
+                      <Box
+                        sx={{
+                          mt: 3,
+                          p: 2,
+                          bgcolor: "#f5f5f5",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        <Typography
+                          variant="h6"
+                          sx={{ fontWeight: "bold", color: "#1976d2" }}
+                        >
+                          Grand Total (PS-Charged to Income): ₱
+                          {grandTotal.toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </Typography>
+                      </Box>
                     </>
                   ) : (
                     <>
@@ -6694,6 +6885,229 @@ const NewProposalWorkflowPage = () => {
             }}
           >
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Merge Proposals floating toolbar ──────────────────────────────────── */}
+      {isBudgetApprover && selectedForMerge.size > 0 && (
+        <Box
+          sx={{
+            position: "fixed",
+            bottom: 28,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1400,
+            bgcolor: "#1b3a1b",
+            color: "#fff",
+            borderRadius: "12px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
+            px: 3,
+            py: 1.5,
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            minWidth: 340,
+            animation: "slideUp 0.25s ease",
+            "@keyframes slideUp": {
+              from: { opacity: 0, transform: "translateX(-50%) translateY(20px)" },
+              to: { opacity: 1, transform: "translateX(-50%) translateY(0)" },
+            },
+          }}
+        >
+          <Box sx={{ fontSize: "1.4rem" }}>🔗</Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
+              {selectedForMerge.size} proposals selected
+            </Typography>
+            <Typography sx={{ fontSize: "0.78rem", opacity: 0.8 }}>
+              Piliin ang "Merge" para pagsamahin bilang isang consolidated proposal
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setSelectedForMerge(new Set())}
+            sx={{
+              color: "#fff",
+              borderColor: "rgba(255,255,255,0.4)",
+              textTransform: "none",
+              fontSize: "0.8rem",
+              "&:hover": { borderColor: "#fff", bgcolor: "rgba(255,255,255,0.1)" },
+            }}
+          >
+            Alisin
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => setMergeDialogOpen(true)}
+            disabled={selectedForMerge.size < 2}
+            sx={{
+              bgcolor: "#4caf50",
+              color: "#fff",
+              fontWeight: 700,
+              textTransform: "none",
+              fontSize: "0.85rem",
+              px: 2.5,
+              "&:hover": { bgcolor: "#388e3c" },
+            }}
+          >
+            🔗 Merge Selected ({selectedForMerge.size})
+          </Button>
+        </Box>
+      )}
+
+      {/* ── Merge Confirmation Dialog ─────────────────────────────────────────── */}
+      <Dialog
+        open={mergeDialogOpen}
+        onClose={() => !mergeLoading && setMergeDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "12px",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.25)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            bgcolor: "#1b3a1b",
+            color: "#fff",
+            fontWeight: 700,
+            fontSize: "1.1rem",
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
+          🔗 I-merge ang mga Proposal
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3, pb: 1 }}>
+          <Typography variant="body2" sx={{ color: "#555", mb: 2 }}>
+            Ang mga sumusunod na proposals ay pagsasamahin sa isang{" "}
+            <strong>Consolidated Proposal</strong>. Ang mga ito ay
+            mai-archive (status: MERGED) at hindi na mababago nang
+            individual pagkatapos ng merge.
+          </Typography>
+
+          {selectedMergeProposals.map((p, i) => (
+            <Box
+              key={p._id}
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                px: 2,
+                py: 1.2,
+                mb: 1,
+                bgcolor: i % 2 === 0 ? "#f8f9fa" : "#fff",
+                borderRadius: "8px",
+                border: "1px solid #e0e0e0",
+              }}
+            >
+              <Box>
+                <Typography
+                  sx={{ fontWeight: 600, fontSize: "0.88rem", color: "#222" }}
+                >
+                  {p.responsibilityCenter || p.division || p.title || "Untitled"}
+                </Typography>
+                <Typography sx={{ fontSize: "0.75rem", color: "#888" }}>
+                  {p.department && `${p.department} · `}FY{p.fiscalYear} ·{" "}
+                  {p.budgetType || p.modelType}
+                </Typography>
+              </Box>
+              <Typography
+                sx={{ fontWeight: 700, fontSize: "0.9rem", color: "#2d5016", whiteSpace: "nowrap", ml: 1 }}
+              >
+                ₱
+                {(
+                  Number(p.amount) ||
+                  Number(p.projectedSubsidy) ||
+                  0
+                ).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </Typography>
+            </Box>
+          ))}
+
+          <Box
+            sx={{
+              mt: 2,
+              px: 2,
+              py: 1.5,
+              bgcolor: "#e8f5e9",
+              borderRadius: "8px",
+              border: "2px solid #4caf50",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography sx={{ fontWeight: 700, color: "#2d5016" }}>
+              Kabuuang Halaga ng Consolidated Proposal:
+            </Typography>
+            <Typography sx={{ fontWeight: 800, color: "#2d5016", fontSize: "1.05rem" }}>
+              ₱
+              {totalMergeAmount.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.5,
+              bgcolor: "#fff8e1",
+              borderRadius: "8px",
+              border: "1px solid #ffc107",
+            }}
+          >
+            <Typography sx={{ fontSize: "0.8rem", color: "#795548" }}>
+              ⚠️ <strong>Paalala:</strong> Ang merged na proposals ay
+              mananatili sa listahan pero <strong>locked at MERGED</strong>{" "}
+              na ang status — hindi na sila maaaring i-submit nang
+              hiwalay. Ang bagong Consolidated Proposal ay maaari mong
+              i-submit sa BRD Planning Analyst.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions
+          sx={{ p: 2.5, borderTop: "1px solid #e0e0e0", gap: 1 }}
+        >
+          <Button
+            onClick={() => setMergeDialogOpen(false)}
+            disabled={mergeLoading}
+            sx={{
+              color: "#666",
+              textTransform: "none",
+              fontWeight: 600,
+            }}
+          >
+            Kanselahin
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleMergeProposals}
+            disabled={mergeLoading || selectedForMerge.size < 2}
+            startIcon={mergeLoading ? null : <span>🔗</span>}
+            sx={{
+              bgcolor: "#2d5016",
+              color: "#fff",
+              fontWeight: 700,
+              textTransform: "none",
+              px: 3,
+              "&:hover": { bgcolor: "#1b3a1b" },
+            }}
+          >
+            {mergeLoading
+              ? "Ini-merge..."
+              : `Kumpirmahin ang Merge (${selectedForMerge.size})`}
           </Button>
         </DialogActions>
       </Dialog>

@@ -368,6 +368,31 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       modelAssignmentLevel = 'DIVISION';
     }
 
+    // NEW: Check if officeId/effectiveDepartmentId is actually a regionId (direct Region assignment)
+    // This supports assigning users to a "Full Region" from the Office Level selection
+    if (normalizedEffectiveLevel === 'OFFICE' && effectiveDepartmentId) {
+      // If we received an officeId with an underscore, it is DEFINITELY a department mapping, NEVER a full region
+      const isCompositeOfficeId = req.body.officeId && String(req.body.officeId).includes('_');
+      // If the frontend explicitly sent a regionId that differs from departmentId, it's a department mapping
+      const hasDifferentRegion = regionId && String(regionId) !== String(effectiveDepartmentId);
+      
+      if (!isCompositeOfficeId && !hasDifferentRegion) {
+        // Only then do we fallback to checking the DB
+        try {
+          // Only query if it's a valid ObjectId to prevent CastError
+          if (mongoose.Types.ObjectId.isValid(effectiveDepartmentId)) {
+            const isActuallyRegion = await Region.exists({ _id: effectiveDepartmentId });
+            if (isActuallyRegion) {
+              if (DEBUG) console.debug('📍 Office ID detected as Region ID, switching to REGION level');
+              modelAssignmentLevel = 'REGION';
+            }
+          }
+        } catch (e) {
+          // Ignore CastError if it's not an ObjectId
+        }
+      }
+    }
+
     if (!userId || !userName || !email || !normalizedEffectiveLevel) {
       return res.status(400).json({
         success: false,
@@ -385,21 +410,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       });
     }
 
-    // Validate ObjectIds if provided (use effective values after mapping)
-    if (regionId && !mongoose.Types.ObjectId.isValid(regionId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid regionId format',
-        code: 'INVALID_REGION_ID'
-      });
-    }
-    if (effectiveDepartmentId && !mongoose.Types.ObjectId.isValid(effectiveDepartmentId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid departmentId/officeId format',
-        code: 'INVALID_DEPARTMENT_ID'
-      });
-    }
     // Build hierarchical assignment based on level
     // For BUDGET_PLANNING_ANALYST with BUDGET_AND_REVENUE_DIVISION, department/division are optional (assignedRegions drives access)
     let assignmentData;
@@ -407,15 +417,15 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       assignmentData = { success: true, regions: [], departments: [], divisions: [], hierarchicalStructure: { level: 'BUDGET_AND_REVENUE_DIVISION', consolidatesTo: 'BUDGET_AND_REVENUE_DIVISION' } };
     } else {
       if (DEBUG) console.debug('🔍 Building hierarchical assignment with:', {
-        assignmentLevel: normalizedEffectiveLevel,
-        regionId,
-        departmentId: effectiveDepartmentId,
+        assignmentLevel: modelAssignmentLevel,
+        regionId: modelAssignmentLevel === 'REGION' ? effectiveDepartmentId : regionId,
+        departmentId: modelAssignmentLevel === 'REGION' ? null : effectiveDepartmentId,
         divisionName: effectiveDivisionName
       });
       assignmentData = await buildHierarchicalAssignment({
-        assignmentLevel: normalizedEffectiveLevel,
-        regionId,
-        departmentId: effectiveDepartmentId,
+        assignmentLevel: modelAssignmentLevel,
+        regionId: modelAssignmentLevel === 'REGION' ? effectiveDepartmentId : regionId,
+        departmentId: modelAssignmentLevel === 'REGION' ? null : effectiveDepartmentId,
         divisionName: effectiveDivisionName
       });
       if (!assignmentData.success) {
@@ -1223,7 +1233,13 @@ const testHierarchicalConsolidation = async (req, res) => {
 /**
  * Helper function to build hierarchical assignment
  */
-const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departmentId, divisionName }) => {
+const buildHierarchicalAssignment = async ({
+  assignmentLevel,
+  regionId,
+  departmentId,
+  divisionName,
+  isActuallyRegion = false
+}) => {
   try {
     let regions = [];
     let departments = [];
@@ -1231,64 +1247,124 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
     let hierarchicalStructure = {};
     switch (assignmentLevel) {
       case 'DIVISION': {
-        // Division assignment requires region, department, and division
-        if (!regionId || !departmentId || !divisionName) {
+        // Division assignment requires department and division
+        if (!departmentId || !divisionName) {
           return {
             success: false,
-            message: 'Division assignment requires regionId, departmentId, and divisionName',
+            message: 'Division assignment requires departmentId, and divisionName',
             code: 'MISSING_DIVISION_REQUIREMENTS'
           };
         }
-        // Validate region and department exist
-        const region = await Region.findById(regionId);
+        // Validate department exists
         const department = await Department.findById(departmentId);
-        if (!region || !department) {
+        let region = null;
+        if (regionId) {
+          region = await Region.findById(regionId);
+        }
+        
+        if (!department || (regionId && !region)) {
           return {
             success: false,
             message: 'Invalid region or department ID',
             code: 'INVALID_REGION_DEPARTMENT'
           };
         }
-        regions = [regionId];
+        
+        regions = regionId ? [regionId] : [];
         departments = [departmentId];
         divisions = [divisionName];
         hierarchicalStructure = {
           level: 'DIVISION',
           division: divisionName,
           department: department.Department,
-          region: region.Region,
+          region: region ? region.Region : 'All Regions',
           consolidatesTo: 'DEPARTMENT',
-          ultimateRegion: region.Region
+          ultimateRegion: region ? region.Region : 'All Regions'
         };
         break;
       }
       case 'DEPARTMENT': {
-        // Department assignment requires region and department
-        if (!regionId || !departmentId) {
+        // Department assignment requires department
+        if (!departmentId) {
           return {
             success: false,
-            message: 'Department assignment requires regionId and departmentId',
+            message: 'Department assignment requires departmentId',
             code: 'MISSING_DEPARTMENT_REQUIREMENTS'
           };
         }
-        const deptRegion = await Region.findById(regionId);
-        const assignedDepartment = await Department.findById(departmentId);
-        if (!deptRegion || !assignedDepartment) {
+        
+        if (isActuallyRegion) {
+          const deptRegion = await Region.findById(departmentId);
+          if (!deptRegion) {
+            return {
+              success: false,
+              message: 'Invalid region ID',
+              code: 'INVALID_REGION'
+            };
+          }
+          regions = [departmentId];
+          departments = [departmentId]; // Use regionId as departmentId to pass schema validation for DEPARTMENT_REGIONAL_LEVEL
+          divisions = [];
+          hierarchicalStructure = {
+            level: 'DEPARTMENT',
+            department: 'FULL REGION',
+            region: deptRegion.Region,
+            consolidatesTo: 'REGION',
+            ultimateRegion: deptRegion.Region
+          };
+          break;
+        }
+
+        let assignedDepartment = await Department.findById(departmentId).catch(() => null);
+        
+        // If not found with findById (maybe it's a Number ID), try native find
+        if (!assignedDepartment && !mongoose.Types.ObjectId.isValid(departmentId)) {
+          const rawDept = await mongoose.connection.db.collection('departments').findOne({
+            $or: [
+              { _id: departmentId },
+              { _id: Number(departmentId) }
+            ]
+          }).catch(() => null);
+          if (rawDept) {
+            assignedDepartment = new Department(rawDept);
+            assignedDepartment.isNew = false;
+          }
+        }
+
+        let deptRegion = null;
+        if (regionId) {
+          deptRegion = await Region.findById(regionId).catch(() => null);
+          if (!deptRegion && !mongoose.Types.ObjectId.isValid(regionId)) {
+            const rawRegion = await mongoose.connection.db.collection('regions').findOne({
+              $or: [
+                { _id: regionId },
+                { _id: Number(regionId) }
+              ]
+            }).catch(() => null);
+            if (rawRegion) {
+              deptRegion = new Region(rawRegion);
+              deptRegion.isNew = false;
+            }
+          }
+        }
+        
+        if (!assignedDepartment || (regionId && !deptRegion)) {
           return {
             success: false,
             message: 'Invalid region or department ID',
             code: 'INVALID_REGION_DEPARTMENT'
           };
         }
-        regions = [regionId];
+        
+        regions = regionId ? [regionId] : [];
         departments = [departmentId];
         divisions = [];
         hierarchicalStructure = {
           level: 'DEPARTMENT',
           department: assignedDepartment.Department,
-          region: deptRegion.Region,
-          consolidatesTo: 'REGION',
-          ultimateRegion: deptRegion.Region
+          region: deptRegion ? deptRegion.Region : 'All Regions',
+          consolidatesTo: deptRegion ? 'REGION' : 'FULL',
+          ultimateRegion: deptRegion ? deptRegion.Region : 'All Regions'
         };
         break;
       }
@@ -1361,18 +1437,24 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'INVALID_DEPARTMENT'
           };
         }
-        // Find region from department mappings
-        const deptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
-        let rcRegionId = null;
-        if (deptMappings.length > 0) {
-          const firstMapping = deptMappings[0];
-          if (firstMapping.regionId) {
-            const region = await Region.findById(firstMapping.regionId);
-            if (region) {
-              rcRegionId = firstMapping.regionId;
+
+        // NEW: Prioritize the provided regionId if available
+        let rcRegionId = regionId;
+        
+        // Find region from department mappings if not provided
+        if (!rcRegionId) {
+          const deptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
+          if (deptMappings.length > 0) {
+            const firstMapping = deptMappings[0];
+            if (firstMapping.regionId) {
+              const region = await Region.findById(firstMapping.regionId);
+              if (region) {
+                rcRegionId = firstMapping.regionId;
+              }
             }
           }
         }
+
         regions = rcRegionId ? [rcRegionId] : [];
         departments = [departmentId];
         divisions = [divisionName];
@@ -1406,18 +1488,24 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'INVALID_DEPARTMENT'
           };
         }
-        // Find region from department mappings
-        const officeDeptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
-        let officeRegionId = null;
-        if (officeDeptMappings.length > 0) {
-          const firstMapping = officeDeptMappings[0];
-          if (firstMapping.regionId) {
-            const region = await Region.findById(firstMapping.regionId);
-            if (region) {
-              officeRegionId = firstMapping.regionId;
+
+        // NEW: Prioritize the provided regionId if available
+        let officeRegionId = regionId;
+
+        // Find region from department mappings if not provided
+        if (!officeRegionId) {
+          const officeDeptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
+          if (officeDeptMappings.length > 0) {
+            const firstMapping = officeDeptMappings[0];
+            if (firstMapping.regionId) {
+              const region = await Region.findById(firstMapping.regionId);
+              if (region) {
+                officeRegionId = firstMapping.regionId;
+              }
             }
           }
         }
+
         regions = officeRegionId ? [officeRegionId] : [];
         departments = [departmentId];
         divisions = [];

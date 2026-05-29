@@ -35,8 +35,8 @@ const upload = multer({ storage });
 // 📌 Upload and Process Excel File
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
-    // Get the active region from the request
-    const { activeRegion, processBy } = req.body;
+    // Get the active region, department, and division from the request
+    const { activeRegion, processBy, activeDepartment, activeDivision } = req.body;
     if (!activeRegion) {
       return res.status(400).json({ 
         error: "No active region provided", 
@@ -89,7 +89,9 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         activeRegion,
         activeSettings.fiscalYear,
         processBy,
-        userAccess
+        userAccess,
+        activeDepartment,
+        activeDivision
       );
       validationResults.push({
         row: i + 2, // +2 because Excel is 1-indexed and we skip header

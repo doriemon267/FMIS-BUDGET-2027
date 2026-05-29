@@ -673,6 +673,24 @@ router.get(
           });
         }
 
+        // NEW: Add regions themselves as top-level offices for direct assignment (November 2025)
+        if (regions && regions.length > 0) {
+          regions.forEach((region) => {
+            const regionId = region._id.toString();
+            // We use the region's _id directly as the officeId for Region-level assignments
+            if (!officesMap.has(regionId)) {
+              officesMap.set(regionId, {
+                id: region._id,
+                name: region.Region || region.name || region.RegionName || 'Region',
+                code: region.RegionCode || region.code || 'REG',
+                region: region.Region || region.name || region.RegionName,
+                regionId: region._id,
+                isRegionOnly: true
+              });
+            }
+          });
+        }
+
                 // Convert divisions/sections to responsibility centers
                 if (mappings && mappings.length > 0) {
                   // First, handle central offices specially

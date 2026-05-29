@@ -142,13 +142,15 @@ const ASSIGNMENT_LEVEL_WORKFLOW_MAPPING = {
     assignmentLevelName: 'Department/Regional Level (Office)',
     autoAssignedRoles: [
       WORKFLOW_ROLES.OFFICE_CREATOR,
+      WORKFLOW_ROLES.DIVISION_REVIEWER,
       WORKFLOW_ROLES.OFFICE_APPROVER
     ],
     canHaveRoles: [
       WORKFLOW_ROLES.OFFICE_CREATOR,
+      WORKFLOW_ROLES.DIVISION_REVIEWER,
       WORKFLOW_ROLES.OFFICE_APPROVER
     ],
-    description: 'Handles department/regional office level submissions (skips BUDGET REVIEWER)'
+    description: 'Handles department/regional office level submissions'
   },
   [ASSIGNMENT_LEVELS.BUDGET_AND_REVENUE_DIVISION]: {
     assignmentLevelName: 'Budget and Revenue Division',
@@ -211,7 +213,8 @@ const WORKFLOW_PATHS = {
     name: 'Office/Department Level Submission',
     steps: [
       'BUDGET PREPARER',      // officeCreator (skips BUDGET_COORDINATOR)
-      'BUDGET APPROVER',      // officeApprover (skips BUDGET REVIEWER)
+      'BUDGET REVIEWER',
+      'BUDGET APPROVER',      // officeApprover
       'BUDGET PLANNING ANALYST',
       'BUDGET OFFICER',
       'BUDGET MANAGER'

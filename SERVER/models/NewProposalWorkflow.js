@@ -45,7 +45,8 @@ const newProposalWorkflowSchema = new mongoose.Schema({
       'RETURNED_TO_REVIEWER',
       'RETURNED_TO_APPROVER',
       'RETURNED_TO_PLANNING_ANALYST',
-      'RETURNED_TO_OFFICER'
+      'RETURNED_TO_OFFICER',
+      'MERGED' // Source proposal archived after being merged into a consolidated proposal
     ],
     default: 'DRAFT'
   },
@@ -261,6 +262,37 @@ const newProposalWorkflowSchema = new mongoose.Schema({
   lockTimeout: {
     type: Number,
     default: 900000 // 15 minutes in ms
+  },
+  // ── Merge / Consolidation tracking ─────────────────────────────────────────
+  // Fields used when the Budget Approver merges multiple proposals into one
+  isConsolidated: {
+    type: Boolean,
+    default: false // true on the NEW merged/consolidated proposal
+  },
+  mergedFrom: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NewProposalWorkflow' // IDs of the source proposals that were merged
+  }],
+  consolidatedBy: {
+    type: String // userId of the Budget Approver who performed the merge
+  },
+  consolidatedByName: {
+    type: String
+  },
+  consolidatedAt: {
+    type: Date
+  },
+  // Fields set on each SOURCE proposal after being merged
+  isMergedSource: {
+    type: Boolean,
+    default: false // true when this proposal has been merged into another
+  },
+  mergedInto: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NewProposalWorkflow' // ID of the consolidated proposal this was merged into
+  },
+  mergedAt: {
+    type: Date
   }
 }, {
   timestamps: true

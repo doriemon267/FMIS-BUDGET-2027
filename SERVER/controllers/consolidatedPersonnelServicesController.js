@@ -3,6 +3,8 @@ const os = require('os');
 const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const Region = require('../models/Region');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
 
 let MuhammaraRecipe;
@@ -11,6 +13,78 @@ try {
 } catch (e) {
   MuhammaraRecipe = null;
 }
+
+// ─── Workflow-status-based scoping ───────────────────────────────────────────
+const VISIBLE_STATUSES_BY_ROLE_PS = {
+  BUDGET_PREPARER:         ['FORWARDED_TO_REVIEWER','FORWARDED_TO_APPROVER','FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PREPARER','RETURNED_TO_REVIEWER','RETURNED_TO_APPROVER','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_REVIEWER:         ['FORWARDED_TO_REVIEWER','RETURNED_TO_REVIEWER','FORWARDED_TO_APPROVER','RETURNED_TO_APPROVER','FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_APPROVER:         ['FORWARDED_TO_APPROVER','RETURNED_TO_APPROVER','FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_PLANNING_ANALYST: ['FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_OFFICER:          ['FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_OFFICER'],
+  BUDGET_MANAGER:          null,
+  SUPER_ADMIN:             null,
+  OVERALL_BUDGET_APPROVER: null,
+};
+const FULL_ACCESS_ROLES_PS = new Set([
+  'SUPER_ADMIN','SUPER ADMIN','BUDGET_MANAGER','BUDGET MANAGER',
+  'OVERALL_BUDGET_APPROVER','OVERALL BUDGET APPROVER',
+  'BUDGET_ADMIN','BUDGET ADMIN',
+]);
+const normalizeRolePS = (r) => String(r || '').trim().replace(/\s+/g, '_').toUpperCase();
+
+const getVisibleWorkflowIdsPS = async (req, { fiscalYear, budgetType, regions } = {}) => {
+  const userRoles = (req.user?.Roles || req.user?.roles || []).map(normalizeRolePS);
+  if (userRoles.some(r => FULL_ACCESS_ROLES_PS.has(r))) return null;
+
+  let visibleStatuses = null;
+  for (const [roleKey, statuses] of Object.entries(VISIBLE_STATUSES_BY_ROLE_PS)) {
+    if (userRoles.includes(roleKey)) {
+      if (statuses === null) return null;
+      if (!visibleStatuses) {
+        visibleStatuses = new Set(statuses);
+      } else {
+        statuses.forEach(s => visibleStatuses.add(s));
+      }
+    }
+  }
+  if (!visibleStatuses) visibleStatuses = new Set(VISIBLE_STATUSES_BY_ROLE_PS.BUDGET_PREPARER);
+
+  const npwQuery = { status: { $in: [...visibleStatuses] } };
+  if (fiscalYear) npwQuery.fiscalYear = Number(fiscalYear) || parseInt(fiscalYear, 10);
+  if (budgetType) {
+    const typeMap = { NEP: 'NEP', GAA: 'GAA' };
+    npwQuery.modelType = typeMap[String(budgetType).toUpperCase()] || 'Initial';
+  }
+  if (regions && regions !== 'all') {
+    const regionList = Array.isArray(regions) ? regions : [regions];
+    const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
+    if (regionDocs.length) npwQuery.region = { $in: regionDocs.map(r => r._id) };
+  }
+
+  const isPreparerReviewer = userRoles.some(r => ['BUDGET_PREPARER','BUDGET_REVIEWER','BUDGET_APPROVER'].includes(r));
+  if (isPreparerReviewer) {
+    const userId = String(req.user?.id || req.user?.userId || '');
+    if (userId) {
+      try {
+        const hua = await HierarchicalUserAssignment.findOne({ userId, isActive: true })
+          .populate('departmentId', 'Department departmentName DepartmentName').lean();
+        if (hua) {
+          const dept = hua.departmentId?.Department || hua.departmentId?.departmentName || hua.departmentId?.DepartmentName;
+          const div  = hua.divisionName || '';
+          const level = String(hua.assignmentLevel || '').toUpperCase();
+          if (dept && !['BUDGET_AND_REVENUE_DIVISION','REGION','FULL'].includes(level)) {
+            npwQuery.department = dept;
+            if (div && level === 'DIVISION') npwQuery.division = div;
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  const docs = await NewProposalWorkflow.find(npwQuery).select('_id').lean();
+  return docs.map(d => d._id);
+};
+// ─────────────────────────────────────────────────────────────────────────────
 // Define the hierarchical structure mapping
 const PERSONNEL_SERVICES_STRUCTURE = {
   "B.1.1": {
@@ -117,7 +191,27 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
       }
     }
 
-    // Fetch all PersonnelServices data
+    // ── Workflow-status scope filter ────────────────────────────────────
+    // Only show Personnel Services data whose parent workflow has been
+    // submitted/forwarded to (or past) the requesting user's role.
+    const visibleWorkflowIds = await getVisibleWorkflowIdsPS(req, { fiscalYear, budgetType, regions: regions || region });
+    if (visibleWorkflowIds !== null) {
+      if (visibleWorkflowIds.length === 0) {
+        return res.status(200).json({
+          success: true,
+          data: [],
+          summary: { totalRegions: 0, totalEmployees: 0, grandTotal: 0 }
+        });
+      }
+      const wfFilter = { workflowRef: { $in: visibleWorkflowIds } };
+      if (query.$and) {
+        query.$and.push(wfFilter);
+      } else {
+        query.workflowRef = { $in: visibleWorkflowIds };
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────
+
     const psData = await PersonnelServices.find(query).lean();
     if (!Array.isArray(psData) || psData.length === 0) {
       return res.status(200).json({

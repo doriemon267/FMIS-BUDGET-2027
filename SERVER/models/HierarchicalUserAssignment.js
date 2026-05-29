@@ -88,17 +88,15 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     required: true
   },
   regionId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed,
     ref: 'region',
     required: function() {
-      return [
-        'DIVISION', 'DEPARTMENT', 'REGION', 'RESPONSIBILITY_CENTER',
-        'DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL'
-      ].includes(this.assignmentLevel);
+      // Made optional for all levels to support Central Offices which have null regionId
+      return false;
     }
   },
   departmentId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed,
     ref: 'department',
     required: function() {
       return [

@@ -27,6 +27,10 @@ import {
   Avatar,
   LinearProgress,
   styled,
+  FormControl,
+  Select,
+  InputLabel,
+  MenuItem,
 } from "@mui/material";
 import { useForm, FormProvider } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -87,12 +91,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const [useCPCSForEmployeeAdd, setUseCPCSForEmployeeAdd] = useState(false);
   const [cpcs1Types, setCpcs1Types] = useState(["CASUAL"]);
   const [cpcs2Types, setCpcs2Types] = useState(["PERMANENT"]);
-  // Get user's hierarchical access information
-  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
-  const rawDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
-  const userDivision = typeof rawDivision === "string" ? rawDivision : rawDivision?.divisionName;
-  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+
 
   // Fetch CPCS salary setting when add dialog opens (for rate lookup)
   useEffect(() => {
@@ -152,6 +152,78 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const [departmentOptions, setDepartmentOptions] = useState([]);
   const [positionOptions, setPositionOptions] = useState([]);
   const [organizationStructure, setOrganizationStructure] = useState(null);
+
+  // States for bulk upload Department & Division selection
+  const [uploadDepartment, setUploadDepartment] = useState("");
+  const [uploadDivision, setUploadDivision] = useState("");
+  const [uploadDivisionOptions, setUploadDivisionOptions] = useState([]);
+
+  // Get user's hierarchical access information
+  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel || 'REGION';
+  const rawDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDivision = typeof rawDivision === "string" ? rawDivision : (rawDivision?.divisionName || rawDivision?.name || rawDivision?.Division || "");
+  const deptObj = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0];
+  const userDepartment = typeof deptObj === "string" ? deptObj : (deptObj?.departmentName || deptObj?.Department || deptObj?.DepartmentName || "");
+  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName
+    || currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.Region
+    || currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.name || "";
+
+  // Dynamic divisions lookup for bulk upload
+  useEffect(() => {
+    if (!uploadDepartment || !organizationStructure) {
+      setUploadDivisionOptions([]);
+      setUploadDivision("");
+      return;
+    }
+    const departmentsWithDivisions = organizationStructure?.availableUnits?.departmentsWithDivisions || [];
+    const matched = departmentsWithDivisions.find(
+      (d) => String(d.departmentName).toLowerCase() === String(uploadDepartment).toLowerCase()
+    );
+    if (matched) {
+      const divisions = matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+      setUploadDivisionOptions(divisions);
+    } else {
+      setUploadDivisionOptions([]);
+    }
+    setUploadDivision("");
+  }, [uploadDepartment, organizationStructure]);
+
+  // Pre-fill and lock upload selectors based on user access levels
+  useEffect(() => {
+    if (isImportOpen) {
+      if (userAccessLevel === 'DIVISION') {
+        setUploadDepartment(userDepartment || "");
+        if (userDepartment && organizationStructure) {
+          const departmentsWithDivisions = organizationStructure?.availableUnits?.departmentsWithDivisions || [];
+          const matched = departmentsWithDivisions.find(
+            (d) => String(d.departmentName).toLowerCase() === String(userDepartment).toLowerCase()
+          );
+          if (matched) {
+            const divisions = matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+            setUploadDivisionOptions(divisions);
+          }
+        }
+        setUploadDivision(userDivision || "");
+      } else if (userAccessLevel === 'DEPARTMENT') {
+        setUploadDepartment(userDepartment || "");
+        if (userDepartment && organizationStructure) {
+          const departmentsWithDivisions = organizationStructure?.availableUnits?.departmentsWithDivisions || [];
+          const matched = departmentsWithDivisions.find(
+            (d) => String(d.departmentName).toLowerCase() === String(userDepartment).toLowerCase()
+          );
+          if (matched) {
+            const divisions = matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+            setUploadDivisionOptions(divisions);
+          }
+        }
+        setUploadDivision("");
+      } else {
+        setUploadDepartment("");
+        setUploadDivision("");
+        setUploadDivisionOptions([]);
+      }
+    }
+  }, [isImportOpen, userAccessLevel, userDepartment, userDivision, organizationStructure]);
 
   // Set Region value when activeRegion changes
   useEffect(() => {
@@ -575,6 +647,13 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     formData.append("file", selectedFile);
     const activeRegionValue = activeRegion.name || activeRegion.Region || activeRegion.regionName;
     formData.append("activeRegion", activeRegionValue);
+    
+    if (uploadDepartment) {
+      formData.append("activeDepartment", uploadDepartment);
+    }
+    if (uploadDivision) {
+      formData.append("activeDivision", uploadDivision);
+    }
 
     // Get the user's name for processBy, fallback to "Admin" if user context is not available
     const processBy =
@@ -2027,6 +2106,64 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                     </Typography>
                   </Alert>
                 )}
+              </Box>
+
+              <Box sx={{ mt: 3, mb: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Active scope (Optional Department / Division restriction):
+                </Typography>
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="upload-dept-select-label">Department</InputLabel>
+                      <Select
+                        labelId="upload-dept-select-label"
+                        id="upload-dept-select"
+                        value={uploadDepartment}
+                        label="Department"
+                        disabled={userAccessLevel === 'DIVISION' || userAccessLevel === 'DEPARTMENT'}
+                        onChange={(e) => {
+                          setUploadDepartment(e.target.value);
+                        }}
+                        sx={{ borderRadius: "8px" }}
+                      >
+                        <MenuItem value="">
+                          <em>All Departments (No Filter)</em>
+                        </MenuItem>
+                        {(departmentOptions || []).map((dept) => (
+                          <MenuItem key={dept.id || dept._id || dept.name} value={dept.name}>
+                            {dept.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel id="upload-div-select-label">Division</InputLabel>
+                      <Select
+                        labelId="upload-div-select-label"
+                        id="upload-div-select"
+                        value={uploadDivision}
+                        label="Division"
+                        disabled={userAccessLevel === 'DIVISION' || !uploadDepartment}
+                        onChange={(e) => {
+                          setUploadDivision(e.target.value);
+                        }}
+                        sx={{ borderRadius: "8px" }}
+                      >
+                        <MenuItem value="">
+                          <em>All Divisions (No Filter)</em>
+                        </MenuItem>
+                        {(uploadDivisionOptions || []).map((divName) => (
+                          <MenuItem key={divName} value={divName}>
+                            {divName}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
               </Box>
 
               <Box sx={{ mt: 4 }}>

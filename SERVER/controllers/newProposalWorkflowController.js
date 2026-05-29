@@ -61,12 +61,10 @@ const isWorkflowESignatureRequired = async () => {
 const WORKFLOW_TRANSITIONS = {
   'BUDGET PREPARER': {
     'DRAFT': {
-      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER',
-      'submit-to-approver': 'FORWARDED_TO_APPROVER'
+      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER'
     },
     'RETURNED_TO_PREPARER': {
-      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER',
-      'submit-to-approver': 'FORWARDED_TO_APPROVER'
+      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER'
     }
   },
   'BUDGET REVIEWER': {
@@ -2115,7 +2113,9 @@ const checkProposalOrgAccess = async (proposal, userId, userRole) => {
       const propRegion = proposal.region?.Region || proposal.region?.regionName || proposal.region?.RegionName || proposal.regionName || proposal.region;
       if (propRegion && String(propRegion) !== userRegion) {
         // Additional fallback: sometimes userRegion is stored with different casing
-        if (String(propRegion).toUpperCase() !== String(userRegion).toUpperCase()) {
+        // Also check proposal.department as it often holds the region name string for regional proposals
+        if (String(propRegion).toUpperCase() !== String(userRegion).toUpperCase() && 
+            String(proposal.department).toUpperCase() !== String(userRegion).toUpperCase()) {
           return false;
         }
       }
@@ -2223,11 +2223,40 @@ exports.getProposals = async (req, res) => {
             if (!orgScope.department) query.department = { $in: [null, ""] };
             
             if (region) {
-              const regionDoc = await require('../models/Region').findOne({
-                $or: [{ Region: region }, { regionName: region }, { RegionName: region }]
-              });
+              const mongoose = require('mongoose');
+              const regionQuery = mongoose.Types.ObjectId.isValid(region)
+                ? { _id: region }
+                : { $or: [{ Region: region }, { regionName: region }, { RegionName: region }] };
+              
+              const regionDoc = await require('../models/Region').findOne(regionQuery);
               if (regionDoc) {
-                query.region = regionDoc._id;
+                const regionStr = regionDoc.Region || regionDoc.regionName || regionDoc.RegionName || String(region);
+                
+                // Find all regions with the same name to handle duplicate Region records
+                const matchingRegions = await require('../models/Region').find({
+                  $or: [{ Region: regionStr }, { regionName: regionStr }, { RegionName: regionStr }]
+                }).select('_id').lean();
+                
+                const regionIds = matchingRegions.map(r => r._id);
+                // Ensure the original requested region is included
+                const mongoose = require('mongoose');
+                if (mongoose.Types.ObjectId.isValid(region) && !regionIds.some(id => String(id) === String(region))) {
+                  regionIds.push(new mongoose.Types.ObjectId(region));
+                }
+
+                delete query.department; // Relax strict department filter so orphans can be seen
+                if (query.$or) {
+                  query.region = { $in: [...regionIds, null] };
+                } else {
+                  query.$or = [
+                    { region: { $in: regionIds } },
+                    { department: regionStr },
+                    { region: null },
+                    { region: { $exists: false } }
+                  ];
+                }
+              } else {
+                query.region = null;
               }
             }
           } else {
@@ -2299,10 +2328,33 @@ exports.getProposals = async (req, res) => {
           query.status = { $in: Array.from(allStatuses) };
           
           // Apply Organizational Scope Restriction
-          // Note: Exclude region from spread since region field is ObjectId, not String
           if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
             const { region, ...orgScopeWithoutRegion } = orgScope;
             query = { ...query, ...orgScopeWithoutRegion };
+            if (region) {
+              const regionDoc = await require('../models/Region').findOne({
+                $or: [{ Region: region }, { regionName: region }, { RegionName: region }]
+              });
+              
+              if (regionDoc) {
+                // For Region Level Approvers, proposals from lower levels might be missing the region ObjectId
+                // but they will have the region string in their department field (e.g. 'MARIIS' as department).
+                // So we allow matching either the region ObjectId OR the department string.
+                if (query.$or) {
+                  // If query already has an $or, we merge them (unlikely here but safe)
+                  query.region = regionDoc._id;
+                } else {
+                  query.$or = [
+                    { region: regionDoc._id },
+                    { department: region },
+                    { region: null },
+                    { region: { $exists: false } }
+                  ];
+                }
+              } else {
+                query.region = null; // Region not found, fetch nothing
+              }
+            }
           }
 
           if (!query.status.$in || query.status.$in.length === 0) {
@@ -2344,10 +2396,43 @@ exports.getProposals = async (req, res) => {
         }
 
         // Apply Organizational Scope Restriction (intersection) for ALL non-Super Admins
-        // Note: Exclude region from spread since region field is ObjectId, not String
         if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
           const { region, ...orgScopeWithoutRegion } = orgScope;
           query = { ...query, ...orgScopeWithoutRegion };
+          if (region) {
+            const mongoose = require('mongoose');
+            const regionQuery = mongoose.Types.ObjectId.isValid(region)
+              ? { _id: region }
+              : { $or: [{ Region: region }, { regionName: region }, { RegionName: region }] };
+            
+            const regionDoc = await require('../models/Region').findOne(regionQuery);
+            if (regionDoc) {
+              const regionStr = regionDoc.Region || regionDoc.regionName || regionDoc.RegionName || String(region);
+              
+              const matchingRegions = await require('../models/Region').find({
+                $or: [{ Region: regionStr }, { regionName: regionStr }, { RegionName: regionStr }]
+              }).select('_id').lean();
+              
+              const regionIds = matchingRegions.map(r => r._id);
+              if (mongoose.Types.ObjectId.isValid(region) && !regionIds.some(id => String(id) === String(region))) {
+                regionIds.push(new mongoose.Types.ObjectId(region));
+              }
+
+              delete query.department;
+              if (query.$or) {
+                query.region = { $in: [...regionIds, null] };
+              } else {
+                query.$or = [
+                  { region: { $in: regionIds } },
+                  { department: regionStr },
+                  { region: null },
+                  { region: { $exists: false } }
+                ];
+              }
+            } else {
+              query.region = null;
+            }
+          }
         }
         break;
       case 'monitoring':
@@ -2357,10 +2442,28 @@ exports.getProposals = async (req, res) => {
           query.status = { $ne: 'DRAFT' };
           
           // Apply Organizational Scope Restriction for Managers
-          // Note: Exclude region from spread since region field is ObjectId, not String
           if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
             const { region, ...orgScopeWithoutRegion } = orgScope;
             query = { ...query, ...orgScopeWithoutRegion };
+            if (region) {
+              const regionDoc = await require('../models/Region').findOne({
+                $or: [{ Region: region }, { regionName: region }, { RegionName: region }]
+              });
+              if (regionDoc) {
+                if (query.$or) {
+                  query.region = regionDoc._id;
+                } else {
+                  query.$or = [
+                    { region: regionDoc._id },
+                    { department: region },
+                    { region: null },
+                    { region: { $exists: false } }
+                  ];
+                }
+              } else {
+                query.region = null;
+              }
+            }
           }
         } else {
             return res.json({
@@ -2385,6 +2488,7 @@ exports.getProposals = async (req, res) => {
   // Silent mode: no verbose logging
 
     // Query both NewProposalWorkflow and legacy Proposal models
+    console.log('GET PROPOSALS FINAL QUERY:', JSON.stringify(query));
     const newProposalsCount = await NewProposalWorkflow.countDocuments(query);
     let newProposals = await NewProposalWorkflow.find(query)
       .sort({ createdAt: -1 })
@@ -2615,14 +2719,17 @@ exports.getProposals = async (req, res) => {
                 console.log('[ORG_FILTER] ✓ ALLOWED (NIA-Wide analyst)');
                 return true;
               }
-              if (assignedRegionNorm && proposalRegion === assignedRegionNorm) {
+              
+              // Match by Region ObjectId/Name OR Department string (which often holds region name for regional proposals)
+              if (assignedRegionNorm && (proposalRegion === assignedRegionNorm || proposalDepartment === assignedRegionNorm)) {
                 console.log('[ORG_FILTER] ✓ ALLOWED (region match)');
                 return true;
               }
+              
               // Fallback: check assignedRegions array (region codes/names)
               if (Array.isArray(userAssignment.assignedRegions) && userAssignment.assignedRegions.length > 0) {
                 const regionNorms = userAssignment.assignedRegions.map(r => normalizeOrgValue(r));
-                if (regionNorms.includes(proposalRegion)) {
+                if (regionNorms.includes(proposalRegion) || regionNorms.includes(proposalDepartment)) {
                   console.log('[ORG_FILTER] ✓ ALLOWED (assignedRegions match)');
                   return true;
                 }
@@ -3060,28 +3167,7 @@ exports.performAction = async (req, res) => {
     console.log('[PERFORM_ACTION] Request:', { proposalId: id, action, comment });
 
     let userAssignment = null;
-    if (action === 'submit-to-reviewer' && userRole === 'BUDGET PREPARER') {
-      try {
-        userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
-        if (userAssignment && String(userAssignment.assignmentLevel).toUpperCase() === 'OFFICE') {
-          action = 'submit-to-approver';
-        }
-      } catch (assignmentErr) {
-        console.warn('[PERFORM_ACTION] Error fetching user assignment:', assignmentErr.message);
-      }
-    }
-
     const proposal = await NewProposalWorkflow.findById(id);
-        if (action === 'submit-to-approver' && userRole === 'BUDGET PREPARER') {
-          try {
-            userAssignment = userAssignment || await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
-            if (!userAssignment || String(userAssignment.assignmentLevel).toUpperCase() !== 'OFFICE') {
-              return res.status(403).json({ success: false, message: 'Direct submit to approver is only allowed for Office-level preparers' });
-            }
-          } catch (assignmentErr) {
-            console.warn('[PERFORM_ACTION] Error enforcing assignment level for submit-to-approver:', assignmentErr.message);
-          }
-        }
 
     if (!proposal) {
       return res.status(404).json({
@@ -4164,6 +4250,302 @@ exports.getProposalTotalsByWorkflowRef = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch proposal totals',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Merge multiple proposals (FORWARDED_TO_APPROVER) into a single consolidated proposal.
+ * Only Budget Approvers (and Super Admins) can perform this action.
+ *
+ * POST /api/allproposal/proposals/merge
+ * Body: { proposalIds: string[], title?: string }
+ *
+ * What this does:
+ *  1. Validates that the caller is a Budget Approver / Super Admin.
+ *  2. Fetches and validates all source proposals:
+ *     - Must all be in FORWARDED_TO_APPROVER or RETURNED_TO_APPROVER status.
+ *     - Must all share the same region and fiscalYear.
+ *     - Must be at least 2 proposals.
+ *  3. Creates a new consolidated NewProposalWorkflow document that:
+ *     - Sums all budget amounts (amount, projectedCorporateIncome, projectedSubsidy).
+ *     - Concatenates personnel, MOOE, capital outlay, and income data arrays.
+ *     - Has status FORWARDED_TO_APPROVER so the Approver can still submit to BRD.
+ *     - Records which source proposals it was built from (mergedFrom[]).
+ *  4. Marks every source proposal as:
+ *     - status: 'MERGED'  (archived)
+ *     - isLocked: true    (no further edits)
+ *     - isMergedSource: true
+ *     - mergedInto: <consolidated proposal _id>
+ *  5. Returns the new consolidated proposal.
+ */
+exports.mergeProposals = async (req, res) => {
+  try {
+    // ── 1. Auth check ─────────────────────────────────────────────────────────
+    const userRole = getUserRole(req);
+    if (!userRole || !['BUDGET APPROVER', 'SUPER ADMIN'].includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Budget Approvers can merge proposals.'
+      });
+    }
+
+    const userId = String(
+      req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId || ''
+    );
+    const userName = await resolveUserDisplayName(req, userId);
+
+    // ── 2. Input validation ───────────────────────────────────────────────────
+    const { proposalIds } = req.body;
+
+    if (!Array.isArray(proposalIds) || proposalIds.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least 2 proposal IDs are required to merge.'
+      });
+    }
+
+    // Deduplicate
+    const uniqueIds = [...new Set(proposalIds.map(id => String(id)))];
+    if (uniqueIds.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate proposal IDs detected. Please select distinct proposals.'
+      });
+    }
+
+    // ── 3. Fetch source proposals ─────────────────────────────────────────────
+    const sources = await NewProposalWorkflow.find({
+      _id: { $in: uniqueIds }
+    }).populate('region', 'Region regionName RegionName').lean();
+
+    if (sources.length !== uniqueIds.length) {
+      const foundIds = sources.map(s => String(s._id));
+      const missing = uniqueIds.filter(id => !foundIds.includes(id));
+      return res.status(404).json({
+        success: false,
+        message: `Some proposals were not found: ${missing.join(', ')}`
+      });
+    }
+
+    // ── 4. Validate statuses ──────────────────────────────────────────────────
+    const ALLOWED_STATUSES = new Set(['FORWARDED_TO_APPROVER', 'RETURNED_TO_APPROVER']);
+    const invalidStatus = sources.find(s => !ALLOWED_STATUSES.has(s.status));
+    if (invalidStatus) {
+      return res.status(400).json({
+        success: false,
+        message: `Proposal "${invalidStatus.title}" has status "${invalidStatus.status}" and cannot be merged. Only proposals with status FORWARDED_TO_APPROVER or RETURNED_TO_APPROVER can be merged.`
+      });
+    }
+
+    // Reject proposals that are already merged sources
+    const alreadyMerged = sources.find(s => s.isMergedSource || s.status === 'MERGED');
+    if (alreadyMerged) {
+      return res.status(400).json({
+        success: false,
+        message: `Proposal "${alreadyMerged.title}" has already been merged into another consolidated proposal and cannot be merged again.`
+      });
+    }
+
+    // ── 5. Validate same region and fiscalYear ────────────────────────────────
+    const firstRegionId = sources[0].region?._id
+      ? String(sources[0].region._id)
+      : String(sources[0].region || '');
+    const firstFiscalYear = sources[0].fiscalYear;
+    const firstModelType = sources[0].modelType;
+
+    for (const src of sources) {
+      const srcRegionId = src.region?._id
+        ? String(src.region._id)
+        : String(src.region || '');
+
+      if (srcRegionId !== firstRegionId) {
+        return res.status(400).json({
+          success: false,
+          message: `All proposals must belong to the same Region. "${src.title}" is from a different region.`
+        });
+      }
+      if (src.fiscalYear !== firstFiscalYear) {
+        return res.status(400).json({
+          success: false,
+          message: `All proposals must have the same Fiscal Year. "${src.title}" has fiscal year ${src.fiscalYear}.`
+        });
+      }
+      if (src.modelType !== firstModelType) {
+        return res.status(400).json({
+          success: false,
+          message: `All proposals must have the same Model Type (Initial/NEP/GAA). "${src.title}" has type ${src.modelType}.`
+        });
+      }
+    }
+
+    // ── 6. Aggregate budget figures ───────────────────────────────────────────
+    let totalAmount = 0;
+    let totalCorporateIncome = 0;
+    let totalSubsidy = 0;
+    const allPersonnelData = [];
+    const allMooeData = [];
+    const allCapitalData = [];
+    const allIncomeData = [];
+    const divisionList = [];
+
+    for (const src of sources) {
+      totalAmount += Number(src.amount) || 0;
+      totalCorporateIncome += Number(src.projectedCorporateIncome) || 0;
+      totalSubsidy += Number(src.projectedSubsidy) || 0;
+
+      // Merge array data – wrap non-arrays in an array for safety
+      const toArr = (val) => {
+        if (Array.isArray(val)) return val;
+        if (val && typeof val === 'object') return [val];
+        return [];
+      };
+
+      allPersonnelData.push(...toArr(src.personnelData));
+      allMooeData.push(...toArr(src.mooeData));
+      allCapitalData.push(...toArr(src.capitalData));
+      allIncomeData.push(...toArr(src.incomeData));
+
+      if (src.division && !divisionList.includes(src.division)) {
+        divisionList.push(src.division);
+      } else if (src.department && !divisionList.includes(src.department)) {
+        divisionList.push(src.department);
+      }
+    }
+
+    // ── 7. Auto-generate title ────────────────────────────────────────────────
+    const regionName = sources[0].region?.Region
+      || sources[0].region?.regionName
+      || sources[0].region?.RegionName
+      || 'Unknown Region';
+
+    const orgSuffix = divisionList.length
+      ? ` — ${divisionList.slice(0, 3).join(', ')}${divisionList.length > 3 ? '…' : ''}`
+      : '';
+
+    const consolidatedTitle =
+      `Consolidated — ${regionName} — FY${firstFiscalYear}${orgSuffix}`;
+
+    // ── 8. Create the consolidated proposal ──────────────────────────────────
+    const regionObjectId = sources[0].region?._id || sources[0].region;
+
+    const now = new Date();
+    const consolidated = new NewProposalWorkflow({
+      title: consolidatedTitle,
+      description: `Consolidated proposal created by ${userName} on ${now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Source proposals: ${sources.map(s => s.title).join('; ')}`,
+      modelType: firstModelType,
+      fiscalYear: firstFiscalYear,
+      region: regionObjectId || undefined,
+      isCentralOffice: sources.some(s => s.isCentralOffice),
+      amount: totalAmount,
+      projectedCorporateIncome: totalCorporateIncome,
+      projectedSubsidy: totalSubsidy,
+      status: 'FORWARDED_TO_APPROVER',
+      createdBy: userId,
+      createdByName: userName,
+      // Merge metadata
+      isConsolidated: true,
+      mergedFrom: uniqueIds,
+      consolidatedBy: userId,
+      consolidatedByName: userName,
+      consolidatedAt: now,
+      // Aggregated budget data (raw arrays – BRD analysts will review)
+      personnelData: allPersonnelData.length ? allPersonnelData : undefined,
+      mooeData: allMooeData.length ? allMooeData : undefined,
+      capitalData: allCapitalData.length ? allCapitalData : undefined,
+      incomeData: allIncomeData.length ? allIncomeData : undefined,
+      workflowHistory: [{
+        action: 'merge',
+        fromStatus: 'FORWARDED_TO_APPROVER',
+        toStatus: 'FORWARDED_TO_APPROVER',
+        performedBy: userId,
+        performedByName: userName,
+        comment: `Merged from ${sources.length} proposals: ${sources.map(s => `"${s.title}"`).join(', ')}`,
+        timestamp: now
+      }]
+    });
+
+    await consolidated.save();
+    console.log(`[mergeProposals] Created consolidated proposal: ${consolidated._id} "${consolidatedTitle}"`);
+
+    // ── 9. Archive + lock every source proposal ───────────────────────────────
+    const mergeHistoryEntry = {
+      action: 'merge',
+      fromStatus: 'FORWARDED_TO_APPROVER',
+      toStatus: 'MERGED',
+      performedBy: userId,
+      performedByName: userName,
+      comment: `Merged into consolidated proposal: "${consolidatedTitle}" (ID: ${consolidated._id})`,
+      timestamp: now
+    };
+
+    await NewProposalWorkflow.updateMany(
+      { _id: { $in: uniqueIds } },
+      {
+        $set: {
+          status: 'MERGED',
+          isMergedSource: true,
+          mergedInto: consolidated._id,
+          mergedAt: now,
+          isLocked: true,
+          'lockedBy.userId': userId,
+          'lockedBy.userName': userName,
+          'lockedBy.userRole': 'BUDGET APPROVER',
+          lockedAt: now,
+        },
+        $push: { workflowHistory: mergeHistoryEntry }
+      }
+    );
+
+    console.log(`[mergeProposals] Archived ${uniqueIds.length} source proposals → status MERGED, isLocked=true`);
+
+    // ── 10. Send notifications to original proposal creators ─────────────────
+    try {
+      const creatorIds = [...new Set(sources.map(s => String(s.createdBy)).filter(Boolean))];
+      if (creatorIds.length > 0) {
+        const notifs = creatorIds.map(recipientUserId => ({
+          recipientUserId,
+          type: 'PROPOSAL_SUBMITTED',
+          title: 'Your Proposal Has Been Consolidated',
+          message: `${userName} merged your proposal into a consolidated proposal: "${consolidatedTitle}". Your proposal is now archived.`,
+          relatedEntityId: String(consolidated._id),
+          relatedEntityType: 'PROPOSAL',
+          relatedLink: `/allproposal?tab=all-proposals&proposalId=${consolidated._id}`,
+          entity: 'proposal',
+          recordIds: [consolidated._id],
+          metadata: {
+            action: 'merge',
+            proposalTitle: consolidatedTitle,
+            proposalId: String(consolidated._id),
+            tab: 'all-proposals',
+            performedBy: userName,
+            uniqueKey: `merge_${consolidated._id}`
+          },
+          status: 'UNREAD',
+          createdAt: now
+        }));
+        await Notification.insertMany(notifs);
+      }
+    } catch (notifErr) {
+      console.warn('[mergeProposals] Notification error (non-fatal):', notifErr.message);
+    }
+
+    // ── 11. Return the consolidated proposal ─────────────────────────────────
+    return res.status(201).json({
+      success: true,
+      message: `Successfully merged ${sources.length} proposals into "${consolidatedTitle}".`,
+      data: consolidated,
+      mergedCount: sources.length,
+      sourceIds: uniqueIds
+    });
+
+  } catch (error) {
+    console.error('[mergeProposals] Error:', error.message);
+    console.error('[mergeProposals] Stack:', error.stack);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to merge proposals.',
       error: error.message
     });
   }

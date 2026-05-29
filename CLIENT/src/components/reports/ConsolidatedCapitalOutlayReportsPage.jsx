@@ -126,13 +126,33 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
   const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
 
-  // Unified restriction check: Preparers or unit-restricted Approvers
+  // Enforce restriction: restricted roles (Preparer, Reviewer, Approver) are locked to "Current Region Only".
+  // Only BRD-level roles (Analyst, Officer, Manager, SuperAdmin) can view All Regions or Custom Selection.
   const isRestricted = useMemo(() => {
-    if (!isHighLevel) return true; // Preparers are always restricted
-    if (isBRD) return false; // BRD Level (Analyst/Super Admin) is never restricted
-    // Non-BRD high levels are restricted if they have unit-level scope
+    if (!currentUser) return true;
+    const roles = (currentUser.Roles || []).map(r => String(r || '').replace(/\s+/g, '_').toUpperCase());
+    const hasRestrictedRole = roles.some(r => [
+      'BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER', 
+      'REVIEWER', 'APPROVER', 'BUDGET_COORDINATOR'
+    ].includes(r));
+    const hasBRDRole = roles.some(r => [
+      'SUPER_ADMIN', 'SUPERADMIN', 'BUDGET_MANAGER', 
+      'BUDGET_OFFICER', 'BUDGET_PLANNING_ANALYST', 
+      'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN'
+    ].includes(r));
+
+    if (hasBRDRole) return false;
+    if (hasRestrictedRole) return true;
+    return !isBRD;
+  }, [currentUser, isBRD]);
+
+  const isDepartmentRestricted = useMemo(() => {
     return ['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY_CENTER'].includes(scope);
-  }, [isHighLevel, isBRD, scope]);
+  }, [scope]);
+
+  const isDivisionRestricted = useMemo(() => {
+    return ['DIVISION', 'RESPONSIBILITY_CENTER'].includes(scope);
+  }, [scope]);
 
   // Enforce restrictions based on role/scope
   useEffect(() => {
@@ -617,8 +637,8 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                 disabled={isRestricted}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
-                <MenuItem value="all">All Regions</MenuItem>
-                <MenuItem value="custom">Custom Selection</MenuItem>
+                {!isRestricted && <MenuItem value="all">All Regions</MenuItem>}
+                {!isRestricted && <MenuItem value="custom">Custom Selection</MenuItem>}
               </Select>
             </FormControl>
           </Grid>
@@ -657,7 +677,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                 value={String(selectedDepartment ?? "")}
                 onChange={(e) => { setSelectedDepartment(e.target.value || ""); setSelectedDivision(""); }}
                 label="Department"
-                disabled={!activeRegion || departments.length === 0 || isRestricted}
+                disabled={!activeRegion || departments.length === 0 || isDepartmentRestricted}
               >
                 <MenuItem value=""><em>All Departments</em></MenuItem>
                 {departments.map((dept, idx) => {
@@ -679,7 +699,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                 value={String(selectedDivision ?? "")}
                 onChange={(e) => setSelectedDivision(e.target.value || "")}
                 label="Division"
-                disabled={!selectedDepartment || divisions.length === 0 || (isRestricted && scope === 'DIVISION')}
+                disabled={!selectedDepartment || divisions.length === 0 || isDivisionRestricted}
               >
                 <MenuItem value=""><em>All Divisions</em></MenuItem>
                 {divisions.map((div, idx) => {

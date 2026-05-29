@@ -3,10 +3,11 @@ const router = express.Router();
 const newProposalWorkflowController = require('../controllers/newProposalWorkflowController');
 const consolidationController = require('../controllers/consolidationController');
 const isAuth = require('../middleware/is_auth');
-// Apply authentication middleware to all routes
-router.use(isAuth);
 const multer = require('multer');
 const path = require('path');
+
+// Apply authentication middleware to all routes
+router.use(isAuth);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -39,9 +40,6 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
-// Apply authentication middleware to all routes
-// router.use(isAuth);
-
 // Serve uploaded files
 router.get('/uploads/:filename', (req, res) => {
   const filename = req.params.filename;
@@ -58,6 +56,10 @@ router.post('/proposals', newProposalWorkflowController.createProposal);
 router.get('/proposals', newProposalWorkflowController.getProposals);
 router.get('/proposals/my-proposals', newProposalWorkflowController.getMyProposals);
 router.get('/proposals/pending-review', newProposalWorkflowController.getPendingReview);
+
+// ── Merge route: MUST be BEFORE generic /:id routes to avoid param clash ──────
+router.post('/proposals/merge', newProposalWorkflowController.mergeProposals);
+
 // Specific routes with parameters must come BEFORE generic /:id routes
 router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
 router.post('/proposals/:id/action', async (req, res, next) => {
@@ -88,6 +90,7 @@ router.post('/proposals/:id/action', async (req, res, next) => {
   }
   next();
 }, newProposalWorkflowController.performAction);
+
 // NEW: Get proposal totals by workflow ref (for BudgetarySupportTable)
 router.get('/proposals/:workflowRefId/totals', newProposalWorkflowController.getProposalTotalsByWorkflowRef);
 
@@ -95,6 +98,9 @@ router.get('/proposals/:workflowRefId/totals', newProposalWorkflowController.get
 router.post('/proposals/:id/attachments', upload.single('file'), newProposalWorkflowController.uploadAttachment);
 router.delete('/proposals/:id/attachments/:attachmentId', newProposalWorkflowController.deleteAttachment);
 router.get('/proposals/:id/attachments', newProposalWorkflowController.getAttachments);
+
+// Get analysts eligible for a specific proposal (region-based routing)
+router.get('/proposals/:id/analysts-for-proposal', newProposalWorkflowController.getAnalystsForProposal);
 
 // Generic routes AFTER specific ones
 router.get('/proposals/:id', newProposalWorkflowController.getProposalById);

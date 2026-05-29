@@ -1,6 +1,7 @@
 const Income = require('../models/Income');
 const IncomeCategory = require('../models/IncomeCategory');
 const IncomeSubcategory = require('../models/IncomeSubcategory');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const Settings = require('../models/Settings');
 const xlsx = require('xlsx');
 const fs = require('fs');
@@ -103,6 +104,33 @@ exports.uploadCorporateIncome = async (req, res) => {
     const workflowData = req.submissionWorkflowData || {};
     const resolvedRegion = workflowData.region || req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName || req.user?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 
+    const proposalId = req.body.proposalId || req.query.proposalId;
+    let strictScope = null;
+    if (proposalId) {
+      const proposal = await NewProposalWorkflow.findById(proposalId).populate('region').lean();
+      if (proposal) {
+        let regionName = '';
+        if (proposal.region) {
+          if (typeof proposal.region === 'string') {
+            regionName = proposal.region;
+          } else if (typeof proposal.region === 'object') {
+            regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || '';
+          } else {
+            const RegionModel = require('../models/Region');
+            const regionDoc = await RegionModel.findById(proposal.region).lean();
+            if (regionDoc) {
+              regionName = regionDoc.Region || '';
+            }
+          }
+        }
+        strictScope = {
+          region: regionName,
+          department: proposal.department,
+          division: proposal.division
+        };
+      }
+    }
+
     // Get user assignment for department, division, workflowLevel
     const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
     const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
@@ -187,6 +215,69 @@ exports.uploadCorporateIncome = async (req, res) => {
             targetLevel = 'DIVISION';
           }
         }
+
+        const isSuperAdmin = req.user?.Roles?.includes('SUPER_ADMIN');
+
+        // Enforce organizational scope for non-SuperAdmins
+        if (!isSuperAdmin) {
+          // 1. If linked to a proposal, it MUST match the proposal's scope
+          if (strictScope) {
+            // Check Region
+            if (strictScope.region && targetRegion && targetRegion.toUpperCase() !== strictScope.region.toUpperCase()) {
+              results.errors.push({
+                row: index + 2,
+                category: categoryName,
+                region: targetRegion,
+                error: `Unauthorized: This proposal is for ${strictScope.region}. Row has ${targetRegion}.`
+              });
+              results.failedRecords++;
+              continue;
+            }
+            // Check Department
+            if (strictScope.department && targetDepartment && targetDepartment.toUpperCase() !== strictScope.department.toUpperCase()) {
+              results.errors.push({
+                row: index + 2,
+                category: categoryName,
+                region: targetRegion || targetDepartment,
+                error: `Unauthorized: This proposal is for ${strictScope.department}. Row has ${targetDepartment}.`
+              });
+              results.failedRecords++;
+              continue;
+            }
+            // Check Division
+            if (strictScope.division && targetDivision && targetDivision.toUpperCase() !== strictScope.division.toUpperCase()) {
+              results.errors.push({
+                row: index + 2,
+                category: categoryName,
+                region: targetRegion || targetDivision,
+                error: `Unauthorized: This proposal is for ${strictScope.division}. Row has ${targetDivision}.`
+              });
+              results.failedRecords++;
+              continue;
+            }
+
+            // Automatically ensure organizational context matches proposal if it was missing in Excel
+            targetRegion = strictScope.region || targetRegion;
+            targetDepartment = strictScope.department || targetDepartment;
+            targetDivision = strictScope.division || targetDivision;
+          } 
+          // 2. If no proposal, check against user's assigned department/division
+          else if (assignedDepartment) {
+             if (targetDepartment && targetDepartment.toUpperCase() !== assignedDepartment.toUpperCase()) {
+                results.errors.push({
+                   row: index + 2,
+                   category: categoryName,
+                   region: targetRegion || targetDepartment,
+                   error: `Unauthorized: You are assigned to ${assignedDepartment}. Row has ${targetDepartment}.`
+                });
+                results.failedRecords++;
+                continue;
+             }
+             // If department matches or was missing, we can force it if targetDepartment is still null
+             if (!targetDepartment) targetDepartment = assignedDepartment;
+          }
+        }
+
         const particulars = particularsCol
           ? row[particularsCol]?.toString().trim() || ''
           : (subcategoryName || categoryName);
@@ -209,6 +300,32 @@ exports.uploadCorporateIncome = async (req, res) => {
         }
 
         results.regions.add(targetRegion || targetDepartment || targetDivision || 'Unknown');
+        
+        // Check for existing record to prevent duplicates
+        const existingIncome = await Income.findOne({
+          fiscalYear: activeSettings.fiscalYear,
+          budgetType: activeSettings.budgetType,
+          region: targetRegion,
+          department: targetDepartment,
+          division: targetDivision,
+          category: categoryName,
+          subcategory: subcategoryName || null,
+          particulars: particulars || categoryName,
+          amount: amount,
+          proposalId: proposalId || null
+        });
+
+        if (existingIncome) {
+          results.errors.push({
+            row: index + 2,
+            category: categoryName,
+            region: targetRegion || targetDepartment || targetDivision || 'Unknown',
+            amount,
+            error: 'Duplicate entry: This item has already been uploaded.'
+          });
+          results.failedRecords++;
+          continue;
+        }
 
         // Prioritize region-specific category over global one
         const categoryQuery = {
@@ -256,7 +373,14 @@ exports.uploadCorporateIncome = async (req, res) => {
           continue;
         }
 
-        const isSuperAdmin = req.user?.Roles?.includes('SUPER_ADMIN');
+        let normalizedWorkflowLevel = targetLevel || 'DIVISION';
+        if (normalizedWorkflowLevel === 'DEPARTMENT_REGIONAL_LEVEL') {
+          normalizedWorkflowLevel = 'DEPARTMENT';
+        } else if (normalizedWorkflowLevel === 'DIVISION_LEVEL') {
+          normalizedWorkflowLevel = 'DIVISION';
+        } else if (normalizedWorkflowLevel === 'OFFICE_LEVEL') {
+          normalizedWorkflowLevel = 'DEPARTMENT';
+        }
 
         const income = new Income({
           particulars: particulars || categoryName,
@@ -271,12 +395,13 @@ exports.uploadCorporateIncome = async (req, res) => {
           department: targetDepartment,
           division: targetDivision,
           originalLevel: targetLevel,
-          workflowLevel: targetLevel,
+          workflowLevel: normalizedWorkflowLevel,
           createdBy: userIdString,
           processBy: req.user?.userName || req.user?.username || req.user?.id || 'System Upload',
           processDate: new Date(),
-          status: isSuperAdmin ? 'System Upload' : 'Draft', // Set System Upload if Super Admin
-          isSystemGenerated: isSuperAdmin // Tag as system generated if Super Admin
+          status: isSuperAdmin && !proposalId ? 'System Upload' : 'Draft', // Set System Upload if Super Admin AND no proposalId
+          isSystemGenerated: isSuperAdmin && !proposalId, // Tag as system generated if Super Admin AND no proposalId
+          proposalId: proposalId || null
         });
         await income.save();
         results.successfullyProcessed++;
@@ -296,6 +421,9 @@ exports.uploadCorporateIncome = async (req, res) => {
     results.regions = Array.from(results.regions);
     results.success = results.successfullyProcessed;
     results.failed = results.failedRecords;
+    results.savedCount = results.successfullyProcessed;
+    results.failedCount = results.failedRecords;
+    results.totalRows = data.length; // Ensure this is sent back
     return res.status(200).json(results);
   } catch (error) {
     console.error('Error uploading corporate income:', error);

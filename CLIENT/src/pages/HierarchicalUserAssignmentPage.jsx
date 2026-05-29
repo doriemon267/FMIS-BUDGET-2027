@@ -685,10 +685,22 @@ const HierarchicalUserAssignmentPage = () => {
     // Only include organizational fields when they have values
     // Map officeId to departmentId and responsibilityCenterName to divisionName for server compatibility
     if (formData.officeId && formData.officeId.trim()) {
+      const selectedOffice = organizationStructure?.availableUnits?.offices?.find(
+        o => String(o.id) === String(formData.officeId) || String(o._id) === String(formData.officeId)
+      );
+
       // Handle composite officeId for regional offices (format: originalDeptId_regionId)
-      payload.departmentId = formData.officeId.includes('_') 
-        ? formData.officeId.split('_')[0] 
-        : formData.officeId;
+      if (formData.officeId.includes('_')) {
+        const [deptId, rid] = formData.officeId.split('_');
+        payload.departmentId = deptId;
+        payload.regionId = rid; // NEW: Pass the region component of the composite ID
+      } else {
+        payload.departmentId = formData.officeId;
+        // Lookup regionId from the selected office if available
+        if (selectedOffice && selectedOffice.regionId) {
+          payload.regionId = selectedOffice.regionId;
+        }
+      }
       payload.officeId = formData.officeId;
     }
 
@@ -714,14 +726,20 @@ const HierarchicalUserAssignmentPage = () => {
   };
 
   const normalizeAssignmentLevel = (level) => {
-    if (level === 'DIVISION') return 'RESPONSIBILITY_CENTER';
-    if (level === 'DEPARTMENT') return 'OFFICE';
-    return level;
+    if (!level) return 'OFFICE';
+    const l = String(level).toUpperCase();
+    if (l === 'DIVISION' || l === 'DIVISION_LEVEL') return 'RESPONSIBILITY_CENTER';
+    if (l === 'DEPARTMENT' || l === 'DEPARTMENT_REGIONAL_LEVEL') return 'OFFICE';
+    if (l === 'REGION') return 'OFFICE'; // Map Region-level to Office-level dropdown for consistency
+    return l;
   };
 
   const getAccessLevelInfo = (level) => {
     const normalizedLevel = normalizeAssignmentLevel(level);
-    return ACCESS_LEVELS.find(al => al.value === normalizedLevel) || ACCESS_LEVELS[0];
+    const info = ACCESS_LEVELS.find(al => al.value === normalizedLevel);
+    if (info) return info;
+    
+    return ACCESS_LEVELS[0]; // Default to RC level
   };
 
   const getConsolidationInfo = (level) => {
@@ -761,59 +779,65 @@ const HierarchicalUserAssignmentPage = () => {
 
     const { offices = [], responsibilityCenters = [] } = organizationStructure?.availableUnits || {};
 
+    const level = String(assignment.assignmentLevel || '').toUpperCase();
+
     // For FULL access, show special message
-    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'FULL') {
+    if (normalizeAssignmentLevel(level) === 'FULL') {
       return 'All Organizations';
     }
 
-    // For OWN_ONLY access
-    // if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'OWN_ONLY') {
-    //   return 'Own Records Only';
-    // }
+    // Prefer populated data from assignment object (arrays created by backend)
+    if (assignment.regions?.length > 0) {
+      const region = assignment.regions[0];
+      const regionName = region.regionName || region.Region || 'Region';
+      
+      // If it's a pure REGION assignment, return just the region
+      if (level === 'REGION' || level === 'BUDGET_AND_REVENUE_DIVISION') {
+        return `Region: ${regionName}`;
+      }
+      
+      // If it has department/office info
+      if (assignment.departments?.length > 0) {
+        const dept = assignment.departments[0];
+        const deptName = dept.departmentName || dept.Department || 'Department';
+        const displayDept = regionName && regionName !== 'All Regions' ? `${deptName} - ${regionName}` : deptName;
+        
+        // Add responsibility center if available
+        const centerName = assignment.divisions?.[0] || assignment.divisionName || assignment.responsibilityCenterName;
+        if (centerName) {
+          return `${displayDept} → ${centerName}`;
+        }
+        
+        return displayDept;
+      }
+      
+      return `Region: ${regionName}`;
+    }
 
-    // Try to find office name by ID
-    if (assignment.departmentId || assignment.officeId) {
-      const officeId = assignment.departmentId || assignment.officeId;
-      const office = offices.find(o => o.id === officeId);
+    // Fallback: Try to find office name by ID string or object
+    const getRawId = (val) => {
+      if (!val) return null;
+      if (typeof val === 'string') return val;
+      return val._id || val.id;
+    };
+
+    const officeId = getRawId(assignment.officeId) || getRawId(assignment.departmentId);
+    if (officeId) {
+      const office = offices.find(o => String(o.id) === String(officeId) || String(o._id) === String(officeId));
       if (office) {
         let display = office.name;
-
-        // Add responsibility center if available
-        if (assignment.divisionName || assignment.responsibilityCenterName) {
-          const centerName = assignment.divisionName || assignment.responsibilityCenterName;
+        const centerName = assignment.divisions?.[0] || assignment.divisionName || assignment.responsibilityCenterName;
+        if (centerName) {
           display += ` → ${centerName}`;
         }
-
         return display;
       }
     }
 
-    // For REGION level assignments
-    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'REGION' && assignment.regions?.length > 0) {
-      const region = assignment.regions[0];
-      return `Region: ${region.regionName || region.Region || 'Unknown'}`;
-    }
-
-    // For OFFICE level assignments without specific office
-    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'OFFICE') {
-      return 'Office Level Access';
-    }
-
-    // For RESPONSIBILITY_CENTER level assignments without specific center
-    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'RESPONSIBILITY_CENTER') {
-      return 'Responsibility Center Access';
-    }
-
-    // Fallback: show what we have
-    if (assignment.divisionName || assignment.responsibilityCenterName) {
-      const centerName = assignment.divisionName || assignment.responsibilityCenterName;
-      return `Division: ${centerName}`;
-    }
-
-    // If we have department info but no office mapping
-    if (assignment.departments?.length > 0) {
-      const dept = assignment.departments[0];
-      return dept.Department || dept.name || 'Department';
+    // Fallback for RC level without office mapping
+    const fallbackCenterName = assignment.divisions?.[0] || assignment.divisionName || assignment.responsibilityCenterName;
+    if (fallbackCenterName) {
+      return `Division: ${fallbackCenterName}`;
     }
 
     return 'Not Specified';
@@ -1668,8 +1692,19 @@ const HierarchicalUserAssignmentPage = () => {
 
                       return (
                         <Box component="li" key={key} {...otherProps}>
-                          <Box>
-                            <Typography variant="body1">{displayName}</Typography>
+                          <Box sx={{ width: '100%' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="body1">{displayName}</Typography>
+                              {option.isRegionOnly && (
+                                <Chip 
+                                  size="small" 
+                                  label="FULL REGION" 
+                                  color="secondary" 
+                                  variant="outlined"
+                                  sx={{ height: 20, fontSize: '0.625rem', fontWeight: 'bold' }} 
+                                />
+                              )}
+                            </Box>
                             {option.region === 'All Regions' && (
                               <Typography variant="caption" color="text.secondary">
                                 Serves multiple regions
@@ -2065,12 +2100,38 @@ const HierarchicalUserAssignmentPage = () => {
                                   // Extract only the necessary form fields from the assignment
                                   const reverseAssignmentLevelMap = {
                                     'DIVISION': 'RESPONSIBILITY_CENTER',
+                                    'DIVISION_LEVEL': 'RESPONSIBILITY_CENTER',
+                                    'RESPONSIBILITY_CENTER': 'RESPONSIBILITY_CENTER',
                                     'DEPARTMENT': 'OFFICE',
-                                    'REGION': 'FULL',
+                                    'DEPARTMENT_REGIONAL_LEVEL': 'OFFICE',
+                                    'OFFICE': 'OFFICE',
+                                    'REGION': 'OFFICE', // Map REGION level to OFFICE dropdown (which now contains regions)
                                     'BUDGET_AND_REVENUE_DIVISION': 'BUDGET_AND_REVENUE_DIVISION',
                                     'FULL': 'FULL',
                                     'OWN_ONLY': 'OWN_ONLY'
                                   };
+
+                                  // Extract officeId correctly (handle populated objects)
+                                  const getRawId = (val) => {
+                                    if (!val) return '';
+                                    if (typeof val === 'string') return val;
+                                    return val._id || val.id || '';
+                                  };
+
+                                  // For REGION level, the "Office" is actually the regionId
+                                  let effectiveOfficeId = '';
+                                  if (assignment.assignmentLevel === 'REGION' || assignment.assignmentLevel === 'BUDGET_AND_REVENUE_DIVISION') {
+                                    effectiveOfficeId = getRawId(assignment.regionId);
+                                  } else {
+                                    const deptId = getRawId(assignment.departmentId);
+                                    const regId = getRawId(assignment.regionId);
+                                    // Reconstruct composite ID if both exist (e.g. for regional departments)
+                                    if (deptId && regId && !assignment.officeId) {
+                                      effectiveOfficeId = `${deptId}_${regId}`;
+                                    } else {
+                                      effectiveOfficeId = assignment.officeId || deptId;
+                                    }
+                                  }
                                   
                                   const formFields = {
                                     userId: assignment.userId,
@@ -2080,8 +2141,8 @@ const HierarchicalUserAssignmentPage = () => {
                                     userRoles: assignment.userRoles || [],
                                     userRole: assignment.userRole || inferredRole,
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
-                                    officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
-                                    responsibilityCenterName: assignment.divisionName || '',
+                                    officeId: effectiveOfficeId, 
+                                    responsibilityCenterName: assignment.divisionName || assignment.responsibilityCenterName || '',
                                     isNIAWide: assignment.isNIAWide || false, // Load NIA-Wide flag from assignment
                                     assignedRegions: assignment.assignedRegions || [], // Load assigned regions from assignment
                                     rolePermissions: assignment.rolePermissions || {

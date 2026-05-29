@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
+import { isBRDLevelUser, isHighLevelAccess } from "../../constants/roles";
 import {
   Box,
   Paper,
@@ -101,6 +102,40 @@ const ConsolidatedReports = () => {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState([]);
   const [consolidationType, setConsolidationType] = useState("current"); // current, all, custom
+
+  // --- ROLE-BASED SCOPING LOGIC ---
+  const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
+  const scope = useMemo(() => String(hierarchical.scope || hierarchical.assignmentLevel || "").toUpperCase(), [hierarchical]);
+  const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
+  const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
+
+  // Enforce restriction: restricted roles (Preparer, Reviewer, Approver) are locked to "Current Region Only".
+  // Only BRD-level roles (Analyst, Officer, Manager, SuperAdmin) can view All Regions or Custom Selection.
+  const isRestricted = useMemo(() => {
+    if (!currentUser) return true;
+    const roles = (currentUser.Roles || []).map(r => String(r || '').replace(/\s+/g, '_').toUpperCase());
+    const hasRestrictedRole = roles.some(r => [
+      'BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER', 
+      'REVIEWER', 'APPROVER', 'BUDGET_COORDINATOR'
+    ].includes(r));
+    const hasBRDRole = roles.some(r => [
+      'SUPER_ADMIN', 'SUPERADMIN', 'BUDGET_MANAGER', 
+      'BUDGET_OFFICER', 'BUDGET_PLANNING_ANALYST', 
+      'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN'
+    ].includes(r));
+
+    if (hasBRDRole) return false;
+    if (hasRestrictedRole) return true;
+    return !isBRD;
+  }, [currentUser, isBRD]);
+
+  // Enforce lock-back to 'current' when role is restricted
+  useEffect(() => {
+    if (isRestricted && consolidationType !== 'current') {
+      setConsolidationType('current');
+      setSelectedRegions([]);
+    }
+  }, [isRestricted, consolidationType]);
 
   // Fetch active settings
   const { data: activeSettings } = useQuery({
@@ -316,10 +351,11 @@ const ConsolidatedReports = () => {
                 value={consolidationType}
                 onChange={handleConsolidationTypeChange}
                 label="Consolidation Type"
+                disabled={isRestricted}
               >
                 <MenuItem value="current">Current Region Only</MenuItem>
-                <MenuItem value="all">All Regions</MenuItem>
-                <MenuItem value="custom">Custom Selection</MenuItem>
+                {!isRestricted && <MenuItem value="all">All Regions</MenuItem>}
+                {!isRestricted && <MenuItem value="custom">Custom Selection</MenuItem>}
               </Select>
             </FormControl>
           </Grid>

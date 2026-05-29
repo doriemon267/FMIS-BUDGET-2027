@@ -1,5 +1,6 @@
 const xlsx = require("xlsx");
 const MooeProposal = require("../models/mooeProposals"); // Use correct model
+const NewProposalWorkflow = require("../models/NewProposalWorkflow");
 const ChartOfAccounts = require("../models/chartOfAccounts");
 const TitleMapping = require("../models/titleMapping");
 const Settings = require("../models/Settings");
@@ -176,6 +177,32 @@ exports.uploadMooe = async (req, res) => {
     const knownDepts = allDepartments.map(d => String(d.departmentName || d.DepartmentName || d.Department || '').toUpperCase().trim());
 
     const org = await getUploadOrgContext(req);
+    const proposalId = req.body.proposalId || req.query.proposalId;
+    let strictScope = null;
+    if (proposalId) {
+      const proposal = await NewProposalWorkflow.findById(proposalId).populate('region').lean();
+      if (proposal) {
+        let regionName = '';
+        if (proposal.region) {
+          if (typeof proposal.region === 'string') {
+            regionName = proposal.region;
+          } else if (typeof proposal.region === 'object') {
+            regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || '';
+          } else {
+            const RegionModel = require('../models/Region');
+            const regionDoc = await RegionModel.findById(proposal.region).lean();
+            if (regionDoc) {
+              regionName = regionDoc.Region || '';
+            }
+          }
+        }
+        strictScope = {
+          region: regionName,
+          department: proposal.department,
+          division: proposal.division
+        };
+      }
+    }
     let success = 0, failed = 0, errors = [];
     let currentRegion = '';
     let currentDept = '';
@@ -232,11 +259,63 @@ exports.uploadMooe = async (req, res) => {
           }
         }
 
+        const isSuperAdmin = req.user?.Roles?.includes('SUPER_ADMIN');
+
+        // Enforce organizational scope for non-SuperAdmins
+        if (!isSuperAdmin) {
+          // 1. If linked to a proposal, it MUST match the proposal's scope
+          if (strictScope) {
+            // Check Region
+            if (strictScope.region && targetRegion && targetRegion.toUpperCase() !== strictScope.region.toUpperCase()) {
+              throw new Error(`Unauthorized: This proposal is for ${strictScope.region}. Row has ${targetRegion}.`);
+            }
+            // Check Department
+            if (strictScope.department && targetDepartment && targetDepartment.toUpperCase() !== strictScope.department.toUpperCase()) {
+              throw new Error(`Unauthorized: This proposal is for ${strictScope.department}. Row has ${targetDepartment}.`);
+            }
+            // Check Division
+            if (strictScope.division && targetDivision && targetDivision.toUpperCase() !== strictScope.division.toUpperCase()) {
+              throw new Error(`Unauthorized: This proposal is for ${strictScope.division}. Row has ${targetDivision}.`);
+            }
+
+            // Automatically ensure organizational context matches proposal if it was missing in Excel
+            targetRegion = strictScope.region || targetRegion;
+            targetDepartment = strictScope.department || targetDepartment;
+            targetDivision = strictScope.division || targetDivision;
+          } 
+          // 2. If no proposal, check against user's assigned context
+          else {
+             if (org.department && targetDepartment && targetDepartment.toUpperCase() !== org.department.toUpperCase()) {
+                throw new Error(`Unauthorized: You are assigned to ${org.department}. Row has ${targetDepartment}.`);
+             }
+             // Fallback to assigned context if missing
+             if (!targetRegion) targetRegion = org.region;
+             if (!targetDepartment) targetDepartment = org.department;
+             if (!targetDivision) targetDivision = org.division;
+          }
+        }
+
         if (!targetRegion && !targetDepartment && !targetDivision) {
           throw new Error('Mission region/organizational context. Please specify REGION or RESPONSIBILITY CENTER.');
         }
 
-        const isSuperAdmin = req.user?.Roles?.includes('SUPER_ADMIN');
+        // Check for existing record to prevent duplicates
+        const existingMooe = await MooeProposal.findOne({
+          fiscalYear: activeSettings.fiscalYear,
+          budgetType: activeSettings.budgetType,
+          region: targetRegion,
+          department: targetDepartment,
+          division: targetDivision,
+          sublineItem: sublineItem,
+          accountingTitle: resolvedMapping.accountingTitle || accountingTitle,
+          uacsCode: resolvedMapping.uacsCode,
+          amount: amount,
+          proposalId: proposalId || null
+        });
+
+        if (existingMooe) {
+          throw new Error('Duplicate entry: This item has already been uploaded.');
+        }
 
         await MooeProposal.create({
           sublineItem,
@@ -254,8 +333,9 @@ exports.uploadMooe = async (req, res) => {
           processBy: req.user?.username || req.user?.name || req.user?.id || 'System',
           processDate: new Date(),
           createdBy: req.user?.id || req.user?.userId || 'system',
-          status: isSuperAdmin ? 'System Upload' : 'Draft',
-          isSystemGenerated: isSuperAdmin
+          status: isSuperAdmin && !proposalId ? 'System Upload' : 'Draft',
+          isSystemGenerated: isSuperAdmin && !proposalId,
+          proposalId: proposalId || null
         });
         success++;
       } catch (error) {
@@ -264,7 +344,16 @@ exports.uploadMooe = async (req, res) => {
       }
     }
 
-    return res.json({ message: "File processed successfully", success, failed, errors, regions: [org.region] });
+    return res.json({ 
+      message: "File processed successfully", 
+      success, 
+      savedCount: success,
+      failed, 
+      failedCount: failed,
+      totalRows: sheetData.length,
+      errors, 
+      regions: [org.region] 
+    });
   } catch (error) {
     return res.status(500).json({ error: "Internal server error", message: error.message });
   }

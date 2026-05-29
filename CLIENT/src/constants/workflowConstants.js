@@ -96,10 +96,11 @@ export const WORKFLOW_STATUSES = {
   AT_OFFICER: 'At Officer',
   FINALIZED: 'Finalized',
   RETURNED: 'Returned',
-  REJECTED: 'Rejected'
+  REJECTED: 'Rejected',
+  MERGED: 'Merged'
 };
 
-// DEPARTMENT_REGIONAL_LEVEL workflow (Office level) - 5 steps (skips REVIEWER)
+// DEPARTMENT_REGIONAL_LEVEL workflow (Office level) - 6 steps
 export const OFFICE_WORKFLOW_STEPS = [
   {
     step: 1,
@@ -111,6 +112,14 @@ export const OFFICE_WORKFLOW_STEPS = [
   },
   {
     step: 2,
+    role: WORKFLOW_ROLES.BUDGET_REVIEWER,
+    label: 'Budget Reviewer',
+    description: 'Reviews proposal quality',
+    icon: 'visibility',
+    statuses: ['Submitted for Review']
+  },
+  {
+    step: 3,
     role: WORKFLOW_ROLES.BUDGET_APPROVER,
     label: 'Budget Approver',
     description: 'Approves proposal',
@@ -118,7 +127,7 @@ export const OFFICE_WORKFLOW_STEPS = [
     statuses: ['Submitted for Approval']
   },
   {
-    step: 3,
+    step: 4,
     role: WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST,
     label: 'Budget Planning Analyst',
     description: 'Technical review',
@@ -126,7 +135,7 @@ export const OFFICE_WORKFLOW_STEPS = [
     statuses: ['At Analyst']
   },
   {
-    step: 4,
+    step: 5,
     role: WORKFLOW_ROLES.BUDGET_OFFICER,
     label: 'Budget Officer',
     description: 'Operational approval',
@@ -134,7 +143,7 @@ export const OFFICE_WORKFLOW_STEPS = [
     statuses: ['At Officer']
   },
   {
-    step: 5,
+    step: 6,
     role: WORKFLOW_ROLES.BUDGET_MANAGER,
     label: 'Budget Manager',
     description: 'Final executive approval',

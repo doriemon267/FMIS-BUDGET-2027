@@ -191,13 +191,33 @@ const normalizeRecordKeys = (rec) => {
   return out;
 };
 
-const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear, processBy, userAccess = {}) => {
+const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear, processBy, userAccess = {}, activeDepartment = null, activeDivision = null) => {
   const errors = [];
   const warnings = [];
 
   // Normalize column names from Excel and merge into record
   const normalized = normalizeRecordKeys(record);
   Object.assign(record, normalized);
+
+  // Validate/Assign Department if activeDepartment is provided
+  if (activeDepartment && activeDepartment.trim() !== '') {
+    const deptStr = record.Department ? String(record.Department).trim() : '';
+    if (deptStr && deptStr.toLowerCase() !== activeDepartment.trim().toLowerCase()) {
+      errors.push(`Department mismatch: Excel row has Department "${deptStr}" but bulk upload is set to "${activeDepartment.trim()}"`);
+    } else {
+      record.Department = activeDepartment.trim();
+    }
+  }
+
+  // Validate/Assign Division if activeDivision is provided
+  if (activeDivision && activeDivision.trim() !== '') {
+    const divStr = record.Division ? String(record.Division).trim() : '';
+    if (divStr && divStr.toLowerCase() !== activeDivision.trim().toLowerCase()) {
+      errors.push(`Division mismatch: Excel row has Division "${divStr}" but bulk upload is set to "${activeDivision.trim()}"`);
+    } else {
+      record.Division = activeDivision.trim();
+    }
+  }
 
   // SG and Step: accept numbers or strings (Excel may return either)
   const sgVal = record.SG;

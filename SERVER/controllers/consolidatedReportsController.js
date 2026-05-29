@@ -14,6 +14,93 @@ try {
   MuhammaraRecipe = null;
 }
 
+// ─── Workflow-status-based scoping ───────────────────────────────────────────
+// Returns the set of NewProposalWorkflow IDs that are visible to the requesting
+// user given their role.  When the user is a Super Admin / BRD role the
+// function returns null, meaning "no extra filter needed – show everything".
+// For all other roles it returns an array of ObjectIds (may be empty).
+const VISIBLE_STATUSES_BY_ROLE = {
+  BUDGET_PREPARER:         ['FORWARDED_TO_REVIEWER','FORWARDED_TO_APPROVER','FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PREPARER','RETURNED_TO_REVIEWER','RETURNED_TO_APPROVER','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_REVIEWER:         ['FORWARDED_TO_REVIEWER','RETURNED_TO_REVIEWER','FORWARDED_TO_APPROVER','RETURNED_TO_APPROVER','FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_APPROVER:         ['FORWARDED_TO_APPROVER','RETURNED_TO_APPROVER','FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_PLANNING_ANALYST: ['FORWARDED_TO_BRD_ANALYST','FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_PLANNING_ANALYST','RETURNED_TO_OFFICER'],
+  BUDGET_OFFICER:          ['FORWARDED_TO_BRD_OFFICER','FORWARDED_TO_BRD_MANAGER','FINALIZED','RETURNED_TO_OFFICER'],
+  BUDGET_MANAGER:          null,  // full access
+  SUPER_ADMIN:             null,  // full access
+  OVERALL_BUDGET_APPROVER: null,  // full access
+};
+
+const FULL_ACCESS_ROLES = new Set([
+  'SUPER_ADMIN','SUPER ADMIN','BUDGET_MANAGER','BUDGET MANAGER',
+  'OVERALL_BUDGET_APPROVER','OVERALL BUDGET APPROVER',
+  'BUDGET_ADMIN','BUDGET ADMIN',
+]);
+
+const normalizeRole = (r) => String(r || '').trim().replace(/\s+/g, '_').toUpperCase();
+
+const getVisibleWorkflowIds = async (req, { fiscalYear, budgetType, regions } = {}) => {
+  const userRoles = (req.user?.Roles || req.user?.roles || []).map(normalizeRole);
+
+  // Super admins / BRD full access – no additional filter
+  if (userRoles.some(r => FULL_ACCESS_ROLES.has(r))) return null;
+
+  // Determine the most-permissive visible-statuses set for this user
+  let visibleStatuses = null;
+  for (const [roleKey, statuses] of Object.entries(VISIBLE_STATUSES_BY_ROLE)) {
+    if (userRoles.includes(roleKey)) {
+      if (statuses === null) return null; // full access
+      if (!visibleStatuses) {
+        visibleStatuses = new Set(statuses);
+      } else {
+        statuses.forEach(s => visibleStatuses.add(s));
+      }
+    }
+  }
+
+  // If the user has no recognized role, default to PREPARER-level visibility
+  if (!visibleStatuses) {
+    visibleStatuses = new Set(VISIBLE_STATUSES_BY_ROLE.BUDGET_PREPARER);
+  }
+
+  const npwQuery = { status: { $in: [...visibleStatuses] } };
+  if (fiscalYear) npwQuery.fiscalYear = Number(fiscalYear) || parseInt(fiscalYear, 10);
+  if (budgetType) {
+    const typeMap = { NEP: 'NEP', GAA: 'GAA' };
+    npwQuery.modelType = typeMap[String(budgetType).toUpperCase()] || 'Initial';
+  }
+  if (regions && regions !== 'all') {
+    const regionList = Array.isArray(regions) ? regions : [regions];
+    const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
+    if (regionDocs.length) npwQuery.region = { $in: regionDocs.map(r => r._id) };
+  }
+
+  // For PREPARER / REVIEWER / APPROVER, also restrict to their own department/division
+  const isPreparerReviewer = userRoles.some(r => ['BUDGET_PREPARER','BUDGET_REVIEWER','BUDGET_APPROVER'].includes(r));
+  if (isPreparerReviewer) {
+    const userId = String(req.user?.id || req.user?.userId || '');
+    if (userId) {
+      try {
+        const hua = await HierarchicalUserAssignment.findOne({ userId, isActive: true })
+          .populate('departmentId', 'Department departmentName DepartmentName')
+          .lean();
+        if (hua) {
+          const dept = hua.departmentId?.Department || hua.departmentId?.departmentName || hua.departmentId?.DepartmentName;
+          const div  = hua.divisionName || '';
+          const level = String(hua.assignmentLevel || '').toUpperCase();
+          if (dept && !['BUDGET_AND_REVENUE_DIVISION','REGION','FULL'].includes(level)) {
+            npwQuery.department = dept;
+            if (div && level === 'DIVISION') npwQuery.division = div;
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  const docs = await NewProposalWorkflow.find(npwQuery).select('_id').lean();
+  return docs.map(d => d._id);
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 const consolidatedReportsController = {
   getConsolidatedData: async (req, res) => {
     try {
@@ -67,6 +154,32 @@ const consolidatedReportsController = {
       if (division && !mooeQuery.division && !mooeQuery.$and) {
         mooeQuery.division = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
       }
+
+      // ── Workflow-status scope filter ─────────────────────────────────────
+      // Only show MOOE data whose parent workflow has been submitted/forwarded
+      // to (or past) the requesting user's role.  Proposals still in DRAFT are
+      // invisible to everyone except the preparer who owns them.
+      const visibleWorkflowIds = await getVisibleWorkflowIds(req, { fiscalYear, budgetType, regions });
+      if (visibleWorkflowIds !== null) {
+        // null  → full access (super-admin / BRD roles); skip extra filter
+        if (visibleWorkflowIds.length === 0) {
+          // User has a scoped role but no visible workflows yet
+          return res.status(200).json({
+            success: true,
+            data: [],
+            summary: { totalRegions: 0, totalCategories: 0, totalEntries: 0, grandTotal: 0 }
+          });
+        }
+        // Merge into existing query — keep the $and structure if already present
+        const wfFilter = { workflowRef: { $in: visibleWorkflowIds } };
+        if (mooeQuery.$and) {
+          mooeQuery.$and.push(wfFilter);
+        } else {
+          mooeQuery.workflowRef = { $in: visibleWorkflowIds };
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       const mooeData = await MooeProposal.find(mooeQuery).lean();
       
       if (!Array.isArray(mooeData) || mooeData.length === 0) {

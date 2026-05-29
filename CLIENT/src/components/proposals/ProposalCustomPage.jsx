@@ -33,6 +33,7 @@ import {
   Typography,
   MenuItem,
   CircularProgress,
+  LinearProgress,
   Paper,
   Tooltip,
   Accordion,
@@ -57,6 +58,12 @@ import {
   SpeedDialAction,
   SpeedDialIcon,
   InputAdornment,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import { useUser } from "../../context/UserContext";
@@ -90,6 +97,9 @@ import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 import { useUserRestrictions } from "../../hooks/useUserRestrictions";
 import { useProposalLock } from "../../hooks/useProposalLock";
 import { styled } from "@mui/material/styles";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import DownloadIcon from "@mui/icons-material/Download";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 
 const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
 
@@ -142,6 +152,15 @@ const ProposalCustomPage = ({
   const [budgetDeficit, setBudgetDeficit] = useState(null);
   const [currentProposalId, setCurrentProposalId] = useState(null);
   const [isResumingDraft, setIsResumingDraft] = useState(true);
+
+  // Bulk Upload state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadType, setUploadType] = useState("Income"); // "Income", "MOOE", "Capital Outlay"
+  const [uploadResult, setUploadResult] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // ================= CONCURRENCY CONTROL =================
   const { lockStatus, acquireLock, releaseLock, hasLock } = useProposalLock(currentProposalId);
@@ -567,6 +586,111 @@ const ProposalCustomPage = ({
     const nextItems = items || {};
     setGroupedItems((prev) => (prev === nextItems ? prev : nextItems));
   }, []);
+
+  const handleDownloadTemplate = async () => {
+    let endpoint = "";
+    if (uploadType === "Income") {
+      endpoint = "/api/income/corporate-income/template";
+    } else if (uploadType === "MOOE") {
+      endpoint = "/api/income/mooe/template";
+    } else if (uploadType === "Capital Outlay") {
+      endpoint = "/api/capitaloutlay/template";
+    }
+
+    try {
+      const response = await api.get(endpoint, {
+        responseType: 'blob',
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${uploadType.toLowerCase()}-template.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Template download error:", error);
+      toast.error("Failed to download template. Please try again.");
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile) {
+      toast.error("Please select a file first");
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadResult(null);
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    if (currentProposalId) {
+      formData.append("proposalId", currentProposalId);
+    }
+
+    // Add necessary context for the upload
+    formData.append("fiscalYear", activeFiscalYear);
+    formData.append("budgetType", activeBudgetType || "Initial");
+    formData.append("region", activeRegionName || "CENTRAL OFFICE");
+
+    let endpoint = "";
+    if (uploadType === "Income") {
+      endpoint = "/api/income/corporate-income/upload";
+    } else if (uploadType === "MOOE") {
+      endpoint = "/api/income/mooe/upload";
+    } else if (uploadType === "Capital Outlay") {
+      endpoint = "/api/capitaloutlay/upload";
+    }
+
+    try {
+      const response = await api.post(endpoint, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setUploadProgress(progress);
+        },
+      });
+
+      setUploadResult({
+        success: true,
+        message: response.data.message || "Upload completed successfully",
+        details: response.data,
+      });
+      
+      toast.success("Bulk upload successful!");
+      
+      // Invalidate relevant queries to refresh data
+      queryClient.invalidateQueries(["income-items"]);
+      queryClient.invalidateQueries(["income-categories"]);
+      queryClient.invalidateQueries(["mooeData"]);
+      queryClient.invalidateQueries(["mooe"]);
+      queryClient.invalidateQueries(["capital-outlays"]);
+      queryClient.invalidateQueries(["capital-outlay"]);
+      queryClient.invalidateQueries(["allProposals"]);
+      queryClient.invalidateQueries(["proposals"]);
+      queryClient.invalidateQueries(["workflowProposals"]);
+      fetchAllData(); // Manually trigger data refresh
+      
+    } catch (error) {
+      console.error("Upload error:", error);
+      setUploadResult({
+        success: false,
+        message: error.response?.data?.message || "Error uploading file",
+        error: error.response?.data?.error || error.message,
+      });
+      toast.error("Upload failed. Please check the file and try again.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   // Enhanced UX state
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -2445,6 +2569,30 @@ const ProposalCustomPage = ({
                 </span>
               </Tooltip>
             )}
+
+            {currentProposalId && (
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<CloudUploadIcon />}
+                onClick={() => {
+                  setUploadType(activeTab);
+                  setUploadDialogOpen(true);
+                  setSelectedFile(null);
+                  setUploadResult(null);
+                }}
+                sx={{
+                  ml: 1,
+                  backgroundColor: "#2d5016",
+                  fontWeight: 600,
+                  borderRadius: "6px",
+                  "&:hover": { backgroundColor: "#1e3a0f" }
+                }}
+              >
+                Upload Excel
+              </Button>
+            )}
+
             {/* Show Proposal Linked chip only for Super Admin, hide for Budget Preparer */}
             {currentProposalId && isSuperAdmin && (
               <Tooltip
@@ -3163,7 +3311,7 @@ const ProposalCustomPage = ({
           </Paper>
 
           {/* Tab Content Rendering */}
-          <Box sx={{ mt: 3, mb: 3, width: "100%" }}>
+          <Box sx={{ mt: 3, mb: 3, width: "100%" }} key={refreshKey}>
             {activeTab === "Income" && (
               <IncomeTable
                 proposalId={
@@ -3607,6 +3755,151 @@ const ProposalCustomPage = ({
             <ListItemText primary="Export as Excel" />
           </MenuItem>
         </Menu>
+
+        {/* Bulk Upload Dialog */}
+        <Dialog 
+          open={uploadDialogOpen} 
+          onClose={() => !isUploading && setUploadDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 1 }}>
+            <CloudUploadIcon color="primary" />
+            Bulk Upload {uploadType}
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Upload an Excel file to bulk create {uploadType} items. These will be automatically linked to the current proposal.
+              </Typography>
+              
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadTemplate}
+                sx={{ mb: 3, mt: 1 }}
+              >
+                Download Excel Template
+              </Button>
+
+              <Box 
+                sx={{ 
+                  p: 3, 
+                  border: "2px dashed #e0e0e0", 
+                  borderRadius: 2, 
+                  textAlign: "center",
+                  bgcolor: "#fafafa",
+                  mb: 2,
+                  cursor: "pointer",
+                  "&:hover": { borderColor: "#1976d2", bgcolor: "#f5f9ff" }
+                }}
+                onClick={() => document.getElementById("bulk-upload-input").click()}
+              >
+                <input
+                  type="file"
+                  id="bulk-upload-input"
+                  hidden
+                  accept=".xlsx, .xls"
+                  onChange={(e) => setSelectedFile(e.target.files[0])}
+                />
+                <CloudUploadIcon sx={{ fontSize: 48, color: "#bdbdbd", mb: 1 }} />
+                <Typography variant="body1" fontWeight={500}>
+                  {selectedFile ? selectedFile.name : "Click to select Excel file"}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Supported formats: .xlsx, .xls
+                </Typography>
+              </Box>
+
+              {isUploading && (
+                <Box sx={{ width: "100%", mt: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1, display: "flex", justifyContent: "space-between" }}>
+                    <span>Uploading...</span>
+                    <span>{uploadProgress}%</span>
+                  </Typography>
+                  <LinearProgress variant="determinate" value={uploadProgress} />
+                </Box>
+              )}
+
+              {uploadResult && (
+                <Box sx={{ mt: 2 }}>
+                  <Alert severity={uploadResult.success ? "success" : "error"}>
+                    {uploadResult.message}
+                  </Alert>
+                  
+                  {uploadResult.details && (
+                    <Box sx={{ mt: 1, p: 1.5, bgcolor: "#f8fafc", borderRadius: 1, border: "1px solid #e2e8f0" }}>
+                      <Typography variant="caption" sx={{ display: "block", fontWeight: 600 }}>
+                        Upload Summary:
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: "block" }}>
+                        - Total Processed: {uploadResult.details.totalRows || 0}
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: "block", color: "success.main" }}>
+                        - Successfully Saved: {uploadResult.details.savedCount ?? uploadResult.details.success ?? 0}
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: "block", color: "error.main" }}>
+                        - Failed/Skipped: {uploadResult.details.failedCount ?? uploadResult.details.failed ?? uploadResult.details.duplicatesCount ?? 0}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {uploadResult.details && uploadResult.details.errors && uploadResult.details.errors.length > 0 && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1, color: "error.main" }}>
+                        ⚠️ Errors Found ({uploadResult.details.errors.length}):
+                      </Typography>
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 200, overflowY: "auto" }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f8fafc", fontSize: "0.75rem" }}>Row</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f8fafc", fontSize: "0.75rem" }}>Category / Item</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f8fafc", fontSize: "0.75rem" }}>Error Message</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {uploadResult.details.errors.map((err, idx) => (
+                              <TableRow key={idx} sx={{ bgcolor: idx % 2 === 0 ? "#fafafa" : "white" }}>
+                                <TableCell sx={{ fontSize: "0.7rem" }}>{err.row}</TableCell>
+                                <TableCell sx={{ fontSize: "0.7rem" }}>{err.category || err.sublineItem || err.title || "N/A"}</TableCell>
+                                <TableCell sx={{ fontSize: "0.7rem", color: "error.main" }}>{err.error}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button 
+              onClick={() => {
+                setUploadDialogOpen(false);
+                if (uploadResult?.success) {
+                  setRefreshKey(prev => prev + 1);
+                }
+              }} 
+              disabled={isUploading}
+            >
+              {uploadResult ? "Close" : "Cancel"}
+            </Button>
+            {!uploadResult && (
+              <Button 
+                onClick={handleFileUpload} 
+                variant="contained" 
+                disabled={!selectedFile || isUploading}
+                startIcon={isUploading ? <CircularProgress size={20} /> : <CloudUploadIcon />}
+              >
+                Upload Now
+              </Button>
+            )}
+          </DialogActions>
+        </Dialog>
 
         <CustomSnackbar
           open={snackbar.open}
