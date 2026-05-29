@@ -235,27 +235,38 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
           if (row?.Department) {
             const departmentsWithDivisions =
               response.data.data.availableUnits?.departmentsWithDivisions || [];
-            const matched = departmentsWithDivisions.find(
+            const matched = departmentsWithDivisions.filter(
               (d) =>
                 String(d.departmentName).toLowerCase() ===
                 String(row.Department).toLowerCase()
             );
 
-            if (matched) {
-              const divisions =
-                matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+            if (matched && matched.length > 0) {
+              // Aggregate all divisions from all mappings and remove duplicates
+              const allDivisions = new Set();
+              matched.forEach((mapping) => {
+                mapping.divisions?.forEach((div) => {
+                  if (div.name) allDivisions.add(div.name);
+                });
+              });
+              const divisions = Array.from(allDivisions).sort();
               setDivisionOptions(divisions);
 
               // Set sections if division exists
               if (row?.Division) {
-                const matchedDiv = matched.divisions.find(
-                  (div) => div.name === row.Division
+                const matchedDept = matched.find((m) =>
+                  m.divisions?.some((div) => div.name === row.Division)
                 );
-                if (matchedDiv && matchedDiv.sections) {
-                  const sections = matchedDiv.sections
-                    .map((section) => section.name)
-                    .filter(Boolean);
-                  setSectionOptions(sections);
+                if (matchedDept) {
+                  const matchedDiv = matchedDept.divisions.find(
+                    (div) => div.name === row.Division
+                  );
+                  if (matchedDiv && matchedDiv.sections) {
+                    const sections = matchedDiv.sections
+                      .map((section) => section.name)
+                      .filter(Boolean);
+                    setSectionOptions(sections);
+                  }
                 }
               }
             }
@@ -375,17 +386,24 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
         }
 
         // Find the department in the hierarchical structure
+        // Aggregates divisions from ALL regional mappings for departments like IMO
         const departmentsWithDivisions =
           organizationStructure?.availableUnits?.departmentsWithDivisions || [];
-        const matched = departmentsWithDivisions.find(
+        const matched = departmentsWithDivisions.filter(
           (d) =>
             String(d.departmentName).toLowerCase() ===
             String(deptName).toLowerCase()
         );
 
-        if (matched) {
-          const divisions =
-            matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+        if (matched && matched.length > 0) {
+          // Aggregate all divisions from all mappings and remove duplicates
+          const allDivisions = new Set();
+          matched.forEach((mapping) => {
+            mapping.divisions?.forEach((div) => {
+              if (div.name) allDivisions.add(div.name);
+            });
+          });
+          const divisions = Array.from(allDivisions).sort();
           setDivisionOptions(divisions);
         } else {
           if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
@@ -464,17 +482,24 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     const deptValue = watch("Department");
     if (deptValue && organizationStructure) {
       // Find the department in the hierarchical structure
+      // Aggregates divisions from ALL regional mappings for departments like IMO
       const departmentsWithDivisions =
         organizationStructure?.availableUnits?.departmentsWithDivisions || [];
-      const matched = departmentsWithDivisions.find(
+      const matched = departmentsWithDivisions.filter(
         (d) =>
           String(d.departmentName).toLowerCase() ===
           String(deptValue).toLowerCase()
       );
 
-      if (matched) {
-        const divisions =
-          matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+      if (matched && matched.length > 0) {
+        // Aggregate all divisions from all mappings and remove duplicates
+        const allDivisions = new Set();
+        matched.forEach((mapping) => {
+          mapping.divisions?.forEach((div) => {
+            if (div.name) allDivisions.add(div.name);
+          });
+        });
+        const divisions = Array.from(allDivisions).sort();
         setDivisionOptions(divisions);
       } else {
         if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
