@@ -1100,10 +1100,9 @@ router.get(
       }));
 
       const formattedDepartments = departments.map(dept => {
-        // Check if this department has subdivisions
+        // Check if this department has subdivisions (meaning it has a divisions array with items)
         const hasSubDivisions = mappings.some(mapping =>
           mapping.departmentId.toString() === dept._id.toString() &&
-          mapping.hasSubDivisions &&
           mapping.divisions &&
           mapping.divisions.length > 0
         );
@@ -1119,15 +1118,16 @@ router.get(
       const formattedMappings = mappings.map(mapping => {
         const rid = mapping.regionId ? mapping.regionId.toString() : null;
         const regionName = mapping.regionName || (rid ? regionIdToName.get(rid) : null) || '';
+        const divisionsList = mapping.divisions ? mapping.divisions.filter(div => div.isActive !== false).map(div => ({
+          name: div.name,
+          code: div.code,
+          sections: div.sections ? div.sections.filter(section => section.isActive !== false) : []
+        })) : [];
         return {
           departmentId: mapping.departmentId,
           departmentName: mapping.departmentName,
-          divisions: mapping.divisions ? mapping.divisions.filter(div => div.isActive !== false).map(div => ({
-            name: div.name,
-            code: div.code,
-            sections: div.sections ? div.sections.filter(section => section.isActive !== false) : []
-          })) : [],
-          hasSubDivisions: mapping.hasSubDivisions || false,
+          divisions: divisionsList,
+          hasSubDivisions: mapping.hasSubDivisions !== undefined ? mapping.hasSubDivisions : (divisionsList.length > 0),
           regionId: mapping.regionId,
           regionName: regionName
         };
@@ -1135,7 +1135,7 @@ router.get(
 
       // Get departments with divisions
       const departmentsWithDivisions = formattedMappings.filter(mapping =>
-        mapping.hasSubDivisions && mapping.divisions.length > 0
+        mapping.divisions && mapping.divisions.length > 0
       );
 
       const response = {

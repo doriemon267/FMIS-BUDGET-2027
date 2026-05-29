@@ -326,7 +326,7 @@ const budgetRoleVisibilityControl = () => {
         case 'BUDGET PREPARER':
           // STEP 1 of 6-step workflow: [BUDGET PREPARER] → BUDGET REVIEWER → BUDGET APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // BUDGET PREPARER creates drafts and can see all their proposals
-          visibilityFilter = {
+          const preparerBaseFilter = {
             $or: [
               // Own proposals created by this user
               { createdByUserId: userId },
@@ -336,10 +336,23 @@ const budgetRoleVisibilityControl = () => {
                 { processBy: userId },
                 { processBy: userName }
               ]},
-              // Organizational scope proposals (Acts as intersection)
-              ...(Object.keys(orgScope).length > 0 ? [orgScope] : [])
+              // Show nothing if no orgScope matches, or allow viewing based on explicit assignment
+              ...(Object.keys(orgScope).length === 0 ? [{ createdByUserId: userId }] : [])
             ]
           };
+
+          // CRITICAL: Strictly intersect with organizational scope for BUDGET PREPARER
+          // This ensures a preparer from Division 2 CANNOT see Division 1 even if they used to be there
+          if (Object.keys(orgScope).length > 0) {
+            visibilityFilter = {
+              $and: [
+                preparerBaseFilter,
+                orgScope // Intersection: Must be (Own/Assigned) AND within (Org Scope)
+              ]
+            };
+          } else {
+            visibilityFilter = preparerBaseFilter;
+          }
           break;
 
         case 'BUDGET REVIEWER':

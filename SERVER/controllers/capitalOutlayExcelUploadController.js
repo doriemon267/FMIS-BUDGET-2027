@@ -148,6 +148,15 @@ const getUploadOrgContext = async (req) => {
  * TITLE | Subline Item | Accounting Title | Particulars | INCOME | SUBSIDY | TOTAL
  */
 exports.uploadCapitalOutlay = async (req, res) => {
+  // Drop the old index if it exists to prevent duplicate key errors with category
+  try {
+    const mongoose = require("mongoose");
+    await mongoose.model("CapitalOutlay").collection.dropIndex("proposalId_1_uacsCode_1_region_1_fiscalYear_1_sublineItem_1");
+    console.log("✅ Successfully dropped old CapitalOutlay unique index in upload controller.");
+  } catch (err) {
+    // Ignore if index doesn't exist or already dropped
+  }
+
   try {
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
@@ -423,8 +432,14 @@ exports.uploadCapitalOutlay = async (req, res) => {
             createdBy: req.user?.id || req.user?.userId || "system",
             status: isSuperAdmin && !proposalId ? "System Upload" : "Draft",
             isSystemGenerated: isSuperAdmin && !proposalId,
-            proposalId: proposalId || null
+            proposalId: proposalId || null,
+            workflowRef: proposalId || null
           });
+        } else {
+          // Backfill workflowRef if it was missing
+          if (!masterRecord.workflowRef && proposalId) {
+            masterRecord.workflowRef = proposalId;
+          }
         }
 
         // 2. DETAIL RECORD (CapitalOutlayDetails) - Check for duplicates first

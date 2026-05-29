@@ -81,8 +81,19 @@ const enableFileLogs = process.env.ENABLE_FILE_LOGS === 'true' ||
 
 if (enableFileLogs) {
   transports.push(
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
+    new winston.transports.File({ 
+      filename: 'logs/error.log', 
+      level: 'error',
+      maxsize: 10 * 1024 * 1024, // 10MB
+      maxFiles: 5,
+      tailable: true
+    }),
+    new winston.transports.File({ 
+      filename: 'logs/combined.log',
+      maxsize: 20 * 1024 * 1024, // 20MB
+      maxFiles: 5,
+      tailable: true
+    })
   );
 }
 

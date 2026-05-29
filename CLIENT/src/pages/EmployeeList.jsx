@@ -148,8 +148,11 @@ const EmployeeList = () => {
   // Fetch employee statistics based on active region and hierarchical access
   useEffect(() => {
     const fetchEmployeeStats = async () => {
-      // Allow BRD-level users to view stats without an activeRegion (shows all regions)
-      if (!activeRegion && userAccessLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
+      const hasDepartmentOrDivision = !!(userDepartment || userDivision);
+      const isExemptFromRegionSelection = userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' || userAccessLevel === 'FULL' || hasDepartmentOrDivision;
+
+      // Allow BRD-level/Full-access users or scoped users to view stats without an activeRegion
+      if (!activeRegion && !isExemptFromRegionSelection) {
         setEmployeeStats({
           total: 0,
           active: 0,
@@ -564,7 +567,7 @@ const EmployeeList = () => {
 
   return (
     <>
-      {(!activeRegion && userAccessLevel !== 'BUDGET_AND_REVENUE_DIVISION') ? (
+      {(!activeRegion && userAccessLevel !== 'BUDGET_AND_REVENUE_DIVISION' && userAccessLevel !== 'FULL' && !userDepartment && !userDivision) ? (
         <Fade in={true} timeout={800}>
           <Paper
             elevation={3}
@@ -799,7 +802,7 @@ const EmployeeList = () => {
                         Employee Management
                       </Typography>
                       <Typography variant="h6" sx={{ opacity: 0.9 }}>
-                        {activeRegion || userRegion
+                        {activeRegion || userRegion || userDepartment || userDivision
                           ? (userAccessLevel === 'DIVISION' || userAccessLevel === 'DEPARTMENT')
                             ? `Managing employees in ${displayInfo.scope}`
                             : `Managing employees in ${regionName || userRegion || (activeRegion?.name || activeRegion?.regionName || activeRegion?.Region)} region`

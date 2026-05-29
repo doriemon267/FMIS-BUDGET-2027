@@ -84,6 +84,11 @@ router.get('/proposals/pending-review', newProposalWorkflowController.getPending
 router.get('/proposals/preparer-create-access', newProposalWorkflowController.getPreparerCreateProposalAccess);
 // Check if there are FINALIZED proposals (optionally by fiscalYear)
 router.get('/proposals/has-finalized', newProposalWorkflowController.hasFinalizedProposals);
+
+// ── Merge route: MUST be BEFORE generic /:id routes to avoid param clash ──────
+router.post('/proposals/merge', newProposalWorkflowController.mergeProposals);
+router.post('/proposals/:id/unconsolidate', newProposalWorkflowController.unconsolidateProposal);
+
 // Specific routes with parameters must come BEFORE generic /:id routes
 router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
 router.get('/proposals/:id/analysts-for-proposal', newProposalWorkflowController.getAnalystsForProposal);

@@ -335,7 +335,8 @@ exports.uploadMooe = async (req, res) => {
           createdBy: req.user?.id || req.user?.userId || 'system',
           status: isSuperAdmin && !proposalId ? 'System Upload' : 'Draft',
           isSystemGenerated: isSuperAdmin && !proposalId,
-          proposalId: proposalId || null
+          proposalId: proposalId || null,
+          workflowRef: proposalId || null
         });
         success++;
       } catch (error) {

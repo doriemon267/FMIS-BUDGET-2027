@@ -53,13 +53,13 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
         key.region === 1 &&
         key.fiscalYear === 1 &&
         key.sublineItem === 1 &&
-        (!key.proposalId || key.proposalId !== 1)
+        !key.category
       );
     });
 
     try {
       await capitalOutlayCollection.createIndex(
-        { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1 },
+        { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1, category: 1 },
         {
           unique: true,
           background: true,
@@ -69,6 +69,7 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
             region: { $exists: true },
             fiscalYear: { $exists: true },
             sublineItem: { $exists: true },
+            category: { $exists: true },
           },
         }
       );
@@ -102,6 +103,48 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
       }
     } catch (error) {
       log.warn?.(`[DB Indexes] Settings index check skipped: ${error.message}`);
+    }
+
+    // --- SELF-HEALING BACKFILL FOR BULK-UPLOADED RECORDS ---
+    // In some bulk uploads, proposalId is written but workflowRef is missing.
+    // This backfills workflowRef so these records show up in consolidated/budgetary support reports.
+    try {
+      log.info?.("[DB Indexes] Starting self-healing backfill for bulk-uploaded workflowRefs...");
+      const mongoose = require('mongoose');
+      
+      // 1. Capital Outlay
+      const CapitalOutlayModel = mongoose.model('CapitalOutlay');
+      const coRes = await CapitalOutlayModel.updateMany(
+        { proposalId: { $ne: null }, $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
+        [{ $set: { workflowRef: "$proposalId" } }]
+      );
+      if (coRes.modifiedCount > 0) {
+        log.info?.(`[DB Indexes] Backfilled workflowRef for ${coRes.modifiedCount} CapitalOutlay records.`);
+      }
+
+      // 2. MOOE Proposals
+      const MooeProposalModel = mongoose.model('MooeProposal');
+      const mooeRes = await MooeProposalModel.updateMany(
+        { proposalId: { $ne: null }, $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
+        [{ $set: { workflowRef: "$proposalId" } }]
+      );
+      if (mooeRes.modifiedCount > 0) {
+        log.info?.(`[DB Indexes] Backfilled workflowRef for ${mooeRes.modifiedCount} MooeProposal records.`);
+      }
+
+      // 3. Corporate Income
+      const IncomeModel = mongoose.model('Income');
+      const incomeRes = await IncomeModel.updateMany(
+        { proposalId: { $ne: null }, $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
+        [{ $set: { workflowRef: "$proposalId" } }]
+      );
+      if (incomeRes.modifiedCount > 0) {
+        log.info?.(`[DB Indexes] Backfilled workflowRef for ${incomeRes.modifiedCount} Income records.`);
+      }
+      
+      log.info?.("[DB Indexes] Self-healing backfill completed.");
+    } catch (backfillError) {
+      log.warn?.(`[DB Indexes] Self-healing backfill failed: ${backfillError.message}`);
     }
 
     log.info?.("[DB Indexes] Index verification completed.");

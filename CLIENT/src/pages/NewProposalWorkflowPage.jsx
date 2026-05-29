@@ -197,7 +197,7 @@ const WORKFLOW_STATUSES = {
     color: "warning",
   },
   RETURNED_TO_OFFICER: { label: "Returned to Officer", color: "warning" },
-  MERGED: { label: "Merged (Archived)", color: "default" },
+  MERGED: { label: "Consolidated (Archived)", color: "default" },
 };
 
 // Base tabs; Monitoring tab will be injected dynamically for Budget Manager
@@ -346,6 +346,8 @@ const NewProposalWorkflowPage = () => {
   const [selectedForMerge, setSelectedForMerge] = useState(new Set());
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [mergeLoading, setMergeLoading] = useState(false);
+  const [unconsolidateDialogOpen, setUnconsolidateDialogOpen] = useState(false);
+  const [unconsolidateLoading, setUnconsolidateLoading] = useState(false);
   const [discountSettings, setDiscountSettings] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsTab, setDetailsTab] = useState("income");
@@ -842,12 +844,24 @@ const NewProposalWorkflowPage = () => {
 
       // Use same params for all - do NOT add region filter when viewing proposal details
       // (region filter would exclude records and show empty tables)
-      const [incomeRes, personnelRes, mooeRes, capitalRes] = await Promise.all([
-        api.get("/income/getByParams", { params: queryParams }),
-        api.get("/personnel/getByParams", { params: queryParams }),
-        api.get("/mooe/getByParams", { params: queryParams }),
-        api.get("/capital-outlay/getByParams", { params: queryParams }),
-      ]);
+      let incomeRes = { data: [] };
+      let personnelRes = { data: [] };
+      let mooeRes = { data: [] };
+      let capitalRes = { data: [] };
+
+      if (proposal.isConsolidated) {
+        incomeRes.data = proposal.incomeData || [];
+        personnelRes.data = proposal.personnelData || [];
+        mooeRes.data = proposal.mooeData || [];
+        capitalRes.data = proposal.capitalData || [];
+      } else {
+        [incomeRes, personnelRes, mooeRes, capitalRes] = await Promise.all([
+          api.get("/income/getByParams", { params: queryParams }),
+          api.get("/getpersonnels/byParams", { params: queryParams }),
+          api.get("/mooe/getByParams", { params: queryParams }),
+          api.get("/capital-outlay/getByParams", { params: queryParams }),
+        ]);
+      }
 
       // Normalize: backend may return array directly or { data: [] }
       const toArray = (res) => {
@@ -858,10 +872,10 @@ const NewProposalWorkflowPage = () => {
       };
 
       const details = {
-        income: toArray(incomeRes),
-        personnel: toArray(personnelRes),
-        mooe: toArray(mooeRes),
-        capitalOutlay: toArray(capitalRes),
+        income: proposal.isConsolidated ? incomeRes.data : toArray(incomeRes),
+        personnel: proposal.isConsolidated ? personnelRes.data : toArray(personnelRes),
+        mooe: proposal.isConsolidated ? mooeRes.data : toArray(mooeRes),
+        capitalOutlay: proposal.isConsolidated ? capitalRes.data : toArray(capitalRes),
       };
 
       console.log("[DEBUG] Fetched proposal details statistics:", {
@@ -887,7 +901,7 @@ const NewProposalWorkflowPage = () => {
       try {
         const [proposalRes, totalsRes] = await Promise.all([
           api.get(`/api/allproposal/proposals/${proposal._id}`),
-          api.get(`/api/allproposal/proposals/${proposal._id}/totals`).catch(() => null),
+          api.get(`/api/allproposal/proposals/${proposal._id}/totals`, { hideErrorToast: true }).catch(() => null),
         ]);
 
         const proposalData = proposalRes.data?.data || proposalRes.data;
@@ -1898,31 +1912,45 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET APPROVER actions
-    if (
-      (userRoles.includes("BUDGET APPROVER") || userRoles.includes("BUDGET_APPROVER")) &&
-      (currentStatus === "Forwarded to Approver" ||
+    const isApprover = userRoles.includes("BUDGET APPROVER") || userRoles.includes("BUDGET_APPROVER");
+    if (isApprover) {
+      if (
+        currentStatus === "Forwarded to Approver" ||
         currentStatus === "Returned to Approver" ||
         currentStatus === "FORWARDED_TO_APPROVER" ||
-        currentStatus === "RETURNED_TO_APPROVER")
-    ) {
-      const analystLabel = analystsForMenu.length === 1
-        ? `Send to ${analystsForMenu[0]?.userName || analystsForMenu[0]?.userId} (${analystsForMenu[0]?.userId})`
-        : "Approve & Forward to Budget/Planning Analyst";
-      actions.push(
-        {
-          label: analystLabel,
-          value: "approver-approve-forward-analyst",
-          icon: <SendIcon />,
-          color: "primary",
-        },
-        // { label: 'Approve & Forward to Budget Officer', value: 'approver-approve-forward-officer', icon: <SendIcon />, color: 'primary' },
-        {
-          label: "Return to Budget Reviewer",
-          value: "approver-return",
-          icon: <RejectIcon />,
-          color: "warning",
+        currentStatus === "RETURNED_TO_APPROVER"
+      ) {
+        const analystLabel = analystsForMenu.length === 1
+          ? `Send to ${analystsForMenu[0]?.userName || analystsForMenu[0]?.userId} (${analystsForMenu[0]?.userId})`
+          : "Approve & Forward to Budget/Planning Analyst";
+        actions.push(
+          {
+            label: analystLabel,
+            value: "approver-approve-forward-analyst",
+            icon: <SendIcon />,
+            color: "primary",
+          }
+        );
+        
+        if (!proposal.isConsolidated) {
+          actions.push({
+            label: "Return to Budget Reviewer",
+            value: "approver-return",
+            icon: <RejectIcon />,
+            color: "warning",
+          });
         }
-      );
+      }
+
+    }
+
+    if (proposal.isConsolidated && (isApprover || isSuperAdmin)) {
+      actions.push({
+        label: "Un-consolidate Proposal",
+        value: "unconsolidate",
+        icon: <RejectIcon />,
+        color: "error",
+      });
     }
 
     // BUDGET PLANNING ANALYST actions (BRD: return to Preparer only)
@@ -2091,6 +2119,7 @@ const NewProposalWorkflowPage = () => {
     isBudgetApprover &&
     MERGEABLE_STATUSES.has(proposal.status) &&
     !proposal.isMergedSource &&
+    !proposal.isConsolidated &&
     proposal.status !== "MERGED";
 
   const handleToggleMergeSelect = (proposalId) => {
@@ -2117,7 +2146,7 @@ const NewProposalWorkflowPage = () => {
 
   const handleMergeProposals = async () => {
     if (selectedForMerge.size < 2) {
-      toast.error("Pumili ng hindi bababa sa 2 proposals para ma-merge.");
+      toast.error("Pumili ng hindi bababa sa 2 proposals para ma-consolidate.");
       return;
     }
     setMergeLoading(true);
@@ -2126,18 +2155,36 @@ const NewProposalWorkflowPage = () => {
         proposalIds: Array.from(selectedForMerge),
       });
       if (response.data?.success) {
-        toast.success(response.data.message || "Matagumpay na na-merge ang mga proposal.");
+        toast.success(response.data.message || "Matagumpay na na-consolidate ang mga proposal.");
         setMergeDialogOpen(false);
         setSelectedForMerge(new Set());
-        refetchProposals();
+        fetchProposals();
       } else {
-        toast.error(response.data?.message || "Hindi ma-merge ang mga proposal.");
+        toast.error(response.data?.message || "Hindi ma-consolidate ang mga proposal.");
       }
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Error sa pag-merge ng proposals.";
+      const msg = err?.response?.data?.message || err?.message || "Error sa pag-consolidate ng proposals.";
       toast.error(msg);
     } finally {
       setMergeLoading(false);
+    }
+  };
+
+  const handleUnconsolidate = async () => {
+    setUnconsolidateLoading(true);
+    try {
+      const response = await api.post(`${WORKFLOW_API_BASE}/${selectedProposal._id}/unconsolidate`);
+      if (response.data?.success) {
+        toast.success(response.data.message || 'Matagumpay na na-unconsolidate ang proposal.');
+        setUnconsolidateDialogOpen(false);
+        fetchProposals();
+      } else {
+        toast.error(response.data?.message || 'Hindi ma-unconsolidate ang proposal.');
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Error sa pag-unconsolidate.');
+    } finally {
+      setUnconsolidateLoading(false);
     }
   };
 
@@ -2800,7 +2847,7 @@ const NewProposalWorkflowPage = () => {
                         >
                           ACTIONS
                         </TableCell>
-                        {/* Merge checkbox column header — only for Budget Approver */}
+                        {/* Consolidate checkbox column header — only for Budget Approver */}
                         {isBudgetApprover && (
                           <TableCell
                             sx={{
@@ -2811,10 +2858,10 @@ const NewProposalWorkflowPage = () => {
                               textAlign: "center",
                             }}
                           >
-                            <Tooltip title="Piliin lahat para sa merge">
+                            <Tooltip title="Piliin lahat para sa consolidate">
                               <input
                                 type="checkbox"
-                                id="merge-select-all"
+                                id="consolidate-select-all"
                                 style={{ cursor: "pointer", accentColor: "#fff", width: 16, height: 16 }}
                                 checked={
                                   filteredProposals
@@ -2996,17 +3043,17 @@ const NewProposalWorkflowPage = () => {
                                 {/* Consolidated badge */}
                                 {proposal.isConsolidated && (
                                   <Chip
-                                    label="Consolidated"
+                                    label="CONSOLIDATED"
                                     size="small"
-                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#1565c0', color: '#fff', fontWeight: 700 }}
+                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#ffb74d', color: '#fff', fontWeight: 700 }}
                                   />
                                 )}
-                                {/* Merged source badge */}
+                                {/* Consolidate source badge */}
                                 {proposal.isMergedSource && (
                                   <Chip
-                                    label="Archived"
+                                    label="CONSOLIDATED (SOURCE)"
                                     size="small"
-                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#757575', color: '#fff' }}
+                                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#9e9e9e', color: '#fff', fontWeight: 700 }}
                                   />
                                 )}
                                 {(/returned/i.test(String(proposal.status || '')) && proposal.currentAssigneeRole) && (
@@ -3108,6 +3155,9 @@ const NewProposalWorkflowPage = () => {
                                               if (proposal.department) params.set("department", String(proposal.department));
                                               if (proposal.division || proposal.responsibilityCenter) params.set("division", String(proposal.division || proposal.responsibilityCenter));
                                               navigate(`/tier?${params.toString()}`);
+                                            } else if (action.value === "unconsolidate") {
+                                              setSelectedProposal(proposal);
+                                              setUnconsolidateDialogOpen(true);
                                             } else {
                                               // Real-time lock check before allowing any workflow action (submit/return/etc.)
                                               try {
@@ -3179,6 +3229,36 @@ const NewProposalWorkflowPage = () => {
                                 )}
                               </Box>
                             </TableCell>
+                            {/* Consolidate checkbox column body — only for Budget Approver */}
+                            {isBudgetApprover && (
+                              <TableCell sx={{ p: 2, textAlign: "center" }}>
+                                {isProposalMergeable(proposal) ? (
+                                  <input
+                                    type="checkbox"
+                                    style={{ cursor: "pointer", width: 16, height: 16, accentColor: "#2d5016" }}
+                                    checked={selectedForMerge.has(proposal._id)}
+                                    onChange={() => handleToggleMergeSelect(proposal._id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                ) : (
+                                  <Tooltip title="Hindi maaaring isama ito sa pag-consolidate (iba ang status o isa na itong consolidated proposal)">
+                                    <Box
+                                      sx={{
+                                        width: 16,
+                                        height: 16,
+                                        borderRadius: "3px",
+                                        border: "1px solid #ccc",
+                                        bgcolor: "#f0f0f0",
+                                        display: "inline-block",
+                                        cursor: "not-allowed",
+                                        opacity: 0.5,
+                                        margin: "0 auto"
+                                      }}
+                                    />
+                                  </Tooltip>
+                                )}
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                     </TableBody>
@@ -6889,7 +6969,7 @@ const NewProposalWorkflowPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ── Merge Proposals floating toolbar ──────────────────────────────────── */}
+      {/* ── Consolidate Proposals floating toolbar ──────────────────────────────────── */}
       {isBudgetApprover && selectedForMerge.size > 0 && (
         <Box
           sx={{
@@ -6921,7 +7001,7 @@ const NewProposalWorkflowPage = () => {
               {selectedForMerge.size} proposals selected
             </Typography>
             <Typography sx={{ fontSize: "0.78rem", opacity: 0.8 }}>
-              Piliin ang "Merge" para pagsamahin bilang isang consolidated proposal
+              Piliin ang "Consolidate" para pagsamahin bilang isang consolidated proposal
             </Typography>
           </Box>
           <Button
@@ -6953,12 +7033,12 @@ const NewProposalWorkflowPage = () => {
               "&:hover": { bgcolor: "#388e3c" },
             }}
           >
-            🔗 Merge Selected ({selectedForMerge.size})
+            🔗 Consolidate Selected ({selectedForMerge.size})
           </Button>
         </Box>
       )}
 
-      {/* ── Merge Confirmation Dialog ─────────────────────────────────────────── */}
+      {/* ── Consolidate Confirmation Dialog ─────────────────────────────────────────── */}
       <Dialog
         open={mergeDialogOpen}
         onClose={() => !mergeLoading && setMergeDialogOpen(false)}
@@ -6982,7 +7062,7 @@ const NewProposalWorkflowPage = () => {
             gap: 1,
           }}
         >
-          🔗 I-merge ang mga Proposal
+          🔗 I-consolidate ang mga Proposal
         </DialogTitle>
         <DialogContent sx={{ pt: 3, pb: 1 }}>
           <Typography variant="body2" sx={{ color: "#555", mb: 2 }}>
@@ -7069,8 +7149,8 @@ const NewProposalWorkflowPage = () => {
             }}
           >
             <Typography sx={{ fontSize: "0.8rem", color: "#795548" }}>
-              ⚠️ <strong>Paalala:</strong> Ang merged na proposals ay
-              mananatili sa listahan pero <strong>locked at MERGED</strong>{" "}
+              ⚠️ <strong>Paalala:</strong> Ang consolidated na proposals ay
+              mananatili sa listahan pero <strong>locked at CONSOLIDATED</strong>{" "}
               na ang status — hindi na sila maaaring i-submit nang
               hiwalay. Ang bagong Consolidated Proposal ay maaari mong
               i-submit sa BRD Planning Analyst.
@@ -7106,8 +7186,61 @@ const NewProposalWorkflowPage = () => {
             }}
           >
             {mergeLoading
-              ? "Ini-merge..."
-              : `Kumpirmahin ang Merge (${selectedForMerge.size})`}
+              ? "Kino-consolidate..."
+              : `Kumpirmahin ang Consolidation (${selectedForMerge.size})`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Un-consolidate Confirmation Dialog */}
+      <Dialog
+        open={unconsolidateDialogOpen}
+        onClose={() => !unconsolidateLoading && setUnconsolidateDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: "12px" },
+        }}
+      >
+        <DialogTitle sx={{ bgcolor: "#fdf3f2", color: "#c62828", fontWeight: 700, display: "flex", alignItems: "center", gap: 1.5 }}>
+          <RejectIcon />
+          Kumpirmahin ang Paghihiwalay (Un-consolidate)
+        </DialogTitle>
+        <DialogContent sx={{ p: 3, pt: 4 }}>
+          <Typography sx={{ mb: 2, fontSize: "0.95rem" }}>
+            Sigurado ka ba na gusto mong i-<strong>unconsolidate</strong> ang proposal na ito?
+          </Typography>
+          <Box sx={{ bgcolor: "#fff4e5", p: 2, borderRadius: "8px", border: "1px solid #ffcc80" }}>
+            <Typography sx={{ fontSize: "0.85rem", color: "#ed6c02", fontWeight: 600, mb: 0.5 }}>
+              Ano ang mangyayari?
+            </Typography>
+            <Typography sx={{ fontSize: "0.8rem", color: "#666" }}>
+              Made-delete ang consolidated proposal na ito, at ang lahat ng original na pinagsamang proposals ay babalik nang hiwa-hiwalay sa iyong inbox (Forwarded to Approver) upang maaari mo silang i-review at aksyunan isa-isa.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, borderTop: "1px solid #e0e0e0", gap: 1 }}>
+          <Button
+            onClick={() => setUnconsolidateDialogOpen(false)}
+            disabled={unconsolidateLoading}
+            sx={{ color: "#666", textTransform: "none", fontWeight: 600 }}
+          >
+            Kanselahin
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleUnconsolidate}
+            disabled={unconsolidateLoading}
+            sx={{
+              bgcolor: "#d32f2f",
+              color: "#fff",
+              fontWeight: 700,
+              textTransform: "none",
+              px: 3,
+              "&:hover": { bgcolor: "#c62828" },
+            }}
+          >
+            {unconsolidateLoading ? "Inaayos..." : "Oo, I-unconsolidate"}
           </Button>
         </DialogActions>
       </Dialog>

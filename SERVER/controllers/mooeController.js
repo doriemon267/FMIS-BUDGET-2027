@@ -1267,6 +1267,7 @@ exports.bulkSaveMOOE = async (req, res) => {
           division: updateObj.division,
           proposalId: updateObj.proposalId,
           filterUsed: {
+            proposalId: updateObj.proposalId,
             uacsCode: item.uacsCode,
             fiscalYear: updateObj.fiscalYear,
             region: updateObj.region,
@@ -1281,6 +1282,7 @@ exports.bulkSaveMOOE = async (req, res) => {
             // For new entries: use unique combination that includes department/division
             // This ensures entries from different divisions stay separate
             { 
+              proposalId: updateObj.proposalId,
               uacsCode: item.uacsCode,
               fiscalYear: updateObj.fiscalYear,
               region: updateObj.region,

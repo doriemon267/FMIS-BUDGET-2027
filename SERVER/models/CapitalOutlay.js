@@ -166,7 +166,7 @@ const CapitalOutlaySchema = new mongoose.Schema(
   { timestamps: true }
 );
 CapitalOutlaySchema.index(
-  { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1 },
+  { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1, category: 1 },
   {
     unique: true,
     partialFilterExpression: {
@@ -174,7 +174,8 @@ CapitalOutlaySchema.index(
       uacsCode: { $exists: true },
       region: { $exists: true },
       fiscalYear: { $exists: true },
-      sublineItem: { $exists: true }
+      sublineItem: { $exists: true },
+      category: { $exists: true }
     }
   }
 );

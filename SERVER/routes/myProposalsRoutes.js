@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const isAuth = require('../middleware/is_auth');
-const { loadHierarchicalAssignment } = require('../middleware/hierarchicalAssignmentMiddleware');
+const { loadHierarchicalAssignment, applyHierarchicalFilters } = require('../middleware/hierarchicalAssignmentMiddleware');
 const { budgetRoleVisibilityControl } = require('../middleware/budgetRoleVisibilityControl');
 const myProposalsController = require('../controllers/myProposalsController');
 
@@ -11,6 +11,7 @@ router.get(
 	'/all',
 	isAuth,
 	loadHierarchicalAssignment,
+	applyHierarchicalFilters,
 	budgetRoleVisibilityControl(),
 	myProposalsController.getAllUserBudgetItems
 );

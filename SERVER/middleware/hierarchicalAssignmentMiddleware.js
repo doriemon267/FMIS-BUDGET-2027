@@ -178,8 +178,10 @@ const applyHierarchicalFilters = (req, res, next) => {
         const divisionName = typeof assignment.divisions[0] === 'string' ? assignment.divisions[0].trim() : (assignment.divisions[0]?.divisionName || '').trim();
         filters = {
           region: regionName,
-          department: departmentName,
-          ...(divisionName ? { division: divisionName } : {})
+          $or: [
+            { division: divisionName },
+            { department: divisionName }
+          ]
         };
       }
       break;

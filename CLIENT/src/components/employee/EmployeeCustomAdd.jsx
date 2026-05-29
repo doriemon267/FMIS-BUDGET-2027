@@ -169,7 +169,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     || currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.name || "";
 
   // Dynamic divisions lookup for bulk upload
-  // Aggregates divisions from ALL regional mappings for departments like IMO
+  // Filters divisions by activeRegion if available, else aggregates divisions from ALL regional mappings for departments like IMO
   useEffect(() => {
     if (!uploadDepartment || !organizationStructure) {
       setUploadDivisionOptions([]);
@@ -177,11 +177,24 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       return;
     }
     const departmentsWithDivisions = organizationStructure?.availableUnits?.departmentsWithDivisions || [];
-    const matched = departmentsWithDivisions.filter(
+    let matched = departmentsWithDivisions.filter(
       (d) => String(d.departmentName).toLowerCase() === String(uploadDepartment).toLowerCase()
     );
+
+    // Apply activeRegion filter if available to prevent showing IMOs from other regions
+    const activeRegionName = activeRegion 
+      ? (activeRegion.Region || activeRegion.name || activeRegion.regionName || String(activeRegion)) 
+      : (userRegion || "");
+
+    if (activeRegionName && activeRegionName.toLowerCase() !== "all regions") {
+      const regionLower = activeRegionName.toLowerCase();
+      matched = matched.filter(m => 
+        m.regionName && m.regionName.toLowerCase() === regionLower
+      );
+    }
+
     if (matched && matched.length > 0) {
-      // Aggregate all divisions from all mappings and remove duplicates
+      // Aggregate all divisions from matched mappings and remove duplicates
       const allDivisions = new Set();
       matched.forEach((mapping) => {
         mapping.divisions?.forEach((div) => {
@@ -194,7 +207,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       setUploadDivisionOptions([]);
     }
     setUploadDivision("");
-  }, [uploadDepartment, organizationStructure]);
+  }, [uploadDepartment, organizationStructure, activeRegion, userRegion]);
 
   // Pre-fill and lock upload selectors based on user access levels
   useEffect(() => {

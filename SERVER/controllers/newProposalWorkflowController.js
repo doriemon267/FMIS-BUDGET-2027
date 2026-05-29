@@ -4395,17 +4395,18 @@ exports.mergeProposals = async (req, res) => {
       totalCorporateIncome += Number(src.projectedCorporateIncome) || 0;
       totalSubsidy += Number(src.projectedSubsidy) || 0;
 
-      // Merge array data – wrap non-arrays in an array for safety
-      const toArr = (val) => {
-        if (Array.isArray(val)) return val;
-        if (val && typeof val === 'object') return [val];
-        return [];
-      };
+      // Fetch actual data from child collections
+      const [personnel, mooe, capital, income] = await Promise.all([
+        PersonnelServices.find({ proposalId: src._id }).lean(),
+        MooeProposal.find({ proposalId: src._id }).lean(),
+        CapitalOutlay.find({ proposalId: src._id }).lean(),
+        Income.find({ proposalId: src._id }).lean()
+      ]);
 
-      allPersonnelData.push(...toArr(src.personnelData));
-      allMooeData.push(...toArr(src.mooeData));
-      allCapitalData.push(...toArr(src.capitalData));
-      allIncomeData.push(...toArr(src.incomeData));
+      allPersonnelData.push(...personnel);
+      allMooeData.push(...mooe);
+      allCapitalData.push(...capital);
+      allIncomeData.push(...income);
 
       if (src.division && !divisionList.includes(src.division)) {
         divisionList.push(src.division);
@@ -4489,9 +4490,11 @@ exports.mergeProposals = async (req, res) => {
           mergedInto: consolidated._id,
           mergedAt: now,
           isLocked: true,
-          'lockedBy.userId': userId,
-          'lockedBy.userName': userName,
-          'lockedBy.userRole': 'BUDGET APPROVER',
+          lockedBy: {
+            userId: userId,
+            userName: userName,
+            userRole: 'BUDGET APPROVER'
+          },
           lockedAt: now,
         },
         $push: { workflowHistory: mergeHistoryEntry }
@@ -4548,5 +4551,60 @@ exports.mergeProposals = async (req, res) => {
       message: 'Failed to merge proposals.',
       error: error.message
     });
+  }
+};
+
+exports.unconsolidateProposal = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id || req.user._id || req.user.Id;
+    const userName = req.user.Name || req.user.name || req.user.Username || 'Unknown User';
+
+    const consolidated = await NewProposalWorkflow.findById(id);
+    if (!consolidated) return res.status(404).json({ success: false, message: 'Consolidated proposal not found.' });
+    if (!consolidated.isConsolidated) return res.status(400).json({ success: false, message: 'This is not a consolidated proposal.' });
+
+    const now = new Date();
+
+    // Unlock and restore original proposals
+    await NewProposalWorkflow.updateMany(
+      { mergedInto: id },
+      {
+        $set: {
+          status: 'FORWARDED_TO_APPROVER',
+          isMergedSource: false,
+          isLocked: false,
+          currentAssigneeRole: 'BUDGET APPROVER'
+        },
+        $unset: {
+          mergedInto: '',
+          mergedAt: '',
+          lockedBy: '',
+          lockedAt: ''
+        },
+        $push: {
+          workflowHistory: {
+            action: 'unconsolidate',
+            fromStatus: 'MERGED',
+            toStatus: 'FORWARDED_TO_APPROVER',
+            performedBy: userId,
+            performedByName: userName,
+            comment: 'Un-consolidated proposal back to individual state',
+            timestamp: now
+          }
+        }
+      }
+    );
+
+    // Delete the consolidated container
+    await NewProposalWorkflow.findByIdAndDelete(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Successfully unconsolidated the proposal.'
+    });
+  } catch (error) {
+    console.error('[unconsolidateProposal] Error:', error.message);
+    res.status(500).json({ success: false, message: 'Failed to unconsolidate proposal.', error: error.message });
   }
 };

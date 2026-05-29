@@ -401,7 +401,8 @@ exports.uploadCorporateIncome = async (req, res) => {
           processDate: new Date(),
           status: isSuperAdmin && !proposalId ? 'System Upload' : 'Draft', // Set System Upload if Super Admin AND no proposalId
           isSystemGenerated: isSuperAdmin && !proposalId, // Tag as system generated if Super Admin AND no proposalId
-          proposalId: proposalId || null
+          proposalId: proposalId || null,
+          workflowRef: proposalId || null
         });
         await income.save();
         results.successfullyProcessed++;

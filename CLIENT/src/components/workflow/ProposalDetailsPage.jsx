@@ -140,6 +140,11 @@ const ProposalDetailsPage = () => {
   const fetchPersonnelServices = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 0: true }));
+      if (proposal?.isConsolidated && proposal?.personnelData?.length > 0) {
+        setPersonnelData(proposal.personnelData);
+        setTabLoading(prev => ({ ...prev, 0: false }));
+        return;
+      }
       const proposalRegion = getProposalRegionStr();
       const response = await api.get('/getpersonnels/byParams', {
         params: { 
@@ -161,6 +166,11 @@ const ProposalDetailsPage = () => {
   const fetchMooeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 1: true }));
+      if (proposal?.isConsolidated && proposal?.mooeData?.length > 0) {
+        setMooeData(proposal.mooeData);
+        setTabLoading(prev => ({ ...prev, 1: false }));
+        return;
+      }
       const proposalRegion = getProposalRegionStr();
       const response = await api.get('/mooe/getByParams', {
         params: { 
@@ -182,6 +192,11 @@ const ProposalDetailsPage = () => {
   const fetchCapitalOutlayData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 2: true }));
+      if (proposal?.isConsolidated && proposal?.capitalData?.length > 0) {
+        setCapitalOutlayData(proposal.capitalData);
+        setTabLoading(prev => ({ ...prev, 2: false }));
+        return;
+      }
       const proposalRegion = getProposalRegionStr();
       const response = await api.get('/capital-outlay/getByParams', {
         params: { 
@@ -203,6 +218,11 @@ const ProposalDetailsPage = () => {
   const fetchIncomeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 3: true }));
+      if (proposal?.isConsolidated && proposal?.incomeData?.length > 0) {
+        setIncomeData(proposal.incomeData);
+        setTabLoading(prev => ({ ...prev, 3: false }));
+        return;
+      }
       const proposalRegion = getProposalRegionStr();
       const response = await api.get('/income/getByParams', {
         params: { 
