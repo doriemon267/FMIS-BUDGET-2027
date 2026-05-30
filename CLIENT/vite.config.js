@@ -7,6 +7,32 @@ export default defineConfig({
 
   plugins: [react()],
 
+  server: {
+    port: 3005,
+    open: false,
+    proxy: {
+      // Forward all API calls to the Express backend — same-origin as far as the browser is concerned
+      '/api': {
+        target: 'http://localhost:5005',
+        changeOrigin: true,
+        secure: false,
+      },
+      // Forward Socket.IO (WebSocket) to the backend
+      '/socket.io': {
+        target: 'http://localhost:5005',
+        changeOrigin: true,
+        ws: true,
+        secure: false,
+      },
+      // Forward uploaded files (attachments, etc.)
+      '/uploads': {
+        target: 'http://localhost:5005',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
+
   optimizeDeps: {
     include: ["@dnd-kit/core", "@dnd-kit/sortable"],
   },

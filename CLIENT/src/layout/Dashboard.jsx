@@ -23,7 +23,7 @@ import { keyframes } from "@mui/system";
 import { FaCaretLeft, FaSearch, FaClock, FaTimes, FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { DateRange as DateRangeIcon } from "@mui/icons-material";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBoundary } from 'react-error-boundary';
 import { ToastContainer } from "react-toastify";
@@ -51,6 +51,72 @@ const blink = keyframes`
   50%, 100% { opacity: 0; }
 `;
 
+const fadeSlideIn = keyframes`
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+`;
+
+// Route → friendly page title map
+const PAGE_TITLES = {
+  '/dashboard': 'Dashboard',
+  '/proposal': 'Create Proposal',
+  '/allproposal': 'All Proposals',
+  '/brd-consolidation': 'BRD Consolidation',
+  '/nep-ceiling': 'NEP Ceiling',
+  '/tier': 'Tier Management',
+  '/tier-comparison': 'Tier Comparison',
+  '/employee': 'Employee List',
+  '/employeeBenefits': 'Employee Benefits',
+  '/courtAppearance': 'Court Appearance',
+  '/overTime': 'Overtime Pay',
+  '/subsistenceAllowanceMDS': 'Subsistence Allowance (MDS)',
+  '/subsistenceAllowanceST': 'Subsistence Allowance (ST)',
+  '/subsistenceAllowance': 'Subsistence Allowance',
+  '/loyaltyPay': 'Loyalty Pay',
+  '/mealallowance': 'Meal Allowance',
+  '/medicalAllowance': 'Medical Allowance',
+  '/childrenAllowance': 'Children Allowance',
+  '/retirees': 'Retirees',
+  '/fysettings': 'Set Cut-Off',
+  '/compensation-management': 'Compensation Management',
+  '/rata': 'RATA Settings',
+  '/categories': 'Capital Outlay',
+  '/income-management': 'Income Management',
+  '/salary-table': 'Perm & Casual Salary Table',
+  '/cos-salary-table': 'COS Salary Table (SSL4)',
+  '/employee-salary-table': 'Employee Salary Table',
+  '/salary-management': 'Salary Management',
+  '/setup/organization': 'Organization Structure',
+  '/hierarchical-user-assignments': 'Hierarchical User Assignments',
+  '/user-activity-logs': 'User Activity Logs',
+  '/bulk-upload-management': 'Bulk Upload Management',
+  '/consolidated-corporate-income': 'Corporate Income Report',
+  '/consolidated-reports': 'MOOE Report',
+  '/consolidated-capital-outlay-reports': 'Capital Outlay Report',
+  '/consolidated-personnel-services-reports': 'Personnel Services Report',
+  '/comparative-report': 'Comparative Budget Report',
+  '/comprehensive-reports': 'Budget Summary Report',
+  '/subsidy-monitoring': 'Subsidy Monitoring',
+  '/corporate-income-upload': 'Corporate Income Upload',
+  '/mooe-upload': 'MOOE Upload',
+  '/database-backup': 'Database Backup',
+  '/grouped-income-categories': 'Grouped Income Categories',
+  '/region-selection': 'Region Selection',
+  '/audit-logs': 'Audit Logs',
+  '/route-permissions': 'Route Permissions',
+  '/settings': 'System Settings',
+  '/fiscalYear': 'Fiscal Year',
+  '/not-authorized': 'Not Authorized',
+};
+
+const getPageTitle = (pathname) => {
+  // Exact match first
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+  // Dynamic segments (e.g. /proposal-details/:id)
+  if (pathname.startsWith('/proposal-details/')) return 'Proposal Details';
+  return 'FMIS-OSBPIS';
+};
+
 // Mapped search routes from based code
 const searchableRoutes = [
   { title: "Dashboard", path: "/dashboard", category: "Main" },
@@ -61,6 +127,8 @@ const searchableRoutes = [
 ];
 
 const DashboardContent = () => {
+  const location = useLocation();
+  const pageTitle = getPageTitle(location.pathname);
   const nav = useNavigate();
   const theme = useTheme();
   const { open, setOpen, toggleDrawer, collapsed, toggleCollapsed, setCollapsed } = useDrawer();
@@ -169,31 +237,65 @@ const DashboardContent = () => {
               </IconButton>
             )}
             
-            {/* Application Title */}
-            <Box sx={{ ml: isMobile ? 0 : 2, display: { xs: "none", sm: "block" } }}>
-              <Typography variant="h6" fontWeight="800" sx={{ color: theme.palette.text.primary, letterSpacing: -0.5 }}>
-                {env("APP_FULL_TITLE") || "Online Submission of Budget Proposal Information System"}
+            {/* Dynamic Page Title Breadcrumb */}
+            <Box
+              key={location.pathname}
+              sx={{
+                ml: isMobile ? 0 : 2,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                animation: `${fadeSlideIn} 0.25s ease`,
+                minWidth: 0,
+              }}
+            >
+              <Box
+                sx={{
+                  width: 5,
+                  height: 20,
+                  borderRadius: 1,
+                  background: "linear-gradient(180deg, #386641, #69d892)",
+                  flexShrink: 0,
+                }}
+              />
+              <Typography
+                variant="h6"
+                fontWeight="800"
+                noWrap
+                sx={{
+                  color: theme.palette.text.primary,
+                  letterSpacing: -0.3,
+                  fontSize: { xs: "0.85rem", sm: "1rem", md: "1.1rem" },
+                }}
+              >
+                {pageTitle}
               </Typography>
             </Box>
           </Box>
 
-          <Box display="flex" alignItems="center" gap={1}>
-            <ActiveRegionDisplay variant="compact" showButton={false} />
+          <Box display="flex" alignItems="center" gap={{ xs: 0.5, sm: 1 }}>
+            {/* Hide region display on mobile to save space */}
+            <Box sx={{ display: { xs: "none", md: "block" } }}>
+              <ActiveRegionDisplay variant="compact" showButton={false} />
+            </Box>
             
-            <Tooltip title="Fiscal info">
-              <IconButton 
-                onClick={(e) => setAnchorFiscalEl(e.currentTarget)}
-                sx={{ color: blinkActive ? "error.main" : "text.secondary", animation: blinkActive ? `${blink} 1s infinite` : "none" }}
-              >
-                <DateRangeIcon />
-              </IconButton>
-            </Tooltip>
+            {/* Fiscal year icon — hidden on small phones */}
+            <Box sx={{ display: { xs: "none", sm: "block" } }}>
+              <Tooltip title="Fiscal info">
+                <IconButton 
+                  onClick={(e) => setAnchorFiscalEl(e.currentTarget)}
+                  sx={{ color: blinkActive ? "error.main" : "text.secondary", animation: blinkActive ? `${blink} 1s infinite` : "none" }}
+                >
+                  <DateRangeIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
 
             <WorkflowNotificationProvider>
               <WorkflowNotifications />
             </WorkflowNotificationProvider>
 
-            <Box sx={{ ml: 1, borderLeft: "1px solid", borderColor: "divider", pl: 2 }}>
+            <Box sx={{ ml: { xs: 0, sm: 1 }, borderLeft: { xs: "none", sm: "1px solid" }, borderColor: "divider", pl: { xs: 0, sm: 2 } }}>
               <UserAvatarMenu />
             </Box>
           </Box>
@@ -228,6 +330,7 @@ const DashboardContent = () => {
           display: "flex",
           flexDirection: "column",
           minHeight: "100vh",
+          minWidth: 0, // Prevent flex overflow
           bgcolor: "#f8fafc",
           overflowY: "auto",
           pt: "64px", // Matches Toolbar minHeight
@@ -236,7 +339,7 @@ const DashboardContent = () => {
       >
         <ToastContainer position="top-right" />
         
-        <Box sx={{ flex: 1, p: { xs: 2, md: 2 }, pt: { xs: 2, md: 2 } }}>
+        <Box sx={{ flex: 1, p: { xs: 1.5, sm: 2, md: 3 }, pt: { xs: 2, md: 3 } }}>
           <ErrorBoundary FallbackComponent={({ error }) => <Typography color="error">Error: {error.message}</Typography>}>
             <AppTrayLauncher />
           </ErrorBoundary>

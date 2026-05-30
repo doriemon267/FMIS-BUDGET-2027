@@ -1242,12 +1242,8 @@ export default function ChatApp() {
         maxWidth: '100%',
         height: '100%',
         maxHeight: '100%',
-        bgcolor: "rgba(20, 20, 35, 0.95)",
+        bgcolor: "transparent", // Blends seamlessly inside FixedChatWindow dark glassmorphism
         overflow: "hidden",
-        boxShadow: "0 24px 48px rgba(0,0,0,0.5)",
-        backdropFilter: "blur(30px)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 16,
         display: "flex",
         flexDirection: "column",
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",

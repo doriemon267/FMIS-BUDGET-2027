@@ -28,7 +28,7 @@ const normalizeRole = (role) =>
 
 /** FOR AUTHORIZED SUPER ADMIN ROLE */
 const AUTHORIZED_SUPER_ADMINS = process.env.SUPER_ADMIN_IDS 
-  ? process.env.SUPER_ADMIN_IDS.split(',') 
+  ? process.env.SUPER_ADMIN_IDS.split(',').map((id) => id.trim())
   : ['111111']; // Fallback ID
 
 /** Check if running in production mode */

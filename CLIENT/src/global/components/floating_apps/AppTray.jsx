@@ -1,6 +1,6 @@
 // src/components/AppTray.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { IconButton, Box, Tooltip, Fade, Stack, Paper, Badge } from "@mui/material";
+import { IconButton, Box, Tooltip, Fade, Stack, Paper, Badge, Typography, InputBase, ButtonBase } from "@mui/material";
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { FiGrid, FiClock, FiBell, FiTrendingUp, FiZap, FiSearch, FiCalendar, FiShield, FiBarChart2, FiEdit } from "react-icons/fi";
 import { BsChatDots } from 'react-icons/bs';
@@ -13,11 +13,11 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
   const [chatSettings, setChatSettings] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
   const nodeRef = useRef(null);
   const trayHandleRef = useRef(null);
   const focusRefs = useRef([]);
 
-  // Each app now has its own color
   // Base app registry (full set). Use local/user settings to hide items.
   const apps = useMemo(() => [
     { Icon: BiCalculator, label: "Calculator", id: "calc", color: "#1976d2", shortcut: 'Alt+C' },
@@ -84,6 +84,14 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
     }
   }, [apps]);
 
+  // Search filter
+  const filteredApps = useMemo(() => {
+    if (!searchQuery.trim()) return visibleApps;
+    return visibleApps.filter(app => 
+      app.label.toLowerCase().includes(searchQuery.toLowerCase().trim())
+    );
+  }, [visibleApps, searchQuery]);
+
   // Close tray when clicking outside or pressing Escape
   useEffect(() => {
     if (!openTray) return undefined;
@@ -103,13 +111,12 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
       document.removeEventListener("touchstart", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [openTray, apps]);
+  }, [openTray]);
 
   useEffect(() => {
     const handler = (e) => {
       try {
         const c = e?.detail?.count || 0;
-        // Check persisted setting
         const chatSettings = JSON.parse(localStorage.getItem('chatSettings') || '{}');
         if (chatSettings && chatSettings.badge === false) {
           setChatUnreadCount(0);
@@ -139,58 +146,85 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
       }
     };
     window.addEventListener('storage', storageHandler);
-    // init local chatSettings for this AppTray and listen for local updates
+    
     try {
-      const s0 = JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s0 || {});
+      const s0 = JSON.parse(localStorage.getItem('chatSettings') || '{}'); 
+      setChatSettings(s0 || {});
     } catch (e) { setChatSettings({}); }
-    const localSettings = () => { try { const s = JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s || {}); } catch(e) { setChatSettings({}); } };
-    window.addEventListener('chat-settings-changed', (e) => { try { const s = e?.detail || JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s || {}); } catch(e) { setChatSettings({}); } });
-    // Initial notification count
+
+    const localSettings = () => { 
+      try { 
+        const s = JSON.parse(localStorage.getItem('chatSettings') || '{}'); 
+        setChatSettings(s || {}); 
+      } catch(e) { setChatSettings({}); } 
+    };
+
+    window.addEventListener('chat-settings-changed', (e) => { 
+      try { 
+        const s = e?.detail || JSON.parse(localStorage.getItem('chatSettings') || '{}'); 
+        setChatSettings(s || {}); 
+      } catch(e) { setChatSettings({}); } 
+    });
+    
     notificationHandler();
-    return () => { window.removeEventListener('chat-unread', handler); window.removeEventListener('storage', storageHandler); window.removeEventListener('system-notification', notificationHandler); };
-    // Load persisted chat badge setting to manage initial unread
-    try {
-      const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
-      if (s && s.badge === false) setChatUnreadCount(0);
-    } catch (e) {}
+    return () => { 
+      window.removeEventListener('chat-unread', handler); 
+      window.removeEventListener('storage', storageHandler); 
+      window.removeEventListener('system-notification', notificationHandler); 
+    };
   }, []);
 
-  // When tray opens, focus on the first visual app (top of stack).
+  // When tray opens, focus on the first visual app
   useEffect(() => {
     if (!openTray) return undefined;
-    const firstIndex = apps.length - 1; // since column-reverse, last item is visually first
     const id = setTimeout(() => {
-      focusRefs.current[firstIndex]?.focus();
-    }, 50);
+      const refs = focusRefs.current.filter(Boolean);
+      refs[0]?.focus();
+    }, 150);
     return () => clearTimeout(id);
-  }, [openTray, apps]);
+  }, [openTray]);
 
+  // Enhanced keyboard navigation for a 3-column grid
   const handleTrayKeyDown = useCallback((e) => {
-    const refs = focusRefs.current;
+    const refs = focusRefs.current.filter(Boolean);
     const len = refs.length || 0;
     if (len === 0) return;
-    const activeLogicalIndex = refs.findIndex((r) => r === document.activeElement);
-    // Convert logical index to visual index (since we use column-reverse)
-    const toVisual = (logical) => (len - 1 - logical);
-    const toLogical = (visual) => (len - 1 - visual);
-    const activeVisualIndex = activeLogicalIndex === -1 ? -1 : toVisual(activeLogicalIndex);
+    const activeIndex = refs.findIndex((r) => r === document.activeElement);
 
-    if (e.key === "ArrowDown") {
+    const cols = 3; 
+
+    if (e.key === "ArrowRight") {
       e.preventDefault();
-      const nextVisual = activeVisualIndex === -1 ? 0 : (activeVisualIndex + 1) % len;
-      const nextLogical = toLogical(nextVisual);
-      refs[nextLogical]?.focus();
+      const nextIndex = activeIndex === -1 ? 0 : (activeIndex + 1) % len;
+      refs[nextIndex]?.focus();
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      const prevIndex = activeIndex === -1 ? len - 1 : (activeIndex - 1 + len) % len;
+      refs[prevIndex]?.focus();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      let nextIndex = activeIndex === -1 ? 0 : activeIndex + cols;
+      if (nextIndex >= len) {
+        nextIndex = activeIndex % cols; 
+      }
+      refs[nextIndex]?.focus();
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      const prevVisual = activeVisualIndex <= 0 ? len - 1 : activeVisualIndex - 1;
-      const prevLogical = toLogical(prevVisual);
-      refs[prevLogical]?.focus();
+      let prevIndex = activeIndex === -1 ? len - 1 : activeIndex - cols;
+      if (prevIndex < 0) {
+        const lastRowStart = Math.floor((len - 1) / cols) * cols;
+        prevIndex = lastRowStart + (activeIndex % cols);
+        if (prevIndex >= len) {
+          prevIndex = len - 1;
+        }
+      }
+      refs[prevIndex]?.focus();
     } else if (e.key === "Home") {
       e.preventDefault();
-      refs[toLogical(0)]?.focus();
+      refs[0]?.focus();
     } else if (e.key === "End") {
       e.preventDefault();
-      refs[toLogical(len - 1)]?.focus();
+      refs[len - 1]?.focus();
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       document.activeElement?.click();
@@ -211,147 +245,437 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
         zIndex: 1300,
       }}
     >
-      {/* Main tray button */}
-        <Tooltip title="App Tray" placement="left">
-          <IconButton
-            className="tray-handle"
+      {/* Main tray launcher handle */}
+      <Tooltip title="App Launcher" placement="left">
+        <IconButton
+          className="tray-handle"
           size="large"
-            ref={trayHandleRef}
+          ref={trayHandleRef}
           sx={{
-            bgcolor: "primary.main",
+            background: openTray 
+              ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' 
+              : 'linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)',
             color: "white",
-            boxShadow: 6,
+            boxShadow: openTray 
+              ? "0 4px 12px rgba(15, 23, 42, 0.3)" 
+              : "0 10px 25px rgba(79, 70, 229, 0.35), 0 2px 10px rgba(6, 182, 212, 0.2)",
             width: 56,
             height: 56,
-            "&:hover": { bgcolor: "primary.dark", transform: "scale(1.05)" },
-            transition: "all 0.2s",
+            borderRadius: '16px', // Sleek modern squircle
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            "&:hover": { 
+              transform: "scale(1.08) translateY(-2px)",
+              boxShadow: openTray 
+                ? "0 6px 16px rgba(15, 23, 42, 0.35)" 
+                : "0 14px 30px rgba(79, 70, 229, 0.45), 0 4px 15px rgba(6, 182, 212, 0.3)",
+              "& .handle-icon": {
+                transform: "rotate(45deg)",
+              }
+            },
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
-          onClick={() => setOpenTray((s) => !s)}
+          onClick={() => {
+            setOpenTray((s) => !s);
+            if (!openTray) setSearchQuery(""); // Clear search when opening
+          }}
           aria-expanded={openTray}
           aria-label="Open app tray"
         >
-          <FiGrid size={20} />
+          {/* Badge for running apps count */}
+          <Badge 
+            badgeContent={openAppIds.length} 
+            color="success"
+            sx={{
+              '& .MuiBadge-badge': {
+                bgcolor: '#10b981',
+                color: 'white',
+                fontWeight: 700,
+                fontSize: '10px',
+                minWidth: '16px',
+                height: '16px',
+                borderRadius: '8px',
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.4)',
+                border: '1.5px solid #4f46e5',
+                animation: openAppIds.length > 0 ? 'pulse-badge 2s infinite ease-in-out' : 'none',
+                '@keyframes pulse-badge': {
+                  '0%, 100%': { transform: 'scale(1)' },
+                  '50%': { transform: 'scale(1.15)' }
+                }
+              }
+            }}
+          >
+            <Box 
+              className="handle-icon" 
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)' 
+              }}
+            >
+              <FiGrid size={24} />
+            </Box>
+          </Badge>
         </IconButton>
       </Tooltip>
 
-      {/* openTray app tray */}
-      <Fade in={openTray} timeout={400}>
+      {/* Glassmorphic App Launcher Grid Panel */}
+      <Fade in={openTray} timeout={300}>
         <Paper
-          elevation={6}
+          elevation={0}
           sx={{
             position: "absolute",
-            bottom: 70,
+            bottom: 74,
             right: 0,
-            p: 1.2,
-            borderRadius: 3,
-            bgcolor: "rgba(255,255,255,0.9)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid",
-            borderColor: "divider",
+            p: 2,
+            width: 320, // Fits 3 columns of premium tiles perfectly
+            borderRadius: '24px', 
+            bgcolor: "rgba(255, 255, 255, 0.8)",
+            backdropFilter: "blur(20px) saturate(180%)",
+            webkitBackdropFilter: "blur(20px) saturate(180%)",
+            border: "1px solid rgba(255, 255, 255, 0.4)",
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05)",
+            transformOrigin: 'bottom right',
           }}
           onKeyDown={handleTrayKeyDown}
           role="menu"
           aria-label="App tray menu"
         >
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5, mb: 0.5 }}>
-            <Tooltip title="Minimize all" placement="top">
-              <IconButton size='small' onClick={() => { onMinimizeAll?.(); setOpenTray(false); }}>
-                <MdRemove />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Close all" placement="top">
-              <IconButton size='small' onClick={() => { onCloseAll?.(); setOpenTray(false); }}>
-                <MdClose />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={chatSettings && chatSettings.hideSidebar ? 'Show conversations' : 'Hide conversations'} placement="top">
-              <IconButton size='small' onClick={() => {
-                try {
-                  const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
-                  const next = { ...(s || {}), hideSidebar: !s.hideSidebar };
-                  localStorage.setItem('chatSettings', JSON.stringify(next));
-                  setChatSettings(next);
-                  // notify same-window listeners
-                  window.dispatchEvent(new CustomEvent('chat-settings-changed', { detail: next }));
-                } catch (e) { }
-                setOpenTray(false);
-              }}>
-                {(chatSettings && chatSettings.hideSidebar) ? <FiChevronRight /> : <FiChevronLeft />}
-              </IconButton>
-            </Tooltip>
+          {/* Header Area */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, px: 0.5 }}>
+            <Box>
+              <Typography 
+                variant="subtitle2" 
+                sx={{ 
+                  fontWeight: 800, 
+                  color: '#1e293b',
+                  letterSpacing: '-0.3px',
+                  lineHeight: 1.2
+                }}
+              >
+                App Launcher
+              </Typography>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  color: '#64748b',
+                  fontWeight: 500,
+                  fontSize: '10px'
+                }}
+              >
+                {openAppIds.length > 0 
+                  ? `${openAppIds.length} active window${openAppIds.length > 1 ? 's' : ''}`
+                  : 'Workspace tools'}
+              </Typography>
+            </Box>
+            
+            <Stack direction="row" spacing={0.5}>
+              <Tooltip title="Minimize all windows" placement="top">
+                <IconButton 
+                  size='small' 
+                  onClick={() => { onMinimizeAll?.(); setOpenTray(false); }}
+                  sx={{ 
+                    color: '#475569', 
+                    bgcolor: 'rgba(0,0,0,0.04)',
+                    width: 28,
+                    height: 28,
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.08)', color: '#1e293b' }
+                  }}
+                >
+                  <MdRemove size={16} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Close all windows" placement="top">
+                <IconButton 
+                  size='small' 
+                  onClick={() => { onCloseAll?.(); setOpenTray(false); }}
+                  sx={{ 
+                    color: '#ef4444', 
+                    bgcolor: 'rgba(239, 68, 68, 0.06)',
+                    width: 28,
+                    height: 28,
+                    '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.12)', color: '#dc2626' }
+                  }}
+                >
+                  <MdClose size={16} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={chatSettings && chatSettings.hideSidebar ? 'Show Chat Panel' : 'Hide Chat Panel'} placement="top">
+                <IconButton 
+                  size='small' 
+                  onClick={() => {
+                    try {
+                      const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
+                      const next = { ...(s || {}), hideSidebar: !s.hideSidebar };
+                      localStorage.setItem('chatSettings', JSON.stringify(next));
+                      setChatSettings(next);
+                      window.dispatchEvent(new CustomEvent('chat-settings-changed', { detail: next }));
+                    } catch (e) { }
+                    setOpenTray(false);
+                  }}
+                  sx={{ 
+                    color: '#475569', 
+                    bgcolor: 'rgba(0,0,0,0.04)',
+                    width: 28,
+                    height: 28,
+                    '&:hover': { bgcolor: 'rgba(0,0,0,0.08)', color: '#1e293b' }
+                  }}
+                >
+                  {(chatSettings && chatSettings.hideSidebar) ? <FiChevronRight size={16} /> : <FiChevronLeft size={16} />}
+                </IconButton>
+              </Tooltip>
+            </Stack>
           </Box>
-          <Stack direction="column-reverse" spacing={1}>
-                {visibleApps.map(({ Icon, label, id, color, shortcut }, idx) => {
+
+          {/* Integrated Search Bar */}
+          <Box sx={{ px: 0.5, mb: 2 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                bgcolor: 'rgba(0, 0, 0, 0.04)',
+                borderRadius: '12px',
+                px: 1.5,
+                py: 0.75,
+                border: '1px solid rgba(0, 0, 0, 0.03)',
+                transition: 'all 0.2s',
+                '&:focus-within': {
+                  bgcolor: 'rgba(255, 255, 255, 0.9)',
+                  borderColor: 'primary.main',
+                  boxShadow: '0 4px 12px rgba(25, 118, 210, 0.08)',
+                }
+              }}
+            >
+              <FiSearch size={15} style={{ color: '#64748b', marginRight: 8 }} />
+              <InputBase
+                placeholder="Search tools..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                sx={{
+                  fontSize: '12px',
+                  color: '#1e293b',
+                  width: '100%',
+                  fontWeight: 500,
+                  '& input::placeholder': {
+                    color: '#94a3b8',
+                    opacity: 1,
+                  }
+                }}
+              />
+              {searchQuery && (
+                <IconButton 
+                  size="small" 
+                  onClick={() => setSearchQuery("")}
+                  sx={{ p: 0.25, color: '#94a3b8', '&:hover': { color: '#64748b' } }}
+                >
+                  <MdClose size={14} />
+                </IconButton>
+              )}
+            </Box>
+          </Box>
+
+          {/* Grid of Square/Squircle Tiles */}
+          <Box 
+            sx={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(3, 1fr)', 
+              gap: 1.2,
+              maxHeight: '300px',
+              overflowY: 'auto',
+              pr: 0.5,
+              '&::-webkit-scrollbar': {
+                width: '4px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: 'rgba(0,0,0,0.02)',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: 'rgba(0,0,0,0.1)',
+                borderRadius: '2px',
+              },
+              '&::-webkit-scrollbar-thumb:hover': {
+                background: 'rgba(0,0,0,0.2)',
+              }
+            }}
+          >
+            {filteredApps.map(({ Icon, label, id, color, shortcut }, idx) => {
               const isOpen = openAppIds.includes(id);
               const isActive = activeAppId === id;
-              const refIndex = idx; // logical order
+              
               return (
-                <Tooltip key={id} title={shortcut ? `${label} — ${shortcut}` : label} placement="left">
-                <Box sx={{ position: 'relative', display: 'inline-block' }}>
-                <Badge
-                  overlap="circular"
-                  color="primary"
-                  variant='standard'
-                  badgeContent={(id === 'chat' && chatUnreadCount > 0) ? chatUnreadCount : (id === 'notifications' && notificationCount > 0) ? notificationCount : undefined}
-                  invisible={(id !== 'chat' && id !== 'notifications') ? !isOpen : false}
-                >
-                <IconButton
-                  role="menuitem"
-                  size="medium"
-                  onClick={() => {
-                    console.debug('[AppTray] clicking app icon', id);
-                    // Close tray after selecting — AppLauncher handles open/close toggle
-                    setOpenTray(false);
-                    onAppOpen(id);
-                    setTimeout(() => trayHandleRef.current?.focus(), 50);
-                  }}
-                  ref={(el) => (focusRefs.current[refIndex] = el)}
-                  aria-keyshortcuts={shortcut}
-                  tabIndex={-1}
-                  sx={{
-                    bgcolor: color,
-                    color: "white",
-                    width: 48,
-                    height: 48,
-                    boxShadow: 4,
-                    "&:hover": {
-                      bgcolor: color,
-                      opacity: 0.9,
-                      transform: "translateY(-2px)",
-                      boxShadow: 6,
-                    },
-                    transition: "all 0.2s ease",
-                    ...(isOpen
-                      ? {
-                          border: "2px solid",
-                          borderColor: "primary.main",
-                          boxShadow: "0 6px 24px rgba(0,0,0,0.25)",
-                          transform: "scale(1.03)",
+                <Tooltip key={id} title={shortcut ? `${label} (${shortcut})` : label} placement="top">
+                  <Box sx={{ display: 'inline-block', position: 'relative' }}>
+                    <Badge
+                      color="error"
+                      variant="standard"
+                      badgeContent={(id === 'chat' && chatUnreadCount > 0) ? chatUnreadCount : (id === 'notifications' && notificationCount > 0) ? notificationCount : undefined}
+                      sx={{
+                        width: '100%',
+                        '& .MuiBadge-badge': {
+                          right: 12,
+                          top: 10,
+                          fontWeight: 700,
+                          fontSize: '10px',
+                          boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)',
+                          bgcolor: '#ef4444'
                         }
-                      : {}),
-                    ...(isActive
-                      ? {
-                          outline: `2px solid rgba(25,118,210,0.2)`,
-                          boxShadow: "0 8px 36px rgba(25,118,210,0.25)",
-                          transform: "scale(1.06)",
-                        }
-                      : {}),
-                  }}
-                  aria-pressed={isOpen}
-                >
-                  <Icon size={20} />
-                </IconButton>
-                </Badge>
-                {id === 'chat' && chatPinned && (
-                  <Box sx={{ position: 'absolute', top: -6, right: -6, zIndex: 10 }}>
-                    <Box sx={{ width: 10, height: 10, bgcolor: '#ffd700', borderRadius: '50%', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }} />
+                      }}
+                    >
+                      <ButtonBase
+                        role="menuitem"
+                        onClick={() => {
+                          console.debug('[AppTray] clicking app icon', id);
+                          setOpenTray(false);
+                          onAppOpen(id);
+                          setTimeout(() => trayHandleRef.current?.focus(), 50);
+                        }}
+                        ref={(el) => (focusRefs.current[idx] = el)}
+                        aria-keyshortcuts={shortcut}
+                        tabIndex={0}
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '100%',
+                          height: 86,
+                          borderRadius: '16px',
+                          bgcolor: isOpen ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.45)',
+                          border: '1px solid',
+                          borderColor: isActive 
+                            ? 'primary.main' 
+                            : isOpen 
+                              ? 'rgba(0, 0, 0, 0.15)' 
+                              : 'rgba(0, 0, 0, 0.05)',
+                          boxShadow: isActive
+                            ? '0 6px 20px rgba(25, 118, 210, 0.12)'
+                            : isOpen
+                              ? '0 4px 12px rgba(0, 0, 0, 0.04)'
+                              : '0 2px 6px rgba(0, 0, 0, 0.01)',
+                          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                          '&:hover': {
+                            bgcolor: isOpen ? '#ffffff' : 'rgba(255, 255, 255, 0.85)',
+                            transform: 'translateY(-4px)',
+                            boxShadow: `0 10px 20px rgba(0, 0, 0, 0.06), 0 4px 12px ${color}15`,
+                            borderColor: color,
+                            '& .app-icon': {
+                              color: color,
+                              transform: 'scale(1.1) rotate(4deg)',
+                              filter: `drop-shadow(0 4px 8px ${color}4d)`,
+                            }
+                          },
+                          '&:focus-visible': {
+                            outline: '2px solid',
+                            outlineColor: 'primary.main',
+                            outlineOffset: '2px',
+                          }
+                        }}
+                        aria-pressed={isOpen}
+                      >
+                        {/* Open status breathing indicator */}
+                        {isOpen && (
+                          <Box 
+                            sx={{ 
+                              position: 'absolute', 
+                              bottom: 8, 
+                              width: 14, 
+                              height: 4, 
+                              borderRadius: '2px', 
+                              bgcolor: color,
+                              boxShadow: `0 1px 6px ${color}`,
+                              animation: 'pulse-bar 2s infinite ease-in-out',
+                              '@keyframes pulse-bar': {
+                                '0%, 100%': { opacity: 0.6, transform: 'scaleX(1)' },
+                                '50%': { opacity: 1, transform: 'scaleX(1.3)' }
+                              }
+                            }} 
+                          />
+                        )}
+
+                        {/* Active Window Pulsing Ring */}
+                        {isActive && (
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: -1,
+                              left: -1,
+                              right: -1,
+                              bottom: -1,
+                              borderRadius: '16px',
+                              border: '2px solid',
+                              borderColor: color,
+                              pointerEvents: 'none',
+                              animation: 'pulse-ring 2s infinite ease-in-out',
+                              '@keyframes pulse-ring': {
+                                '0%': { opacity: 0.3, transform: 'scale(1)' },
+                                '50%': { opacity: 0.6, transform: 'scale(1.02)' },
+                                '100%': { opacity: 0.3, transform: 'scale(1)' }
+                              }
+                            }}
+                          />
+                        )}
+
+                        {/* App Icon */}
+                        <Box 
+                          className="app-icon"
+                          sx={{ 
+                            color: isOpen ? color : '#64748b', 
+                            mb: 1.2,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.25s ease',
+                            filter: isOpen ? `drop-shadow(0 2px 4px ${color}33)` : 'none',
+                          }}
+                        >
+                          <Icon size={22} />
+                        </Box>
+
+                        {/* App Label */}
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            fontWeight: isOpen || isActive ? 700 : 600, 
+                            color: isOpen ? '#1e293b' : '#475569',
+                            fontSize: '11px',
+                            textAlign: 'center',
+                            px: 0.5,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            width: '100%',
+                            transition: 'color 0.2s',
+                          }}
+                        >
+                          {label}
+                        </Typography>
+                      </ButtonBase>
+                    </Badge>
                   </Box>
-                )}
-                </Box>
-              </Tooltip>
+                </Tooltip>
               );
             })}
-          </Stack>
+
+            {/* No items fallback */}
+            {filteredApps.length === 0 && (
+              <Box 
+                sx={{ 
+                  gridColumn: 'span 3', 
+                  py: 4, 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  color: '#94a3b8'
+                }}
+              >
+                <FiSearch size={22} style={{ marginBottom: 8, opacity: 0.6 }} />
+                <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '11px' }}>
+                  No match for "{searchQuery}"
+                </Typography>
+              </Box>
+            )}
+          </Box>
         </Paper>
       </Fade>
     </Box>
@@ -359,3 +683,4 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
 };
 
 export default AppTray;
+

@@ -230,57 +230,82 @@ const CustomDrawer = () => {
       }}
     >
       {/* Fixed Header with Logo */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          minHeight: 70, // Matches standard app bar height
-          px: collapsed ? 0 : 2.5,
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+      <Tooltip
+        title="Financial Management Information System - Online Submission of Budget Proposal Information System"
+        placement="right"
+        arrow
+        slotProps={{
+          tooltip: {
+            sx: {
+              bgcolor: 'rgba(4, 28, 15, 0.97)',
+              color: '#a8f0c0',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              backdropFilter: 'blur(8px)',
+              borderRadius: '10px',
+              border: '1px solid rgba(105, 216, 146, 0.25)',
+              maxWidth: 260,
+              lineHeight: 1.5,
+              px: 1.5,
+              py: 1,
+              '& .MuiTooltip-arrow': { color: 'rgba(4, 28, 15, 0.97)' },
+            },
+          },
         }}
       >
         <Box
           sx={{
-            width: collapsed ? 36 : 28,
-            height: collapsed ? 36 : 28,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            '&:hover': { transform: 'scale(1.1)' },
+            gap: 2,
+            minHeight: 70, // Matches standard app bar height
+            px: collapsed ? 0 : 2.5,
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            cursor: 'default',
           }}
-          onClick={() => navigate('/')}
         >
-          <img
-            src="/2020-nia-logo.svg"
-            alt="Logo"
-            style={{ height: '100%', width: '100%', objectFit: 'contain' }}
-          />
-        </Box>
-        {!collapsed && (
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography
-              sx={{ color: 'white', fontWeight: 800, fontSize: '0.95rem', lineHeight: 1 }}
-            >
-              FMIS-OSBPIS
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                color: 'rgba(255, 255, 255, 0.4)',
-                fontSize: '0.6rem',
-                display: 'block',
-                mt: '2px',
-              }}
-            >
-              Budget Proposal
-            </Typography>
+          <Box
+            sx={{
+              width: collapsed ? 36 : 28,
+              height: collapsed ? 36 : 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              '&:hover': { transform: 'scale(1.1)' },
+            }}
+            onClick={() => navigate('/')}
+          >
+            <img
+              src="/2020-nia-logo.svg"
+              alt="Logo"
+              style={{ height: '100%', width: '100%', objectFit: 'contain' }}
+            />
           </Box>
-        )}
-      </Box>
+          {!collapsed && (
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography
+                sx={{ color: 'white', fontWeight: 800, fontSize: '0.95rem', lineHeight: 1 }}
+              >
+                FMIS-OSBPIS
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'rgba(255, 255, 255, 0.4)',
+                  fontSize: '0.6rem',
+                  display: 'block',
+                  mt: '2px',
+                }}
+              >
+                Budget Proposal
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </Tooltip>
 
       {/* Moved Collapse Icon */}
       {showDesktopCollapseControls && (
