@@ -191,7 +191,7 @@ const UserProvider = ({ children }) => {
       );
 
       const particularID = currentUser?.particularID || "";
-      const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
+      const logoffUrl = `https://accounts.nia.gov.ph/Account/LogOff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
 
       window.location.href = logoffUrl;
     }

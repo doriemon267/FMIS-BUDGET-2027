@@ -3963,7 +3963,9 @@ const NewProposalWorkflowPage = () => {
               </Box>
 
               {/* Tabs for different sections */}
-              <Tabs
+              {!selectedProposal?.isConsolidated && (
+                <>
+                  <Tabs
                 value={detailsTab}
                 onChange={(e, newValue) => setDetailsTab(newValue)}
                 sx={{
@@ -6220,6 +6222,8 @@ const NewProposalWorkflowPage = () => {
                     </>
                   ))}
               </Box>
+                </>
+              )}
             </>
           )}
         </DialogContent>

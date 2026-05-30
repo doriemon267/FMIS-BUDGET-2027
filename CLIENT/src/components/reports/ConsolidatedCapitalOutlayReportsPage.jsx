@@ -146,13 +146,18 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
     return !isBRD;
   }, [currentUser, isBRD]);
 
+  const scopeNormalized = scope.replace(/_/g, ' ').trim();
   const isDepartmentRestricted = useMemo(() => {
-    return ['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY_CENTER'].includes(scope);
-  }, [scope]);
+    if (['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY CENTER'].includes(scopeNormalized)) return true;
+    if (isRestricted && scopeNormalized !== 'REGION' && scopeNormalized !== 'CENTRAL') return true;
+    return false;
+  }, [scopeNormalized, isRestricted]);
 
   const isDivisionRestricted = useMemo(() => {
-    return ['DIVISION', 'RESPONSIBILITY_CENTER'].includes(scope);
-  }, [scope]);
+    if (['DIVISION', 'RESPONSIBILITY CENTER'].includes(scopeNormalized)) return true;
+    if (isRestricted && scopeNormalized !== 'REGION' && scopeNormalized !== 'CENTRAL' && scopeNormalized !== 'DEPARTMENT' && scopeNormalized !== 'OFFICE') return true;
+    return false;
+  }, [scopeNormalized, isRestricted]);
 
   // Enforce restrictions based on role/scope
   useEffect(() => {

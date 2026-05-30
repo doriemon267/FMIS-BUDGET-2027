@@ -102,13 +102,18 @@ const ConsolidatedCorporateIncomePage = () => {
     return !isBRD;
   }, [currentUser, isBRD]);
 
+  const scopeNormalized = scope.replace(/_/g, ' ').trim();
   const isDepartmentRestricted = useMemo(() => {
-    return ['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY_CENTER'].includes(scope);
-  }, [scope]);
+    if (['DEPARTMENT', 'DIVISION', 'OFFICE', 'RESPONSIBILITY CENTER'].includes(scopeNormalized)) return true;
+    if (isRestricted && scopeNormalized !== 'REGION' && scopeNormalized !== 'CENTRAL') return true;
+    return false;
+  }, [scopeNormalized, isRestricted]);
 
   const isDivisionRestricted = useMemo(() => {
-    return ['DIVISION', 'RESPONSIBILITY_CENTER'].includes(scope);
-  }, [scope]);
+    if (['DIVISION', 'RESPONSIBILITY CENTER'].includes(scopeNormalized)) return true;
+    if (isRestricted && scopeNormalized !== 'REGION' && scopeNormalized !== 'CENTRAL' && scopeNormalized !== 'DEPARTMENT' && scopeNormalized !== 'OFFICE') return true;
+    return false;
+  }, [scopeNormalized, isRestricted]);
 
   // Enforce restrictions based on role/scope
   useEffect(() => {
@@ -120,20 +125,33 @@ const ConsolidatedCorporateIncomePage = () => {
       if (userRegion && selectedRegions !== userRegion) {
         setSelectedRegions(userRegion);
       }
-      if ((scope === 'DEPARTMENT' || scope === 'DIVISION') && hierarchical.accessibleDepartments?.[0]) {
-        const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
-        if (selectedDepartment !== userDeptId) {
+      if (isDepartmentRestricted) {
+        let userDeptId = '';
+        if (hierarchical.accessibleDepartments?.[0]) {
+          userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
+        } else if (currentUser?.department && departments?.length > 0) {
+          const matchedDept = departments.find(d => 
+            String(d.Department || d.name).toUpperCase() === String(currentUser.department).toUpperCase()
+          );
+          if (matchedDept) userDeptId = String(matchedDept._id);
+        }
+        if (userDeptId && selectedDepartment !== userDeptId) {
           setSelectedDepartment(userDeptId);
         }
       }
-      if (scope === 'DIVISION' && hierarchical.accessibleDivisions?.[0]) {
-        const userDiv = hierarchical.accessibleDivisions[0];
-        if (selectedDivision !== userDiv) {
+      if (isDivisionRestricted) {
+        let userDiv = '';
+        if (hierarchical.accessibleDivisions?.[0]) {
+          userDiv = hierarchical.accessibleDivisions[0];
+        } else if (currentUser?.division) {
+          userDiv = currentUser.division;
+        }
+        if (userDiv && selectedDivision !== userDiv) {
           setSelectedDivision(userDiv);
         }
       }
     }
-  }, [isRestricted, scope, consolidationType, hierarchical, activeRegionName, selectedRegions, selectedDepartment, selectedDivision]);
+  }, [isRestricted, scope, consolidationType, hierarchical, activeRegionName, selectedRegions, selectedDepartment, selectedDivision, isDepartmentRestricted, isDivisionRestricted, currentUser, departments]);
 
   const selectedDepartmentName = selectedDepartment
     ? (departments.find((d) => String(d._id) === String(selectedDepartment))?.Department || selectedDepartment)

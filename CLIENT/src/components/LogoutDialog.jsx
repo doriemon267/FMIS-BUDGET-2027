@@ -74,21 +74,10 @@ const LogoutDialog = ({ handleCloseMenu, compact = false }) => {
   
   const handleLogout = async () => {
     try {
-      if (IS_PRODUCTION) {
-        // NIA Production Logoff Logic
-        const clientId = env("CLIENT_ID");
-        const currentUrl = window.location.origin + "/dashboard";
-        const returnUrl = encodeURIComponent(
-          `https://accounts.nia.gov.ph/Account/Login?ReturnUrl=${encodeURIComponent(currentUrl)}`,
-        );
-        
-        // Gamitin ang particularID para sa NIA owner parameter
-        const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${currentUser?.particularID}&returnUrl=${returnUrl}`;
-
-        window.location.href = logoffUrl;
-      } else {
-        // Local/Dev Logout
-        await logout();
+      // Call the centralized logout function from UserContext
+      // This will handle clearing local states, calling logout APIs, and redirecting to SSO
+      await logout();
+      if (!IS_PRODUCTION) {
         toast.success("Logged out successfully");
       }
     } catch (error) {

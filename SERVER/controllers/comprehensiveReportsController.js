@@ -535,15 +535,24 @@ const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType,
   }
 
   if (groupBy === 'responsibilityCenter' && Array.isArray(responsibilityCenters) && responsibilityCenters.length > 0) {
-    npwQuery.division = { $in: responsibilityCenters };
+    npwQuery.$and = npwQuery.$and || [];
+    npwQuery.$and.push({
+      $or: [
+        { division: { $in: responsibilityCenters } },
+        { responsibilityCenter: { $in: responsibilityCenters } }
+      ]
+    });
   }
 
   if (preparerScope) {
-    const level = String(preparerScope.assignmentLevel || '').toUpperCase();
-    if (level === 'DIVISION' && preparerScope.division) {
-      npwQuery.division = preparerScope.division;
-    } else if ((level === 'DEPARTMENT' || level === 'OFFICE') && preparerScope.department) {
-      npwQuery.department = preparerScope.department;
+    const scopeVal = preparerScope.division || preparerScope.department;
+    if (scopeVal) {
+      npwQuery.$or = npwQuery.$or || [];
+      npwQuery.$or.push(
+        { division: scopeVal },
+        { department: scopeVal },
+        { responsibilityCenter: scopeVal }
+      );
     }
   }
 
@@ -664,11 +673,16 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
 
   // Preparer scope: restrict to Division or Department
   if (preparerScope) {
-    const level = String(preparerScope.assignmentLevel || '').toUpperCase();
-    if (level === 'DIVISION' && preparerScope.division) {
-      query.division = preparerScope.division;
-    } else if ((level === 'DEPARTMENT' || level === 'OFFICE') && preparerScope.department) {
-      query.department = preparerScope.department;
+    const scopeVal = preparerScope.division || preparerScope.department;
+    if (scopeVal) {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { division: scopeVal },
+          { department: scopeVal },
+          { responsibilityCenter: scopeVal }
+        ]
+      });
     }
   }
 

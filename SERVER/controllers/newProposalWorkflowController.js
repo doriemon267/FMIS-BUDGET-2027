@@ -2418,16 +2418,38 @@ exports.getProposals = async (req, res) => {
                 regionIds.push(new mongoose.Types.ObjectId(region));
               }
 
-              delete query.department;
-              if (query.$or) {
+              if (userRole === 'BUDGET PREPARER' || userRole === 'BUDGET REVIEWER') {
+                // For lower levels, do not delete the exact level scopes. Enforce them strictly.
+                // Include responsibilityCenter in the exact match since older proposals use it.
                 query.region = { $in: [...regionIds, null] };
+                const exactScope = orgScope.division || orgScope.department;
+                if (exactScope) {
+                  const scopeFilters = [
+                    { division: exactScope },
+                    { department: exactScope },
+                    { responsibilityCenter: exactScope }
+                  ];
+                  if (query.$or) {
+                    query.$and = query.$and || [];
+                    query.$and.push({ $or: scopeFilters });
+                  } else {
+                    query.$or = scopeFilters;
+                  }
+                  delete query.division;
+                  delete query.department;
+                }
               } else {
-                query.$or = [
-                  { region: { $in: regionIds } },
-                  { department: regionStr },
-                  { region: null },
-                  { region: { $exists: false } }
-                ];
+                delete query.department;
+                if (query.$or) {
+                  query.region = { $in: [...regionIds, null] };
+                } else {
+                  query.$or = [
+                    { region: { $in: regionIds } },
+                    { department: regionStr },
+                    { region: null },
+                    { region: { $exists: false } }
+                  ];
+                }
               }
             } else {
               query.region = null;

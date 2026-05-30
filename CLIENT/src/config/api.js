@@ -215,23 +215,16 @@ api.interceptors.response.use(undefined, async (error) => {
         return Promise.reject(error);
       }
       // If refresh fails, redirect appropriately for better UX
-      try {
-        if (!config.__diagnosticRan) {
-          config.__diagnosticRan = true;
-          const [whoami, myAccess] = await Promise.allSettled([
-            authApi.get('/get-user'),
-            api.get('/api/hierarchical-rbac/my-access')
-          ]);
-          console.debug('Auth diagnostic - get-user result:', whoami.status === 'fulfilled' ? whoami.value.data : whoami.reason?.response?.data || whoami.reason?.message);
-          console.debug('Auth diagnostic - my-access result:', myAccess.status === 'fulfilled' ? myAccess.value.data : myAccess.reason?.response?.data || myAccess.reason?.message);
-        }
-      } catch (diagErr) {
-        console.debug('Auth diagnostic failed:', diagErr?.message || diagErr);
-      }
       // Redirect: 401 -> login, 403 -> not-authorized (avoids stuck UI)
       if (response.status === 401) {
-        goTo('/login');
         toast.error('Session expired. Please log in again.');
+        if (IS_PRODUCTION) {
+          const currentUrl = typeof window !== 'undefined' ? window.location.href : "https://budget.nia.gov.ph";
+          const base = env("LOGIN_REDIRECT_URL") || "https://fmis.nia.gov.ph/login";
+          window.location.href = `${base}?ReturnUrl=${encodeURIComponent(currentUrl)}`;
+        } else {
+          goTo('/login');
+        }
       } else if (response.status === 403) {
         goTo('/not-authorized');
         toast.error('You do not have permission to perform this action.');
