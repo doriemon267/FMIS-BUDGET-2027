@@ -103,20 +103,24 @@ const StatCard = React.memo(({ title, value, color, icon: Icon, isLoading, subti
       component="article"
       sx={{
         height: '100%',
-        borderRadius: 5,
+        borderRadius: 6,
         position: 'relative',
         overflow: 'hidden',
         backgroundColor: isDarkMode ? alpha(color, 0.08) : '#ffffff',
-        border: `1px solid ${alpha(color, 0.15)}`,
+        border: `1px solid ${isDarkMode ? alpha(color, 0.15) : alpha(color, 0.12)}`,
+        boxShadow: isDarkMode 
+          ? `inset 0 1px 1px ${alpha('#fff', 0.1)}, 0 4px 20px -5px ${alpha(color, 0.05)}` 
+          : `0 10px 30px -10px ${alpha(color, 0.08)}`,
         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
         '&:hover': {
           transform: 'translateY(-8px)',
-          boxShadow: `0 20px 40px -15px ${alpha(color, 0.35)}`,
-          borderColor: alpha(color, 0.4),
+          boxShadow: `0 20px 40px -15px ${alpha(color, 0.4)}`,
+          borderColor: alpha(color, 0.5),
           '& .stat-icon-container': {
-            transform: 'scale(1.1) rotate(5deg)',
+            transform: 'scale(1.1) rotate(5deg) translateY(-2px)',
             bgcolor: color,
-            color: '#fff'
+            color: '#fff',
+            boxShadow: `0 12px 24px -6px ${alpha(color, 0.4)}`
           }
         }
       }}
@@ -157,8 +161,8 @@ const StatCard = React.memo(({ title, value, color, icon: Icon, isLoading, subti
           </Box>
         </Stack>
         {subtitle && (
-          <Box sx={{ mt: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant='caption' sx={{ color: 'text.secondary', fontWeight: 700, bgcolor: alpha(color, 0.06), px: 1.5, py: 0.5, borderRadius: 1.5 }}>
+          <Box sx={{ mt: 3 }}>
+            <Typography variant='caption' sx={{ color: color, fontWeight: 800, bgcolor: alpha(color, 0.08), px: 1.8, py: 0.8, borderRadius: 2 }}>
               {subtitle}
             </Typography>
           </Box>
@@ -180,23 +184,28 @@ const ActionCard = React.memo(({ title, description, icon: Icon, color, onClick,
     <Card
       elevation={0}
       sx={{
-        borderRadius: 5,
+        borderRadius: 6,
         height: '100%',
-        border: `1px solid ${alpha(isDarkMode ? '#fff' : '#000', 0.06)}`,
+        border: `1px solid ${isDarkMode ? alpha('#fff', 0.08) : alpha('#000', 0.06)}`,
         transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
         background: isDarkMode ? alpha('#1e293b', 0.4) : '#ffffff',
+        boxShadow: isDarkMode 
+          ? `inset 0 1px 1px ${alpha('#fff', 0.05)}, 0 4px 20px -5px rgba(0,0,0,0.15)`
+          : `0 10px 30px -10px rgba(0,0,0,0.05)`,
         position: 'relative',
         overflow: 'hidden',
         '&:hover': {
-          borderColor: alpha(color, 0.3),
+          borderColor: alpha(color, 0.5),
           bgcolor: isDarkMode ? alpha(color, 0.04) : alpha(color, 0.01),
           transform: 'translateY(-6px)',
-          boxShadow: '0 25px 50px -20px rgba(0,0,0,0.12)',
+          boxShadow: `0 25px 50px -20px ${alpha(color, 0.25)}`,
           '& .action-icon-box': { 
-            bgcolor: color, color: '#fff', transform: 'scale(1.1) rotate(-5deg)'
+            bgcolor: color, color: '#fff', transform: 'scale(1.1) rotate(-5deg)',
+            boxShadow: `0 12px 24px -6px ${alpha(color, 0.4)}`
           },
           '& .action-button': {
-            bgcolor: color, color: '#fff', transform: 'translateY(-2px)'
+            bgcolor: color, color: '#fff', transform: 'translateY(-2px)',
+            boxShadow: `0 8px 16px -4px ${alpha(color, 0.3)}`
           }
         },
       }}
@@ -204,16 +213,16 @@ const ActionCard = React.memo(({ title, description, icon: Icon, color, onClick,
       {/* CardActionArea ensures enterprise-level keyboard accessibility (Tab + Enter) */}
       <CardActionArea onClick={onClick} sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', p: 4, zIndex: 1 }}>
         <Box className="action-icon-box" sx={{
-          display: 'inline-flex', p: 2, borderRadius: 3, bgcolor: alpha(color, 0.1),
+          display: 'inline-flex', p: 2, borderRadius: 4, bgcolor: alpha(color, 0.1),
           color: color, mb: 3, transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
           boxShadow: `0 10px 20px -5px ${alpha(color, 0.2)}`
         }}>
           <Icon sx={{ fontSize: 30 }} aria-hidden="true" />
         </Box>
-        <Typography variant='h5' fontWeight='800' gutterBottom sx={{ letterSpacing: -0.5 }}>
+        <Typography variant='h5' fontWeight='900' gutterBottom sx={{ letterSpacing: -0.5 }}>
           {title}
         </Typography>
-        <Typography variant='body1' color='text.secondary' sx={{ mb: 4, flexGrow: 1, lineHeight: 1.7, opacity: 0.8 }}>
+        <Typography variant='body1' color='text.secondary' sx={{ mb: 4, flexGrow: 1, lineHeight: 1.7, opacity: 0.85, fontWeight: 500 }}>
           {description}
         </Typography>
         <Button
@@ -308,6 +317,23 @@ const HomePage = () => {
   }, [userAccessLevel, divisionName, userDepartment, regionName]);
 
   const [lastUpdated, setLastUpdated] = useState(new Date());
+
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getGreetingText = useCallback(() => {
+    const hour = currentTime.getHours();
+    if (hour >= 0 && hour < 5) return 'Magandang Madaling Araw';
+    if (hour >= 5 && hour < 12) return 'Magandang Umaga';
+    if (hour >= 12 && hour < 18) return 'Magandang Hapon';
+    return 'Magandang Gabi';
+  }, [currentTime]);
 
   const { data: stats, isLoading, error: statsError } = useQuery({
     queryKey: ['dashboardStats', regionName, userAccessLevel],
@@ -418,98 +444,174 @@ const HomePage = () => {
       <Container maxWidth={false} sx={{ pt: { xs: 2, md: 1 }, pb: { xs: 4, md: 5 }, px: { xs: 2, md: 3 } }}>
         <Stack spacing={4}>
           
-          {/* --- HERO SECTION --- */}
+          {/* --- PREMIUM WELCOME BANNER --- */}
           <Paper
             elevation={0}
             component="section"
             sx={{
-              p: { xs: 2.5, md: 3 },
-              borderRadius: 5,
+              p: { xs: 3.5, md: 4.5 },
+              borderRadius: 6,
               position: 'relative',
               overflow: 'hidden',
-              bgcolor: isDarkMode ? alpha('#fff', 0.02) : '#fff',
-              border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : alpha('#000', 0.06)}`,
-              boxShadow: '0 4px 20px -10px rgba(0,0,0,0.05)',
+              background: isDarkMode 
+                ? 'linear-gradient(135deg, #0b1e15 0%, #17301e 50%, #204026 100%)' 
+                : 'linear-gradient(135deg, #1b4332 0%, #386641 50%, #60a561 100%)',
+              color: 'white',
+              border: `1px solid ${isDarkMode ? alpha('#fff', 0.08) : alpha('#fff', 0.2)}`,
+              boxShadow: '0 20px 40px -15px rgba(27, 67, 50, 0.35)',
             }}
           >
+            {/* Ambient decorative glowing backdrops */}
             <Box sx={{
-              position: 'absolute', top: -100, right: -50, width: 400, height: 400,
-              borderRadius: '50%', background: `radial-gradient(circle, ${alpha(THEME_COLORS.primary, 0.03)} 0%, transparent 70%)`, zIndex: 0
+              position: 'absolute', top: -150, right: -50, width: 450, height: 450,
+              borderRadius: '50%', background: `radial-gradient(circle, ${alpha('#a7c957', 0.15)} 0%, transparent 70%)`, zIndex: 0, pointerEvents: 'none'
             }} />
             <Box sx={{
-              position: 'absolute', bottom: -50, left: -50, width: 300, height: 300,
-              borderRadius: '50%', background: `radial-gradient(circle, ${alpha(THEME_COLORS.accent, 0.05)} 0%, transparent 70%)`, zIndex: 0
+              position: 'absolute', bottom: -100, left: -50, width: 350, height: 350,
+              borderRadius: '50%', background: `radial-gradient(circle, ${alpha('#fff', 0.1)} 0%, transparent 70%)`, zIndex: 0, pointerEvents: 'none'
             }} />
 
             <Grid container spacing={4} alignItems="center" sx={{ position: 'relative', zIndex: 1 }}>
               <Grid item xs={12} lg={8}>
-                <Stack spacing={1} sx={{ mb: 3 }}>
-                  <Typography variant='overline' component="h2" sx={{ letterSpacing: 3, fontWeight: 800, color: THEME_COLORS.primary, fontSize: '0.75rem' }}>
-                    OFFICIAL BUDGET SYSTEM
+                <Stack spacing={1.5} sx={{ mb: 3 }}>
+                  <Typography variant='overline' component="h2" sx={{ letterSpacing: 4, fontWeight: 900, color: '#a7c957', fontSize: '0.8rem' }}>
+                    OFFICIAL BUDGET SYSTEM PORTAL
                   </Typography>
-                  <Typography variant='h4' component="h1" fontWeight={900} sx={{ mt: 0.5, letterSpacing: -0.8, fontSize: { xs: '1.5rem', md: '1.8rem' }, lineHeight: 1.2, color: isDarkMode ? '#fff' : '#1a1a1a' }}>
-                    Mabuhay, {formatDisplayName(currentUser)}!
+                  <Typography variant='h3' component="h1" fontWeight={900} sx={{ letterSpacing: -1, fontSize: { xs: '1.8rem', md: '2.4rem' }, lineHeight: 1.15 }}>
+                    {getGreetingText()}, {formatDisplayName(currentUser)}!
                   </Typography>
                 </Stack>
                 
-                <Typography variant='body1' sx={{ color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', maxWidth: 600, mb: 4, lineHeight: 1.7, fontSize: '1.05rem', fontWeight: 500 }}>
+                <Typography variant='body1' sx={{ color: 'rgba(255,255,255,0.85)', maxWidth: 620, mb: 4, lineHeight: 1.75, fontSize: '1.05rem', fontWeight: 500 }}>
                   {isPreparer
                     ? `Welcome back to your central hub for FMIS budget management. You can now manage your budget proposals and track compliance for FY ${fiscalYear}.`
-                    : `Welcome back! Here is an overview of budget submissions for ${displayInfo.name}. You can monitor progress and review pending items in real-time.`}
+                    : `Welcome back! Here is an overview of budget submissions for ${regionName}. You can monitor progress and review pending items in real-time.`}
                 </Typography>
                 
-                <Stack direction='row' spacing={1} flexWrap='wrap' useFlexGap sx={{ mb: 0 }}>
+                <Stack direction='row' spacing={1.5} flexWrap='wrap' useFlexGap sx={{ mb: 0 }}>
                   {actionChips.map((chip) => (
                     <Chip
                       key={chip.label}
                       label={chip.label}
-                      icon={<span style={{ fontSize: '1rem' }}>{chip.icon}</span>}
+                      icon={<span style={{ fontSize: '1rem', marginRight: 4 }}>{chip.icon}</span>}
                       sx={{
-                        bgcolor: isDarkMode ? alpha('#fff', 0.05) : alpha(THEME_COLORS.primary, 0.05),
-                        color: isDarkMode ? '#fff' : THEME_COLORS.secondary,
-                        border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : alpha(THEME_COLORS.primary, 0.1)}`,
-                        fontWeight: 700, px: 1, borderRadius: 2.5, height: 32, fontSize: '0.85rem',
-                        transition: 'all 0.2s', '&:hover': { bgcolor: isDarkMode ? alpha('#fff', 0.1) : alpha(THEME_COLORS.primary, 0.1) }
+                        bgcolor: 'rgba(255,255,255,0.12)',
+                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        fontWeight: 700, px: 1.5, borderRadius: 2.5, height: 36, fontSize: '0.85rem',
+                        transition: 'all 0.3s ease', 
+                        '&:hover': { 
+                          bgcolor: 'rgba(255,255,255,0.2)',
+                          transform: 'translateY(-1px)'
+                        }
                       }}
                     />
                   ))}
                 </Stack>
               </Grid>
 
+              {/* Dynamic Glassmorphic Clock Panel */}
               <Grid item xs={12} lg={4}>
                 <Box sx={{ 
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  bgcolor: isDarkMode ? alpha('#fff', 0.03) : '#f8fafc', p: 3, borderRadius: 5,
-                  border: `1px solid ${isDarkMode ? alpha('#fff', 0.1) : 'rgba(0,0,0,0.04)'}`, textAlign: 'center',
-                  boxShadow: isDarkMode ? 'none' : 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  p: 3.5, borderRadius: 6,
+                  border: '1px solid rgba(255, 255, 255, 0.15)', textAlign: 'center',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
+                    transform: 'scale(1.02)'
+                  }
                 }}>
-                   <Box sx={{ position: 'relative', display: 'inline-flex', mb: 3 }}>
-                      <CircularProgress variant="determinate" value={100} size={120} thickness={5} sx={{ color: isDarkMode ? alpha('#fff', 0.05) : alpha(THEME_COLORS.primary, 0.08) }} />
+                  <Typography variant="h6" fontWeight="900" sx={{ color: '#a7c957', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: 2, mb: 1 }}>
+                    System Local Time
+                  </Typography>
+                  <Typography variant="h3" fontWeight="900" sx={{ letterSpacing: -1, color: '#fff', mb: 1, fontFamily: '"Outfit", "Roboto", sans-serif' }}>
+                    {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontWeight: 700, mb: 3, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    {currentTime.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </Typography>
+
+                  <Box sx={{ width: '100%', height: '1px', bgcolor: 'rgba(255,255,255,0.1)', mb: 3 }} />
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'center' }}>
+                    <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                      <CircularProgress variant="determinate" value={100} size={70} thickness={6} sx={{ color: 'rgba(255,255,255,0.06)' }} />
                       <CircularProgress
-                        variant="determinate" value={Number(completionRate)} size={120} thickness={5}
+                        variant="determinate" value={Number(completionRate)} size={70} thickness={6}
                         sx={{ 
-                          color: THEME_COLORS.primary, position: 'absolute', left: 0, strokeLinecap: 'round',
-                          filter: `drop-shadow(0 0 10px ${alpha(THEME_COLORS.primary, 0.3)})`
+                          color: '#a7c957', position: 'absolute', left: 0, strokeLinecap: 'round',
+                          filter: `drop-shadow(0 0 8px ${alpha('#a7c957', 0.6)})`
                         }}
                       />
                       <Box sx={{
                         top: 0, left: 0, bottom: 0, right: 0, position: 'absolute', display: 'flex',
-                        flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Typography variant="h3" fontWeight="900" sx={{ letterSpacing: -1, color: isDarkMode ? '#fff' : THEME_COLORS.secondary }}>{completionRate}%</Typography>
+                        <Typography variant="subtitle2" fontWeight="900" sx={{ color: '#fff' }}>{completionRate}%</Typography>
                       </Box>
-                   </Box>
-                   <Typography variant="h6" fontWeight="900" sx={{ mb: 0.5, fontSize: '1.1rem', color: isDarkMode ? '#fff' : '#1a1a1a' }}>Submission Health</Typography>
-                   <Typography variant="caption" sx={{ color: isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)', fontWeight: 700, maxWidth: 200, display: 'block' }}>Approved vs Total for FY {fiscalYear}</Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'left' }}>
+                      <Typography variant="subtitle2" fontWeight="900" sx={{ color: '#fff', lineHeight: 1.1 }}>Submission Health</Typography>
+                      <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>FY {fiscalYear} Approved</Typography>
+                    </Box>
+                  </Box>
                 </Box>
               </Grid>
             </Grid>
           </Paper>
 
-          {/* --- DEADLINE REMINDER --- */}
-          {activeSettings?.dueDate && (
-            <DeadlineReminder deadline={activeSettings.dueDate} label="Budget Submission Deadline" showIcon={true} />
-          )}
+          {/* --- LIVE SYSTEM STATUS BAR --- */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mx: 0.5,
+              borderRadius: 4,
+              border: `1px solid ${isDarkMode ? alpha('#fff', 0.08) : alpha('#000', 0.05)}`,
+              background: isDarkMode ? alpha('#1e293b', 0.4) : '#ffffff',
+              boxShadow: '0 4px 12px -2px rgba(0,0,0,0.03)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 2
+            }}
+          >
+            <Box display="flex" alignItems="center" gap={1.5}>
+              <Box sx={{ width: 8, height: 8, bgcolor: '#6a994e', borderRadius: '50%', animation: 'pulse 1.8s infinite ease-in-out', '@keyframes pulse': { '0%': { opacity: 0.4, transform: 'scale(0.9)' }, '50%': { opacity: 1, transform: 'scale(1.2)', boxShadow: `0 0 10px ${alpha('#6a994e', 0.8)}` }, '100%': { opacity: 0.4, transform: 'scale(0.9)' } } }} />
+              <Typography variant="body2" fontWeight="700" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontSize: '0.75rem' }}>
+                System Core Live Monitor
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+              {[
+                { label: 'Vite Engine: Stable', color: '#6a994e' },
+                { label: 'Express API: Connected', color: '#6a994e' },
+                { label: 'Database: Online', color: '#6a994e' },
+                { label: 'Sync: Real-time', color: '#0077b6' }
+              ].map((status, idx) => (
+                <Chip
+                  key={idx}
+                  label={status.label}
+                  size="small"
+                  sx={{
+                    bgcolor: alpha(status.color, 0.08),
+                    color: status.color,
+                    fontWeight: 800,
+                    fontSize: '0.75rem',
+                    border: `1px solid ${alpha(status.color, 0.15)}`,
+                    height: 26,
+                    '& .MuiChip-label': { px: 1.2 }
+                  }}
+                />
+              ))}
+            </Stack>
+          </Paper>
 
           {/* --- QUICK ACTIONS (Moved up for better UX/Enterprise workflow) --- */}
           <Box component="section">

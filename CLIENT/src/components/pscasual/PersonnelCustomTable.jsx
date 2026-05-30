@@ -510,7 +510,7 @@ const CasualCustomTable = ({
   return (
     <>
       {/* Main Table with Zoom Animation */}
-      <Zoom in={true} timeout={600}>
+      <>
         <Box overflow="auto" sx={{ border: "solid thin #fff" }}>
           <Paper sx={{
             width: "100%",
@@ -897,10 +897,10 @@ const CasualCustomTable = ({
           </Box>
         </Popover>
         </Box>
-      </Zoom>
+      </>
 
       {/* Grand Total Footer - use sum of displayed rows to match SUBTOTAL column (avoids API vs list filter mismatch) */}
-      <Fade in={true} timeout={1000}>
+      <>
         <Box
           sx={{
             display: "flex",
@@ -937,7 +937,7 @@ const CasualCustomTable = ({
             })}
           </Typography>
         </Box>
-      </Fade>
+      </>
     </>
   );
 };

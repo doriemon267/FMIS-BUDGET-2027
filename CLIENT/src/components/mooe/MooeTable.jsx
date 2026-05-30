@@ -1809,7 +1809,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
       </Box>
 
       {/* Main Table with Zoom Animation */}
-      <Zoom in={true} timeout={600}>
+      <>
         <Box sx={{ position: 'relative' }}>
           <TableContainer
             component={Paper}
@@ -2218,7 +2218,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
         </TableContainer>
 
           {/* Fixed Footer Table with Animation */}
-          <Fade in={true} timeout={1000}>
+          <>
             <Table
               sx={{
                 position: 'sticky',
@@ -2433,9 +2433,9 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             </TableRow>
           </TableFooter>
             </Table>
-          </Fade>
+          </>
         </Box>
-      </Zoom>
+      </>
 
       {/* Filter Menu */}
       <Menu

@@ -138,7 +138,7 @@ function DetailRow({ detail, onEdit, canEdit }) {
   const total = (detail.income_amount || 0) + (detail.subsidy_amount || 0);
 
   return (
-    <Fade in timeout={300}>
+    <>
       <Paper
         elevation={0}
         sx={{
@@ -201,7 +201,7 @@ function DetailRow({ detail, onEdit, canEdit }) {
           )}
         </Box>
       </Paper>
-    </Fade>
+    </>
   );
 }
 

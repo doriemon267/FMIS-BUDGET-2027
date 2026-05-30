@@ -3,6 +3,7 @@ import {
   ListItemIcon,
   MenuItem,
   Typography,
+  useTheme
 } from "@mui/material";
 import { useState } from "react";
 import { toast } from "react-toastify";
@@ -45,6 +46,8 @@ const parseParticularIdAndEmail = (particularID, emailFromUser) => {
 
 const LogoutDialog = ({ handleCloseMenu, compact = false }) => {
   const { logout, currentUser } = useUser();
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
 
   // Kunin ang email mula sa posibleng casing (Email o email)
   const email = currentUser?.email ?? currentUser?.Email;
@@ -57,14 +60,26 @@ const LogoutDialog = ({ handleCloseMenu, compact = false }) => {
   const handleOpen = async () => {
     handleCloseMenu?.();
     const result = await Swal.fire({
-      title: "Logout?",
+      title: "Sign Out?",
       text: "Are you sure you want to sign out?",
-      icon: "question",
+      icon: "warning",
+      iconColor: "#e63946",
       showCancelButton: true,
-      confirmButtonColor: "#386641",
-      cancelButtonColor: "#d33",
-      confirmButtonText: "Yes, logout",
+      confirmButtonText: "Yes, Sign Out",
+      cancelButtonText: "Cancel",
+      background: isDarkMode ? "#152e22" : "#ffffff", // Deep green backdrop for dark mode, clean white for light
+      color: isDarkMode ? "#cbd5e1" : "#1e293b",
+      confirmButtonColor: "#e63946", // Elegant modern red for destructive action
+      cancelButtonColor: "#386641", // Sleek deep green for cancel
+      reverseButtons: true,
       allowOutsideClick: false,
+      customClass: {
+        popup: 'premium-swal-popup',
+        title: 'premium-swal-title',
+        htmlContainer: 'premium-swal-text',
+        confirmButton: 'premium-swal-confirm',
+        cancelButton: 'premium-swal-cancel',
+      }
     });
 
     if (result.isConfirmed) {
@@ -87,33 +102,76 @@ const LogoutDialog = ({ handleCloseMenu, compact = false }) => {
   };
 
   return (
-    <MenuItem onClick={handleOpen} sx={{ py: 1.5 }}>
-      <ListItemIcon sx={{ color: "error.main" }}>
-        <LuLogOut size={20} />
-      </ListItemIcon>
-      
-      {compact ? (
-        <Typography variant="body2" fontWeight={500}>Logout</Typography>
-      ) : (
-        <Box sx={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <Typography 
-            variant="body2" 
-            sx={{ fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
-          >
-            Logout: {idPart}
-          </Typography>
-          {emailPart && (
+    <>
+      <style>{`
+        .premium-swal-popup {
+          border-radius: 24px !important;
+          font-family: 'Outfit', 'Inter', 'Roboto', sans-serif !important;
+          border: 1px solid ${isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'} !important;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+          padding: 2.5rem 1.5rem !important;
+        }
+        .premium-swal-title {
+          font-weight: 900 !important;
+          font-size: 1.6rem !important;
+          letter-spacing: -0.5px !important;
+          margin-bottom: 0.5rem !important;
+        }
+        .premium-swal-text {
+          font-weight: 500 !important;
+          font-size: 1rem !important;
+          opacity: 0.85 !important;
+          margin-bottom: 1.5rem !important;
+        }
+        .premium-swal-confirm {
+          border-radius: 12px !important;
+          font-weight: 700 !important;
+          font-size: 0.95rem !important;
+          padding: 12px 24px !important;
+          transition: all 0.3s ease !important;
+        }
+        .premium-swal-confirm:hover {
+          transform: translateY(-2px) !important;
+        }
+        .premium-swal-cancel {
+          border-radius: 12px !important;
+          font-weight: 700 !important;
+          font-size: 0.95rem !important;
+          padding: 12px 24px !important;
+          transition: all 0.3s ease !important;
+        }
+        .premium-swal-cancel:hover {
+          transform: translateY(-2px) !important;
+        }
+      `}</style>
+      <MenuItem onClick={handleOpen} sx={{ py: 1.5 }}>
+        <ListItemIcon sx={{ color: "error.main" }}>
+          <LuLogOut size={20} />
+        </ListItemIcon>
+        
+        {compact ? (
+          <Typography variant="body2" fontWeight={500}>Logout</Typography>
+        ) : (
+          <Box sx={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <Typography 
-              variant="caption" 
-              color="text.secondary"
-              sx={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
+              variant="body2" 
+              sx={{ fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
             >
-              {emailPart}
+              Logout: {idPart}
             </Typography>
-          )}
-        </Box>
-      )}
-    </MenuItem>
+            {emailPart && (
+              <Typography 
+                variant="caption" 
+                color="text.secondary"
+                sx={{ whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
+              >
+                {emailPart}
+              </Typography>
+            )}
+          </Box>
+        )}
+      </MenuItem>
+    </>
   );
 };
 

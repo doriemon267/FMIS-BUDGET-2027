@@ -258,222 +258,220 @@ const CustomTable = ({
   };
 
   return (
-    <Zoom in={true} timeout={600}>
-      <Box sx={{ width: "100%" }}>
-        <Paper sx={{
-          width: "100%",
-          mb: 2,
-          borderRadius: 2,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-          transition: 'all 0.3s ease'
+    <Box sx={{ width: "100%" }}>
+      <Paper sx={{
+        width: "100%",
+        mb: 2,
+        borderRadius: 2,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+        transition: 'all 0.3s ease'
+      }}>
+        <TableContainer sx={{
+          height: "60vh",
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: '#f1f1f1',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#c1c1c1',
+            borderRadius: '4px',
+            '&:hover': {
+              background: '#a8a8a8',
+            },
+          },
         }}>
-          <TableContainer sx={{
-            height: "60vh",
-            '&::-webkit-scrollbar': {
-              width: '8px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
-              borderRadius: '4px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: '#c1c1c1',
-              borderRadius: '4px',
-              '&:hover': {
-                background: '#a8a8a8',
-              },
-            },
-          }}>
-          <Table
-            sx={{ minWidth: 750 }}
-            aria-labelledby="tableTitle"
-            size="medium"
-          >
-            <TableHead sx={{ position: "sticky", top: 0, backgroundColor: "#375e38", zIndex: 1 }}>
-              <TableRow>
-                {columns.map((column) => (
-                  <TableCell
-                    key={column.type === "action" ? "action" : column.field}
+        <Table
+          sx={{ minWidth: 750 }}
+          aria-labelledby="tableTitle"
+          size="medium"
+        >
+          <TableHead sx={{ position: "sticky", top: 0, backgroundColor: "#375e38", zIndex: 1 }}>
+            <TableRow>
+              {columns.map((column) => (
+                <TableCell
+                  key={column.type === "action" ? "action" : column.field}
+                  sx={{
+                    color: "white",
+                    fontWeight: "bold",
+                    borderRight: "1px solid",
+                    borderColor: grey[500],
+                  }}
+                >
+                  <Box
                     sx={{
-                      color: "white",
-                      fontWeight: "bold",
-                      borderRight: "1px solid",
-                      borderColor: grey[500],
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.5,
                     }}
                   >
-                    <Box
+                    <TableSortLabel
+                      active={orderBy === column.field}
+                      direction={orderBy === column.field ? order : "asc"}
+                      onClick={() => handleRequestSort(column.field)}
+                    >
+                      {column.label}
+                    </TableSortLabel>
+                    {column.searchable && (
+                      <Tooltip title={`Filter by ${column.label}`}>
+                        <IconButton
+                          size="small"
+                          onClick={(e) =>
+                            handleFilterClick(
+                              e,
+                              column.field,
+                              column.label
+                            )
+                          }
+                        >
+                          <TiFilter />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          {isLoading ? (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
+                  <Fade in={isLoading}>
+                    <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+                      <CircularProgress size={40} sx={{ color: '#375e38' }} />
+                      <Typography variant="body2" color="text.secondary">
+                        Loading retiree data...
+                      </Typography>
+                    </Box>
+                  </Fade>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          ) : (
+            <TableBody>
+              {data && data[dataListName] && data[dataListName].length > 0 ? (
+                data[dataListName].map((row, rowIndex) => {
+                  const isRecentlyUpdated =
+                    row.updatedAt &&
+                    dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
+
+                  return (
+                    <TableRow
+                      key={rowIndex}
+                      hover
                       sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 0.5,
+                        backgroundColor: isRecentlyUpdated
+                          ? green[50] // Highlight modified rows
+                          : rowIndex % 2 === 0
+                          ? blueGrey[50]
+                          : "#ffffff",
+                        cursor: "pointer",
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          backgroundColor: isRecentlyUpdated
+                            ? green[100]
+                            : rowIndex % 2 === 0
+                            ? blueGrey[100]
+                            : "rgba(55, 94, 56, 0.04)",
+                          transform: 'translateY(-1px)',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }
                       }}
                     >
-                      <TableSortLabel
-                        active={orderBy === column.field}
-                        direction={orderBy === column.field ? order : "asc"}
-                        onClick={() => handleRequestSort(column.field)}
-                      >
-                        {column.label}
-                      </TableSortLabel>
-                      {column.searchable && (
-                        <Tooltip title={`Filter by ${column.label}`}>
-                          <IconButton
-                            size="small"
-                            onClick={(e) =>
-                              handleFilterClick(
-                                e,
-                                column.field,
-                                column.label
-                              )
+                      {columns.map((column, colIndex) => {
+                        const cellValue = row[column.field];
+                        const isFocused =
+                          focusedCell &&
+                          focusedCell.rowIndex === rowIndex &&
+                          focusedCell.colIndex === colIndex;
+
+                        return (
+                          <TableCell
+                            key={colIndex}
+                            align={
+                              column.type === "number" ? "right" : "left"
+                            }
+                            sx={{
+                              backgroundColor: isFocused
+                                ? "#e3f2fd"
+                                : "inherit",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                            onClick={() =>
+                              setFocusedCell({ rowIndex, colIndex })
                             }
                           >
-                            <TiFilter />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </Box>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            {isLoading ? (
-              <TableBody>
-                <TableRow>
-                  <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
-                    <Fade in={isLoading}>
-                      <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                        <CircularProgress size={40} sx={{ color: '#375e38' }} />
-                        <Typography variant="body2" color="text.secondary">
-                          Loading retiree data...
-                        </Typography>
-                      </Box>
-                    </Fade>
+                            {column.render ? (
+                              column.render(row)
+                            ) : column.type === "date" && isValidDate(cellValue) ? (
+                              formatDateToMDY(cellValue)
+                            ) : column.type === "number" ? (
+                              formatCurrency(cellValue)
+                            ) : (
+                              <TextSearchable columnName={cellValue} />
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow sx={{ height: "70vh" }}>
+                  <TableCell
+                    colSpan={columns.length}
+                    sx={{ textAlign: "center", fontWeight: "500" }}
+                  >
+                    {searchValue ? (
+                      <>
+                        No results found for <b>"{searchValue}"</b>.
+                      </>
+                    ) : (
+                      "No rows found."
+                    )}
                   </TableCell>
                 </TableRow>
-              </TableBody>
-            ) : (
-              <TableBody>
-                {data && data[dataListName] && data[dataListName].length > 0 ? (
-                  data[dataListName].map((row, rowIndex) => {
-                    const isRecentlyUpdated =
-                      row.updatedAt &&
-                      dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
-
-                    return (
-                      <TableRow
-                        key={rowIndex}
-                        hover
-                        sx={{
-                          backgroundColor: isRecentlyUpdated
-                            ? green[50] // Highlight modified rows
-                            : rowIndex % 2 === 0
-                            ? blueGrey[50]
-                            : "#ffffff",
-                          cursor: "pointer",
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            backgroundColor: isRecentlyUpdated
-                              ? green[100]
-                              : rowIndex % 2 === 0
-                              ? blueGrey[100]
-                              : "rgba(55, 94, 56, 0.04)",
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                          }
-                        }}
-                      >
-                        {columns.map((column, colIndex) => {
-                          const cellValue = row[column.field];
-                          const isFocused =
-                            focusedCell &&
-                            focusedCell.rowIndex === rowIndex &&
-                            focusedCell.colIndex === colIndex;
-
-                          return (
-                            <TableCell
-                              key={colIndex}
-                              align={
-                                column.type === "number" ? "right" : "left"
-                              }
-                              sx={{
-                                backgroundColor: isFocused
-                                  ? "#e3f2fd"
-                                  : "inherit",
-                                cursor: "pointer",
-                                whiteSpace: "nowrap",
-                              }}
-                              onClick={() =>
-                                setFocusedCell({ rowIndex, colIndex })
-                              }
-                            >
-                              {column.render ? (
-                                column.render(row)
-                              ) : column.type === "date" && isValidDate(cellValue) ? (
-                                formatDateToMDY(cellValue)
-                              ) : column.type === "number" ? (
-                                formatCurrency(cellValue)
-                              ) : (
-                                <TextSearchable columnName={cellValue} />
-                              )}
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow sx={{ height: "70vh" }}>
-                    <TableCell
-                      colSpan={columns.length}
-                      sx={{ textAlign: "center", fontWeight: "500" }}
-                    >
-                      {searchValue ? (
-                        <>
-                          No results found for <b>"{searchValue}"</b>.
-                        </>
-                      ) : (
-                        "No rows found."
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            )}
-          </Table>
-        </TableContainer>
-
-          {!isLoading && (
-            <TablePagination
-              rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
-              component="div"
-              count={data?.totalRecords || 0}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              sx={{
-                borderTop: '1px solid rgba(224, 224, 224, 1)',
-                backgroundColor: '#fafafa'
-              }}
-            />
+              )}
+            </TableBody>
           )}
+        </Table>
+      </TableContainer>
 
-          <Popover
-            open={Boolean(filterAnchorEl)}
-            anchorEl={filterAnchorEl}
-            onClose={handleFilterClose}
-            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-          >
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 2 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#375e38" }}>
-                Filter by {fieldAndValue.label}
-              </Typography>
-              {renderFilter()}
-            </Box>
-          </Popover>
-        </Paper>
-      </Box>
-    </Zoom>
+      {!isLoading && (
+        <TablePagination
+          rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
+          component="div"
+          count={data?.totalRecords || 0}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          sx={{
+            borderTop: '1px solid rgba(224, 224, 224, 1)',
+            backgroundColor: '#fafafa'
+          }}
+        />
+      )}
+
+      <Popover
+        open={Boolean(filterAnchorEl)}
+        anchorEl={filterAnchorEl}
+        onClose={handleFilterClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 2 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#375e38" }}>
+            Filter by {fieldAndValue.label}
+          </Typography>
+          {renderFilter()}
+        </Box>
+      </Popover>
+    </Paper>
+  </Box>
   );
 };
 

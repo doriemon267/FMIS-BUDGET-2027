@@ -662,207 +662,205 @@ const CustomTable = ({
         </Grid>
       </Paper>
 
-      {/* Main Table with Zoom Animation */}
-      <Zoom in={true} timeout={600}>
-        <Box overflow="auto">
-          <Paper sx={{
-            width: "100%",
-            overflow: "hidden",
-            borderRadius: 2,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
-            }
+      {/* Main Table without Zoom Animation */}
+      <Box overflow="auto">
+        <Paper sx={{
+          width: "100%",
+          overflow: "hidden",
+          borderRadius: 2,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+          }
+        }}>
+          <TableContainer sx={{
+            height: "60vh",
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f1f1',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#c1c1c1',
+              borderRadius: '4px',
+              '&:hover': {
+                background: '#a8a8a8',
+              },
+            },
           }}>
-            <TableContainer sx={{
-              height: "60vh",
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: '#f1f1f1',
-                borderRadius: '4px',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: '#c1c1c1',
-                borderRadius: '4px',
-                '&:hover': {
-                  background: '#a8a8a8',
-                },
-              },
-            }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                {columns.map((column) => (
-                  <TableCell
-                    key={column.field}
-                    sx={{
-                      borderRight: "1px solid",
-                      borderColor: grey[500],
-                      textAlign: column.type === "number" ? "right" : "left",
-                      backgroundColor: "#375e38",
-                      color: "#fff",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                      <TableSortLabel
-                        active={orderBy === column.field}
-                        direction={orderBy === column.field ? order : "asc"}
-                        onClick={() => handleRequestSort(column.field)}
-                      >
-                        {column.label}
-                      </TableSortLabel>
-                      {column.type !== "action" && (
-                        <Tooltip title={`Filter ${column.label}`}>
-                          <IconButton
-                            size="small"
-                            onClick={(event) =>
-                              handleFilterClick(event, column.field, column.label)
-                            }
-                          >
-                            <TiFilter color="lightgray" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </Box>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              {columns.map((column) => (
+                <TableCell
+                  key={column.field}
+                  sx={{
+                    borderRight: "1px solid",
+                    borderColor: grey[500],
+                    textAlign: column.type === "number" ? "right" : "left",
+                    backgroundColor: "#375e38",
+                    color: "#fff",
+                    fontWeight: "bold",
+                  }}
+                >
+                  <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <TableSortLabel
+                      active={orderBy === column.field}
+                      direction={orderBy === column.field ? order : "asc"}
+                      onClick={() => handleRequestSort(column.field)}
+                    >
+                      {column.label}
+                    </TableSortLabel>
+                    {column.type !== "action" && (
+                      <Tooltip title={`Filter ${column.label}`}>
+                        <IconButton
+                          size="small"
+                          onClick={(event) =>
+                            handleFilterClick(event, column.field, column.label)
+                          }
+                        >
+                          <TiFilter color="lightgray" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
 
-            {isLoading ? (
-              <TableBody>
-                <TableRow>
-                  <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
-                    <Fade in={isLoading}>
-                      <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                        <CircularProgress size={40} sx={{ color: '#375e38' }} />
-                        <Typography variant="body2" color="text.secondary">
-                          Loading subsistence allowance data...
-                        </Typography>
-                      </Box>
-                    </Fade>
+          {isLoading ? (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
+                  <Fade in={isLoading}>
+                    <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+                      <CircularProgress size={40} sx={{ color: '#375e38' }} />
+                      <Typography variant="body2" color="text.secondary">
+                        Loading subsistence allowance data...
+                      </Typography>
+                    </Box>
+                  </Fade>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          ) : (
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow sx={{ height: "70vh" }}>
+                  <TableCell colSpan={columns.length} align="center">
+                    {searchValue ? (
+                      <>
+                        No results found for <b>"{searchValue}"</b>.
+                      </>
+                    ) : (
+                      "No rows found."
+                    )}
                   </TableCell>
                 </TableRow>
-              </TableBody>
-            ) : (
-              <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow sx={{ height: "70vh" }}>
-                    <TableCell colSpan={columns.length} align="center">
-                      {searchValue ? (
-                        <>
-                          No results found for <b>"{searchValue}"</b>.
-                        </>
-                      ) : (
-                        "No rows found."
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rows.map((row, rowIndex) => {
-                    const isRecentlyUpdated =
-                      row.updatedAt && dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
+              ) : (
+                rows.map((row, rowIndex) => {
+                  const isRecentlyUpdated =
+                    row.updatedAt && dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
 
-                    return (
-                      <TableRow
-                        key={row._id || rowIndex}
-                        hover
-                        sx={{
+                  return (
+                    <TableRow
+                      key={row._id || rowIndex}
+                      hover
+                      sx={{
+                        backgroundColor: isRecentlyUpdated
+                          ? green[50]
+                          : rowIndex % 2 === 0
+                          ? blueGrey[50]
+                          : "#fff",
+                        cursor: "pointer",
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
                           backgroundColor: isRecentlyUpdated
-                            ? green[50]
+                            ? green[100]
                             : rowIndex % 2 === 0
-                            ? blueGrey[50]
-                            : "#fff",
-                          cursor: "pointer",
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            backgroundColor: isRecentlyUpdated
-                              ? green[100]
-                              : rowIndex % 2 === 0
-                              ? blueGrey[100]
-                              : "rgba(55, 94, 56, 0.04)",
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                          }
-                        }}
-                      >
-                        {columns.map((column, i) => {
-                          const cellValue = row[column.field];
-                          return (
-                            <TableCell
-                              key={column.field}
-                              onClick={() =>
-                                handleCellClick(rowIndex, column.field, row["_id"])
-                              }
-                              sx={{
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                fontWeight: 500,
-                                textAlign: column.type === "number" ? "right" : "left",
-                              }}
-                            >
-                              {column.render ? (
-                                column.render(row)
-                              ) : column.type === "date" ? (
-                                formatDateToMDY(cellValue)
-                              ) : column.type === "number" ? (
-                                formatCurrency(cellValue)
-                              ) : column.type === "boolean" ? (
-                                cellValue ? "Yes" : "No"
-                              ) : column.searchable ? (
-                                <TextSearchable columnName={cellValue} />
-                              ) : (
-                                cellValue
-                              )}
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            )}
-          </Table>
-            </TableContainer>
+                            ? blueGrey[100]
+                            : "rgba(55, 94, 56, 0.04)",
+                          transform: 'translateY(-1px)',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }
+                      }}
+                    >
+                      {columns.map((column, i) => {
+                        const cellValue = row[column.field];
+                        return (
+                          <TableCell
+                            key={column.field}
+                            onClick={() =>
+                              handleCellClick(rowIndex, column.field, row["_id"])
+                            }
+                            sx={{
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              fontWeight: 500,
+                              textAlign: column.type === "number" ? "right" : "left",
+                            }}
+                          >
+                            {column.render ? (
+                              column.render(row)
+                            ) : column.type === "date" ? (
+                              formatDateToMDY(cellValue)
+                            ) : column.type === "number" ? (
+                              formatCurrency(cellValue)
+                            ) : column.type === "boolean" ? (
+                              cellValue ? "Yes" : "No"
+                            ) : column.searchable ? (
+                              <TextSearchable columnName={cellValue} />
+                            ) : (
+                              cellValue
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          )}
+        </Table>
+          </TableContainer>
 
-            {!isLoading && (
-              <TablePagination
-                rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
-                component="div"
-                count={data?.totalRecords || 0}
-                rowsPerPage={rowsPerPage}
-                page={page}
-                onPageChange={handleChangePage}
-                onRowsPerPageChange={handleChangeRowsPerPage}
-                sx={{
-                  borderTop: '1px solid rgba(224, 224, 224, 1)',
-                  backgroundColor: '#fafafa'
-                }}
-              />
-            )}
+          {!isLoading && (
+            <TablePagination
+              rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
+              component="div"
+              count={data?.totalRecords || 0}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              sx={{
+                borderTop: '1px solid rgba(224, 224, 224, 1)',
+                backgroundColor: '#fafafa'
+              }}
+            />
+          )}
 
-            <Popover
-              open={Boolean(filterAnchorEl)}
-              anchorEl={filterAnchorEl}
-              onClose={handleFilterClose}
-              anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-            >
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 2 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#375e38" }}>
-                  Filter by {fieldAndValue.label}
-                </Typography>
-                {renderFilter()}
-              </Box>
-            </Popover>
-          </Paper>
-        </Box>
-      </Zoom>
+          <Popover
+            open={Boolean(filterAnchorEl)}
+            anchorEl={filterAnchorEl}
+            onClose={handleFilterClose}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#375e38" }}>
+                Filter by {fieldAndValue.label}
+              </Typography>
+              {renderFilter()}
+            </Box>
+          </Popover>
+        </Paper>
+      </Box>
 
       {/* Export Menu */}
       <Popover

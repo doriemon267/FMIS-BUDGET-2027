@@ -106,7 +106,7 @@ const IncomeTable = ({
   const [autoSave, setAutoSave] = useState(false);  // Auto-save disabled - use SAVE button instead
   const [lastSaved, setLastSaved] = useState(null);
   const [compactView, setCompactView] = useState(false);
-  const [showSummaryCard, setShowSummaryCard] = useState(true);
+  const [showSummaryCard, setShowSummaryCard] = useState(false);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [autoSaveTimer, setAutoSaveTimer] = useState(null);
@@ -1264,7 +1264,7 @@ const IncomeTable = ({
           Show summary
         </Button>
       )}
-      <Zoom in={true}>
+      <>
         <Paper elevation={3} sx={{ width: '100%', overflow: 'hidden', borderRadius: 2, boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
           {isLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -1479,7 +1479,7 @@ const IncomeTable = ({
             </TableContainer>
           )}
         </Paper>
-      </Zoom>
+      </>
       <Menu
         anchorEl={exportMenuAnchor}
         open={Boolean(exportMenuAnchor)}

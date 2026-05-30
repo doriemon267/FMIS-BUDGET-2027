@@ -380,7 +380,7 @@ const COSCustomTable = ({
   return (
     <>
       {/* Main Table with Zoom Animation */}
-      <Zoom in={true} timeout={600}>
+      <>
         <Box overflow="auto" sx={{ border: "solid thin #fff" }}>
           <Paper sx={{
             width: "100%",
@@ -623,10 +623,10 @@ const COSCustomTable = ({
           </Box>
         </Popover>
         </Box>
-      </Zoom>
+      </>
 
       {/* Grand Total Footer with Fade Animation */}
-      <Fade in={true} timeout={1000}>
+      <>
         <Box
           sx={{
             display: "flex",
@@ -662,7 +662,7 @@ const COSCustomTable = ({
             })}
           </Typography>
         </Box>
-      </Fade>
+      </>
     </>
   );
 };

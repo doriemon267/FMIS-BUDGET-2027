@@ -596,214 +596,212 @@ const OvertimePayCustomTable = ({
         </Grid>
       </Paper>
 
-      {/* Main Table with Zoom Animation */}
-      <Zoom in={true} timeout={600}>
-        <Box overflow="auto">
-          <Paper sx={{
-            width: "100%",
-            overflow: "hidden",
-            borderRadius: 2,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease'
+      {/* Main Table without Zoom Animation */}
+      <Box overflow="auto">
+        <Paper sx={{
+          width: "100%",
+          overflow: "hidden",
+          borderRadius: 2,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          transition: 'all 0.3s ease'
+        }}>
+          <TableContainer sx={{
+            height: "60vh",
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f1f1',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#c1c1c1',
+              borderRadius: '4px',
+              '&:hover': {
+                background: '#a8a8a8',
+              },
+            },
           }}>
-            <TableContainer sx={{
-              height: "60vh",
-              '&::-webkit-scrollbar': {
-                width: '8px',
+        <Table size="small">
+          {/* HEAD */}
+          <TableHead
+            sx={{
+              "& .MuiTableCell-root": {
+                fontWeight: "bold", // Bold ang header font
+                color: "#fff",
               },
-              '&::-webkit-scrollbar-track': {
-                background: '#f1f1f1',
-                borderRadius: '4px',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                background: '#c1c1c1',
-                borderRadius: '4px',
+            }}
+          >
+            <TableRow
+              sx={{
+                position: "sticky",
+                top: 0,
+                backgroundColor: "#375e38",
+                zIndex: 2,
+                borderBottom: "2px solid #fff", // Horizontal grid line
+              }}
+            >
+              {columns.map((column, index) => (
+                <TableCell
+                  key={column.field}
+                  sx={{
+                    borderRight: "1px solid",
+                    borderColor: grey[500],
+                    textAlign: getAlignment(index),
+                  }}
+                >
+                  <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <TableSortLabel
+                      active={orderBy === column.field}
+                      direction={orderBy === column.field ? order : "asc"}
+                      onClick={() => handleRequestSort(column.field)}
+                    >
+                      {column.label}
+                    </TableSortLabel>
+                    {column.type !== "action" && (
+                      <Tooltip title={`Filter ${column.label}`} arrow>
+                        <IconButton
+                          size="small"
+                          onClick={(event) =>
+                            handleFilterClick(event, column.field, column.label)
+                          }
+                        >
+                          <TiFilter color="lightgray" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+
+          {/* BODY */}
+          <TableBody
+            sx={{
+              "& .MuiTableRow-root": {
+                borderBottom: "1px solid rgba(224, 224, 224, 1)",
+                transition: 'all 0.2s ease',
+                cursor: "pointer",
                 '&:hover': {
-                  background: '#a8a8a8',
-                },
-              },
-            }}>
-          <Table size="small">
-            {/* HEAD */}
-            <TableHead
-              sx={{
-                "& .MuiTableCell-root": {
-                  fontWeight: "bold", // Bold ang header font
-                  color: "#fff",
-                },
-              }}
-            >
-              <TableRow
-                sx={{
-                  position: "sticky",
-                  top: 0,
-                  backgroundColor: "#375e38",
-                  zIndex: 2,
-                  borderBottom: "2px solid #fff", // Horizontal grid line
-                }}
-              >
-                {columns.map((column, index) => (
-                  <TableCell
-                    key={column.field}
-                    sx={{
-                      borderRight: "1px solid",
-                      borderColor: grey[500],
-                      textAlign: getAlignment(index),
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                      <TableSortLabel
-                        active={orderBy === column.field}
-                        direction={orderBy === column.field ? order : "asc"}
-                        onClick={() => handleRequestSort(column.field)}
-                      >
-                        {column.label}
-                      </TableSortLabel>
-                      {column.type !== "action" && (
-                        <Tooltip title={`Filter ${column.label}`} arrow>
-                          <IconButton
-                            size="small"
-                            onClick={(event) =>
-                              handleFilterClick(event, column.field, column.label)
-                            }
-                          >
-                            <TiFilter color="lightgray" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </Box>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-
-            {/* BODY */}
-            <TableBody
-              sx={{
-                "& .MuiTableRow-root": {
-                  borderBottom: "1px solid rgba(224, 224, 224, 1)",
-                  transition: 'all 0.2s ease',
-                  cursor: "pointer",
-                  '&:hover': {
-                    backgroundColor: 'rgba(55, 94, 56, 0.04)',
-                    transform: 'translateY(-1px)',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                  }
-                },
-                "& .MuiTableRow-root:nth-of-type(odd)": {
-                  backgroundColor: "#f8f9fa",
-                },
-                "& .MuiTableRow-root:nth-of-type(even)": {
-                  backgroundColor: "#ffffff",
-                },
-                // Enhanced hover effects for odd/even rows
-                "& .MuiTableRow-root:nth-of-type(odd):hover": {
-                  backgroundColor: 'rgba(55, 94, 56, 0.08)',
-                },
-                "& .MuiTableRow-root:nth-of-type(even):hover": {
                   backgroundColor: 'rgba(55, 94, 56, 0.04)',
-                },
-                // Specific alignment para sa bawat column gamit ang nth-of-type
-                "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(1)": {
-                  textAlign: "left",
-                },
-                "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(2)": {
-                  textAlign: "center",
-                },
-                "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(3)": {
-                  textAlign: "center",
-                },
-                "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(4)": {
-                  textAlign: "right",
-                },
-                "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(5)": {
-                  textAlign: "center",
-                },
-                "& .MuiTableCell-root": {
-                  fontWeight: "normal",
-                  padding: "12px 16px",
-                },
-              }}
-            >
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
-                    <Fade in={isLoading}>
-                      <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                        <CircularProgress size={40} sx={{ color: '#375e38' }} />
-                        <Typography variant="body2" color="text.secondary">
-                          Loading overtime pay data...
-                        </Typography>
-                      </Box>
-                    </Fade>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                <>
-                  {/* Inline Add Row */}
-                  <InlineOvertimeAddRow refreshData={refreshData} employeeOptions={employeeOptions} />
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }
+              },
+              "& .MuiTableRow-root:nth-of-type(odd)": {
+                backgroundColor: "#f8f9fa",
+              },
+              "& .MuiTableRow-root:nth-of-type(even)": {
+                backgroundColor: "#ffffff",
+              },
+              // Enhanced hover effects for odd/even rows
+              "& .MuiTableRow-root:nth-of-type(odd):hover": {
+                backgroundColor: 'rgba(55, 94, 56, 0.08)',
+              },
+              "& .MuiTableRow-root:nth-of-type(even):hover": {
+                backgroundColor: 'rgba(55, 94, 56, 0.04)',
+              },
+              // Specific alignment para sa bawat column gamit ang nth-of-type
+              "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(1)": {
+                textAlign: "left",
+              },
+              "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(2)": {
+                textAlign: "center",
+              },
+              "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(3)": {
+                textAlign: "center",
+              },
+              "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(4)": {
+                textAlign: "right",
+              },
+              "& .MuiTableRow-root > .MuiTableCell-root:nth-of-type(5)": {
+                textAlign: "center",
+              },
+              "& .MuiTableCell-root": {
+                fontWeight: "normal",
+                padding: "12px 16px",
+              },
+            }}
+          >
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
+                  <Fade in={isLoading}>
+                    <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+                      <CircularProgress size={40} sx={{ color: '#375e38' }} />
+                      <Typography variant="body2" color="text.secondary">
+                        Loading overtime pay data...
+                      </Typography>
+                    </Box>
+                  </Fade>
+                </TableCell>
+              </TableRow>
+            ) : (
+              <>
+                {/* Inline Add Row */}
+                <InlineOvertimeAddRow refreshData={refreshData} employeeOptions={employeeOptions} />
 
-                  {/* Existing Rows */}
-                  {rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={columns.length} align="center">
-                        {searchValue ? (
-                          <>
-                            No results found for <b>"{searchValue}"</b>.
-                          </>
-                        ) : (
-                          "No rows found."
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    rows.map((row) => (
-                      <OvertimePayEditableRow
-                        key={row._id}
-                        row={row}
-                        refreshData={refetch}
-                        activeSettings={data?.activeSettings || null}
-                      />
-                    ))
-                  )}
-                </>
-              )}
-            </TableBody>
-          </Table>
-            </TableContainer>
+                {/* Existing Rows */}
+                {rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} align="center">
+                      {searchValue ? (
+                        <>
+                          No results found for <b>"{searchValue}"</b>.
+                        </>
+                      ) : (
+                        "No rows found."
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row) => (
+                    <OvertimePayEditableRow
+                      key={row._id}
+                      row={row}
+                      refreshData={refetch}
+                      activeSettings={data?.activeSettings || null}
+                    />
+                  ))
+                )}
+              </>
+            )}
+          </TableBody>
+        </Table>
+          </TableContainer>
 
-            {/* PAGINATION */}
-            <TablePagination
-              rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
-              component="div"
-              count={data?.totalRecords || 0}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              sx={{
-                borderTop: '1px solid rgba(224, 224, 224, 1)',
-                backgroundColor: '#fafafa'
-              }}
-            />
+          {/* PAGINATION */}
+          <TablePagination
+            rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
+            component="div"
+            count={data?.totalRecords || 0}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            sx={{
+              borderTop: '1px solid rgba(224, 224, 224, 1)',
+              backgroundColor: '#fafafa'
+            }}
+          />
 
-            {/* FILTER POPOVER */}
-            <Popover
-              open={Boolean(filterAnchorEl)}
-              anchorEl={filterAnchorEl}
-              onClose={handleFilterClose}
-              anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-            >
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 2 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#375e38" }}>
-                  Filter by {fieldAndValue.label}
-                </Typography>
-                {renderFilter()}
-              </Box>
-            </Popover>
-          </Paper>
-        </Box>
-      </Zoom>
+          {/* FILTER POPOVER */}
+          <Popover
+            open={Boolean(filterAnchorEl)}
+            anchorEl={filterAnchorEl}
+            onClose={handleFilterClose}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 2 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#375e38" }}>
+                Filter by {fieldAndValue.label}
+              </Typography>
+              {renderFilter()}
+            </Box>
+          </Popover>
+        </Paper>
+      </Box>
 
       {/* Export Menu */}
       <Popover

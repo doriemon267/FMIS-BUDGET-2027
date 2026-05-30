@@ -388,229 +388,227 @@ const CustomTable = ({
         </Paper>
       )}
 
-      {/* Main Table with Zoom Animation */}
-      <Zoom in={true} timeout={600}>
-        <Paper sx={{ 
-          width: "calc(100% - 32px)", 
-          overflow: "hidden", 
-          borderRadius: 2, 
-          mx: 2, 
-          boxShadow: 3,
-          transition: 'all 0.3s ease',
-          '&:hover': {
-            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          }
-        }}>
-        <TableContainer sx={{ height: "78vh", borderRadius: 2 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow
-                sx={{
-                  position: "sticky",
-                  top: 0,
-                  backgroundColor: "#375e38",
-                  zIndex: 2,
-                  '& th:first-of-type': {
-                    borderTopLeftRadius: 8,
-                  },
-                  '& th:last-child': {
-                    borderTopRightRadius: 8,
-                  },
-                }}
-              >
-                {columns.map((column) => (
-                  <TableCell
-                    key={column.field}
-                    sx={{
-                      borderRight: "1px solid",
-                      borderColor: "rgba(255, 255, 255, 0.3)",
-                      textAlign: column.type === "number" ? "right" : "left",
-                      padding: "12px 16px",
-                      color: "white",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                      <TableSortLabel
-                        active={orderBy === column.field}
-                        direction={orderBy === column.field ? order : "asc"}
-                        onClick={() => handleRequestSort(column.field)}
-                      >
-                        {column.label}
-                      </TableSortLabel>
-                      <Tooltip title={`Filter ${column.label}`}>
-                        <IconButton
-                          size="small"
-                          onClick={(event) =>
-                            handleFilterClick(event, column.field, column.label)
-                          }
-                        >
-                          <TiFilter color="lightgray" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-
-            {filteredRows.length === 0 ? (
-              <TableBody>
-                <TableRow sx={{ height: "70vh" }}>
-                  <TableCell colSpan={columns.length} align="center">
-                    {searchValue ? (
-                      <>No results found for <b>"{searchValue}"</b>.</>
-                    ) : (
-                      "No rows found."
-                    )}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            ) : (
-              <TableBody>
-                {rows.map((row, rowIndex) => (
-                  <TableRow
-                    key={row._id || rowIndex}
-                    sx={{
-                      backgroundColor: row.isModified
-                        ? "#fff3e0"
-                        : rowIndex % 2 === 0
-                        ? blueGrey[50]
-                        : "#fff",
-                      '&:hover': {
-                        backgroundColor: row.isModified
-                          ? "#ffe0b2"
-                          : "#e8f4f8",
-                      },
-                      transition: 'background-color 0.2s ease',
-                    }}
-                  >
-                    {columns.map((column) => {
-                      const cellValue = row[column.field];
-                      return (
-                        <TableCell
-                          key={column.field}
-                          sx={{
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            fontWeight: 500,
-                            textAlign: column.type === "number" ? "right" : "left",
-                            padding: "10px 16px",
-                            borderBottom: "1px solid rgba(224, 224, 224, 0.5)",
-                          }}
-                        >
-                          {column.render
-                            ? column.render(row, rowIndex)
-                            : column.type === "date"
-                            ? formatDateToMDY(cellValue)
-                            : column.type === "number"
-                            ? formatCurrency(cellValue)
-                            : column.type === "boolean"
-                            ? cellValue
-                              ? "Yes"
-                              : "No"
-                            : cellValue}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            )}
-
-            <TableFooter>
-              <TableRow
-                sx={{
-                  position: "sticky",
-                  bottom: 0,
-                  backgroundColor: "#375e38",
-                  zIndex: 2,
-                  '& td:first-of-type': {
-                    borderBottomLeftRadius: 8,
-                  },
-                  '& td:last-child': {
-                    borderBottomRightRadius: 8,
-                  },
-                }}
-              >
+      {/* Main Table without Zoom Animation */}
+      <Paper sx={{ 
+        width: "calc(100% - 32px)", 
+        overflow: "hidden", 
+        borderRadius: 2, 
+        mx: 2, 
+        boxShadow: 3,
+        transition: 'all 0.3s ease',
+        '&:hover': {
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        }
+      }}>
+      <TableContainer sx={{ height: "78vh", borderRadius: 2 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow
+              sx={{
+                position: "sticky",
+                top: 0,
+                backgroundColor: "#375e38",
+                zIndex: 2,
+                '& th:first-of-type': {
+                  borderTopLeftRadius: 8,
+                },
+                '& th:last-child': {
+                  borderTopRightRadius: 8,
+                },
+              }}
+            >
+              {columns.map((column) => (
                 <TableCell
-                  colSpan={columns.length - 2}
+                  key={column.field}
                   sx={{
-                    textAlign: "right",
-                    fontWeight: "bold",
-                    color: "#fff",
-                    borderRight: "1px solid rgba(255, 255, 255, 0.3)",
+                    borderRight: "1px solid",
+                    borderColor: "rgba(255, 255, 255, 0.3)",
+                    textAlign: column.type === "number" ? "right" : "left",
                     padding: "12px 16px",
+                    color: "white",
+                    fontWeight: "bold",
                   }}
                 >
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="body2" sx={{ color: '#fff' }}>
-                      Total Records: {totals.totalRecords}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: '#fff', fontWeight: 'bold' }}>
-                      TOTALS:
-                    </Typography>
+                  <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <TableSortLabel
+                      active={orderBy === column.field}
+                      direction={orderBy === column.field ? order : "asc"}
+                      onClick={() => handleRequestSort(column.field)}
+                    >
+                      {column.label}
+                    </TableSortLabel>
+                    <Tooltip title={`Filter ${column.label}`}>
+                      <IconButton
+                        size="small"
+                        onClick={(event) =>
+                          handleFilterClick(event, column.field, column.label)
+                        }
+                      >
+                        <TiFilter color="lightgray" />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 </TableCell>
-                <TableCell
-                  sx={{
-                    textAlign: "right",
-                    fontWeight: "bold",
-                    color: "#fff",
-                    borderRight: "1px solid rgba(255, 255, 255, 0.3)",
-                    padding: "12px 16px",
-                  }}
-                >
-                  {totals.noOfCourtAppearance.toLocaleString()}
-                </TableCell>
-                <TableCell
-                  sx={{
-                    textAlign: "right",
-                    fontWeight: "bold",
-                    color: "#fff",
-                    padding: "12px 16px",
-                  }}
-                >
-                  {formatCurrency(totals.courtAppearanceAmount)}
+              ))}
+            </TableRow>
+          </TableHead>
+
+          {filteredRows.length === 0 ? (
+            <TableBody>
+              <TableRow sx={{ height: "70vh" }}>
+                <TableCell colSpan={columns.length} align="center">
+                  {searchValue ? (
+                    <>No results found for <b>"{searchValue}"</b>.</>
+                  ) : (
+                    "No rows found."
+                  )}
                 </TableCell>
               </TableRow>
-            </TableFooter>
-          </Table>
-        </TableContainer>
-        <TablePagination
-          rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
-          component="div"
-          count={filteredRows.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          sx={{
-            borderTop: '1px solid #e0e0e0',
-            borderBottomLeftRadius: 8,
-            borderBottomRightRadius: 8,
-            '& .MuiTablePagination-toolbar': {
-              padding: '8px 16px',
-            },
-          }}
-        />
-        <Popover
-          open={Boolean(filterAnchorEl)}
-          anchorEl={filterAnchorEl}
-          onClose={handleFilterClose}
-          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-        >
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 1 }}>
-            <Box sx={{ fontSize: 14, fontWeight: 600 }}>
-              Filter by {fieldAndValue.label}
-            </Box>
-            {renderFilter()}
+            </TableBody>
+          ) : (
+            <TableBody>
+              {rows.map((row, rowIndex) => (
+                <TableRow
+                  key={row._id || rowIndex}
+                  sx={{
+                    backgroundColor: row.isModified
+                      ? "#fff3e0"
+                      : rowIndex % 2 === 0
+                      ? blueGrey[50]
+                      : "#fff",
+                    '&:hover': {
+                      backgroundColor: row.isModified
+                        ? "#ffe0b2"
+                        : "#e8f4f8",
+                    },
+                    transition: 'background-color 0.2s ease',
+                  }}
+                >
+                  {columns.map((column) => {
+                    const cellValue = row[column.field];
+                    return (
+                      <TableCell
+                        key={column.field}
+                        sx={{
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          fontWeight: 500,
+                          textAlign: column.type === "number" ? "right" : "left",
+                          padding: "10px 16px",
+                          borderBottom: "1px solid rgba(224, 224, 224, 0.5)",
+                        }}
+                      >
+                        {column.render
+                          ? column.render(row, rowIndex)
+                          : column.type === "date"
+                          ? formatDateToMDY(cellValue)
+                          : column.type === "number"
+                          ? formatCurrency(cellValue)
+                          : column.type === "boolean"
+                          ? cellValue
+                            ? "Yes"
+                            : "No"
+                          : cellValue}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableBody>
+          )}
+
+          <TableFooter>
+            <TableRow
+              sx={{
+                position: "sticky",
+                bottom: 0,
+                backgroundColor: "#375e38",
+                zIndex: 2,
+                '& td:first-of-type': {
+                  borderBottomLeftRadius: 8,
+                },
+                '& td:last-child': {
+                  borderBottomRightRadius: 8,
+                },
+              }}
+            >
+              <TableCell
+                colSpan={columns.length - 2}
+                sx={{
+                  textAlign: "right",
+                  fontWeight: "bold",
+                  color: "#fff",
+                  borderRight: "1px solid rgba(255, 255, 255, 0.3)",
+                  padding: "12px 16px",
+                }}
+              >
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body2" sx={{ color: '#fff' }}>
+                    Total Records: {totals.totalRecords}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#fff', fontWeight: 'bold' }}>
+                    TOTALS:
+                  </Typography>
+                </Box>
+              </TableCell>
+              <TableCell
+                sx={{
+                  textAlign: "right",
+                  fontWeight: "bold",
+                  color: "#fff",
+                  borderRight: "1px solid rgba(255, 255, 255, 0.3)",
+                  padding: "12px 16px",
+                }}
+              >
+                {totals.noOfCourtAppearance.toLocaleString()}
+              </TableCell>
+              <TableCell
+                sx={{
+                  textAlign: "right",
+                  fontWeight: "bold",
+                  color: "#fff",
+                  padding: "12px 16px",
+                }}
+              >
+                {formatCurrency(totals.courtAppearanceAmount)}
+              </TableCell>
+            </TableRow>
+          </TableFooter>
+        </Table>
+      </TableContainer>
+      <TablePagination
+        rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
+        component="div"
+        count={filteredRows.length}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+        sx={{
+          borderTop: '1px solid #e0e0e0',
+          borderBottomLeftRadius: 8,
+          borderBottomRightRadius: 8,
+          '& .MuiTablePagination-toolbar': {
+            padding: '8px 16px',
+          },
+        }}
+      />
+      <Popover
+        open={Boolean(filterAnchorEl)}
+        anchorEl={filterAnchorEl}
+        onClose={handleFilterClose}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 1 }}>
+          <Box sx={{ fontSize: 14, fontWeight: 600 }}>
+            Filter by {fieldAndValue.label}
           </Box>
-        </Popover>
-      </Paper>
-      </Zoom>
-    </Box>
+          {renderFilter()}
+        </Box>
+      </Popover>
+    </Paper>
+  </Box>
   );
 };
 

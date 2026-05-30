@@ -25,76 +25,53 @@ const CustomPage = ({
   const apiPath = `/${dataListName}`;
   return (
     <Box sx={{ p: 0 }}>
-      <Paper sx={{
-        p: 3,
-        mb: 3,
-        mx: 3,
-        borderRadius: 2,
-        background: "linear-gradient(135deg, #375e38 0%, #2e4d30 100%)",
-        color: "white",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
-        transition: "all 0.3s ease",
-        "&:hover": {
-          boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
-          transform: "translateY(-2px)",
-        },
-      }}>
-        <Box display="flex" alignItems="center" gap={2}>
-          <DiningIcon sx={{ fontSize: "2rem", transition: "transform 0.3s ease", "&:hover": { transform: "rotate(20deg) scale(1.2)" } }} />
-          <Box>
-            <Typography variant="h4" fontWeight="bold" gutterBottom>
-              Subsistence Allowance
-            </Typography>
-            <Typography variant="body1" sx={{ opacity: 0.9 }}>
-              {pageDescription}
-            </Typography>
-            <Box display="flex" gap={1} mt={2}>
-              <Chip label="Compensation-based" size="small" sx={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white", fontWeight: "bold" }} />
-              <Chip label="Monthly rate in Compensation" size="small" sx={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white", fontWeight: "bold" }} />
-            </Box>
-          </Box>
+      {(hasAdd || customAddElement) && (
+        <Box sx={{ mb: 2, mx: 3, display: 'flex', justifyContent: 'flex-end' }}>
+          {customAddElement || (
+            <CustomCreateUpdateDialog endpoint={apiPath} schema={schema} dataListName={dataListName} />
+          )}
         </Box>
-        {hasAdd && (
-          <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
-            {customAddElement || (
-              <CustomCreateUpdateDialog endpoint={apiPath} schema={schema} dataListName={dataListName} />
-            )}
-          </Box>
-        )}
-      </Paper>
+      )}
 
       <Box sx={{ mx: 3 }}>
-        <Zoom in={true} timeout={600}>
-          <Paper sx={{ width: "100%", overflow: "hidden", borderRadius: 2, boxShadow: "0 8px 32px rgba(0,0,0,0.1)" }}>
-            <CustomTable
-              dataListName={dataListName}
-              apiPath={apiPath}
-              ROWS_PER_PAGE={ROWS_PER_PAGE}
-              columns={Object.keys(schema)
-                .filter((key) => schema[key].show === true || key === "action")
-                .map((key) => {
-                  const fieldSchema = schema[key];
-                  const column = { field: key, label: fieldSchema.label, type: fieldSchema.type, searchable: fieldSchema.searchable || false };
-                  if (fieldSchema.type === "action") {
-                    column.render = (row) => (
-                      <CustomMenu
-                        additionalMenuOptions={additionalMenuOptions}
-                        customEditElement={customEditElement}
-                        hasEdit={hasEdit}
-                        hasDelete={hasDelete}
-                        row={row}
-                        schema={schema}
-                        endpoint={apiPath}
-                        dataListName={dataListName}
-                      />
-                    );
-                  }
-                  if (fieldSchema.customRender) column.render = (row) => fieldSchema.customRender(row);
-                  return column;
-                })}
-            />
-          </Paper>
-        </Zoom>
+        <Paper sx={{ 
+          width: "100%", 
+          overflow: "hidden", 
+          borderRadius: 2, 
+          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+          }
+        }}>
+          <CustomTable
+            dataListName={dataListName}
+            apiPath={apiPath}
+            ROWS_PER_PAGE={ROWS_PER_PAGE}
+            columns={Object.keys(schema)
+              .filter((key) => schema[key].show === true || key === "action")
+              .map((key) => {
+                const fieldSchema = schema[key];
+                const column = { field: key, label: fieldSchema.label, type: fieldSchema.type, searchable: fieldSchema.searchable || false };
+                if (fieldSchema.type === "action") {
+                  column.render = (row) => (
+                    <CustomMenu
+                      additionalMenuOptions={additionalMenuOptions}
+                      customEditElement={customEditElement}
+                      hasEdit={hasEdit}
+                      hasDelete={hasDelete}
+                      row={row}
+                      schema={schema}
+                      endpoint={apiPath}
+                      dataListName={dataListName}
+                    />
+                  );
+                }
+                if (fieldSchema.customRender) column.render = (row) => fieldSchema.customRender(row);
+                return column;
+              })}
+          />
+        </Paper>
       </Box>
     </Box>
   );

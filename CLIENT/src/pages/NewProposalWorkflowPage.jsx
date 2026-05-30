@@ -35,6 +35,7 @@ import {
   InputAdornment,
   Switch,
   FormControlLabel,
+  ButtonBase,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -48,6 +49,17 @@ import {
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import HistoryIcon from "@mui/icons-material/History";
+import { 
+  FiLayers, 
+  FiUser, 
+  FiActivity, 
+  FiTrendingUp, 
+  FiUserCheck, 
+  FiUsers, 
+  FiCreditCard, 
+  FiBriefcase, 
+  FiCpu 
+} from "react-icons/fi";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { useRegion } from "../context/RegionContext";
@@ -2307,76 +2319,91 @@ const NewProposalWorkflowPage = () => {
 
 
       {/* Tabs and Table Container */}
-      <Box sx={{ mx: 2, mt: 1.5, mb: 0 }}>
+      <Box sx={{ mx: 2, mt: 2, mb: 0 }}>
         <Paper
           sx={{
-            boxShadow: "none",
-            borderRadius: "0px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)",
+            borderRadius: "16px",
             overflow: "hidden",
-            border: "none",
-            transition: "all 0.2s ease",
-            bgcolor: BRAND_COLORS.darkGreen,
+            border: "1px solid rgba(0, 0, 0, 0.06)",
+            transition: "all 0.3s ease",
+            bgcolor: "#ffffff",
           }}
         >
-          {/* Tabs Header with Green Background */}
+          {/* Tabs Header - Premium Segmented Control */}
           <Box
             sx={{
-              background: BRAND_COLORS.darkGreen,
-              color: "white",
-              px: 1,
-              py: 1,
+              background: "#f8fafc",
+              px: 2,
+              py: 1.5,
               display: "flex",
-              gap: 0,
-              alignItems: "stretch",
-              borderTop: "1px solid rgba(255,255,255,0.15)",
+              justifyContent: "center",
+              borderBottom: "1px solid rgba(0, 0, 0, 0.05)",
             }}
           >
-            {tabs
-              .filter((tab) => {
-                // SUPER_ADMIN sees all tabs
-                if (isSuperAdmin) return true;
-                // BRD Users don't see "my-proposals" tab
-                if (tab.value === "my-proposals" && isBRDUser && !isBudgetPreparer) return false;
-                return true;
-              })
-              .map((tab, index) => {
-                const tabIndex = tabs.findIndex((t) => t.value === tab.value);
-                const isActive = activeTab === tabIndex;
-                return (
-                  <Box
-                    key={index}
-                    onClick={() => handleTabChange(null, tabIndex)}
-                    sx={{
-                      flex: 1,
-                      bgcolor: isActive ? "#2b4a2c" : "transparent",
-                      color: "white",
-                      textTransform: "uppercase",
-                      fontSize: "0.8rem",
-                      fontWeight: 800,
-                      letterSpacing: "0.8px",
-                      p: 1.25,
-                      borderRight:
-                        index <
-                        tabs.filter(
-                          (t) => !(t.value === "my-proposals" && isBRDUser && !isBudgetPreparer)
-                        ).length -
-                          1
-                          ? "1px solid rgba(255,255,255,0.25)"
-                          : "none",
-                      transition: "all 0.2s ease",
-                      cursor: "pointer",
-                      textAlign: "center",
-                      "&:hover": {
-                        bgcolor: isActive
-                          ? "#2b4a2c"
-                          : "rgba(255,255,255,0.08)",
-                      },
-                    }}
-                  >
-                    {tab.label}
-                  </Box>
-                );
-              })}
+            <Box
+              sx={{
+                display: "flex",
+                bgcolor: "rgba(0, 0, 0, 0.04)",
+                borderRadius: "12px",
+                p: 0.5,
+                width: "100%",
+                maxWidth: 560,
+                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.03)",
+              }}
+            >
+              {tabs
+                .filter((tab) => {
+                  // SUPER_ADMIN sees all tabs
+                  if (isSuperAdmin) return true;
+                  // BRD Users don't see "my-proposals" tab
+                  if (tab.value === "my-proposals" && isBRDUser && !isBudgetPreparer) return false;
+                  return true;
+                })
+                .map((tab, index) => {
+                  const tabIndex = tabs.findIndex((t) => t.value === tab.value);
+                  const isActive = activeTab === tabIndex;
+                  
+                  // Pick icon based on tab value
+                  let TabIcon = FiLayers;
+                  if (tab.value === "my-proposals") TabIcon = FiUser;
+                  if (tab.value === "monitoring") TabIcon = FiActivity;
+                  
+                  return (
+                    <ButtonBase
+                      key={index}
+                      onClick={() => handleTabChange(null, tabIndex)}
+                      sx={{
+                        flex: 1,
+                        bgcolor: isActive ? "#ffffff" : "transparent",
+                        color: isActive ? "#2d5016" : "#64748b",
+                        fontSize: "0.8rem",
+                        fontWeight: isActive ? 800 : 600,
+                        py: 1,
+                        borderRadius: "8px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 1,
+                        boxShadow: isActive ? "0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)" : "none",
+                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        "&:hover": {
+                          color: isActive ? "#2d5016" : "#334155",
+                          bgcolor: isActive ? "#ffffff" : "rgba(0,0,0,0.02)",
+                        },
+                        "&:focus-visible": {
+                          outline: "2px solid",
+                          outlineColor: "primary.main",
+                          outlineOffset: "2px",
+                        }
+                      }}
+                    >
+                      <TabIcon size={14} style={{ opacity: isActive ? 1 : 0.7 }} />
+                      {tab.label}
+                    </ButtonBase>
+                  );
+                })}
+            </Box>
           </Box>
           {/* Monitoring Metrics Cards - Below Tabs, Auto-Adjusting */}
           {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
@@ -3966,33 +3993,115 @@ const NewProposalWorkflowPage = () => {
               {!selectedProposal?.isConsolidated && (
                 <>
                   <Tabs
-                value={detailsTab}
-                onChange={(e, newValue) => setDetailsTab(newValue)}
-                sx={{
-                  borderBottom: "1px solid #e0e0e0",
-                  bgcolor: "white",
-                  "& .MuiTab-root": {
-                    textTransform: "none",
-                    fontWeight: 600,
-                    fontSize: "0.95rem",
-                    minWidth: 120,
-                    "&.Mui-selected": {
-                      color: "#2d5016",
-                    },
-                  },
-                  "& .MuiTabs-indicator": {
-                    bgcolor: "#2d5016",
-                    height: 3,
-                  },
-                }}
-              >
-                <Tab label="Income" value="income" />
-                <Tab label="PS-Permanent" value="ps-permanent" />
-                <Tab label="PS-Casual" value="ps-casual" />
-                <Tab label="PS-Charged" value="ps-charged" />
-                <Tab label="MOOE" value="mooe" />
-                <Tab label="Capital Outlay" value="capital-outlay" />
-              </Tabs>
+                    value={detailsTab}
+                    onChange={(e, newValue) => setDetailsTab(newValue)}
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    sx={{
+                      borderBottom: "1px solid rgba(0, 0, 0, 0.06)",
+                      bgcolor: "#f8fafc",
+                      p: 1.2,
+                      borderRadius: "16px 16px 0 0",
+                      "& .MuiTabs-flexContainer": {
+                        gap: 1,
+                      },
+                      "& .MuiTab-root": {
+                        textTransform: "none",
+                        fontWeight: 700,
+                        fontSize: "0.85rem",
+                        minWidth: 110,
+                        minHeight: 46,
+                        borderRadius: "12px",
+                        color: "#64748b",
+                        display: "flex",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 1.2,
+                        py: 1,
+                        px: 2,
+                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        "&:hover": {
+                          color: "#334155",
+                          bgcolor: "rgba(0, 0, 0, 0.02)",
+                          transform: "translateY(-1px)",
+                        },
+                        "&.Mui-selected": {
+                          color: "#2d5016",
+                          bgcolor: "#f0f7f0",
+                          boxShadow: "0 2px 8px rgba(45, 80, 22, 0.06)",
+                          "& .tab-icon-wrapper": {
+                            transform: "scale(1.1)",
+                          }
+                        },
+                      },
+                      "& .MuiTabs-indicator": {
+                        bgcolor: "#2d5016",
+                        height: 3,
+                        borderRadius: "3px 3px 0 0",
+                      },
+                    }}
+                  >
+                    <Tab 
+                      icon={
+                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'income' ? '#43a047' : 'inherit' }}>
+                          <FiTrendingUp size={16} />
+                        </Box>
+                      } 
+                      iconPosition="start" 
+                      label="Income" 
+                      value="income" 
+                    />
+                    <Tab 
+                      icon={
+                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'ps-permanent' ? '#1976d2' : 'inherit' }}>
+                          <FiUserCheck size={16} />
+                        </Box>
+                      } 
+                      iconPosition="start" 
+                      label="PS-Permanent" 
+                      value="ps-permanent" 
+                    />
+                    <Tab 
+                      icon={
+                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'ps-casual' ? '#f57c00' : 'inherit' }}>
+                          <FiUsers size={16} />
+                        </Box>
+                      } 
+                      iconPosition="start" 
+                      label="PS-Casual" 
+                      value="ps-casual" 
+                    />
+                    <Tab 
+                      icon={
+                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'ps-charged' ? '#9c27b0' : 'inherit' }}>
+                          <FiCreditCard size={16} />
+                        </Box>
+                      } 
+                      iconPosition="start" 
+                      label="PS-Charged" 
+                      value="ps-charged" 
+                    />
+                    <Tab 
+                      icon={
+                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'mooe' ? '#00b0ff' : 'inherit' }}>
+                          <FiBriefcase size={16} />
+                        </Box>
+                      } 
+                      iconPosition="start" 
+                      label="MOOE" 
+                      value="mooe" 
+                    />
+                    <Tab 
+                      icon={
+                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'capital-outlay' ? '#009688' : 'inherit' }}>
+                          <FiCpu size={16} />
+                        </Box>
+                      } 
+                      iconPosition="start" 
+                      label="Capital Outlay" 
+                      value="capital-outlay" 
+                    />
+                  </Tabs>
 
               {/* Tab Content */}
               <Box

@@ -11,6 +11,16 @@ import { useRegion } from "../../context/RegionContext";
 import { IoPersonCircleOutline } from "react-icons/io5";
 import { GrHostMaintenance } from "react-icons/gr";
 import { FaFileContract, FaPesoSign } from "react-icons/fa6";
+import { 
+  FiTrendingUp, 
+  FiUserCheck, 
+  FiUsers, 
+  FiCreditCard, 
+  FiBriefcase, 
+  FiFileText, 
+  FiCpu, 
+  FiAward 
+} from "react-icons/fi";
 import StyledBox from "../../global/components/StyledBox";
 import PSPermanentServiceTable from "../pspermanent/PersonnelServicesPage";
 import PSCasualServiceTable from "../pscasual/PersonnelServicesPage";
@@ -64,6 +74,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ButtonBase,
 } from "@mui/material";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import { useUser } from "../../context/UserContext";
@@ -100,6 +111,8 @@ import { styled } from "@mui/material/styles";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DownloadIcon from "@mui/icons-material/Download";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
+import BusinessCenterIcon from "@mui/icons-material/BusinessCenter";
 
 const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
 
@@ -2071,11 +2084,12 @@ const ProposalCustomPage = ({
       <Paper
         elevation={0}
         sx={{
-          p: 2.5,
+          p: 3,
           borderRadius: 0,
-          background: "#375e38",
+          background: "linear-gradient(135deg, #1e3d22 0%, #375e38 50%, #4e7d4f 100%)",
           color: "white",
-          boxShadow: "none",
+          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.08)",
+          borderBottom: "4px solid #2d5016",
           transition: "all 0.3s ease",
           display: "flex",
           justifyContent: "space-between",
@@ -2084,64 +2098,105 @@ const ProposalCustomPage = ({
           flexWrap: "wrap",
         }}
       >
-        <Box>
-          <Typography
-            variant="h5"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: "bold", fontSize: "1.8rem" }}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2.5 }}>
+          <Box
+            sx={{
+              bgcolor: "rgba(255, 255, 255, 0.15)",
+              p: 1.5,
+              borderRadius: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "inset 0 2px 4px rgba(255, 255, 255, 0.2)",
+              backdropFilter: "blur(4px)",
+            }}
           >
-            {title}
-          </Typography>
-          <Typography
-            variant="body1"
-            component="h2"
-            sx={{ opacity: 0.9, fontSize: "0.9rem" }}
-          >
-            {description || "Submit and manage your budget proposals"}
-          </Typography>
+            <BusinessCenterIcon sx={{ fontSize: "2rem", color: "#fff" }} />
+          </Box>
+          <Box>
+            <Typography
+              variant="h5"
+              component="h1"
+              gutterBottom
+              sx={{ 
+                fontWeight: 800, 
+                fontSize: "1.8rem", 
+                m: 0,
+                textShadow: "0 2px 4px rgba(0,0,0,0.15)",
+                letterSpacing: "0.5px"
+              }}
+            >
+              {title}
+            </Typography>
+            <Typography
+              variant="body1"
+              component="h2"
+              sx={{ 
+                opacity: 0.85, 
+                fontSize: "0.88rem",
+                mt: 0.5,
+                fontWeight: 500
+              }}
+            >
+              {description || "Submit and manage your budget proposals"}
+            </Typography>
+          </Box>
         </Box>
-        <TextField
-          placeholder="Search"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          size="small"
-          variant="outlined"
-          sx={{
-            width: 250,
-            "& .MuiOutlinedInput-root": {
-              color: "#333",
-              backgroundColor: "white",
-              borderRadius: "6px",
-              "& fieldset": {
-                borderColor: "#e0e0e0",
-              },
-              "&:hover fieldset": {
-                borderColor: "#e0e0e0",
-              },
-              "&.Mui-focused fieldset": {
-                borderColor: "#2d5016",
-                borderWidth: "2px",
-              },
-            },
-            "& .MuiOutlinedInput-input": {
-              "&::placeholder": {
-                opacity: 0.6,
-                color: "#999",
-              },
-            },
-            "& .MuiSvgIcon-root": {
-              color: "#999",
-            },
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ opacity: 0.6, fontSize: "1.2rem" }} />
-              </InputAdornment>
-            ),
-          }}
-        />
+
+        {/* Premium Metadata Chips */}
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+          {/* Active Region Chip */}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              bgcolor: "rgba(255, 255, 255, 0.12)",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              borderRadius: "20px",
+              py: 0.75,
+              px: 2,
+              backdropFilter: "blur(8px)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+              transition: "all 0.2s ease",
+              "&:hover": {
+                bgcolor: "rgba(255, 255, 255, 0.2)",
+                transform: "translateY(-1px)",
+              }
+            }}
+          >
+            <LocationOnIcon sx={{ fontSize: "1.1rem", color: "#81c784" }} />
+            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.82rem", letterSpacing: "0.3px" }}>
+              REGION: {String(activeRegionName || "Central Office").toUpperCase()}
+            </Typography>
+          </Box>
+
+          {/* Active FY Chip */}
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              bgcolor: "rgba(255, 255, 255, 0.12)",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              borderRadius: "20px",
+              py: 0.75,
+              px: 2,
+              backdropFilter: "blur(8px)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+              transition: "all 0.2s ease",
+              "&:hover": {
+                bgcolor: "rgba(255, 255, 255, 0.2)",
+                transform: "translateY(-1px)",
+              }
+            }}
+          >
+            <CalendarTodayIcon sx={{ fontSize: "1.05rem", color: "#64b5f6" }} />
+            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.82rem", letterSpacing: "0.3px" }}>
+              FY {resolvedFiscalYear || "N/A"} - {String(resolvedBudgetType || "Initial").toUpperCase()}
+            </Typography>
+          </Box>
+        </Box>
       </Paper>
 
       <StyledBox>
@@ -3243,70 +3298,109 @@ const ProposalCustomPage = ({
           {/* Desktop Tab Navigation */}
           <Paper
             sx={{
-              boxShadow: "none",
-              borderRadius: "0px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)",
+              borderRadius: "16px",
               overflow: "hidden",
-              border: "none",
-              transition: "all 0.2s ease",
-              bgcolor: "#375e38",
+              border: "1px solid rgba(0, 0, 0, 0.06)",
+              transition: "all 0.3s ease",
+              bgcolor: "#ffffff",
               display: { xs: "none", md: "block" },
+              mb: 3,
             }}
           >
-            {/* Tabs Header with Green Background */}
+            {/* Tabs Header - Premium Segmented Control */}
             <Box
               sx={{
-                background: "#375e38",
-                color: "white",
-                px: 1,
-                py: 1,
+                background: "#f8fafc",
+                px: 2,
+                py: 1.5,
                 display: "flex",
-                gap: 0,
-                alignItems: "stretch",
-                borderTop: "1px solid rgba(255,255,255,0.15)",
+                justifyContent: "center",
               }}
             >
-              {[
-                { label: "INCOME", value: "Income" },
-                { label: "PS - Permanent", value: "PSPermanent" },
-                { label: "PS - Casual", value: "PSCasual" },
-                { label: "PS - Charged to Income", value: "PSChargedToIncome" },
-                { label: "COS/JO", value: "COS/JO" },
-                { label: "MOOE", value: "MOOE" },
-                { label: "CAPITAL OUTLAY", value: "Capital Outlay" },
-                { label: "BSGC", value: "Budgetary Support" },
-              ].map((tab, index, arr) => {
-                const isActive = activeTab === tab.value;
-                return (
-                  <Box
-                    key={index}
-                    onClick={() => setActiveTab(tab.value)}
-                    sx={{
-                      flex: 1,
-                      bgcolor: isActive ? "#2b4a2c" : "transparent",
-                      color: "white",
-                      textTransform: "uppercase",
-                      fontSize: "0.8rem",
-                      fontWeight: 800,
-                      letterSpacing: "0.8px",
-                      p: 1.25,
-                      borderRight:
-                        index < arr.length - 1
-                          ? "1px solid rgba(255,255,255,0.25)"
-                          : "none",
-                      transition: "all 0.2s ease",
-                      cursor: "pointer",
-                      textAlign: "center",
-                      "&:hover": {
-                        bgcolor: isActive
-                          ? "#2b4a2c"
-                          : "rgba(255,255,255,0.08)",
-                      },
-                    }}
-                  >
-                    {tab.label}
-                  </Box>
-                );
-              })}
+              <Box
+                sx={{
+                  display: "flex",
+                  bgcolor: "rgba(0, 0, 0, 0.04)",
+                  borderRadius: "12px",
+                  p: 0.5,
+                  width: "100%",
+                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.03)",
+                  gap: 0.5,
+                  flexWrap: "nowrap",
+                  overflowX: "auto",
+                  "&::-webkit-scrollbar": {
+                    height: "4px",
+                  },
+                  "&::-webkit-scrollbar-thumb": {
+                    background: "rgba(0,0,0,0.1)",
+                    borderRadius: "2px",
+                  }
+                }}
+              >
+                {[
+                  { label: "INCOME", value: "Income", Icon: FiTrendingUp, color: "#43a047" },
+                  { label: "PS - Permanent", value: "PSPermanent", Icon: FiUserCheck, color: "#1976d2" },
+                  { label: "PS - Casual", value: "PSCasual", Icon: FiUsers, color: "#f57c00" },
+                  { label: "PS - Charged", value: "PSChargedToIncome", Icon: FiCreditCard, color: "#9c27b0" },
+                  { label: "COS/JO", value: "COS/JO", Icon: FiBriefcase, color: "#00b0ff" },
+                  { label: "MOOE", value: "MOOE", Icon: FiFileText, color: "#e91e63" },
+                  { label: "CAPITAL OUTLAY", value: "Capital Outlay", Icon: FiCpu, color: "#009688" },
+                  { label: "BSGC", value: "Budgetary Support", Icon: FiAward, color: "#607d8b" },
+                ].map((tab, index) => {
+                  const isActive = activeTab === tab.value;
+                  const Icon = tab.Icon;
+                  return (
+                    <ButtonBase
+                      key={index}
+                      onClick={() => setActiveTab(tab.value)}
+                      sx={{
+                        flex: 1,
+                        bgcolor: isActive ? "#ffffff" : "transparent",
+                        color: isActive ? "#2d5016" : "#64748b",
+                        fontSize: "0.78rem",
+                        fontWeight: isActive ? 800 : 600,
+                        py: 1.25,
+                        px: 1.5,
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 0.8,
+                        minWidth: 110,
+                        whiteSpace: "nowrap",
+                        boxShadow: isActive ? "0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)" : "none",
+                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        "&:hover": {
+                          color: isActive ? "#2d5016" : "#334155",
+                          bgcolor: isActive ? "#ffffff" : "rgba(0,0,0,0.02)",
+                          "& .tab-icon-wrapper": {
+                            transform: "scale(1.1)",
+                          }
+                        },
+                        "&:focus-visible": {
+                          outline: "2px solid",
+                          outlineColor: "primary.main",
+                          outlineOffset: "2px",
+                        }
+                      }}
+                    >
+                      <Box 
+                        className="tab-icon-wrapper"
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          transition: 'transform 0.2s', 
+                          color: isActive ? tab.color : 'inherit' 
+                        }}
+                      >
+                        <Icon size={14} />
+                      </Box>
+                      {tab.label}
+                    </ButtonBase>
+                  );
+                })}
+              </Box>
             </Box>
           </Paper>
 
@@ -3485,9 +3579,9 @@ const ProposalCustomPage = ({
           </Box>
 
           {/* Enhanced Button Group with Export and Bulk Actions */}
-          <div className="button-group">
-            {/* Bulk Actions Button */}
-            {showBulkActions && (
+          {showBulkActions && (
+            <div className="button-group">
+              {/* Bulk Actions Button */}
               <Button
                 variant="outlined"
                 color="primary"
@@ -3503,132 +3597,107 @@ const ProposalCustomPage = ({
                   bulkSelection.budgetarySupport.length}
                 )
               </Button>
-            )}
 
-            {/* Export Button */}
-            {isSuperAdmin && (
-              <Button
-                variant="outlined"
-                color="secondary"
-                onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-                startIcon={<GetAppIcon />}
-                sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
-              >
-                Export
-              </Button>
-            )}
-
-            {/* Activity Log Button */}
-            {isSuperAdmin && (
-              <Button
-                variant="outlined"
-                onClick={() => setShowActivityLog(true)}
-                startIcon={<HistoryIcon />}
-                sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
-              >
-                Activity
-              </Button>
-            )}
-
-            {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
-            {(canCreate || canEditOwn) && (
-              <>
-                <Tooltip
-                  title={
-                    readOnly
-                      ? "Account is in read-only mode"
-                      : !canEditOwn
-                      ? "You don't have permission to submit proposals. Please contact your administrator."
-                      : !budgetSummary.isIncomeBalanced
-                      ? "Combined Income Total must equal Corporate Income before submission"
-                      : ""
-                  }
-                >
-                  <span style={{ display: "inline-block" }}>
-                    {/* <Button
-                    variant="contained"
-                    color="primary"
-                    onClick={handleOpenDialog}
-                    disabled={
-                      readOnly ||
-                      !canEditOwn ||
-                      !anyNotSubmitted ||
-                      isSubmitting
+              {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
+              {(canCreate || canEditOwn) && (
+                <>
+                  <Tooltip
+                    title={
+                      readOnly
+                        ? "Account is in read-only mode"
+                        : !canEditOwn
+                        ? "You don't have permission to submit proposals. Please contact your administrator."
+                        : !budgetSummary.isIncomeBalanced
+                        ? "Combined Income Total must equal Corporate Income before submission"
+                        : ""
                     }
-                    startIcon={<BalanceIcon />}
-                    sx={{
-                      mr: 1,
-                      py: 1,
-                      px: { xs: 2, sm: 3 },
-                      fontSize: { xs: "0.8rem", sm: "0.9rem" },
-                      backgroundColor: "#375e38",
-                      "&:hover": {
-                        backgroundColor: "#2e4e2f",
-                      },
-                    }}
                   >
-                    Submit All Proposals
-                  </Button> */}
-                  </span>
-                </Tooltip>
-                <Tooltip
-                  title={
-                    readOnly
-                      ? "Account is in read-only mode"
-                      : Object.keys(validationErrors).length > 0
-                      ? "Please fix validation errors before saving"
-                      : !anyNotSubmitted
-                      ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
-                      : isSubmitting
-                      ? "Currently processing. Please wait..."
-                      : "Save all eligible proposals as draft"
-                  }
-                  arrow
-                >
-                  <span style={{ display: "inline-block" }}>
-                    {/* <Button
-                    variant="outlined"
-                    color="success"
-                    onClick={() => handleSaveAsDraft()}
-                    disabled={!canEditOwn || !anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0 || readOnly}
-                    startIcon={
-                      saveStatus === "saving" ? (
-                        <CircularProgress size={16} />
-                      ) : (
-                        <SaveIcon />
-                      )
+                    <span style={{ display: "inline-block" }}>
+                      {/* <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleOpenDialog}
+                      disabled={
+                        readOnly ||
+                        !canEditOwn ||
+                        !anyNotSubmitted ||
+                        isSubmitting
+                      }
+                      startIcon={<BalanceIcon />}
+                      sx={{
+                        mr: 1,
+                        py: 1,
+                        px: { xs: 2, sm: 3 },
+                        fontSize: { xs: "0.8rem", sm: "0.9rem" },
+                        backgroundColor: "#375e38",
+                        "&:hover": {
+                          backgroundColor: "#2e4e2f",
+                        },
+                      }}
+                    >
+                      Submit All Proposals
+                    </Button> */}
+                    </span>
+                  </Tooltip>
+                  <Tooltip
+                    title={
+                      readOnly
+                        ? "Account is in read-only mode"
+                        : Object.keys(validationErrors).length > 0
+                        ? "Please fix validation errors before saving"
+                        : !anyNotSubmitted
+                        ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
+                        : isSubmitting
+                        ? "Currently processing. Please wait..."
+                        : "Save all eligible proposals as draft"
                     }
-                    sx={{
-                      py: 1,
-                      px: { xs: 2, sm: 3 },
-                      fontSize: { xs: "0.8rem", sm: "0.9rem" },
-                      borderColor:
-                        Object.keys(validationErrors).length > 0
-                          ? "#f44336"
-                          : "#375e38",
-                      color:
-                        Object.keys(validationErrors).length > 0
-                          ? "#f44336"
-                          : "#375e38",
-                      "&:hover": {
+                    arrow
+                  >
+                    <span style={{ display: "inline-block" }}>
+                      {/* <Button
+                      variant="outlined"
+                      color="success"
+                      onClick={() => handleSaveAsDraft()}
+                      disabled={!canEditOwn || !anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0 || readOnly}
+                      startIcon={
+                        saveStatus === "saving" ? (
+                          <CircularProgress size={16} />
+                        ) : (
+                          <SaveIcon />
+                        )
+                      }
+                      sx={{
+                        py: 1,
+                        px: { xs: 2, sm: 3 },
+                        fontSize: { xs: "0.8rem", sm: "0.9rem" },
                         borderColor:
                           Object.keys(validationErrors).length > 0
-                            ? "#d32f2f"
-                            : "#2e4e2f",
-                        backgroundColor:
+                            ? "#f44336"
+                            : "#375e38",
+                        color:
                           Object.keys(validationErrors).length > 0
-                            ? "rgba(244, 67, 54, 0.04)"
-                            : "rgba(55, 94, 56, 0.04)",
-                      },
-                    }}
-                  >
-                    {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
-                  </Button> */}
-                  </span>
-                </Tooltip>
-              </>
-            )}
-          </div>
+                            ? "#f44336"
+                            : "#375e38",
+                        "&:hover": {
+                          borderColor:
+                            Object.keys(validationErrors).length > 0
+                              ? "#d32f2f"
+                              : "#2e4e2f",
+                          backgroundColor:
+                            Object.keys(validationErrors).length > 0
+                              ? "rgba(244, 67, 54, 0.04)"
+                              : "rgba(55, 94, 56, 0.04)",
+                        },
+                      }}
+                    >
+                      {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
+                    </Button> */}
+                    </span>
+                  </Tooltip>
+                </>
+              )}
+            </div>
+          )}
         </Box>
 
         {/* Mobile Speed Dial for Actions */}
@@ -3646,20 +3715,7 @@ const ProposalCustomPage = ({
             onClose={() => setSpeedDialOpen(false)}
             onOpen={() => setSpeedDialOpen(true)}
           >
-            {isSuperAdmin && (
-              <SpeedDialAction
-                icon={<GetAppIcon />}
-                tooltipTitle="Export"
-                onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-              />
-            )}
-            {isSuperAdmin && (
-              <SpeedDialAction
-                icon={<HistoryIcon />}
-                tooltipTitle="Activity Log"
-                onClick={() => setShowActivityLog(true)}
-              />
-            )}
+
             {showBulkActions && (
               <SpeedDialAction
                 icon={<SelectAllIcon />}

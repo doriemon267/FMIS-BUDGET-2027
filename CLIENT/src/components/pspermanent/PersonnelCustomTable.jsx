@@ -511,7 +511,7 @@ const PermanentCustomTable = ({
   return (
     <>
       {/* Main Table with Zoom Animation */}
-      <Zoom in={true} timeout={600}>
+      <>
         <Box overflow="auto" sx={{ border: 'solid thin #fff' }}>
           <Paper
             sx={{
@@ -931,10 +931,10 @@ const PermanentCustomTable = ({
             </Box>
           </Popover>
         </Box>
-      </Zoom>
+      </>
 
       {/* Grand Total Footer - use sum of displayed rows to match SUBTOTAL column (avoids API vs list filter mismatch) */}
-      <Fade in={true} timeout={1000}>
+      <>
         <Box
           sx={{
             display: 'flex',
@@ -971,7 +971,7 @@ const PermanentCustomTable = ({
             })}
           </Typography>
         </Box>
-      </Fade>
+      </>
     </>
   );
 };

@@ -316,46 +316,45 @@ const CustomTable = ({
   const headerTextColor = "#ffffff"; // White text for header
 
   return (
-    <Zoom in={true} timeout={600}>
-      <Box overflow="auto" sx={{ mt: 3}}>
-        {/* Header with region indicator */}
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            mb: 2, 
-            px: 2 
-          }}
-        >
-          <Box display="flex" alignItems="center" gap={2}>
-            <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 'bold' }}>
-              Meal Allowance Management
-            </Typography>
-            
-            {(activeRegion || assignmentLevel) && (
-              <Chip
-                label={getHierarchicalDisplay().label}
-                size="small"
-                color={getHierarchicalDisplay().color}
-                sx={{
-                  backgroundColor: getHierarchicalDisplay().color === 'success' ? green[100] : 
-                                   getHierarchicalDisplay().color === 'warning' ? orange[100] :
-                                   getHierarchicalDisplay().color === 'error' ? '#f8d7da' : blue[100],
-                  color: getHierarchicalDisplay().color === 'success' ? green[800] : 
-                         getHierarchicalDisplay().color === 'warning' ? orange[800] :
-                         getHierarchicalDisplay().color === 'error' ? '#721c24' : blue[800],
-                  fontWeight: 'bold',
-                  border: `1px solid ${getHierarchicalDisplay().color === 'success' ? green[300] : 
-                                       getHierarchicalDisplay().color === 'warning' ? orange[300] :
-                                       getHierarchicalDisplay().color === 'error' ? '#f5c6cb' : blue[300]}`
-                }}
-              />
-            )}
-          </Box>
+    <Box overflow="auto" sx={{ mt: 3}}>
+      {/* Header with region indicator */}
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 2, 
+          px: 2 
+        }}
+      >
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 'bold' }}>
+            Meal Allowance Management
+          </Typography>
+          
+          {(activeRegion || assignmentLevel) && (
+            <Chip
+              label={getHierarchicalDisplay().label}
+              size="small"
+              color={getHierarchicalDisplay().color}
+              sx={{
+                backgroundColor: getHierarchicalDisplay().color === 'success' ? green[100] : 
+                                 getHierarchicalDisplay().color === 'warning' ? orange[100] :
+                                 getHierarchicalDisplay().color === 'error' ? '#f8d7da' : blue[100],
+                color: getHierarchicalDisplay().color === 'success' ? green[800] : 
+                       getHierarchicalDisplay().color === 'warning' ? orange[800] :
+                       getHierarchicalDisplay().color === 'error' ? '#721c24' : blue[800],
+                fontWeight: 'bold',
+                border: `1px solid ${getHierarchicalDisplay().color === 'success' ? green[300] : 
+                                     getHierarchicalDisplay().color === 'warning' ? orange[300] :
+                                     getHierarchicalDisplay().color === 'error' ? '#f5c6cb' : blue[300]}`
+              }}
+            />
+          )}
         </Box>
-        
-       <Paper sx={{
+      </Box>
+      
+     <Paper sx={{
   mt: 2, // Add this line for margin-top
   width: "100%",
   overflow: "hidden",
@@ -363,247 +362,246 @@ const CustomTable = ({
   boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
   transition: 'all 0.3s ease'
 }}>
-          <TableContainer sx={{
-            height: "60vh",
-            '&::-webkit-scrollbar': {
-              width: '8px',
+        <TableContainer sx={{
+          height: "60vh",
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: '#f1f1f1',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#c1c1c1',
+            borderRadius: '4px',
+            '&:hover': {
+              background: '#a8a8a8',
             },
-            '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
-              borderRadius: '4px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: '#c1c1c1',
-              borderRadius: '4px',
-              '&:hover': {
-                background: '#a8a8a8',
-              },
-            },
-          }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                {columns.map((column) => (
-                  <TableCell
-                    key={column.field}
-                    sx={{
-                      backgroundColor: headerBgColor,
-                      color: headerTextColor,
-                      fontWeight: "bold",
-                      borderRight: "1px solid",
-                      borderColor: "rgba(255, 255, 255, 0.2)",
-                      textAlign: column.type === "number" ? "right" : "left",
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" justifyContent="space-between">
-                      <TableSortLabel
-                        active={orderBy === column.field}
-                        direction={orderBy === column.field ? order : "asc"}
-                        onClick={() => handleRequestSort(column.field)}
-                        sx={{
-                          '&.MuiTableSortLabel-root': {
-                            color: headerTextColor,
-                          },
-                          '&.MuiTableSortLabel-root:hover': {
-                            color: headerTextColor,
-                          },
-                          '&.Mui-active': {
-                            color: headerTextColor,
-                          },
-                          '& .MuiTableSortLabel-icon': {
-                            color: `${headerTextColor} !important`,
-                          },
-                        }}
-                      >
-                        {column.label}
-                      </TableSortLabel>
-                      {column.type !== "action" && (
-                        <Tooltip title={`Filter ${column.label}`}>
-                          <IconButton
-                            size="small"
-                            onClick={(event) =>
-                              handleFilterClick(event, column.field, column.label)
-                            }
-                            sx={{ color: "rgba(255, 255, 255, 0.7)" }}
-                          >
-                            <TiFilter />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </Box>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
+          },
+        }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              {columns.map((column) => (
+                <TableCell
+                  key={column.field}
+                  sx={{
+                    backgroundColor: headerBgColor,
+                    color: headerTextColor,
+                    fontWeight: "bold",
+                    borderRight: "1px solid",
+                    borderColor: "rgba(255, 255, 255, 0.2)",
+                    textAlign: column.type === "number" ? "right" : "left",
+                  }}
+                >
+                  <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <TableSortLabel
+                      active={orderBy === column.field}
+                      direction={orderBy === column.field ? order : "asc"}
+                      onClick={() => handleRequestSort(column.field)}
+                      sx={{
+                        '&.MuiTableSortLabel-root': {
+                          color: headerTextColor,
+                        },
+                        '&.MuiTableSortLabel-root:hover': {
+                          color: headerTextColor,
+                        },
+                        '&.Mui-active': {
+                          color: headerTextColor,
+                        },
+                        '& .MuiTableSortLabel-icon': {
+                          color: `${headerTextColor} !important`,
+                        },
+                      }}
+                    >
+                      {column.label}
+                    </TableSortLabel>
+                    {column.type !== "action" && (
+                      <Tooltip title={`Filter ${column.label}`}>
+                        <IconButton
+                          size="small"
+                          onClick={(event) =>
+                            handleFilterClick(event, column.field, column.label)
+                          }
+                          sx={{ color: "rgba(255, 255, 255, 0.7)" }}
+                        >
+                          <TiFilter />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
 
-            {isLoading ? (
-              <TableBody>
-                <TableRow>
-                  <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
-                    <Fade in={isLoading}>
-                      <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                        <CircularProgress size={40} sx={{ color: '#375e38' }} />
-                        <Typography variant="body2" color="text.secondary">
-                          Loading meal allowance data...
-                        </Typography>
-                      </Box>
-                    </Fade>
+          {isLoading ? (
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
+                  <Fade in={isLoading}>
+                    <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+                      <CircularProgress size={40} sx={{ color: '#375e38' }} />
+                      <Typography variant="body2" color="text.secondary">
+                        Loading meal allowance data...
+                      </Typography>
+                    </Box>
+                  </Fade>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          ) : (
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow sx={{ height: "70vh" }}>
+                  <TableCell colSpan={columns.length} align="center">
+                    {searchValue ? (
+                      <>
+                        No results found for <b>"{searchValue}"</b>.
+                      </>
+                    ) : (
+                      "No rows found."
+                    )}
                   </TableCell>
                 </TableRow>
-              </TableBody>
-            ) : (
-              <TableBody>
-                {rows.length === 0 ? (
-                  <TableRow sx={{ height: "70vh" }}>
-                    <TableCell colSpan={columns.length} align="center">
-                      {searchValue ? (
-                        <>
-                          No results found for <b>"{searchValue}"</b>.
-                        </>
-                      ) : (
-                        "No rows found."
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rows.map((row, rowIndex) => {
-                    const isRecentlyUpdated =
-                      row.updatedAt && dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
+              ) : (
+                rows.map((row, rowIndex) => {
+                  const isRecentlyUpdated =
+                    row.updatedAt && dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
 
-                    return (
-                      <TableRow
-                        key={row._id || rowIndex}
-                        hover
-                        sx={{
+                  return (
+                    <TableRow
+                      key={row._id || rowIndex}
+                      hover
+                      sx={{
+                        backgroundColor: isRecentlyUpdated
+                          ? green[50]
+                          : rowIndex % 2 === 0
+                          ? blueGrey[50]
+                          : "#fff",
+                        cursor: "pointer",
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
                           backgroundColor: isRecentlyUpdated
-                            ? green[50]
+                            ? green[100]
                             : rowIndex % 2 === 0
-                            ? blueGrey[50]
-                            : "#fff",
-                          cursor: "pointer",
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            backgroundColor: isRecentlyUpdated
-                              ? green[100]
-                              : rowIndex % 2 === 0
-                              ? blueGrey[100]
-                              : "rgba(55, 94, 56, 0.04)",
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                          }
-                        }}
-                      >
-                        {columns.map((column) => {
-                          const cellValue = row[column.field];
-                          return (
-                            <TableCell
-                              key={column.field}
-                              onClick={() =>
-                                handleCellClick(rowIndex, column.field, row["_id"])
-                              }
-                              sx={{
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                fontWeight: 500,
-                                textAlign: column.type === "number" ? "right" : "left",
-                              }}
-                            >
-                              {column.render ? (
-                                column.render(row)
-                              ) : column.type === "date" ? (
-                                formatDateToMDY(cellValue)
-                              ) : column.type === "number" ? (
-                                formatCurrency(cellValue)
-                              ) : column.type === "boolean" ? (
-                                cellValue ? "Yes" : "No"
-                              ) : column.searchable ? (
-                                <TextSearchable columnName={cellValue} />
-                              ) : (
-                                cellValue
-                              )}
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            )}
-          </Table>
-          </TableContainer>
+                            ? blueGrey[100]
+                            : "rgba(55, 94, 56, 0.04)",
+                          transform: 'translateY(-1px)',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                        }
+                      }}
+                    >
+                      {columns.map((column) => {
+                        const cellValue = row[column.field];
+                        return (
+                          <TableCell
+                            key={column.field}
+                            onClick={() =>
+                              handleCellClick(rowIndex, column.field, row["_id"])
+                            }
+                            sx={{
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              fontWeight: 500,
+                              textAlign: column.type === "number" ? "right" : "left",
+                            }}
+                          >
+                            {column.render ? (
+                              column.render(row)
+                            ) : column.type === "date" ? (
+                              formatDateToMDY(cellValue)
+                            ) : column.type === "number" ? (
+                              formatCurrency(cellValue)
+                            ) : column.type === "boolean" ? (
+                              cellValue ? "Yes" : "No"
+                            ) : column.searchable ? (
+                              <TextSearchable columnName={cellValue} />
+                            ) : (
+                              cellValue
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          )}
+        </Table>
+        </TableContainer>
 
-          {!isLoading && (
-          <TablePagination
-            rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
-            component="div"
-            count={data?.totalRecords || 0}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-            sx={{
-              borderTop: '1px solid rgba(224, 224, 224, 1)',
-              backgroundColor: '#fafafa',
-              '& .MuiIconButton-root': {
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  backgroundColor: 'rgba(46, 125, 50, 0.1)',
-                  transform: 'scale(1.1)',
-                }
-              },
-              '& .MuiTablePagination-select': {
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  backgroundColor: 'rgba(46, 125, 50, 0.05)',
-                }
+        {!isLoading && (
+        <TablePagination
+          rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
+          component="div"
+          count={data?.totalRecords || 0}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          sx={{
+            borderTop: '1px solid rgba(224, 224, 224, 1)',
+            backgroundColor: '#fafafa',
+            '& .MuiIconButton-root': {
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                transform: 'scale(1.1)',
               }
-            }}
-          />
-        )}
+            },
+            '& .MuiTablePagination-select': {
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                backgroundColor: 'rgba(46, 125, 50, 0.05)',
+              }
+            }
+          }}
+        />
+      )}
 
-          <Popover
-            open={Boolean(filterAnchorEl)}
-            anchorEl={filterAnchorEl}
-            onClose={handleFilterClose}
-            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-            PaperProps={{
-              sx: {
-                borderRadius: 2,
-                boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
-                transition: 'all 0.3s ease',
-                border: '1px solid rgba(46, 125, 50, 0.1)',
-                '&:hover': {
-                  boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                }
+        <Popover
+          open={Boolean(filterAnchorEl)}
+          anchorEl={filterAnchorEl}
+          onClose={handleFilterClose}
+          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+              transition: 'all 0.3s ease',
+              border: '1px solid rgba(46, 125, 50, 0.1)',
+              '&:hover': {
+                boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
               }
-            }}
-          >
-            <Box sx={{ 
-              display: "flex", 
-              flexDirection: "column", 
-              gap: 1, 
-              p: 2,
-              backgroundColor: 'rgba(46, 125, 50, 0.02)'
-            }}>
-              <Typography 
-                variant="subtitle2" 
-                sx={{ 
-                  fontWeight: 600, 
-                  color: "#375e38",
-                  borderBottom: '2px solid rgba(46, 125, 50, 0.2)',
-                  paddingBottom: 1
-                }}
-              >
-                Filter by {fieldAndValue.label}
-              </Typography>
-              {renderFilter()}
-            </Box>
-          </Popover>
-        </Paper>
-      </Box>
-    </Zoom>
+            }
+          }}
+        >
+          <Box sx={{ 
+            display: "flex", 
+            flexDirection: "column", 
+            gap: 1, 
+            p: 2,
+            backgroundColor: 'rgba(46, 125, 50, 0.02)'
+          }}>
+            <Typography 
+              variant="subtitle2" 
+              sx={{ 
+                fontWeight: 600, 
+                color: "#375e38",
+                borderBottom: '2px solid rgba(46, 125, 50, 0.2)',
+                paddingBottom: 1
+              }}
+            >
+              Filter by {fieldAndValue.label}
+            </Typography>
+            {renderFilter()}
+          </Box>
+        </Popover>
+      </Paper>
+    </Box>
   );
 };
 
