@@ -30,6 +30,7 @@ import {
   alpha
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import {
   Settings as SettingsIcon,
   Palette as PaletteIcon,
@@ -67,6 +68,7 @@ const UserPreferencesDialog = ({ open, onClose }) => {
   const theme = useTheme();
   const { mode, setMode } = useThemeContext();
   const isDarkMode = mode === 'dark';
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const {
     preferences,
@@ -283,7 +285,7 @@ const UserPreferencesDialog = ({ open, onClose }) => {
             flexShrink: 0
           }}>
             <Tabs
-              orientation={{ xs: 'horizontal', md: 'vertical' }}
+              orientation={isMobile ? 'horizontal' : 'vertical'}
               variant="scrollable"
               scrollButtons="auto"
               value={activeTab}

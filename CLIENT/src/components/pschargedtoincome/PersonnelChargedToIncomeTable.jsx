@@ -23,6 +23,7 @@ import {
   Paper,
   Card,
   CardContent,
+  useTheme,
 } from '@mui/material';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -49,6 +50,8 @@ const PersonnelChargedToIncomeTable = ({
   locked = false,
   proposalId = null,
 }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const [columnVisibility, setColumnVisibility] = useState({});
   const [filteredRows, setFilteredRows] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
@@ -376,7 +379,7 @@ const PersonnelChargedToIncomeTable = ({
 
       <TableContainer component={Paper}>
         <Table>
-          <TableHead sx={{ bgcolor: '#2b4a2c' }}>
+          <TableHead sx={{ bgcolor: headerBg }}>
             <TableRow>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
                 <Checkbox

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Box,
   Card,
@@ -95,6 +96,10 @@ const fetchTier2Data = async (region, fiscalYear) => {
 };
 
 const TierComparisonPage = () => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const highlightBg = theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#f1f8ed';
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
   const { selectedRegion: contextRegion } = useRegion();
   const queryClient = useQueryClient();
 
@@ -238,19 +243,19 @@ const TierComparisonPage = () => {
 
     return (
       <Box>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: '#1976d2' }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: titleColor }}>
           A. SOURCES OF FUNDS
         </Typography>
         <TableContainer component={Paper} sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
             <Table size="medium">
                 <TableHead>
-                    <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                    <TableRow sx={{ backgroundColor: headerBg }}>
                         <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '25%', fontSize: '0.95rem' }}>Particulars</TableCell>
                         <TableCell align="center" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem' }}>PROJECTED CORPORATE INCOME<br />(a)</TableCell>
                         <TableCell colSpan={3} align="center" sx={{ fontWeight: 'bold', color: 'white', width: '30%', fontSize: '0.95rem' }}>PROJECTED SUBSIDY</TableCell>
                         <TableCell align="center" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem' }}>PROPOSED BUDGET<br />(e = a + d)</TableCell>
                     </TableRow>
-                    <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                    <TableRow sx={{ backgroundColor: headerBg }}>
                         <TableCell sx={{color: 'white'}}></TableCell>
                         <TableCell sx={{color: 'white'}}></TableCell>
                         <TableCell align="center" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.9rem' }}>TIER 1 (b)</TableCell>
@@ -337,7 +342,7 @@ const TierComparisonPage = () => {
                             </Accordion>
                         </TableCell>
                     </TableRow>
-                     <TableRow sx={{ backgroundColor: '#2e7d32', color: 'white' }}>
+                      <TableRow sx={{ backgroundColor: headerBg, color: 'white' }}>
                         <TableCell component="th" scope="row" sx={{ fontWeight: 'bold', color: 'white' }}>TOTAL SOURCES OF FUNDS</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white' }}>{formatCurrency((tier1Totals?.income || 0) + ((tier1Totals?.personnel || 0) * 0.6) + ((tier1Totals?.mooe || 0) * 0.5))}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white' }}>{formatCurrency(((tier1Totals?.personnel || 0) * 0.4) + ((tier1Totals?.mooe || 0) * 0.5) + (tier1Totals?.capital || 0))}</TableCell>
@@ -350,7 +355,7 @@ const TierComparisonPage = () => {
         </TableContainer>
 
         {/* SECTION B: USES OF FUNDS */}
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: '#1976d2' }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: titleColor }}>
           B. USES OF FUNDS
         </Typography>
 
@@ -358,7 +363,7 @@ const TierComparisonPage = () => {
         <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
           <Table size="medium">
             <TableHead>
-              <TableRow sx={{ backgroundColor: '#1976d2' }}>
+              <TableRow sx={{ backgroundColor: headerBg }}>
                 <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '25%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
                   USE OF FUNDS
                 </TableCell>
@@ -406,7 +411,7 @@ const TierComparisonPage = () => {
                   );
               })}
 
-              <TableRow sx={{ backgroundColor: '#e3f2fd', borderTop: '2px solid #1976d2' }}>
+              <TableRow sx={{ backgroundColor: highlightBg, borderTop: '2px solid', borderTopColor: headerBg }}>
                 <TableCell sx={{ pl: 3, py: 2, fontWeight: 'bold' }}>
                     TOTAL USES OF FUNDS
                 </TableCell>

@@ -22,6 +22,7 @@ import {
   Checkbox,
   Zoom,
   Fade,
+  useTheme,
 } from '@mui/material';
 import { blueGrey, green, grey } from '@mui/material/colors';
 import { useQuery } from '@tanstack/react-query';
@@ -84,6 +85,8 @@ const PermanentCustomTable = ({
   selectedRows = [],
   onRowSelectionChange,
 }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, 'second');
 
@@ -553,7 +556,7 @@ const PermanentCustomTable = ({
                     const headerCellSx = {
                       position: 'sticky',
                       top: 0,
-                      backgroundColor: '#375e38',
+                      backgroundColor: headerBg,
                       zIndex: 1,
                       borderRight: '1px solid',
                       borderColor: grey[500],
@@ -812,11 +815,11 @@ const PermanentCustomTable = ({
                       })
                     )}
 
-                    {/* Totals Row */}
+                     {/* Totals Row */}
                     {tableData.length > 0 && (
                       <TableRow
                         sx={{
-                          backgroundColor: '#375e38',
+                          backgroundColor: headerBg,
                           '& .MuiTableCell-root': {
                             color: '#fff',
                             fontWeight: 'bold',
@@ -828,7 +831,7 @@ const PermanentCustomTable = ({
                         {onRowSelectionChange && (
                           <TableCell
                             sx={{
-                              backgroundColor: '#375e38',
+                              backgroundColor: headerBg,
                               color: '#fff',
                               fontWeight: 'bold',
                               textAlign: 'center',
@@ -856,7 +859,7 @@ const PermanentCustomTable = ({
                           <TableCell
                             key={column.field}
                             sx={{
-                              backgroundColor: '#375e38',
+                              backgroundColor: headerBg,
                               color: '#fff',
                               fontWeight: 'bold',
                               textAlign:
@@ -889,7 +892,7 @@ const PermanentCustomTable = ({
             </TableContainer>
           </Paper>
           {!isLoading && (
-            <TablePagination
+             <TablePagination
               rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
               component="div"
               count={data ? data.totalRecords : 0}
@@ -898,7 +901,7 @@ const PermanentCustomTable = ({
               onPageChange={handleChangePage}
               onRowsPerPageChange={handleChangeRowsPerPage}
               sx={{
-                backgroundColor: '#375e38',
+                backgroundColor: headerBg,
                 '& .MuiTablePagination-root, & .MuiTablePagination-toolbar, & .MuiTablePagination-selectLabel, & .MuiTablePagination-input, & .MuiTablePagination-displayedRows':
                   {
                     color: '#fff',
@@ -942,7 +945,7 @@ const PermanentCustomTable = ({
             mt: 0,
             gap: 1,
             justifyContent: 'flex-end',
-            backgroundColor: '#375e38',
+            backgroundColor: headerBg,
             padding: '8px 16px',
             borderRadius: '0 0 4px 4px',
             boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',

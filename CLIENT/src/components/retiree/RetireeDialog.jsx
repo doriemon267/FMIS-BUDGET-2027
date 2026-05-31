@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useTheme } from "@mui/material/styles";
 import {
   Button,
   Dialog,
@@ -42,6 +43,17 @@ const RetireeDialog = ({
   dataListName,
   buttonProps = {},
 }) => {
+  const theme = useTheme();
+  const headerGradient = theme.palette.mode === 'dark' 
+    ? 'linear-gradient(135deg, #0b2413 0%, #1e3320 100%)' 
+    : 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)';
+  const buttonGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #1e3320 0%, #0b2413 100%)'
+    : 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)';
+  const buttonHoverGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)'
+    : 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)';
+
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
@@ -453,7 +465,7 @@ const RetireeDialog = ({
       <Dialog
         open={open}
         onClose={handleClose}
-        maxWidth="lg"
+        maxWidth="md"
         fullWidth
         PaperProps={{
           sx: {
@@ -463,7 +475,7 @@ const RetireeDialog = ({
         }}
       >
         <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+          background: headerGradient,
           color: 'white',
           fontWeight: 'bold'
         }}>
@@ -738,9 +750,10 @@ const RetireeDialog = ({
             onClick={handleSubmit}
             disabled={createMutation.isPending || updateMutation.isPending}
             sx={{
-              background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+              background: buttonGradient,
+              color: 'white',
               '&:hover': {
-                background: 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)',
+                background: buttonHoverGradient,
               }
             }}
           >

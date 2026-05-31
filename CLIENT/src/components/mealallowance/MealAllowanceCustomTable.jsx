@@ -22,6 +22,7 @@ import {
   Fade,
   Chip,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { blueGrey, green, grey, blue, orange } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -43,6 +44,11 @@ const CustomTable = ({
   dataListName = "data",
   orderByDefault = "updatedAt",
 }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const highlightBg = theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#f1f8ed';
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
+
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
   // Use the region context
@@ -311,10 +317,6 @@ const CustomTable = ({
 
   const rows = data?.data || [];
 
-  // Styling constants
-  const headerBgColor = "#2e7d32"; // Dark green color for header
-  const headerTextColor = "#ffffff"; // White text for header
-
   return (
     <Box overflow="auto" sx={{ mt: 3}}>
       {/* Header with region indicator */}
@@ -328,7 +330,7 @@ const CustomTable = ({
         }}
       >
         <Box display="flex" alignItems="center" gap={2}>
-          <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 'bold' }}>
+          <Typography variant="h6" sx={{ color: titleColor, fontWeight: 'bold' }}>
             Meal Allowance Management
           </Typography>
           
@@ -338,14 +340,17 @@ const CustomTable = ({
               size="small"
               color={getHierarchicalDisplay().color}
               sx={{
-                backgroundColor: getHierarchicalDisplay().color === 'success' ? green[100] : 
+                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 
+                                 getHierarchicalDisplay().color === 'success' ? green[100] : 
                                  getHierarchicalDisplay().color === 'warning' ? orange[100] :
                                  getHierarchicalDisplay().color === 'error' ? '#f8d7da' : blue[100],
-                color: getHierarchicalDisplay().color === 'success' ? green[800] : 
+                color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 
+                       getHierarchicalDisplay().color === 'success' ? green[800] : 
                        getHierarchicalDisplay().color === 'warning' ? orange[800] :
                        getHierarchicalDisplay().color === 'error' ? '#721c24' : blue[800],
                 fontWeight: 'bold',
-                border: `1px solid ${getHierarchicalDisplay().color === 'success' ? green[300] : 
+                border: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 
+                                     getHierarchicalDisplay().color === 'success' ? green[300] : 
                                      getHierarchicalDisplay().color === 'warning' ? orange[300] :
                                      getHierarchicalDisplay().color === 'error' ? '#f5c6cb' : blue[300]}`
               }}
@@ -368,30 +373,30 @@ const CustomTable = ({
             width: '8px',
           },
           '&::-webkit-scrollbar-track': {
-            background: '#f1f1f1',
+            background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : '#f1f1f1',
             borderRadius: '4px',
           },
           '&::-webkit-scrollbar-thumb': {
-            background: '#c1c1c1',
+            background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : '#c1c1c1',
             borderRadius: '4px',
             '&:hover': {
-              background: '#a8a8a8',
+              background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : '#a8a8a8',
             },
           },
         }}>
         <Table size="small">
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ backgroundColor: headerBg }}>
               {columns.map((column) => (
                 <TableCell
                   key={column.field}
                   sx={{
-                    backgroundColor: headerBgColor,
-                    color: headerTextColor,
-                    fontWeight: "bold",
                     borderRight: "1px solid",
-                    borderColor: "rgba(255, 255, 255, 0.2)",
+                    borderColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(224, 224, 224, 1)',
                     textAlign: column.type === "number" ? "right" : "left",
+                    color: 'white',
+                    fontWeight: 700,
+                    py: 1.25,
                   }}
                 >
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -400,17 +405,15 @@ const CustomTable = ({
                       direction={orderBy === column.field ? order : "asc"}
                       onClick={() => handleRequestSort(column.field)}
                       sx={{
-                        '&.MuiTableSortLabel-root': {
-                          color: headerTextColor,
-                        },
-                        '&.MuiTableSortLabel-root:hover': {
-                          color: headerTextColor,
-                        },
+                        color: 'white !important',
                         '&.Mui-active': {
-                          color: headerTextColor,
+                          color: 'white !important',
+                        },
+                        '&:hover': {
+                          color: 'rgba(255, 255, 255, 0.8) !important',
                         },
                         '& .MuiTableSortLabel-icon': {
-                          color: `${headerTextColor} !important`,
+                          color: 'white !important',
                         },
                       }}
                     >
@@ -423,7 +426,7 @@ const CustomTable = ({
                           onClick={(event) =>
                             handleFilterClick(event, column.field, column.label)
                           }
-                          sx={{ color: "rgba(255, 255, 255, 0.7)" }}
+                          sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white' } }}
                         >
                           <TiFilter />
                         </IconButton>
@@ -441,7 +444,7 @@ const CustomTable = ({
                 <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
                   <Fade in={isLoading}>
                     <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                      <CircularProgress size={40} sx={{ color: '#375e38' }} />
+                      <CircularProgress size={40} sx={{ color: titleColor }} />
                       <Typography variant="body2" color="text.secondary">
                         Loading meal allowance data...
                       </Typography>
@@ -475,18 +478,18 @@ const CustomTable = ({
                       hover
                       sx={{
                         backgroundColor: isRecentlyUpdated
-                          ? green[50]
+                          ? theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : green[50]
                           : rowIndex % 2 === 0
-                          ? blueGrey[50]
-                          : "#fff",
+                          ? theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : blueGrey[50]
+                          : "transparent",
                         cursor: "pointer",
                         transition: 'all 0.2s ease',
                         '&:hover': {
                           backgroundColor: isRecentlyUpdated
-                            ? green[100]
+                            ? theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.25)' : green[100]
                             : rowIndex % 2 === 0
-                            ? blueGrey[100]
-                            : "rgba(55, 94, 56, 0.04)",
+                            ? theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : blueGrey[100]
+                            : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.04)' : "rgba(55, 94, 56, 0.04)",
                           transform: 'translateY(-1px)',
                           boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                         }
@@ -544,18 +547,18 @@ const CustomTable = ({
           onRowsPerPageChange={handleChangeRowsPerPage}
           sx={{
             borderTop: '1px solid rgba(224, 224, 224, 1)',
-            backgroundColor: '#fafafa',
+            backgroundColor: theme.palette.mode === 'dark' ? 'background.paper' : '#fafafa',
             '& .MuiIconButton-root': {
               transition: 'all 0.2s ease',
               '&:hover': {
-                backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                backgroundColor: 'rgba(76, 175, 80, 0.1)',
                 transform: 'scale(1.1)',
               }
             },
             '& .MuiTablePagination-select': {
               transition: 'all 0.2s ease',
               '&:hover': {
-                backgroundColor: 'rgba(46, 125, 50, 0.05)',
+                backgroundColor: 'rgba(76, 175, 80, 0.05)',
               }
             }
           }}
@@ -572,7 +575,7 @@ const CustomTable = ({
               borderRadius: 2,
               boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
               transition: 'all 0.3s ease',
-              border: '1px solid rgba(46, 125, 50, 0.1)',
+              border: '1px solid rgba(76, 175, 80, 0.1)',
               '&:hover': {
                 boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
               }
@@ -584,14 +587,14 @@ const CustomTable = ({
             flexDirection: "column", 
             gap: 1, 
             p: 2,
-            backgroundColor: 'rgba(46, 125, 50, 0.02)'
+            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.2)' : 'rgba(76, 175, 80, 0.02)'
           }}>
             <Typography 
               variant="subtitle2" 
               sx={{ 
                 fontWeight: 600, 
-                color: "#375e38",
-                borderBottom: '2px solid rgba(46, 125, 50, 0.2)',
+                color: titleColor,
+                borderBottom: '2px solid rgba(76, 175, 80, 0.2)',
                 paddingBottom: 1
               }}
             >

@@ -1180,7 +1180,13 @@ const IncomeTable = ({
       </Box>
       {showSummaryCard && (
         <Fade in={showSummaryCard}>
-          <Card sx={{ mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+          <Card sx={{ 
+            mb: 3, 
+            background: 'linear-gradient(135deg, #1e3d22 0%, #375e38 50%, #2d5016 100%)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: '14px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)'
+          }}>
             <CardContent sx={{ py: 2, position: 'relative' }}>
               <Tooltip title={showSummaryCard ? 'Hide summary' : 'Show summary'}>
                 <IconButton
@@ -1265,7 +1271,13 @@ const IncomeTable = ({
         </Button>
       )}
       <>
-        <Paper elevation={3} sx={{ width: '100%', overflow: 'hidden', borderRadius: 2, boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
+        <Paper elevation={3} sx={{ 
+          width: '100%', 
+          overflow: 'hidden', 
+          borderRadius: 3, 
+          boxShadow: (theme) => theme.palette.mode === 'dark' ? '0 12px 40px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.06)',
+          border: (theme) => theme.palette.mode === 'dark' ? '1px solid rgba(167, 201, 87, 0.15)' : '1px solid rgba(0,0,0,0.06)'
+        }}>
           {isLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
               <CircularProgress size={40} sx={{ color: '#375e38' }} />
@@ -1280,19 +1292,52 @@ const IncomeTable = ({
               <Table size={compactView ? "small" : "medium"} stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ bgcolor: '#375e38', color: 'white', fontWeight: 'bold', width: '45%', position: 'sticky', top: 0, zIndex: 2, fontSize: compactView ? '0.875rem' : '1rem', py: compactView ? 1 : 2 }}>
+                    <TableCell sx={{ 
+                      bgcolor: (theme) => theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016', 
+                      color: 'white', 
+                      fontWeight: 'bold', 
+                      width: '45%', 
+                      position: 'sticky', 
+                      top: 0, 
+                      zIndex: 2, 
+                      fontSize: compactView ? '0.875rem' : '1rem', 
+                      py: compactView ? 1 : 2,
+                      borderBottom: (theme) => theme.palette.mode === 'dark' ? '1px solid rgba(52,211,153,0.15)' : 'none'
+                    }}>
                       <Box display="flex" alignItems="center" gap={1}>
                         <AccountBalanceIcon fontSize="small" />
                         CATEGORIES
                       </Box>
                     </TableCell>
-                    <TableCell sx={{ bgcolor: '#375e38', color: 'white', fontWeight: 'bold', width: '40%', position: 'sticky', top: 0, zIndex: 2, fontSize: compactView ? '0.875rem' : '1rem', py: compactView ? 1 : 2 }}>
+                    <TableCell sx={{ 
+                      bgcolor: (theme) => theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016', 
+                      color: 'white', 
+                      fontWeight: 'bold', 
+                      width: '40%', 
+                      position: 'sticky', 
+                      top: 0, 
+                      zIndex: 2, 
+                      fontSize: compactView ? '0.875rem' : '1rem', 
+                      py: compactView ? 1 : 2,
+                      borderBottom: (theme) => theme.palette.mode === 'dark' ? '1px solid rgba(52,211,153,0.15)' : 'none'
+                    }}>
                       <Box display="flex" alignItems="center" gap={1}>
                         <InfoIcon fontSize="small" />
                         SUB-CATEGORIES
                       </Box>
                     </TableCell>
-                    <TableCell sx={{ bgcolor: '#375e38', color: 'white', fontWeight: 'bold', width: '15%', position: 'sticky', top: 0, zIndex: 2, fontSize: compactView ? '0.875rem' : '1rem', py: compactView ? 1 : 2 }} align="right">
+                    <TableCell sx={{ 
+                      bgcolor: (theme) => theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016', 
+                      color: 'white', 
+                      fontWeight: 'bold', 
+                      width: '15%', 
+                      position: 'sticky', 
+                      top: 0, 
+                      zIndex: 2, 
+                      fontSize: compactView ? '0.875rem' : '1rem', 
+                      py: compactView ? 1 : 2, 
+                      borderBottom: (theme) => theme.palette.mode === 'dark' ? '1px solid rgba(52,211,153,0.15)' : 'none'
+                    }} align="right">
                       <Box display="flex" alignItems="center" justifyContent="flex-end" gap={1}>
                         <TrendingUpIcon fontSize="small" />
                         AMOUNT

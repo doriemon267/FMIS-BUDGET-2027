@@ -205,7 +205,7 @@ const DashboardContent = () => {
   }, []);
 
   return (
-    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden", bgcolor: "#f1f5f9" }}>
+    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden", bgcolor: "#ffffff" }}>
       <ThemeSync />
       <OfflineBanner />
       <CssBaseline />
@@ -331,7 +331,7 @@ const DashboardContent = () => {
           flexDirection: "column",
           minHeight: "100vh",
           minWidth: 0, // Prevent flex overflow
-          bgcolor: "#f8fafc",
+          bgcolor: "#ffffff",
           overflowY: "auto",
           pt: "64px", // Matches Toolbar minHeight
           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",

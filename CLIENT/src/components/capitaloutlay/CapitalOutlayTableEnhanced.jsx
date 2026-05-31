@@ -34,6 +34,7 @@ import {
   InputAdornment,
   Backdrop,
   Badge,
+  useTheme,
 } from "@mui/material";
 import {
   Refresh,
@@ -147,6 +148,8 @@ const defaultFilterState = {
 };
 
 const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false, locked = false }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const { currentUser } = useUser();
   const isSuperAdmin = useMemo(() => {
     return (currentUser?.Roles || []).some((role) =>
@@ -1304,7 +1307,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
               <TableRow>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1318,7 +1321,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1330,7 +1333,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1341,7 +1344,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1352,7 +1355,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1364,7 +1367,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1375,7 +1378,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1387,7 +1390,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
@@ -1399,7 +1402,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                 </TableCell>
                 <TableCell 
                   sx={{ 
-                    backgroundColor: "#1b5e20",
+                    backgroundColor: headerBg,
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',

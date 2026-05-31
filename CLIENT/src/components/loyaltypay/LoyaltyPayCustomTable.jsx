@@ -21,6 +21,7 @@ import {
   Zoom,
   Fade,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { blueGrey, green, grey } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -40,6 +41,11 @@ const CustomTable = ({
   dataListName = "data",
   orderByDefault = "updatedAt",
 }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const highlightBg = theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#f1f8ed';
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
+
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
 
@@ -281,27 +287,30 @@ const CustomTable = ({
             width: '8px',
           },
           '&::-webkit-scrollbar-track': {
-            background: '#f1f1f1',
+            background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : '#f1f1f1',
             borderRadius: '4px',
           },
           '&::-webkit-scrollbar-thumb': {
-            background: '#c1c1c1',
+            background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : '#c1c1c1',
             borderRadius: '4px',
             '&:hover': {
-              background: '#a8a8a8',
+              background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : '#a8a8a8',
             },
           },
         }}>
         <Table size="small">
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ backgroundColor: headerBg }}>
               {columns.map((column) => (
                 <TableCell
                   key={column.field}
                   sx={{
                     borderRight: "1px solid",
-                    borderColor: grey[500],
+                    borderColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(224, 224, 224, 1)',
                     textAlign: column.type === "number" ? "right" : "left",
+                    color: 'white',
+                    fontWeight: 700,
+                    py: 1.25,
                   }}
                 >
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -309,6 +318,18 @@ const CustomTable = ({
                       active={orderBy === column.field}
                       direction={orderBy === column.field ? order : "asc"}
                       onClick={() => handleRequestSort(column.field)}
+                      sx={{
+                        color: 'white !important',
+                        '&.Mui-active': {
+                          color: 'white !important',
+                        },
+                        '&:hover': {
+                          color: 'rgba(255, 255, 255, 0.8) !important',
+                        },
+                        '& .MuiTableSortLabel-icon': {
+                          color: 'white !important',
+                        },
+                      }}
                     >
                       {column.label}
                     </TableSortLabel>
@@ -319,8 +340,9 @@ const CustomTable = ({
                           onClick={(event) =>
                             handleFilterClick(event, column.field, column.label)
                           }
+                          sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white' } }}
                         >
-                          <TiFilter color="lightgray" />
+                          <TiFilter />
                         </IconButton>
                       </Tooltip>
                     )}
@@ -336,7 +358,7 @@ const CustomTable = ({
                 <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
                   <Fade in={isLoading}>
                     <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                      <CircularProgress size={40} sx={{ color: '#375e38' }} />
+                      <CircularProgress size={40} sx={{ color: titleColor }} />
                       <Typography variant="body2" color="text.secondary">
                         Loading loyalty pay data...
                       </Typography>
@@ -370,18 +392,18 @@ const CustomTable = ({
                       hover
                       sx={{
                         backgroundColor: isRecentlyUpdated
-                          ? green[50]
+                          ? theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : green[50]
                           : rowIndex % 2 === 0
-                          ? blueGrey[50]
-                          : "#fff",
+                          ? theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : blueGrey[50]
+                          : "transparent",
                         cursor: "pointer",
                         transition: 'all 0.2s ease',
                         '&:hover': {
                           backgroundColor: isRecentlyUpdated
-                            ? green[100]
+                            ? theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.25)' : green[100]
                             : rowIndex % 2 === 0
-                            ? blueGrey[100]
-                            : "rgba(55, 94, 56, 0.04)",
+                            ? theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : blueGrey[100]
+                            : theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.04)' : "rgba(55, 94, 56, 0.04)",
                           transform: 'translateY(-1px)',
                           boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                         }
@@ -439,7 +461,7 @@ const CustomTable = ({
             onRowsPerPageChange={handleChangeRowsPerPage}
             sx={{
               borderTop: '1px solid rgba(224, 224, 224, 1)',
-              backgroundColor: '#fafafa'
+              backgroundColor: theme.palette.mode === 'dark' ? 'background.paper' : '#fafafa'
             }}
           />
         )}
@@ -451,7 +473,7 @@ const CustomTable = ({
           anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
         >
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#375e38" }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: titleColor }}>
               Filter by {fieldAndValue.label}
             </Typography>
             {renderFilter()}

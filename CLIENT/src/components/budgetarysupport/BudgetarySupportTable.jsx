@@ -17,7 +17,8 @@ import {
   Card,
   CardContent,
   Menu,
-  MenuItem
+  MenuItem,
+  useTheme
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import GetAppIcon from '@mui/icons-material/GetApp';
@@ -99,6 +100,12 @@ const computePersonnelCanonicalTotal = (item) => {
 };
 
 const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrandTotal = 0, groupedItems = {}, onChargedToIncomeChange = null, onNonChargedPersonnelServicesChange = null, onBudgetDeficitChange = null }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const highlightBg = theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.2)' : 'rgba(46, 125, 50, 0.08)';
+  const highlightGradient = theme.palette.mode === 'dark' 
+    ? 'linear-gradient(135deg, rgba(46, 125, 50, 0.25) 0%, rgba(46, 125, 50, 0.15) 100%)' 
+    : 'linear-gradient(135deg, rgba(46, 125, 50, 0.12) 0%, rgba(46, 125, 50, 0.06) 100%)';
   const [amount, setAmount] = useState(0);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [compactView, setCompactView] = useState(false);
@@ -1382,7 +1389,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   }
 
   // Enhanced toolbar component
-  const renderEnhancedToolbar = () => (
+  return (
     <Box sx={{ mb: 3 }}>
       {/* Top Row - Main Controls */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -1435,19 +1442,11 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
           </Tooltip>
         </Box>
       </Box>
-    </Box>
-  );
-
-  return (
-    <Box sx={{ width: '100%', mb: 4 }}>
-      {/* Enhanced Toolbar */}
-      {renderEnhancedToolbar()}
-
       {/* Use of Funds Table */}
       <Card sx={{ mb: 3, bgcolor: '#fff', boxShadow: 3, borderRadius: 3 }}>
         <CardContent sx={{ p: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', letterSpacing: 0.5 }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', color: theme.palette.primary.main, letterSpacing: 0.5 }}>
             A. SOURCES OF FUNDS
           </Typography>
           <Box display="flex" alignItems="center" gap={1}>
@@ -1458,7 +1457,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
         <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
           <Table size={compactView ? 'small' : 'medium'}>
             <TableHead>
-              <TableRow sx={{ backgroundColor: '#1976d2' }}>
+              <TableRow sx={{ backgroundColor: headerBg }}>
                 <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
                   CORPORATE INCOME
                 </TableCell>
@@ -1490,7 +1489,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', letterSpacing: 0.2 }}>
                       ₱{(row.key === irrigationDisplayKey ? irrigationMeta.displaySubtotal : toNumber(effectiveGroupedItems?.[row.key]?.subtotal || 0))
                         .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
@@ -1501,7 +1500,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', letterSpacing: 0.2 }}>
                       ₱{(row.key === irrigationDisplayKey ? irrigationMeta.displaySubtotal : toNumber(effectiveGroupedItems?.[row.key]?.subtotal || 0))
                         .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
@@ -1510,12 +1509,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
               ))}
 
               <TableRow sx={{ 
-                backgroundColor: '#e3f2fd',
-                borderTop: '2px solid #1976d2'
+                backgroundColor: highlightBg,
+                borderTop: `2px solid ${headerBg}`
               }}>
                 <TableCell sx={{ pl: 3, py: 2 }}>
                   <Box display="flex" alignItems="center" gap={1}>
-                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: headerBg, letterSpacing: 0.5 }}>
                       TOTAL CORPORATE INCOME
                     </Typography>
                     <Chip label={`Items: ${Object.values(effectiveGroupedItems || {}).reduce((acc, g) => acc + ((g.items && Array.isArray(g.items)) ? g.items.length : 0), 0)}`}
@@ -1525,7 +1524,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </Box>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
-                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: 'text.primary' }}>
                     ₱{corporateIncomeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
@@ -1535,7 +1534,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
-                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: 'text.primary' }}>
                     ₱{corporateIncomeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
@@ -1547,7 +1546,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
    <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
             <Table size={compactView ? 'small' : 'medium'}>
               <TableHead>
-                <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                <TableRow sx={{ backgroundColor: headerBg }}>
                   <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
                     BUDGETARY SUPPORT
                   </TableCell>
@@ -1616,19 +1615,19 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                    <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: '#1565c0' }}>
+                    <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: 'text.primary' }}>
                       ₱{(totalCorporateIncomeUses + totalSubsidySources).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
                 <TableRow sx={{ 
-                  background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-                  borderTop: '2px solid #1976d2'
+                  background: highlightGradient,
+                  borderTop: `2px solid ${headerBg}`
                 }}>
                   <TableCell sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pl: 3, py: 2 }}>
                     <Box display="flex" alignItems="center" gap={1}>
                       <TrendingUpIcon color="primary" fontSize="small" />
-                      <Typography variant="body2" fontWeight="bold" sx={{ color: '#1976d2' }}>
+                      <Typography variant="body2" fontWeight="bold" sx={{ color: headerBg }}>
                         TOTAL BUDGETARY SUPPORT
                       </Typography>
                     </Box>
@@ -1644,7 +1643,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
-                    <Typography variant="body2" fontWeight="bold" sx={{ color: '#1976d2' }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: headerBg }}>
                       ₱{(totalCorporateIncomeUses + totalSubsidySources).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
@@ -1688,7 +1687,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       <Card sx={{ mb: 3, bgcolor: '#fff', boxShadow: 3, borderRadius: 3 }}>
         <CardContent sx={{ p: 3 }}>
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', letterSpacing: 0.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: theme.palette.primary.main, letterSpacing: 0.5 }}>
               B. USES OF FUNDS
             </Typography>
             <Box display="flex" alignItems="center" gap={1}>
@@ -1699,7 +1698,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
           <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
             <Table size={compactView ? 'small' : 'medium'}>
               <TableHead>
-                <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                <TableRow sx={{ backgroundColor: headerBg }}>
                   <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
                     USE OF FUNDS
                   </TableCell>
@@ -1737,7 +1736,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', letterSpacing: 0.2 }}>
                     ₱{Number(useOfFundsBreakdown.personalServices || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
@@ -1767,7 +1766,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', letterSpacing: 0.2 }}>
                     ₱{(Number(useOfFundsBreakdown.maintenanceAndOperatingIncome || 0) + Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
@@ -1795,7 +1794,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', letterSpacing: 0.2 }}>
                     ₱{(corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.capitalOutlaysSubsidy || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
@@ -1803,13 +1802,13 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
               {/* TOTAL ROW */}
               <TableRow sx={{ 
-                background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-                borderTop: '2px solid #1976d2'
+                background: highlightGradient,
+                borderTop: `2px solid ${headerBg}`
               }}>
                 <TableCell sx={{ pl: 3, py: 2 }}>
                   <Box display="flex" alignItems="center" gap={1}>
                     <TrendingUpIcon color="primary" fontSize="small" />
-                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: headerBg, letterSpacing: 0.5 }}>
                       TOTAL USES OF FUNDS
                     </Typography>
                   </Box>
@@ -1825,7 +1824,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
-                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1976d2' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: headerBg }}>
                     ₱{totalProposedBudgetUses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>

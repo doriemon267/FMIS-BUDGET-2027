@@ -211,14 +211,14 @@ const getUserRole = (req) => {
     .map((role) => role.replace(/\s+/g, '_').toUpperCase());
 
   const rolePriority = [
-    'BUDGET_PREPARER',
-    'BUDGET_REVIEWER',
-    'BUDGET_APPROVER',
-    'BUDGET_PLANNING_ANALYST',
-    'BUDGET_OFFICER',
-    'BUDGET_MANAGER',
-    'OVERALL_BUDGET_APPROVER',
     'SUPER_ADMIN',
+    'OVERALL_BUDGET_APPROVER',
+    'BUDGET_MANAGER',
+    'BUDGET_OFFICER',
+    'BUDGET_PLANNING_ANALYST',
+    'BUDGET_APPROVER',
+    'BUDGET_REVIEWER',
+    'BUDGET_PREPARER',
   ];
 
   for (const normalizedRole of rolePriority) {
@@ -2138,7 +2138,9 @@ exports.getProposals = async (req, res) => {
     const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
     const usernameField = Array.isArray(req.user?.Username) ? req.user.Username[0] : req.user?.Username;
     const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
-    const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
+    const { status, modelType, fiscalYear, view } = req.query;
+    const page = req.query.page || 1;
+    const limit = req.query.limit || 10;
     // Normalize userId to string to avoid mismatches
     const userIdString = userId ? String(userId) : undefined;
     const strictIdentityCandidates = [userIdString, usernameField]
@@ -2155,12 +2157,16 @@ exports.getProposals = async (req, res) => {
         .lean();
 
       if (userAssignment) {
-        if (userAssignment.divisionName) orgScope.division = userAssignment.divisionName.trim();
+        if (userAssignment.divisionName && userAssignment.divisionName.trim()) {
+          orgScope.division = userAssignment.divisionName.trim();
+        }
         if (userAssignment.departmentId) {
-          orgScope.department = (userAssignment.departmentId.Department || userAssignment.departmentId.departmentName || '').trim();
+          const dept = (userAssignment.departmentId.Department || userAssignment.departmentId.departmentName || '').trim();
+          if (dept) orgScope.department = dept;
         }
         if (userAssignment.regionId) {
-          orgScope.region = (userAssignment.regionId.Region || userAssignment.regionId.regionName || '').trim();
+          const reg = (userAssignment.regionId.Region || userAssignment.regionId.regionName || '').trim();
+          if (reg) orgScope.region = reg;
         }
       }
     } catch (err) {
@@ -2195,7 +2201,10 @@ exports.getProposals = async (req, res) => {
       query.status = statusAlias[status] || status;
     }
     if (modelType) query.modelType = modelType;
-    if (fiscalYear) query.fiscalYear = parseInt(fiscalYear);
+    if (fiscalYear) {
+      const fy = parseInt(fiscalYear);
+      if (!isNaN(fy)) query.fiscalYear = fy;
+    }
 
     // Apply view-based and role-based filtering
     const isSuperAdmin = userRole === 'SUPER ADMIN';
@@ -2466,7 +2475,9 @@ exports.getProposals = async (req, res) => {
           // Apply Organizational Scope Restriction for Managers
           if (!isSuperAdmin && Object.keys(orgScope).length > 0) {
             const { region, ...orgScopeWithoutRegion } = orgScope;
-            query = { ...query, ...orgScopeWithoutRegion };
+            
+            // For Managers (Budget Manager), we typically only restrict by Region 
+            // and NOT by specific department/division, as they should see all offices in their region.
             if (region) {
               const regionDoc = await require('../models/Region').findOne({
                 $or: [{ Region: region }, { regionName: region }, { RegionName: region }]
@@ -2503,21 +2514,22 @@ exports.getProposals = async (req, res) => {
     }
 
     // Manual pagination
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 10));
     const skip = (pageNum - 1) * limitNum;
 
   // Silent mode: no verbose logging
 
     // Query both NewProposalWorkflow and legacy Proposal models
-    console.log('GET PROPOSALS FINAL QUERY:', JSON.stringify(query));
+    try { console.log('GET PROPOSALS FINAL QUERY:', JSON.stringify(query)); } catch (_) { console.log('GET PROPOSALS FINAL QUERY: [unserializable]'); }
     const newProposalsCount = await NewProposalWorkflow.countDocuments(query);
     let newProposals = await NewProposalWorkflow.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
-      .populate('region', 'Region regionName RegionName');
-    if (view === 'monitoring' && (userRole === 'BUDGET MANAGER' || userRole === 'SUPER ADMIN')) {
+      .populate('region', 'Region regionName RegionName')
+      .lean();
+    if (view === 'monitoring' && (userRole === 'BUDGET MANAGER' || isSuperAdmin)) {
       console.log('[MONITORING] Query:', query);
       console.log('[MONITORING] Found proposals:', newProposals.length);
       if (newProposals.length > 0) {
@@ -2601,24 +2613,24 @@ exports.getProposals = async (req, res) => {
       // Note: Exclude region from spread since region field is ObjectId, not String
       const { region, ...orgScopeWithoutRegion } = orgScope;
       const fallbackQuery = { createdBy: userIdString, ...orgScopeWithoutRegion };
-  const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+  const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
       newProposals = fallbackAll.filter(p => p.status === 'DRAFT' || p.status === 'RETURNED_TO_PREPARER');
       // Second fallback: try createdByName if still empty
       if (newProposals.length === 0) {
         const { region: _r, ...orgScopeWithoutRegion } = orgScope;
-  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
         newProposals = nameFallback;
       }
       // Final fallback: only return user-specific drafts. Do NOT return ALL drafts to avoid exposure.
       if (newProposals.length === 0) {
         const { region: _r2, ...orgScopeWithoutRegion } = orgScope;
-        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
+        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName').lean();
         // Also try createdByName fallback, but do not broaden to all drafts
         if (allUserDrafts.length > 0) {
           newProposals = allUserDrafts;
         } else {
           const { region: _r3, ...orgScopeWithoutRegion } = orgScope;
-          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
           newProposals = nameFallback;
         }
       }
@@ -2912,7 +2924,7 @@ exports.getProposals = async (req, res) => {
 
     // Metrics aggregation for monitoring view
     let metrics = undefined;
-    if (view === 'monitoring' && (userRole === 'BUDGET MANAGER' || userRole === 'SUPER ADMIN')) {
+    if (view === 'monitoring' && (userRole === 'BUDGET MANAGER' || isSuperAdmin)) {
       // Normalize statuses for metrics (map either human-readable or enum codes to consistent enum keys)
       const humanToEnumStatusMap = {
         'Draft': 'DRAFT',
@@ -2951,7 +2963,15 @@ exports.getProposals = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching proposals:', error);
+    console.error('[getProposals] CRITICAL ERROR:', {
+      message: error.message,
+      stack: error.stack,
+      query: JSON.stringify(req.query),
+      user: {
+        id: req.user?.id || req.user?._id,
+        roles: req.user?.Roles
+      }
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to fetch proposals',

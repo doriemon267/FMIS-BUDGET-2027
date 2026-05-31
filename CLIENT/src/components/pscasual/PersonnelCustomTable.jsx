@@ -21,6 +21,7 @@ import {
   Zoom,
   Fade,
   CircularProgress,
+  useTheme,
 } from "@mui/material";
 import { blueGrey, green, grey } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
@@ -77,6 +78,8 @@ const CasualCustomTable = ({
   selectedRows = [],
   onRowSelectionChange,
 }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
 
@@ -544,7 +547,7 @@ const CasualCustomTable = ({
                   const headerCellSx = {
                     position: "sticky",
                     top: 0,
-                    backgroundColor: "#375e38",
+                    backgroundColor: headerBg,
                     zIndex: 1,
                     borderRight: "1px solid",
                     borderColor: grey[500],
@@ -639,7 +642,7 @@ const CasualCustomTable = ({
                     >
                       <Fade in={isLoading}>
                         <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                          <CircularProgress size={40} sx={{ color: '#375e38' }} />
+                          <CircularProgress size={40} sx={{ color: headerBg }} />
                           <Typography variant="body2" color="text.secondary">
                             Loading casual personnel data...
                           </Typography>
@@ -789,7 +792,7 @@ const CasualCustomTable = ({
                   {tableData.length > 0 && (
                     <TableRow
                       sx={{
-                        backgroundColor: "#375e38",
+                        backgroundColor: headerBg,
                         "& .MuiTableCell-root": {
                           color: "#fff",
                           fontWeight: "bold",
@@ -800,7 +803,7 @@ const CasualCustomTable = ({
                       {hasRowSelection && (
                         <TableCell
                           sx={{
-                            backgroundColor: "#375e38",
+                            backgroundColor: headerBg,
                             color: "#fff",
                             fontWeight: "bold",
                             textAlign: "center",
@@ -821,7 +824,7 @@ const CasualCustomTable = ({
                         <TableCell
                           key={column.field}
                           sx={{
-                            backgroundColor: "#375e38",
+                            backgroundColor: headerBg,
                             color: "#fff",
                             fontWeight: "bold",
                             textAlign:
@@ -864,7 +867,7 @@ const CasualCustomTable = ({
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
             sx={{
-              backgroundColor: "#375e38",
+              backgroundColor: headerBg,
               "& .MuiTablePagination-root, & .MuiTablePagination-toolbar, & .MuiTablePagination-selectLabel, & .MuiTablePagination-input, & .MuiTablePagination-displayedRows":
                 {
                   color: "#fff",
@@ -908,7 +911,7 @@ const CasualCustomTable = ({
             mt: 0,
             gap: 1,
             justifyContent: "flex-end",
-            backgroundColor: "#375e38",
+            backgroundColor: headerBg,
             padding: "8px 16px",
             borderRadius: "0 0 4px 4px",
             boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Box, Tab, Tabs, Typography, Paper, ButtonBase } from "@mui/material";
-import { styled } from "@mui/material/styles";
+import { styled, useTheme } from "@mui/material/styles";
 import { FaGavel, FaClock, FaAward, FaBriefcase } from "react-icons/fa";
 import { GiMeal } from "react-icons/gi";
 import { BiSolidShieldPlus, BiChild } from "react-icons/bi";
@@ -86,6 +86,7 @@ const tabPathMapping = {
 };
 
 const EmployeeBenefitsPage = () => {
+  const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
@@ -200,15 +201,14 @@ const EmployeeBenefitsPage = () => {
         </Box>
       </Paper>
       
-      {/* Segmented white card tab dock */}
+      {/* Premium Forest Green Solid-Bar Tab Dock */}
       <Paper
-        elevation={2}
+        elevation={0}
         sx={{
-          p: 1.5,
-          borderRadius: "16px",
-          bgcolor: "#ffffff",
-          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0,0,0,0.01)",
-          border: "1px solid rgba(0, 0, 0, 0.04)",
+          background: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016",
+          p: 1.25,
+          borderRadius: "12px",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
           mb: 3,
         }}
       >
@@ -216,11 +216,8 @@ const EmployeeBenefitsPage = () => {
           <Box
             sx={{
               display: "flex",
-              bgcolor: "rgba(0, 0, 0, 0.04)",
-              borderRadius: "12px",
-              p: 0.5,
+              bgcolor: "transparent",
               width: "100%",
-              boxShadow: "inset 0 2px 4px rgba(0,0,0,0.03)",
               gap: 0.5,
               flexWrap: "nowrap",
               overflowX: "auto",
@@ -228,7 +225,7 @@ const EmployeeBenefitsPage = () => {
                 height: "4px",
               },
               "&::-webkit-scrollbar-thumb": {
-                background: "rgba(0,0,0,0.1)",
+                background: "rgba(255,255,255,0.15)",
                 borderRadius: "2px",
               }
             }}
@@ -243,30 +240,34 @@ const EmployeeBenefitsPage = () => {
                   sx={{
                     flex: 1,
                     bgcolor: isActive ? "#ffffff" : "transparent",
-                    color: isActive ? "#2d5016" : "#64748b",
+                    color: isActive 
+                      ? (theme.palette.mode === "dark" ? "#0b2413" : "#2d5016") 
+                      : "rgba(255, 255, 255, 0.75)",
                     fontSize: "0.78rem",
                     fontWeight: isActive ? 800 : 600,
-                    py: 1.25,
+                    py: 1,
                     px: 2,
-                    borderRadius: "10px",
+                    borderRadius: "6px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 0.8,
                     minWidth: 145,
                     whiteSpace: "nowrap",
-                    boxShadow: isActive ? "0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)" : "none",
-                    transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                    boxShadow: isActive ? "0 2px 6px rgba(0,0,0,0.15)" : "none",
+                    transition: "all 0.2s ease-in-out",
                     "&:hover": {
-                      color: isActive ? "#2d5016" : "#334155",
-                      bgcolor: isActive ? "#ffffff" : "rgba(0,0,0,0.02)",
+                      color: isActive 
+                        ? (theme.palette.mode === "dark" ? "#0b2413" : "#2d5016") 
+                        : "#ffffff",
+                      bgcolor: isActive ? "#ffffff" : "rgba(255, 255, 255, 0.08)",
                       "& .tab-icon-wrapper": {
                         transform: "scale(1.1)",
                       }
                     },
                     "&:focus-visible": {
                       outline: "2px solid",
-                      outlineColor: "primary.main",
+                      outlineColor: "#ffffff",
                       outlineOffset: "2px",
                     }
                   }}

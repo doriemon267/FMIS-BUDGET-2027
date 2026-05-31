@@ -36,6 +36,7 @@ import {
   Switch,
   FormControlLabel,
   ButtonBase,
+  useTheme,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -116,9 +117,9 @@ const PS_HEADER_CELL = {
   amount: { minWidth: 130 },
 };
 
-const renderPSTableHead = () => (
+const renderPSTableHead = (headerBg) => (
   <TableHead>
-    <TableRow sx={TABLE_HEADER_ROW}>
+    <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg || BRAND_COLORS.deepGreen }}>
       <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
       <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
       <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
@@ -223,6 +224,10 @@ const BASE_TABS = [
 const WORKFLOW_API_BASE = "/api/allproposal/proposals";
 
 const NewProposalWorkflowPage = () => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const highlightBg = theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.15)' : 'rgba(46, 125, 50, 0.06)';
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
   const navigate = useNavigate();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
@@ -1652,7 +1657,7 @@ const NewProposalWorkflowPage = () => {
       label: "View Details",
       value: "view-details",
       icon: <ViewIcon />,
-      color: "#2d5016",
+      color: headerBg,
     });
 
     // VIEW HISTORY (always available)
@@ -1660,7 +1665,7 @@ const NewProposalWorkflowPage = () => {
       label: "View History",
       value: "view-history",
       icon: <ExpandMoreIcon />,
-      color: "#1976d2",
+      color: headerBg,
     });
 
     // VIEW AUDIT TRAIL (always available)
@@ -1692,7 +1697,7 @@ const NewProposalWorkflowPage = () => {
         label: "Open Tier",
         value: "open-tier",
         icon: <TableChartIcon />,
-        color: "#2d5016",
+        color: headerBg,
       });
     }
 
@@ -2330,26 +2335,29 @@ const NewProposalWorkflowPage = () => {
             bgcolor: "#ffffff",
           }}
         >
-          {/* Tabs Header - Premium Segmented Control */}
+          {/* Tabs Header - Premium Solid Segmented Control */}
           <Box
             sx={{
-              background: "#f8fafc",
+              background: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016",
               px: 2,
-              py: 1.5,
+              py: 1.25,
               display: "flex",
               justifyContent: "center",
-              borderBottom: "1px solid rgba(0, 0, 0, 0.05)",
+              borderBottom: "none",
+              borderTopLeftRadius: "12px",
+              borderTopRightRadius: "12px",
             }}
           >
             <Box
               sx={{
                 display: "flex",
-                bgcolor: "rgba(0, 0, 0, 0.04)",
+                bgcolor: "transparent",
                 borderRadius: "12px",
                 p: 0.5,
                 width: "100%",
                 maxWidth: 560,
-                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.03)",
+                boxShadow: "none",
+                gap: 0.5,
               }}
             >
               {tabs
@@ -2368,7 +2376,6 @@ const NewProposalWorkflowPage = () => {
                   let TabIcon = FiLayers;
                   if (tab.value === "my-proposals") TabIcon = FiUser;
                   if (tab.value === "monitoring") TabIcon = FiActivity;
-                  
                   return (
                     <ButtonBase
                       key={index}
@@ -2376,24 +2383,30 @@ const NewProposalWorkflowPage = () => {
                       sx={{
                         flex: 1,
                         bgcolor: isActive ? "#ffffff" : "transparent",
-                        color: isActive ? "#2d5016" : "#64748b",
+                        color: isActive 
+                          ? (theme.palette.mode === "dark" ? "#0b2413" : "#2d5016") 
+                          : "rgba(255, 255, 255, 0.75)",
                         fontSize: "0.8rem",
                         fontWeight: isActive ? 800 : 600,
                         py: 1,
-                        borderRadius: "8px",
+                        borderRadius: "6px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         gap: 1,
-                        boxShadow: isActive ? "0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)" : "none",
-                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        boxShadow: isActive ? "0 2px 6px rgba(0, 0, 0, 0.15)" : "none",
+                        transition: "all 0.2s ease-in-out",
                         "&:hover": {
-                          color: isActive ? "#2d5016" : "#334155",
-                          bgcolor: isActive ? "#ffffff" : "rgba(0,0,0,0.02)",
+                          color: isActive 
+                            ? (theme.palette.mode === "dark" ? "#0b2413" : "#2d5016") 
+                            : "#ffffff",
+                          bgcolor: isActive 
+                            ? "#ffffff" 
+                            : "rgba(255, 255, 255, 0.08)",
                         },
                         "&:focus-visible": {
                           outline: "2px solid",
-                          outlineColor: "primary.main",
+                          outlineColor: "#ffffff",
                           outlineOffset: "2px",
                         }
                       }}
@@ -2407,7 +2420,7 @@ const NewProposalWorkflowPage = () => {
           </Box>
           {/* Monitoring Metrics Cards - Below Tabs, Auto-Adjusting */}
           {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
-            <Box sx={{ display: "flex", gap: 1, alignItems: "stretch", p: 1.5, bgcolor: "white", flexWrap: "nowrap", borderBottom: "1px solid #e0e0e0", justifyContent: "space-between", minHeight: "100px" }}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "stretch", p: 1.5, bgcolor: theme.palette.mode === 'dark' ? 'background.paper' : 'white', flexWrap: "nowrap", borderBottom: "1px solid", borderColor: "divider", justifyContent: "space-between", minHeight: "100px" }}>
               {Object.entries(monitoringMetrics.byStatus || {}).map(([status, count]) => {
                 // Normalization: server may return human-readable labels OR enum codes as keys.
                 // Normalize both into a stable enum-style key to let the UI map to icons & labels consistently.
@@ -2483,10 +2496,10 @@ const NewProposalWorkflowPage = () => {
                     <Box sx={{ fontSize: "1.8rem", mb: 0.8, lineHeight: 1 }}>
                       {statusIcons[normalized] || statusIcons[status] || '•'}
                     </Box>
-                    <Box sx={{ fontSize: "2rem", fontWeight: 700, color: "#2d5016", mb: 0.5, lineHeight: 1 }}>
+                    <Box sx={{ fontSize: "2rem", fontWeight: 700, color: titleColor, mb: 0.5, lineHeight: 1 }}>
                       {count}
                     </Box>
-                    <Typography sx={{ fontSize: "0.7rem", color: "#555", fontWeight: 500, lineHeight: 1.2, wordWrap: "break-word" }}>
+                    <Typography sx={{ fontSize: "0.7rem", color: theme.palette.mode === 'dark' ? 'text.secondary' : '#555', fontWeight: 500, lineHeight: 1.2, wordWrap: "break-word" }}>
                       {statusLabels[normalized] || statusLabels[status] || status}
                     </Typography>
                   </Box>
@@ -2503,24 +2516,25 @@ const NewProposalWorkflowPage = () => {
                   minWidth: "0",
                   py: 2,
                   px: 1,
-                  bgcolor: "#f0f8f0",
+                  bgcolor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#f0f8f0',
                   borderRadius: "6px",
-                  border: "2px solid #2d5016",
+                  border: "2px solid",
+                  borderColor: titleColor,
                   textAlign: "center",
                   transition: "all 0.3s ease",
                   "&:hover": {
-                    bgcolor: "#e8f5e8",
-                    boxShadow: "0 2px 8px rgba(45, 80, 22, 0.15)"
+                    bgcolor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.25)' : '#e8f5e8',
+                    boxShadow: theme.palette.mode === 'dark' ? 'none' : "0 2px 8px rgba(45, 80, 22, 0.15)"
                   }
                 }}
               >
                 <Box sx={{ fontSize: "1.8rem", mb: 0.8, lineHeight: 1 }}>
                   📊
                 </Box>
-                <Box sx={{ fontSize: "2rem", fontWeight: 700, color: "#2d5016", mb: 0.5, lineHeight: 1 }}>
+                <Box sx={{ fontSize: "2rem", fontWeight: 700, color: titleColor, mb: 0.5, lineHeight: 1 }}>
                   {monitoringMetrics.total || 0}
                 </Box>
-                <Typography sx={{ fontSize: "0.7rem", color: "#2d5016", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.3px", lineHeight: 1.2 }}>
+                <Typography sx={{ fontSize: "0.7rem", color: titleColor, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.3px", lineHeight: 1.2 }}>
                   Total
                 </Typography>
               </Box>
@@ -2695,8 +2709,12 @@ const NewProposalWorkflowPage = () => {
                   label={showAllRegions ? 'Showing: All regions' : `Region: ${resolvedRegionString}`}
                   size="small"
                   sx={{
-                    bgcolor: showAllRegions ? "#e7f6ff" : "#f1f8ed",
-                    color: showAllRegions ? "#035388" : "#2d5016",
+                    bgcolor: showAllRegions 
+                      ? (theme.palette.mode === 'dark' ? 'rgba(3, 83, 136, 0.2)' : '#e7f6ff') 
+                      : (theme.palette.mode === 'dark' ? 'rgba(45, 80, 22, 0.2)' : '#f1f8ed'),
+                    color: showAllRegions 
+                      ? (theme.palette.mode === 'dark' ? '#64b5f6' : '#035388') 
+                      : titleColor,
                     fontWeight: 600,
                     ml: 1,
                   }}
@@ -3212,7 +3230,7 @@ const NewProposalWorkflowPage = () => {
                                             px: 2,
                                             color:
                                               action.value === "view-details"
-                                                ? "#2d5016"
+                                                ? titleColor
                                                 : "inherit",
                                             fontWeight:
                                               action.value === "view-details"
@@ -3223,10 +3241,10 @@ const NewProposalWorkflowPage = () => {
                                             "&:hover": {
                                               bgcolor:
                                                 action.color === "warning"
-                                                  ? "#fff3e0"
+                                                  ? (theme.palette.mode === 'dark' ? 'rgba(245, 124, 0, 0.1)' : '#fff3e0')
                                                   : action.color === "success"
-                                                  ? "#e8f5e9"
-                                                  : "#f0f7ed",
+                                                  ? (theme.palette.mode === 'dark' ? 'rgba(56, 142, 60, 0.1)' : '#e8f5e9')
+                                                  : (theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.1)' : '#f0f7ed'),
                                               transform: "translateX(4px)",
                                             },
                                           }}
@@ -3237,12 +3255,12 @@ const NewProposalWorkflowPage = () => {
                                               alignItems: "center",
                                               color:
                                                 action.color === "primary"
-                                                  ? "#2d5016"
+                                                  ? titleColor
                                                   : action.color === "warning"
                                                   ? "#f57c00"
                                                   : action.color === "success"
                                                   ? "#388e3c"
-                                                  : "#2d5016",
+                                                  : titleColor,
                                             }}
                                           >
                                             {action.icon}
@@ -3262,7 +3280,7 @@ const NewProposalWorkflowPage = () => {
                                 {isProposalMergeable(proposal) ? (
                                   <input
                                     type="checkbox"
-                                    style={{ cursor: "pointer", width: 16, height: 16, accentColor: "#2d5016" }}
+                                    style={{ cursor: "pointer", width: 16, height: 16, accentColor: titleColor }}
                                     checked={selectedForMerge.has(proposal._id)}
                                     onChange={() => handleToggleMergeSelect(proposal._id)}
                                     onClick={(e) => e.stopPropagation()}
@@ -3365,7 +3383,7 @@ const NewProposalWorkflowPage = () => {
       >
         <DialogTitle
           sx={{
-            bgcolor: "#2d5016",
+            bgcolor: headerBg,
             color: "white",
             fontWeight: "bold",
             fontSize: "1.25rem",
@@ -3453,8 +3471,8 @@ const NewProposalWorkflowPage = () => {
               </Alert>
 
               {signerMode === 'p12' && (
-                <Box sx={{ mt: 2, p: 2, border: '1px solid #ddd', borderRadius: 1, bgcolor: '#fafafa' }}>
-                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', color: '#2d5016' }}>
+                <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: theme.palette.mode === 'dark' ? 'background.default' : '#fafafa' }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', color: titleColor }}>
                     Digital Signature (P12 Mode)
                   </Typography>
                   
@@ -3520,15 +3538,15 @@ const NewProposalWorkflowPage = () => {
               (signerMode === 'p12' && actionType && actionRequiresDigitalSignature(mapActionToBackend(actionType)) && (!actionP12File || !actionP12Password))
             }
             sx={{
-              bgcolor: "#2d5016",
+              bgcolor: headerBg,
               color: "white",
               textTransform: "none",
               fontWeight: 600,
               px: 3,
-              boxShadow: "0 2px 8px rgba(45,80,22,0.3)",
+              boxShadow: theme.palette.mode === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(45,80,22,0.3)',
               "&:hover": {
-                bgcolor: "#4a7c2c",
-                boxShadow: "0 4px 12px rgba(45,80,22,0.4)",
+                bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#4a7c2c',
+                boxShadow: theme.palette.mode === 'dark' ? '0 4px 12px rgba(0,0,0,0.6)' : '0 4px 12px rgba(45,80,22,0.4)',
               },
               "&:disabled": {
                 bgcolor: "#ccc",
@@ -3580,8 +3598,8 @@ const NewProposalWorkflowPage = () => {
       >
         <DialogTitle
           sx={{
-            bgcolor: "linear-gradient(135deg, #2d5016 0%, #375e38 100%)",
-            background: "linear-gradient(135deg, #2d5016 0%, #375e38 100%)",
+            bgcolor: theme.palette.mode === 'dark' ? "linear-gradient(135deg, #0b2413 0%, #1e3d22 100%)" : "linear-gradient(135deg, #2d5016 0%, #375e38 100%)",
+            background: theme.palette.mode === 'dark' ? "linear-gradient(135deg, #0b2413 0%, #1e3d22 100%)" : "linear-gradient(135deg, #2d5016 0%, #375e38 100%)",
             color: "white",
             fontWeight: "bold",
             fontSize: "1.25rem",
@@ -3618,7 +3636,7 @@ const NewProposalWorkflowPage = () => {
                 p: 6,
               }}
             >
-              <CircularProgress sx={{ color: "#2d5016" }} size={20} />
+              <CircularProgress sx={{ color: titleColor }} size={20} />
             </Box>
           ) : (
             <>
@@ -3626,8 +3644,9 @@ const NewProposalWorkflowPage = () => {
               <Box
                 sx={{
                   p: 4,
-                  bgcolor: "rgba(0, 0, 0, 0.01)",
-                  borderBottom: "1px solid rgba(0, 0, 0, 0.06)",
+                  bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.01)',
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
                 }}
               >
                 <Grid container spacing={3}>
@@ -3640,7 +3659,7 @@ const NewProposalWorkflowPage = () => {
                       >
                         Responsibility Center
                       </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 700, color: '#2d5016', fontSize: '1.05rem' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 700, color: titleColor, fontSize: '1.05rem' }}>
                         {selectedProposal?.responsibilityCenter ||
                           selectedProposal?.division ||
                           selectedProposal?.department ||
@@ -3689,7 +3708,7 @@ const NewProposalWorkflowPage = () => {
                           label={selectedProposal?.budgetType?.toUpperCase() || selectedProposal?.modelType?.toUpperCase()}
                           size="small"
                           sx={{
-                            bgcolor: "#2d5016",
+                            bgcolor: headerBg,
                             color: "white",
                             fontWeight: "bold",
                             borderRadius: '6px',
@@ -3765,8 +3784,9 @@ const NewProposalWorkflowPage = () => {
                       sx={{
                         p: 2.5,
                         borderRadius: "12px",
-                        bgcolor: "rgba(45, 80, 22, 0.04)",
-                        border: "1px solid rgba(45, 80, 22, 0.1)",
+                        bgcolor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(45, 80, 22, 0.04)',
+                        border: "1px solid",
+                        borderColor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.25)' : 'rgba(45, 80, 22, 0.1)',
                         boxShadow: "0 2px 8px rgba(45, 80, 22, 0.02)",
                         transition: "all 0.2s",
                         "&:hover": { boxShadow: "0 4px 16px rgba(45, 80, 22, 0.07)" }
@@ -3774,13 +3794,13 @@ const NewProposalWorkflowPage = () => {
                     >
                       <Typography
                         variant="caption"
-                        sx={{ color: "#2d5016", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}
+                        sx={{ color: titleColor, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}
                       >
                         Proposed Budget (Grand Total)
                       </Typography>
                       <Typography
                         variant="h6"
-                        sx={{ fontWeight: 800, color: "#2d5016", mt: 0.5, fontSize: "1.3rem" }}
+                        sx={{ fontWeight: 800, color: titleColor, mt: 0.5, fontSize: "1.3rem" }}
                       >
                         ₱
                         {getAuthoritativeProposedBudget().toLocaleString("en-US", {
@@ -3885,7 +3905,7 @@ const NewProposalWorkflowPage = () => {
                     <Box sx={{ mt: 4, pt: 3, borderTop: "2px dashed #d0d0d0" }}>
                       <Typography
                         variant="subtitle1"
-                        sx={{ fontWeight: 600, mb: 2, color: "#2d5016" }}
+                        sx={{ fontWeight: 600, mb: 2, color: titleColor }}
                       >
                         Edit Proposal Details
                       </Typography>
@@ -3928,11 +3948,11 @@ const NewProposalWorkflowPage = () => {
                           size="small"
                           disabled={!proposalEditDirty}
                           sx={{
-                            bgcolor: proposalEditDirty ? "#2d5016" : "#9e9e9e",
+                            bgcolor: proposalEditDirty ? headerBg : "text.disabled",
                             "&:hover": {
                               bgcolor: proposalEditDirty
-                                ? "#1e3a0f"
-                                : "#757575",
+                                ? (theme.palette.mode === 'dark' ? '#14331d' : '#1e3a0f')
+                                : "text.disabled",
                             },
                           }}
                           onClick={async () => {
@@ -3998,47 +4018,8 @@ const NewProposalWorkflowPage = () => {
                     variant="scrollable"
                     scrollButtons="auto"
                     sx={{
-                      borderBottom: "1px solid rgba(0, 0, 0, 0.06)",
-                      bgcolor: "#f8fafc",
-                      p: 1.2,
-                      borderRadius: "16px 16px 0 0",
-                      "& .MuiTabs-flexContainer": {
-                        gap: 1,
-                      },
-                      "& .MuiTab-root": {
-                        textTransform: "none",
-                        fontWeight: 700,
-                        fontSize: "0.85rem",
-                        minWidth: 110,
-                        minHeight: 46,
-                        borderRadius: "12px",
-                        color: "#64748b",
-                        display: "flex",
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 1.2,
-                        py: 1,
-                        px: 2,
-                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-                        "&:hover": {
-                          color: "#334155",
-                          bgcolor: "rgba(0, 0, 0, 0.02)",
-                          transform: "translateY(-1px)",
-                        },
-                        "&.Mui-selected": {
-                          color: "#2d5016",
-                          bgcolor: "#f0f7f0",
-                          boxShadow: "0 2px 8px rgba(45, 80, 22, 0.06)",
-                          "& .tab-icon-wrapper": {
-                            transform: "scale(1.1)",
-                          }
-                        },
-                      },
-                      "& .MuiTabs-indicator": {
-                        bgcolor: "#2d5016",
-                        height: 3,
-                        borderRadius: "3px 3px 0 0",
-                      },
+                      mb: 0.5,
+                      borderBottom: "none",
                     }}
                   >
                     <Tab 
@@ -4053,7 +4034,7 @@ const NewProposalWorkflowPage = () => {
                     />
                     <Tab 
                       icon={
-                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'ps-permanent' ? '#1976d2' : 'inherit' }}>
+                        <Box className="tab-icon-wrapper" sx={{ display: 'flex', alignItems: 'center', transition: 'transform 0.2s', color: detailsTab === 'ps-permanent' ? headerBg : 'inherit' }}>
                           <FiUserCheck size={16} />
                         </Box>
                       } 
@@ -4235,11 +4216,11 @@ const NewProposalWorkflowPage = () => {
                                     alignItems: "center",
                                     justifyContent: "space-between",
                                     p: 2,
-                                    bgcolor: "#2d5016",
+                                    bgcolor: headerBg,
                                     color: "white",
                                     borderRadius: "8px",
                                     cursor: "pointer",
-                                    "&:hover": { bgcolor: "#3d6026" },
+                                    "&:hover": { bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#3d6026' },
                                   }}
                                 >
                                   <Box
@@ -4278,7 +4259,7 @@ const NewProposalWorkflowPage = () => {
                                     <TableContainer sx={{ mt: 1 }}>
                                       <Table size="small">
                                         <TableHead>
-                                          <TableRow sx={TABLE_HEADER_ROW}>
+                                          <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
                                             <TableCell
                                               sx={{ fontWeight: "bold" }}
                                             >
@@ -4444,7 +4425,7 @@ const NewProposalWorkflowPage = () => {
                             >
                               <Typography
                                 variant="h6"
-                                sx={{ fontWeight: "bold", color: "#1976d2" }}
+                                sx={{ fontWeight: "bold", color: headerBg }}
                               >
                                 Grand Total: ₱
                                 {grandTotal.toLocaleString("en-US", {
@@ -4470,7 +4451,7 @@ const NewProposalWorkflowPage = () => {
                       <TableContainer sx={TABLE_CONTAINER}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
+                            <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
                               <TableCell sx={{ fontWeight: "bold" }}>Item</TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>Category</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold" }}>Amount</TableCell>
@@ -4535,7 +4516,7 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          {renderPSTableHead()}
+                          {renderPSTableHead(headerBg)}
                           <TableBody>
                             {paginatedPermanentPersonnel.map((item, index) => {
                               const globalIndex = permanentPersonnelPage * permanentPersonnelRowsPerPage + index;
@@ -4709,10 +4690,10 @@ const NewProposalWorkflowPage = () => {
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={33} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={33} sx={{ bgcolor: theme.palette.mode === 'dark' ? 'background.default' : '#fafafa', p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: titleColor }}>
                                               Employee Information
                                             </Typography>
                                           </Grid>
@@ -4764,7 +4745,7 @@ const NewProposalWorkflowPage = () => {
                       >
                         <Typography
                           variant="h6"
-                          sx={{ fontWeight: "bold", color: "#1976d2" }}
+                          sx={{ fontWeight: "bold", color: headerBg }}
                         >
                           Grand Total (PS-Permanent): ₱
                           {grandTotal.toLocaleString("en-US", {
@@ -4786,7 +4767,7 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          {renderPSTableHead()}
+                          {renderPSTableHead(headerBg)}
                           <TableBody>
                             <TableRow>
                               <TableCell colSpan={33} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
@@ -4842,7 +4823,7 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          {renderPSTableHead()}
+                          {renderPSTableHead(headerBg)}
                           <TableBody>
                             {paginatedCasualPersonnel.map((item, index) => {
                               const globalIndex = casualPersonnelPage * casualPersonnelRowsPerPage + index;
@@ -5016,10 +4997,10 @@ const NewProposalWorkflowPage = () => {
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={33} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={33} sx={{ bgcolor: theme.palette.mode === 'dark' ? 'background.default' : '#fafafa', p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: titleColor }}>
                                               Employee Information
                                             </Typography>
                                           </Grid>
@@ -5071,7 +5052,7 @@ const NewProposalWorkflowPage = () => {
                       >
                         <Typography
                           variant="h6"
-                          sx={{ fontWeight: "bold", color: "#1976d2" }}
+                          sx={{ fontWeight: "bold", color: headerBg }}
                         >
                           Grand Total (PS-Casual): ₱
                           {grandTotal.toLocaleString("en-US", {
@@ -5093,7 +5074,7 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          {renderPSTableHead()}
+                          {renderPSTableHead(headerBg)}
                           <TableBody>
                             <TableRow>
                               <TableCell colSpan={33} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
@@ -5142,7 +5123,7 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          {renderPSTableHead()}
+                          {renderPSTableHead(headerBg)}
                           <TableBody>
                             {paginatedChargedPersonnel.map((item, index) => {
                               const globalIndex = chargedPersonnelPage * chargedPersonnelRowsPerPage + index;
@@ -5316,10 +5297,10 @@ const NewProposalWorkflowPage = () => {
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={33} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={33} sx={{ bgcolor: theme.palette.mode === 'dark' ? 'background.default' : '#fafafa', p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
-                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: titleColor }}>
                                               Employee Information
                                             </Typography>
                                           </Grid>
@@ -5371,7 +5352,7 @@ const NewProposalWorkflowPage = () => {
                       >
                         <Typography
                           variant="h6"
-                          sx={{ fontWeight: "bold", color: "#1976d2" }}
+                          sx={{ fontWeight: "bold", color: headerBg }}
                         >
                           Grand Total (PS-Charged to Income): ₱
                           {grandTotal.toLocaleString("en-US", {
@@ -5393,7 +5374,7 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                       <TableContainer sx={TABLE_CONTAINER_PS}>
                         <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
-                          {renderPSTableHead()}
+                          {renderPSTableHead(headerBg)}
                           <TableBody>
                             <TableRow>
                               <TableCell colSpan={33} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
@@ -5454,11 +5435,11 @@ const NewProposalWorkflowPage = () => {
                                     alignItems: "center",
                                     justifyContent: "space-between",
                                     p: 2,
-                                    bgcolor: "#2d5016",
+                                    bgcolor: headerBg,
                                     color: "white",
                                     borderRadius: "8px",
                                     cursor: "pointer",
-                                    "&:hover": { bgcolor: "#3d6026" },
+                                    "&:hover": { bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#3d6026' },
                                   }}
                                 >
                                   <Box
@@ -5487,7 +5468,7 @@ const NewProposalWorkflowPage = () => {
                                   <TableContainer sx={{ mt: 1 }}>
                                     <Table size="small">
                                       <TableHead>
-                                        <TableRow sx={TABLE_HEADER_ROW}>
+                                        <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
                                           <TableCell
                                             sx={{ fontWeight: "bold" }}
                                           >
@@ -5909,7 +5890,7 @@ const NewProposalWorkflowPage = () => {
                       <TableContainer sx={TABLE_CONTAINER}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
+                            <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
                               <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
@@ -6018,11 +5999,11 @@ const NewProposalWorkflowPage = () => {
                                     alignItems: "center",
                                     justifyContent: "space-between",
                                     p: 2,
-                                    bgcolor: "#2d5016",
+                                    bgcolor: headerBg,
                                     color: "white",
                                     borderRadius: "8px",
                                     cursor: "pointer",
-                                    "&:hover": { bgcolor: "#3d6026" },
+                                    "&:hover": { bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#3d6026' },
                                   }}
                                 >
                                   <Box
@@ -6051,7 +6032,7 @@ const NewProposalWorkflowPage = () => {
                                   <TableContainer sx={{ mt: 1 }}>
                                     <Table size="small">
                                       <TableHead>
-                                        <TableRow sx={TABLE_HEADER_ROW}>
+                                        <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
                                           <TableCell
                                             sx={{ fontWeight: "bold" }}
                                           >
@@ -6308,7 +6289,7 @@ const NewProposalWorkflowPage = () => {
                       <TableContainer sx={TABLE_CONTAINER}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={TABLE_HEADER_ROW}>
+                            <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
                               <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
@@ -6343,8 +6324,8 @@ const NewProposalWorkflowPage = () => {
                 <Button
                   variant="contained"
                   sx={{
-                    bgcolor: "#2d5016",
-                    "&:hover": { bgcolor: "#1e3a0f" },
+                    bgcolor: headerBg,
+                    "&:hover": { bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#1e3a0f' },
                   }}
                   onClick={handleSaveChanges}
                 >
@@ -6388,13 +6369,13 @@ const NewProposalWorkflowPage = () => {
             }}
             variant="contained"
             sx={{
-              bgcolor: "#2d5016",
+              bgcolor: headerBg,
               color: "white",
               textTransform: "none",
               fontWeight: 600,
               px: 4,
               "&:hover": {
-                bgcolor: "#4a7c2c",
+                bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#4a7c2c',
               },
             }}
           >
@@ -6424,7 +6405,7 @@ const NewProposalWorkflowPage = () => {
       >
         <DialogTitle
           sx={{
-            bgcolor: "#2d5016",
+            bgcolor: headerBg,
             color: "white",
             fontWeight: "bold",
             display: "flex",
@@ -6458,7 +6439,7 @@ const NewProposalWorkflowPage = () => {
               <TableContainer sx={{ maxHeight: 600 }}>
                 <Table stickyHeader>
                   <TableHead>
-                    <TableRow sx={TABLE_HEADER_ROW}>
+                    <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
                       <TableCell
                         sx={{
                           fontWeight: "bold",
@@ -6794,13 +6775,13 @@ const NewProposalWorkflowPage = () => {
             onClick={() => setHistoryDialogOpen(false)}
             variant="contained"
             sx={{
-              bgcolor: "#2d5016",
+              bgcolor: headerBg,
               color: "white",
               textTransform: "none",
               fontWeight: 600,
               px: 4,
               "&:hover": {
-                bgcolor: "#4a7c2c",
+                bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#4a7c2c',
               },
             }}
           >
@@ -6824,7 +6805,7 @@ const NewProposalWorkflowPage = () => {
       >
         <DialogTitle
           sx={{
-            bgcolor: "#2d5016",
+            bgcolor: headerBg,
             color: "white",
             fontWeight: "bold",
             display: "flex",
@@ -7058,13 +7039,13 @@ const NewProposalWorkflowPage = () => {
           )}
         </DialogContent>
         <DialogActions
-          sx={{ p: 3, borderTop: "1px solid #e0e0e0", bgcolor: "#f9fafb" }}
+          sx={{ p: 3, borderTop: "1px solid #e0e0e0", bgcolor: theme.palette.mode === 'dark' ? 'background.paper' : '#f9fafb' }}
         >
           <Button
             onClick={() => setAuditTrailDialogOpen(false)}
             variant="contained"
             sx={{
-              bgcolor: "#2d5016",
+              bgcolor: headerBg,
               color: "white",
               textTransform: "none",
               fontWeight: 600,
@@ -7072,8 +7053,8 @@ const NewProposalWorkflowPage = () => {
               py: 1.2,
               borderRadius: "6px",
               "&:hover": {
-                bgcolor: "#1e3a0f",
-                boxShadow: "0 4px 12px rgba(45, 80, 22, 0.2)",
+                bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#1e3a0f',
+                boxShadow: theme.palette.mode === 'dark' ? 'none' : "0 4px 12px rgba(45, 80, 22, 0.2)",
               },
             }}
           >
@@ -7197,22 +7178,23 @@ const NewProposalWorkflowPage = () => {
                 mb: 1,
                 bgcolor: i % 2 === 0 ? "#f8f9fa" : "#fff",
                 borderRadius: "8px",
-                border: "1px solid #e0e0e0",
+                border: "1px solid",
+                borderColor: "divider",
               }}
             >
               <Box>
                 <Typography
-                  sx={{ fontWeight: 600, fontSize: "0.88rem", color: "#222" }}
+                  sx={{ fontWeight: 600, fontSize: "0.88rem", color: "text.primary" }}
                 >
                   {p.responsibilityCenter || p.division || p.title || "Untitled"}
                 </Typography>
-                <Typography sx={{ fontSize: "0.75rem", color: "#888" }}>
+                <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
                   {p.department && `${p.department} · `}FY{p.fiscalYear} ·{" "}
                   {p.budgetType || p.modelType}
                 </Typography>
               </Box>
               <Typography
-                sx={{ fontWeight: 700, fontSize: "0.9rem", color: "#2d5016", whiteSpace: "nowrap", ml: 1 }}
+                sx={{ fontWeight: 700, fontSize: "0.9rem", color: titleColor, whiteSpace: "nowrap", ml: 1 }}
               >
                 ₱
                 {(
@@ -7232,18 +7214,19 @@ const NewProposalWorkflowPage = () => {
               mt: 2,
               px: 2,
               py: 1.5,
-              bgcolor: "#e8f5e9",
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#e8f5e9',
               borderRadius: "8px",
-              border: "2px solid #4caf50",
+              border: "2px solid",
+              borderColor: "success.main",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
             }}
           >
-            <Typography sx={{ fontWeight: 700, color: "#2d5016" }}>
+            <Typography sx={{ fontWeight: 700, color: titleColor }}>
               Kabuuang Halaga ng Consolidated Proposal:
             </Typography>
-            <Typography sx={{ fontWeight: 800, color: "#2d5016", fontSize: "1.05rem" }}>
+            <Typography sx={{ fontWeight: 800, color: titleColor, fontSize: "1.05rem" }}>
               ₱
               {totalMergeAmount.toLocaleString("en-US", {
                 minimumFractionDigits: 2,
@@ -7290,12 +7273,12 @@ const NewProposalWorkflowPage = () => {
             disabled={mergeLoading || selectedForMerge.size < 2}
             startIcon={mergeLoading ? null : <span>🔗</span>}
             sx={{
-              bgcolor: "#2d5016",
+              bgcolor: headerBg,
               color: "#fff",
               fontWeight: 700,
               textTransform: "none",
               px: 3,
-              "&:hover": { bgcolor: "#1b3a1b" },
+              "&:hover": { bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#1b3a1b' },
             }}
           >
             {mergeLoading

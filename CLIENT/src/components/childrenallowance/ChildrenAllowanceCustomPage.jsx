@@ -4,6 +4,7 @@ import CustomMenu from "../../global/components/CustomMenu";
 import CustomTable from "./ChildrenAllowanceCustomTable";
 import PropTypes from "prop-types";
 import { Zoom, Chip } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import {
   Box,
   Card,
@@ -62,6 +63,11 @@ const CustomPage = ({
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
 }) => {
+  const theme = useTheme();
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
+  const refreshBg = theme.palette.mode === 'dark' ? 'rgba(165, 214, 167, 0.1)' : 'rgba(55, 94, 56, 0.1)';
+  const refreshHoverBg = theme.palette.mode === 'dark' ? 'rgba(165, 214, 167, 0.2)' : 'rgba(55, 94, 56, 0.2)';
+
   const pageTitle = title || "Children Allowance";
   const pageDescription = description || `Manage ${dataListName}`;
   const apiPath = `/${dataListName}`;
@@ -138,12 +144,12 @@ const CustomPage = ({
           transition: 'all 0.3s ease',
           '&:hover': {
             boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-            backgroundColor: '#fafafa'
+            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : '#fafafa'
           }
         }}>
           <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
             <Box display="flex" alignItems="center" gap={2}>
-              <Typography variant="h6" sx={{ color: '#375e38', fontWeight: 'bold' }}>
+              <Typography variant="h6" sx={{ color: titleColor, fontWeight: 'bold' }}>
                 Children Allowance Management
               </Typography>
 
@@ -151,10 +157,10 @@ const CustomPage = ({
                 <IconButton
                   onClick={() => refetch()}
                   disabled={statsLoading}
-                  color="primary"
                   sx={{
-                    backgroundColor: 'rgba(55, 94, 56, 0.1)',
-                    '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.2)' }
+                    backgroundColor: refreshBg,
+                    color: titleColor,
+                    '&:hover': { backgroundColor: refreshHoverBg }
                   }}
                 >
                   <RefreshIcon />
@@ -168,14 +174,14 @@ const CustomPage = ({
             <Grid item xs={12} sm={6} md={3}>
               <Card 
                 sx={{ 
-                  backgroundColor: '#e8f5e9', 
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.1)' : '#e8f5e9', 
                   borderLeft: '4px solid #4caf50',
                   transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   '&:hover': {
                     transform: 'translateY(-5px)',
                     boxShadow: '0 10px 20px rgba(76, 175, 80, 0.2)',
-                    backgroundColor: '#d7f0da',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#d7f0da',
                   }
                 }}
               >
@@ -204,14 +210,14 @@ const CustomPage = ({
             <Grid item xs={12} sm={6} md={3}>
               <Card 
                 sx={{ 
-                  backgroundColor: '#e3f2fd', 
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.1)' : '#e3f2fd', 
                   borderLeft: '4px solid #2196f3',
                   transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   '&:hover': {
                     transform: 'translateY(-5px)',
                     boxShadow: '0 10px 20px rgba(33, 150, 243, 0.2)',
-                    backgroundColor: '#d0e8fc',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.15)' : '#d0e8fc',
                   }
                 }}
               >
@@ -240,14 +246,14 @@ const CustomPage = ({
             <Grid item xs={12} sm={6} md={3}>
               <Card 
                 sx={{ 
-                  backgroundColor: '#fff3e0', 
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 152, 0, 0.1)' : '#fff3e0', 
                   borderLeft: '4px solid #ff9800',
                   transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   '&:hover': {
                     transform: 'translateY(-5px)',
                     boxShadow: '0 10px 20px rgba(255, 152, 0, 0.2)',
-                    backgroundColor: '#ffe8cc',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 152, 0, 0.15)' : '#ffe8cc',
                   }
                 }}
               >
@@ -276,14 +282,14 @@ const CustomPage = ({
             <Grid item xs={12} sm={6} md={3}>
               <Card 
                 sx={{ 
-                  backgroundColor: '#fce4ec', 
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(233, 30, 99, 0.1)' : '#fce4ec', 
                   borderLeft: '4px solid #e91e63',
                   transition: 'all 0.3s ease',
                   cursor: 'pointer',
                   '&:hover': {
                     transform: 'translateY(-5px)',
                     boxShadow: '0 10px 20px rgba(233, 30, 99, 0.2)',
-                    backgroundColor: '#f8d0e0',
+                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(233, 30, 99, 0.15)' : '#f8d0e0',
                   }
                 }}
               >

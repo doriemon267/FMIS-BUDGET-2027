@@ -703,39 +703,16 @@ const MyProposalPage = () => {
         )}
       </Paper>
 
-      <Paper elevation={1} sx={{ borderRadius: 2, overflow: 'hidden', mb: 3 }}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          sx={{
-            '& .MuiTab-root': {
-              fontWeight: 600,
-              textTransform: 'none',
-              minWidth: 120,
-              py: 2,
-              color: '#666',
-              '&:hover': {
-                backgroundColor: 'rgba(55, 94, 56, 0.05)',
-                color: '#375e38'
-              }
-            },
-            '& .Mui-selected': {
-              color: '#375e38',
-              backgroundColor: 'rgba(55, 94, 56, 0.1)'
-            },
-            '& .MuiTabs-indicator': {
-              backgroundColor: '#375e38',
-              height: 3
-            },
-            backgroundColor: '#fff'
-          }}
-        >
-          <Tab label="Submitted" />
-          <Tab label="Draft" />
-          <Tab label="Returned" />
-          <Tab label="Approved" />
-        </Tabs>
-      </Paper>
+      <Tabs
+        value={activeTab}
+        onChange={handleTabChange}
+        sx={{ mb: 3 }}
+      >
+        <Tab label="Submitted" />
+        <Tab label="Draft" />
+        <Tab label="Returned" />
+        <Tab label="Approved" />
+      </Tabs>
       
       {activeTab === 0 && (
         <Box>

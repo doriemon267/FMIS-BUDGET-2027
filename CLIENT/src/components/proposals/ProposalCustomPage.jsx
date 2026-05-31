@@ -127,6 +127,9 @@ const ProposalCustomPage = ({
   const { readOnly, canCreate } = useUserRestrictions();
   const queryClient = useQueryClient();
   const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const hoverBg = theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.15)' : 'rgba(46, 125, 50, 0.06)';
+  const hoverBorder = theme.palette.mode === 'dark' ? '#4e7d4f' : '#2d5016';
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const activeRegionKey =
     activeRegion?.name ||
@@ -1591,21 +1594,12 @@ const ProposalCustomPage = ({
 
   // Mobile Tab Component
   const MobileTabNavigation = () => (
-    <Box sx={{ display: { xs: "block", md: "none" } }}>
+    <Box sx={{ display: { xs: "block", md: "none" }, mb: 2 }}>
       <Tabs
         value={activeTab}
         onChange={(e, newValue) => setActiveTab(newValue)}
         variant="scrollable"
         scrollButtons="auto"
-        sx={{
-          borderBottom: 1,
-          borderColor: "divider",
-          "& .MuiTab-root": {
-            minWidth: "auto",
-            fontSize: "0.75rem",
-            px: 1,
-          },
-        }}
       >
         <Tab
           label="Income"
@@ -2083,13 +2077,16 @@ const ProposalCustomPage = ({
       {/* Modern Header Section */}
       <Paper
         elevation={0}
+        className="db-welcome-grid"
         sx={{
           p: 3,
           borderRadius: 0,
-          background: "linear-gradient(135deg, #1e3d22 0%, #375e38 50%, #4e7d4f 100%)",
+          background: theme.palette.mode === "dark" 
+            ? "linear-gradient(135deg, #1b4332 0%, #2d5016 50%, #375e38 100%)"
+            : "linear-gradient(135deg, #1e3d22 0%, #375e38 50%, #4e7d4f 100%)",
           color: "white",
-          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.08)",
-          borderBottom: "4px solid #2d5016",
+          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12)",
+          borderBottom: "1px solid rgba(167, 201, 87, 0.2)",
           transition: "all 0.3s ease",
           display: "flex",
           justifyContent: "space-between",
@@ -2101,17 +2098,18 @@ const ProposalCustomPage = ({
         <Box sx={{ display: "flex", alignItems: "center", gap: 2.5 }}>
           <Box
             sx={{
-              bgcolor: "rgba(255, 255, 255, 0.15)",
+              background: "linear-gradient(135deg, rgba(52, 211, 153, 0.2) 0%, rgba(52, 211, 153, 0.05) 100%)",
               p: 1.5,
-              borderRadius: "12px",
+              borderRadius: "14px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "inset 0 2px 4px rgba(255, 255, 255, 0.2)",
+              border: "1px solid rgba(52, 211, 153, 0.25)",
+              boxShadow: "0 8px 24px -4px rgba(52, 211, 153, 0.2)",
               backdropFilter: "blur(4px)",
             }}
           >
-            <BusinessCenterIcon sx={{ fontSize: "2rem", color: "#fff" }} />
+            <BusinessCenterIcon sx={{ fontSize: "2rem", color: "#34d399" }} />
           </Box>
           <Box>
             <Typography
@@ -2119,11 +2117,11 @@ const ProposalCustomPage = ({
               component="h1"
               gutterBottom
               sx={{ 
-                fontWeight: 800, 
+                fontWeight: 900, 
                 fontSize: "1.8rem", 
                 m: 0,
-                textShadow: "0 2px 4px rgba(0,0,0,0.15)",
-                letterSpacing: "0.5px"
+                textShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                letterSpacing: "-0.5px"
               }}
             >
               {title}
@@ -2132,67 +2130,70 @@ const ProposalCustomPage = ({
               variant="body1"
               component="h2"
               sx={{ 
-                opacity: 0.85, 
-                fontSize: "0.88rem",
+                opacity: 0.8, 
+                fontSize: "0.85rem",
                 mt: 0.5,
-                fontWeight: 500
+                fontWeight: 500,
+                letterSpacing: "0.2px"
               }}
             >
               {description || "Submit and manage your budget proposals"}
             </Typography>
           </Box>
         </Box>
-
+ 
         {/* Premium Metadata Chips */}
-        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+        <Box className="db-welcome-chips" sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
           {/* Active Region Chip */}
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
-              gap: 1,
-              bgcolor: "rgba(255, 255, 255, 0.12)",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
-              borderRadius: "20px",
-              py: 0.75,
-              px: 2,
-              backdropFilter: "blur(8px)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-              transition: "all 0.2s ease",
+              gap: 1.2,
+              bgcolor: "rgba(255, 255, 255, 0.06)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: "999px",
+              py: 0.8,
+              px: 2.2,
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+              transition: "all 0.25s ease",
               "&:hover": {
-                bgcolor: "rgba(255, 255, 255, 0.2)",
-                transform: "translateY(-1px)",
+                bgcolor: "rgba(255, 255, 255, 0.12)",
+                borderColor: "rgba(52, 211, 153, 0.4)",
+                transform: "translateY(-1.5px)",
               }
             }}
           >
-            <LocationOnIcon sx={{ fontSize: "1.1rem", color: "#81c784" }} />
-            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.82rem", letterSpacing: "0.3px" }}>
+            <LocationOnIcon sx={{ fontSize: "1.1rem", color: "#34d399" }} />
+            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: "0.78rem", letterSpacing: "0.05em", color: "rgba(255,255,255,0.9)" }}>
               REGION: {String(activeRegionName || "Central Office").toUpperCase()}
             </Typography>
           </Box>
-
+ 
           {/* Active FY Chip */}
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
-              gap: 1,
-              bgcolor: "rgba(255, 255, 255, 0.12)",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
-              borderRadius: "20px",
-              py: 0.75,
-              px: 2,
-              backdropFilter: "blur(8px)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-              transition: "all 0.2s ease",
+              gap: 1.2,
+              bgcolor: "rgba(255, 255, 255, 0.06)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: "999px",
+              py: 0.8,
+              px: 2.2,
+              backdropFilter: "blur(12px)",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+              transition: "all 0.25s ease",
               "&:hover": {
-                bgcolor: "rgba(255, 255, 255, 0.2)",
-                transform: "translateY(-1px)",
+                bgcolor: "rgba(255, 255, 255, 0.12)",
+                borderColor: "rgba(56, 189, 248, 0.4)",
+                transform: "translateY(-1.5px)",
               }
             }}
           >
-            <CalendarTodayIcon sx={{ fontSize: "1.05rem", color: "#64b5f6" }} />
-            <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.82rem", letterSpacing: "0.3px" }}>
+            <CalendarTodayIcon sx={{ fontSize: "1.05rem", color: "#38bdf8" }} />
+            <Typography variant="body2" sx={{ fontWeight: 800, fontSize: "0.78rem", letterSpacing: "0.05em", color: "rgba(255,255,255,0.9)" }}>
               FY {resolvedFiscalYear || "N/A"} - {String(resolvedBudgetType || "Initial").toUpperCase()}
             </Typography>
           </Box>
@@ -2383,7 +2384,7 @@ const ProposalCustomPage = ({
             >
               <Typography
                 variant="subtitle2"
-                sx={{ fontWeight: 600, mb: 1, color: "#1976d2" }}
+                sx={{ fontWeight: 600, mb: 1, color: headerBg }}
               >
                 PRIVACY NOTICE / CERTIFICATION
               </Typography>
@@ -2513,7 +2514,7 @@ const ProposalCustomPage = ({
               variant="filled"
               size="small"
               sx={{
-                backgroundColor: "#1976d2",
+                backgroundColor: headerBg,
                 fontWeight: 600,
                 letterSpacing: "0.3px",
                 "& .MuiChip-icon": {
@@ -2906,13 +2907,13 @@ const ProposalCustomPage = ({
                       textAlign: "center",
                       p: 1,
                       background:
-                        "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)",
+                        "linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%)",
                       borderRadius: 1,
                       boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
-                      border: "1px solid rgba(25, 118, 210, 0.2)",
+                      border: "1px solid rgba(0, 150, 136, 0.2)",
                       transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
                       "&:hover": {
-                        boxShadow: "0 4px 8px rgba(25, 118, 210, 0.15)",
+                        boxShadow: "0 4px 8px rgba(0, 150, 136, 0.15)",
                         transform: "translateY(-2px)",
                       },
                     }}
@@ -2929,7 +2930,7 @@ const ProposalCustomPage = ({
                         display: "block",
                         fontWeight: "bold",
                         fontSize: "0.8rem",
-                        color: "#0d47a1",
+                        color: "#004d40",
                         mt: 0.5,
                       }}
                     >
@@ -3298,34 +3299,38 @@ const ProposalCustomPage = ({
           {/* Desktop Tab Navigation */}
           <Paper
             sx={{
-              boxShadow: "0 10px 30px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)",
+              boxShadow: theme.palette.mode === "dark" 
+                ? "0 8px 30px rgba(0,0,0,0.4)" 
+                : "0 10px 30px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)",
               borderRadius: "16px",
               overflow: "hidden",
-              border: "1px solid rgba(0, 0, 0, 0.06)",
+              border: theme.palette.mode === "dark"
+                ? "1px solid rgba(167, 201, 87, 0.18)"
+                : "1px solid rgba(0, 0, 0, 0.06)",
               transition: "all 0.3s ease",
-              bgcolor: "#ffffff",
+              bgcolor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.02)" : "#ffffff",
+              backdropFilter: "blur(12px)",
               display: { xs: "none", md: "block" },
               mb: 3,
             }}
           >
-            {/* Tabs Header - Premium Segmented Control */}
+            {/* Tabs Header - Premium Solid Segmented Control */}
             <Box
               sx={{
-                background: "#f8fafc",
+                background: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016",
                 px: 2,
-                py: 1.5,
+                py: 1.25,
                 display: "flex",
                 justifyContent: "center",
+                borderTopLeftRadius: "12px",
+                borderTopRightRadius: "12px",
               }}
             >
               <Box
                 sx={{
                   display: "flex",
-                  bgcolor: "rgba(0, 0, 0, 0.04)",
-                  borderRadius: "12px",
-                  p: 0.5,
+                  bgcolor: "transparent",
                   width: "100%",
-                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.03)",
                   gap: 0.5,
                   flexWrap: "nowrap",
                   overflowX: "auto",
@@ -3333,20 +3338,20 @@ const ProposalCustomPage = ({
                     height: "4px",
                   },
                   "&::-webkit-scrollbar-thumb": {
-                    background: "rgba(0,0,0,0.1)",
+                    background: "rgba(255,255,255,0.15)",
                     borderRadius: "2px",
                   }
                 }}
               >
                 {[
-                  { label: "INCOME", value: "Income", Icon: FiTrendingUp, color: "#43a047" },
-                  { label: "PS - Permanent", value: "PSPermanent", Icon: FiUserCheck, color: "#1976d2" },
-                  { label: "PS - Casual", value: "PSCasual", Icon: FiUsers, color: "#f57c00" },
-                  { label: "PS - Charged", value: "PSChargedToIncome", Icon: FiCreditCard, color: "#9c27b0" },
-                  { label: "COS/JO", value: "COS/JO", Icon: FiBriefcase, color: "#00b0ff" },
-                  { label: "MOOE", value: "MOOE", Icon: FiFileText, color: "#e91e63" },
-                  { label: "CAPITAL OUTLAY", value: "Capital Outlay", Icon: FiCpu, color: "#009688" },
-                  { label: "BSGC", value: "Budgetary Support", Icon: FiAward, color: "#607d8b" },
+                  { label: "INCOME", value: "Income", Icon: FiTrendingUp, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
+                  { label: "PS - Permanent", value: "PSPermanent", Icon: FiUserCheck, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
+                  { label: "PS - Casual", value: "PSCasual", Icon: FiUsers, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
+                  { label: "PS - Charged", value: "PSChargedToIncome", Icon: FiCreditCard, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
+                  { label: "COS/JO", value: "COS/JO", Icon: FiBriefcase, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
+                  { label: "MOOE", value: "MOOE", Icon: FiFileText, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
+                  { label: "CAPITAL OUTLAY", value: "Capital Outlay", Icon: FiCpu, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
+                  { label: "BSGC", value: "Budgetary Support", Icon: FiAward, color: theme.palette.mode === "dark" ? "#0b2413" : "#2d5016" },
                 ].map((tab, index) => {
                   const isActive = activeTab === tab.value;
                   const Icon = tab.Icon;
@@ -3356,31 +3361,39 @@ const ProposalCustomPage = ({
                       onClick={() => setActiveTab(tab.value)}
                       sx={{
                         flex: 1,
-                        bgcolor: isActive ? "#ffffff" : "transparent",
-                        color: isActive ? "#2d5016" : "#64748b",
+                        bgcolor: isActive 
+                          ? "#ffffff" 
+                          : "transparent",
+                        color: isActive 
+                          ? (theme.palette.mode === "dark" ? "#0b2413" : "#2d5016") 
+                          : "rgba(255, 255, 255, 0.75)",
                         fontSize: "0.78rem",
                         fontWeight: isActive ? 800 : 600,
-                        py: 1.25,
+                        py: 1,
                         px: 1.5,
-                        borderRadius: "10px",
+                        borderRadius: "6px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         gap: 0.8,
                         minWidth: 110,
                         whiteSpace: "nowrap",
-                        boxShadow: isActive ? "0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)" : "none",
-                        transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        boxShadow: isActive ? "0 2px 6px rgba(0, 0, 0, 0.15)" : "none",
+                        transition: "all 0.2s ease-in-out",
                         "&:hover": {
-                          color: isActive ? "#2d5016" : "#334155",
-                          bgcolor: isActive ? "#ffffff" : "rgba(0,0,0,0.02)",
+                          color: isActive 
+                            ? (theme.palette.mode === "dark" ? "#0b2413" : "#2d5016") 
+                            : "#ffffff",
+                          bgcolor: isActive 
+                            ? "#ffffff" 
+                            : "rgba(255, 255, 255, 0.08)",
                           "& .tab-icon-wrapper": {
                             transform: "scale(1.1)",
                           }
                         },
                         "&:focus-visible": {
                           outline: "2px solid",
-                          outlineColor: "primary.main",
+                          outlineColor: "#ffffff",
                           outlineOffset: "2px",
                         }
                       }}
@@ -3848,7 +3861,7 @@ const ProposalCustomPage = ({
                   bgcolor: "#fafafa",
                   mb: 2,
                   cursor: "pointer",
-                  "&:hover": { borderColor: "#1976d2", bgcolor: "#f5f9ff" }
+                  "&:hover": { borderColor: hoverBorder, bgcolor: hoverBg }
                 }}
                 onClick={() => document.getElementById("bulk-upload-input").click()}
               >

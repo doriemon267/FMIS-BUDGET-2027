@@ -1,7 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand Color Tokens */
+  --color-brand-50: #f0fdf4;
+  --color-brand-100: #dcfce7;
+  --color-brand-200: #bbf7d0;
+  --color-brand-300: #86efac;
+  --color-brand-400: #4ade80;
+  --color-brand-500: #60a561;
+  --color-brand-600: #386641;
+  --color-brand-700: #1b4332;
+  --color-brand-800: #0d2b1f;
+  --color-brand-900: #0b1e15;
+  --color-brand-950: #071510;
+
+  /* Accent tokens */
+  --color-accent-lime: #a7c957;
+  --color-accent-glow: #4ade80;
+
+  /* Surface tokens */
+  --color-surface-dark: #0b1e15;
+  --color-surface-card: #0f2319;
+  --color-surface-obsidian: #020c07;
+
+  /* Typography */
+  --font-family-sans: "Inter", "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  /* Custom animation durations */
+  --animate-float1: floatOrb1 8s ease-in-out infinite;
+  --animate-float2: floatOrb2 11s ease-in-out infinite;
+  --animate-draw-path: drawSparkline 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  --animate-fade-up: fadeSlideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  --animate-pulse-led: pulseLed 1.8s ease-in-out infinite;
+  --animate-shimmer: shimmerBar 2s linear infinite;
+}
+
+@keyframes floatOrb1 {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.15; }
+  50% { transform: translateY(-20px) scale(1.06); opacity: 0.28; }
+}
+@keyframes floatOrb2 {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.18; }
+  50% { transform: translateY(22px) scale(0.94); opacity: 0.32; }
+}
+@keyframes drawSparkline {
+  from { stroke-dashoffset: 200; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulseLed {
+  0%, 100% { opacity: 0.4; transform: scale(0.88); }
+  50%       { opacity: 1; transform: scale(1.25); box-shadow: 0 0 10px currentColor; }
+}
+@keyframes shimmerBar {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(200%); }
+}
+
+/* Tailwind utility aliases for custom animations */
+.animate-float1 { animation: var(--animate-float1); }
+.animate-float2 { animation: var(--animate-float2); }
+.animate-draw-path { animation: var(--animate-draw-path); }
+.animate-fade-up { animation: var(--animate-fade-up); }
+.animate-pulse-led { animation: var(--animate-pulse-led); }
+
+/* Google Fonts preload */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
 * {
     margin: 0;
     padding: 0;
 }
+
 
 /* App.css */
 

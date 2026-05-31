@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useTheme } from "@mui/material/styles";
 import {
   Dialog,
   DialogTitle,
@@ -41,6 +42,17 @@ const validationSchema = yup.object({
 });
 
 const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
+  const theme = useTheme();
+  const headerGradient = theme.palette.mode === 'dark' 
+    ? 'linear-gradient(135deg, #0b2413 0%, #1e3320 100%)' 
+    : 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)';
+  const buttonGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #1e3320 0%, #0b2413 100%)'
+    : 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)';
+  const buttonHoverGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)'
+    : 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)';
+
   const isEditing = Boolean(row);
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -302,7 +314,7 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
       <Dialog
         open={open}
         onClose={handleClose}
-        maxWidth="lg"
+        maxWidth="md"
         fullWidth
         PaperProps={{
           sx: {
@@ -312,7 +324,7 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
         }}
       >
         <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+          background: headerGradient,
           color: 'white',
           fontWeight: 'bold'
         }}>
@@ -507,9 +519,9 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
             variant="contained"
             disabled={loading || mutation.isLoading || !settings || settingsLoading || !!error}
             sx={{
-              background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+              background: buttonGradient,
               '&:hover': {
-                background: 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)',
+                background: buttonHoverGradient,
               }
             }}
           >

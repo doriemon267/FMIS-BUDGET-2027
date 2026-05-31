@@ -33,6 +33,7 @@ import {
   Checkbox,
   FormControlLabel as MuiFormControlLabel,
   InputAdornment,
+  useTheme,
 } from "@mui/material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -76,6 +77,8 @@ const PSCasualCustomPageTable = ({
   locked = false,
   proposalId = null,  // ADDED: Accept proposalId from parent
 }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const [rows, setRows] = useState([]);
   const [filteredRows, setFilteredRows] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
@@ -903,19 +906,19 @@ const PSCasualCustomPageTable = ({
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }}><strong>Position Title</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }}><strong>SG</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }}><strong>Step</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }}><strong>Employee Name</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }}><strong>Division</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>Monthly</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>Annual</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>RATA</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>PERA</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>Uniform</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>Mid-Year</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>Year-End</strong></TableCell>
-                      <TableCell sx={{ color: 'white', backgroundColor: '#375e38' }} align="right"><strong>Total</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }}><strong>Position Title</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }}><strong>SG</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }}><strong>Step</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }}><strong>Employee Name</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }}><strong>Division</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>Monthly</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>Annual</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>RATA</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>PERA</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>Uniform</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>Mid-Year</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>Year-End</strong></TableCell>
+                      <TableCell sx={{ color: 'white', backgroundColor: headerBg }} align="right"><strong>Total</strong></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>

@@ -36,6 +36,7 @@ import {
   FormControl,
   InputLabel,
   Select,
+  useTheme,
 } from "@mui/material";
 import { ToastContainer, toast } from "react-toastify";
 import { debounce } from "lodash";
@@ -107,6 +108,8 @@ import LockOpenIcon from "@mui/icons-material/LockOpen";
 import BulkUploadModal from "../common/BulkUploadModal";
 
 const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, fiscalYear = null }) => {  // ADDED: Accept region, proposalId, fiscalYear from parent
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const { currentUser } = useUser();
   const isSuperAdmin = useMemo(() => {
     return (currentUser?.Roles || []).some((role) =>
@@ -1398,7 +1401,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
         <Button
           variant="contained"
           onClick={() => queryClient.invalidateQueries(["mooeData"])}
-          sx={{ backgroundColor: "#375e38", "&:hover": { backgroundColor: "#2d4a2e" } }}
+          sx={{ backgroundColor: headerBg, "&:hover": { backgroundColor: "#2d4a2e" } }}
         >
           Retry Loading
         </Button>
@@ -1840,7 +1843,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             <TableHead>
               <TableRow>
                 <TableCell width="5%" sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -1851,7 +1854,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                 }}></TableCell>
                 {viewMode === "consolidated" && (
                   <TableCell width="15%" sx={{ 
-                    backgroundColor: "#375e38", 
+                    backgroundColor: headerBg, 
                     color: "#fff",
                     fontWeight: "bold",
                     padding: "12px 16px",
@@ -1861,7 +1864,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   }}>DATA TYPE</TableCell>
                 )}
                 <TableCell width={viewMode === "consolidated" ? "20%" : "20%"} sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -1870,7 +1873,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   borderTop: "1px solid white",
                 }}>{viewMode === "consolidated" ? "CATEGORY" : "SUBLINE ITEM"}</TableCell>
                 <TableCell width={viewMode === "consolidated" ? "20%" : "25%"} sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -1879,7 +1882,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   borderTop: "1px solid white",
                 }}>ACCOUNTING TITLE</TableCell>
                 <TableCell width="10%" sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -1888,7 +1891,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   borderTop: "1px solid white",
                 }}>UACS CODE</TableCell>
                 <TableCell width="12%" sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -1898,7 +1901,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   textAlign: "right"
                 }}>INCOME</TableCell>
                 <TableCell width="12%" sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -1908,7 +1911,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   textAlign: "right"
                 }}>SUBSIDY</TableCell>
                 <TableCell width="16%" sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -1918,7 +1921,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   textAlign: "right"
                 }}>AMOUNT</TableCell>
                 {isEditable && <TableCell width="8%" sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2234,12 +2237,12 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               }}
             >
           <TableFooter>
-            {/* Regular MOOE Total Row */}
+            {/* Table totals footer */}
             <TableRow>
               <TableCell 
                 colSpan={4} 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2255,7 +2258,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2270,7 +2273,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2285,7 +2288,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2305,7 +2308,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               <TableCell 
                 colSpan={4} 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2321,7 +2324,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2336,7 +2339,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2351,7 +2354,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2371,7 +2374,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               <TableCell 
                 colSpan={4} 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2387,7 +2390,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2402,7 +2405,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",
@@ -2417,7 +2420,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
               </TableCell>
               <TableCell 
                 sx={{ 
-                  backgroundColor: "#375e38", 
+                  backgroundColor: headerBg, 
                   color: "#fff",
                   fontWeight: "bold",
                   padding: "12px 16px",

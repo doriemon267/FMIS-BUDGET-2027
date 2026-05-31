@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { useTheme } from "@mui/material/styles";
 import {
   Dialog,
   DialogTitle,
@@ -26,6 +27,18 @@ import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
 
 const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
+  const theme = useTheme();
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
+  const headerGradient = theme.palette.mode === 'dark' 
+    ? 'linear-gradient(135deg, #0b2413 0%, #1e3320 100%)' 
+    : 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)';
+  const buttonGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #1e3320 0%, #0b2413 100%)'
+    : 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)';
+  const buttonHoverGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)'
+    : 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)';
+
   const isEditing = Boolean(row);
   const [open, setOpen] = useState(false);
   const [employees, setEmployees] = useState([]);
@@ -243,7 +256,7 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
       <Dialog
         open={open}
         onClose={handleClose}
-        maxWidth="lg"
+        maxWidth="md"
         fullWidth
         PaperProps={{
           sx: {
@@ -260,7 +273,7 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
         }}
       >
         <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+          background: headerGradient,
           color: 'white',
           fontWeight: 'bold'
         }}>
@@ -310,7 +323,7 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
                         sx={{
                           '& .MuiOutlinedInput-root': {
                             '&.Mui-focused fieldset': {
-                              borderColor: '#375e38',
+                              borderColor: titleColor,
                             },
                           },
                         }}
@@ -404,8 +417,8 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
               transition: 'all 0.3s ease',
               borderRadius: 1.5,
               '&:hover': {
-                borderColor: '#2e7d32',
-                backgroundColor: 'rgba(46, 125, 50, 0.05)',
+                borderColor: titleColor,
+                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(165, 214, 167, 0.05)' : 'rgba(46, 125, 50, 0.05)',
                 transform: 'translateY(-2px)',
               }
             }}
@@ -417,14 +430,14 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
             variant="contained"
             disabled={mutation.isLoading}
             sx={{
-              background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+              background: buttonGradient,
               borderRadius: 1.5,
               transition: 'all 0.3s ease',
-              boxShadow: '0 4px 10px rgba(46, 125, 50, 0.3)',
+              boxShadow: theme.palette.mode === 'dark' ? '0 4px 10px rgba(0, 0, 0, 0.5)' : '0 4px 10px rgba(46, 125, 50, 0.3)',
               '&:hover': {
-                background: 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)',
+                background: buttonHoverGradient,
                 transform: 'translateY(-2px)',
-                boxShadow: '0 6px 15px rgba(46, 125, 50, 0.4)',
+                boxShadow: theme.palette.mode === 'dark' ? '0 6px 15px rgba(0, 0, 0, 0.6)' : '0 6px 15px rgba(46, 125, 50, 0.4)',
               }
             }}
           >

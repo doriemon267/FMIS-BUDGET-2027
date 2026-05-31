@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
+import { useTheme } from "@mui/material/styles";
 import { useForm, Controller } from "react-hook-form";
 import {
   Button,
@@ -26,11 +27,22 @@ import EditIcon from "@mui/icons-material/Edit";
 import CustomButton from "../../global/components/CustomButton";
 
 const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => {
+  const theme = useTheme();
+  const headerGradient = theme.palette.mode === 'dark' 
+    ? 'linear-gradient(135deg, #0b2413 0%, #1e3320 100%)' 
+    : 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)';
+  const buttonGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #1e3320 0%, #0b2413 100%)'
+    : 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)';
+  const buttonHoverGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)'
+    : 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)';
+
   const isEditing = Boolean(row);
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [employees, setEmployees] = useState([]);
-  const [addedEmployeesSet, setAddedEmployeesSet] = useState(new Set());
+
   const { currentUser, assignmentLevel } = useUser();
   const { activeRegion } = useRegion();
 
@@ -76,17 +88,14 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     },
   });
 
-  // Update addedEmployeesSet whenever existing entries change
-  useEffect(() => {
-    // Safely check if existingEntries is an array before mapping
+  // Memoize addedEmployeesSet to prevent infinite re-render cycles
+  const addedEmployeesSet = useMemo(() => {
     if (Array.isArray(existingEntries) && existingEntries.length > 0) {
-      const employeeNumbers = new Set(
+      return new Set(
         existingEntries.map((entry) => entry?.employeeNumber).filter(Boolean)
       );
-      setAddedEmployeesSet(employeeNumbers);
-    } else {
-      setAddedEmployeesSet(new Set());
     }
+    return new Set();
   }, [existingEntries]);
 
   // FIX 1: Reset form when dialog opens or row changes
@@ -279,8 +288,24 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
         </MenuItem>
       )}
 
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ background: "linear-gradient(135deg, #2d5a3d 0%, #1e3d2a 100%)", color: "white" }}>
+      <Dialog 
+        open={open} 
+        onClose={handleClose} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          background: headerGradient,
+          color: 'white',
+          fontWeight: 'bold',
+          py: 2
+        }}>
           <Box display="flex" alignItems="center" gap={2}>
             <RestaurantIcon />
             <Box>
@@ -409,12 +434,20 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
         </DialogContent>
 
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={handleClose} variant="outlined">Cancel</Button>
+          <Button onClick={handleClose} variant="outlined" sx={{ mr: 1 }}>
+            Cancel
+          </Button>
           <Button
             onClick={handleSubmit(onSubmit)}
             variant="contained"
             disabled={mutation.isPending || (isEditing ? false : !selectedEmployees || selectedEmployees.length === 0)}
-            sx={{ background: "linear-gradient(135deg, #2d5a3d 0%, #1e3d2a 100%)" }}
+            sx={{
+              background: buttonGradient,
+              color: 'white',
+              '&:hover': {
+                background: buttonHoverGradient,
+              }
+            }}
           >
             {mutation.isPending ? <CircularProgress size={20} color="inherit" /> : isEditing ? "Update" : `Add (${selectedEmployees?.length || 0})`}
           </Button>

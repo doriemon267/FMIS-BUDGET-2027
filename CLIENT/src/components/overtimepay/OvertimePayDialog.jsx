@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useForm, Controller } from "react-hook-form";
+import { useTheme } from "@mui/material/styles";
 import {
   Button,
   Dialog,
@@ -10,6 +11,8 @@ import {
   TextField,
   Autocomplete,
   MenuItem,
+  Box,
+  Typography,
 } from "@mui/material";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../../config/api";
@@ -17,14 +20,44 @@ import { toast } from "react-hot-toast";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
 import EditIcon from "@mui/icons-material/Edit";
+import OvertimeIcon from "@mui/icons-material/AccessTime";
 import CustomButton from "../../global/components/CustomButton";
 
 const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
+  const theme = useTheme();
+  const headerGradient = theme.palette.mode === 'dark' 
+    ? 'linear-gradient(135deg, #0b2413 0%, #1e3320 100%)' 
+    : 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)';
+  const buttonGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #1e3320 0%, #0b2413 100%)'
+    : 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)';
+  const buttonHoverGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)'
+    : 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)';
+
   const isEditing = Boolean(row);
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
+
+  // Get organizational level display text based on user's hierarchical access
+  const getOrganizationalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    const scope = hierarchical.scope || 'REGION';
+    
+    switch(scope) {
+      case 'DIVISION':
+        const divisionName = hierarchical.accessibleDivisions?.[0] || 'Division';
+        return `Division: ${divisionName}`;
+      case 'DEPARTMENT':
+        const departmentName = hierarchical.accessibleDepartments?.[0]?.departmentName || 'Department';
+        return `Department: ${departmentName}`;
+      case 'REGION':
+      default:
+        return activeRegion ? `Region: ${activeRegion.name}` : '';
+    }
+  };
 
   const [overtimeRate, setOvertimeRate] = useState(100);
   const [weekdayMultiplier, setWeekdayMultiplier] = useState(1.25);
@@ -167,8 +200,37 @@ const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
         </MenuItem>
       )}
 
-      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{isEditing ? "Edit Overtime Pay" : "Add Overtime Pay"}</DialogTitle>
+      <Dialog 
+        open={open} 
+        onClose={handleClose} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          background: headerGradient,
+          color: 'white',
+          fontWeight: 'bold',
+          py: 2
+        }}>
+          <Box display="flex" alignItems="center" gap={2}>
+            <OvertimeIcon sx={{ fontSize: '2rem' }} />
+            <Box>
+              <Typography variant="h6" fontWeight="bold">
+                {isEditing ? "Edit Overtime Pay" : "Add Overtime Pay"}
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                {isEditing ? "Update employee overtime pay details" : "Add new overtime pay record"}
+                {getOrganizationalDisplay() && ` - ${getOrganizationalDisplay()}`}
+              </Typography>
+            </Box>
+          </Box>
+        </DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2}>
             <Grid item xs={12}>
@@ -258,9 +320,23 @@ const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleSubmit(onSubmit)} variant="contained">
-            {isEditing ? "Update" : "Save"}
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={handleClose} variant="outlined" sx={{ mr: 1 }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            variant="contained"
+            disabled={mutation.isLoading}
+            sx={{
+              background: buttonGradient,
+              color: 'white',
+              '&:hover': {
+                background: buttonHoverGradient,
+              }
+            }}
+          >
+            {mutation.isLoading ? "Saving..." : (isEditing ? "Update" : "Save")}
           </Button>
         </DialogActions>
       </Dialog>

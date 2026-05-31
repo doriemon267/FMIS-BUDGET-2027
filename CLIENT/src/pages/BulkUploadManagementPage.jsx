@@ -253,10 +253,7 @@ const BulkUploadManagementPage = () => {
             <Tabs
               value={tabValue}
               onChange={handleTabChange}
-              indicatorColor="primary"
-              textColor="primary"
               variant="fullWidth"
-              sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
             >
               <Tab label="Income" />
               <Tab label="MOOE" />

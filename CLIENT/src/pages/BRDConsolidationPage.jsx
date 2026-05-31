@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '@mui/material/styles';
 import {
   Container,
   Paper,
@@ -72,10 +73,15 @@ function TabPanel(props) {
 }
 
 // Shared table layout styles for consistency
-const tableHeaderCell = { fontWeight: 700, whiteSpace: 'nowrap', py: 1.5, px: 2 };
+const tableHeaderCell = { fontWeight: 700, whiteSpace: 'nowrap', py: 1.5, px: 2, color: 'white' };
 const tableBodyCell = { py: 1.25, px: 2 };
 
 export default function BRDConsolidationPage() {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const highlightBg = theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#f1f8ed';
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
+
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -334,28 +340,25 @@ export default function BRDConsolidationPage() {
       )}
 
       {/* Tabs Section */}
-      <Paper sx={{ boxShadow: 2, borderRadius: 2, overflow: 'hidden' }}>
-        <Tabs
-          value={tabValue}
-          onChange={handleTabChange}
-          indicatorColor="primary"
-          textColor="primary"
-          variant="fullWidth"
-          sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}
-        >
-          <Tab
-            icon={<LocationOnIcon />}
-            iconPosition="start"
-            label={`Regional (${regionalStructure.length})`}
-            id="consolidation-tab-0"
-          />
-          <Tab
-            icon={<BusinessIcon />}
-            iconPosition="start"
-            label={`Central Office (${centralOfficeStructure.length})`}
-            id="consolidation-tab-1"
-          />
-        </Tabs>
+      <Tabs
+        value={tabValue}
+        onChange={handleTabChange}
+        variant="fullWidth"
+        sx={{ mb: 2 }}
+      >
+        <Tab
+          icon={<LocationOnIcon />}
+          iconPosition="start"
+          label={`Regional (${regionalStructure.length})`}
+          id="consolidation-tab-0"
+        />
+        <Tab
+          icon={<BusinessIcon />}
+          iconPosition="start"
+          label={`Central Office (${centralOfficeStructure.length})`}
+          id="consolidation-tab-1"
+        />
+      </Tabs>
 
         {/* Regional Structure Tab — only non–Central Office regions */}
         <TabPanel value={tabValue} index={0}>
@@ -367,7 +370,7 @@ export default function BRDConsolidationPage() {
             <TableContainer sx={{ overflow: 'auto' }}>
               <Table size="medium" sx={{ minWidth: 560 }}>
                 <TableHead>
-                  <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                  <TableRow sx={{ backgroundColor: headerBg }}>
                     <TableCell sx={{ ...tableHeaderCell, width: '40%' }}>Region</TableCell>
                     <TableCell align="center" sx={{ ...tableHeaderCell, width: '20%' }}>Divisions</TableCell>
                     <TableCell align="right" sx={{ ...tableHeaderCell, width: '20%' }}>Total Proposals</TableCell>
@@ -394,7 +397,7 @@ export default function BRDConsolidationPage() {
                               >
                                 <ExpandMoreIcon />
                               </IconButton>
-                              <LocationOnIcon sx={{ mr: 1, color: 'primary.main' }} />
+                              <LocationOnIcon sx={{ mr: 1, color: titleColor }} />
                               <Typography sx={{ fontWeight: 600 }}>{region.region}</Typography>
                             </Box>
                           </TableCell>
@@ -417,10 +420,10 @@ export default function BRDConsolidationPage() {
                         <TableRow>
                           <TableCell colSpan={4} sx={{ p: 0 }}>
                             <Collapse in={expandedRegion === region.region} timeout="auto" unmountOnExit>
-                              <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
+                              <Box sx={{ p: 2, backgroundColor: theme.palette.mode === 'dark' ? 'background.paper' : '#fcfdfa' }}>
                                 <Table size="small" sx={{ minWidth: 520 }}>
                                   <TableHead>
-                                    <TableRow sx={{ backgroundColor: 'grey.200' }}>
+                                    <TableRow sx={{ backgroundColor: headerBg }}>
                                       <TableCell sx={{ ...tableHeaderCell, pl: 4 }}>Division</TableCell>
                                       <TableCell align="right" sx={tableHeaderCell}>Proposals</TableCell>
                                       <TableCell align="right" sx={tableHeaderCell}>Total Amount</TableCell>
@@ -468,14 +471,14 @@ export default function BRDConsolidationPage() {
                                         <TableRow>
                                           <TableCell colSpan={4} sx={{ p: 0, borderBottom: 'none' }}>
                                             <Collapse in={expandedDivision === `${region.region}-${division.division}`} timeout="auto" unmountOnExit>
-                                              <Box sx={{ py: 1.5, px: 2, backgroundColor: 'grey.100' }}>
+                                              <Box sx={{ py: 1.5, px: 2, backgroundColor: theme.palette.mode === 'dark' ? 'background.default' : '#f4f7f2' }}>
                                                 <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
                                                   Proposals ({division.proposalCount})
                                                 </Typography>
                                                 <TableContainer sx={{ overflow: 'auto' }}>
                                                   <Table size="small" sx={{ minWidth: 900 }}>
                                                     <TableHead>
-                                                      <TableRow sx={{ backgroundColor: 'grey.300' }}>
+                                                      <TableRow sx={{ backgroundColor: headerBg }}>
                                                         <TableCell sx={{ ...tableHeaderCell, pl: 6, minWidth: 200 }}>Proposal Title</TableCell>
                                                         <TableCell sx={{ ...tableHeaderCell, minWidth: 90 }}>Budget Type</TableCell>
                                                         <TableCell align="center" sx={{ ...tableHeaderCell, minWidth: 80 }}>Fiscal Year</TableCell>
@@ -552,7 +555,7 @@ export default function BRDConsolidationPage() {
             <TableContainer sx={{ overflow: 'auto' }}>
               <Table size="medium" sx={{ minWidth: 560 }}>
                 <TableHead>
-                  <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                  <TableRow sx={{ backgroundColor: headerBg }}>
                     <TableCell sx={{ ...tableHeaderCell, width: '40%' }}>Department</TableCell>
                     <TableCell align="right" sx={{ ...tableHeaderCell, width: '15%' }}>Proposals</TableCell>
                     <TableCell align="right" sx={{ ...tableHeaderCell, width: '25%' }}>Total Amount</TableCell>
@@ -606,14 +609,14 @@ export default function BRDConsolidationPage() {
                         <TableRow>
                           <TableCell colSpan={4} sx={{ p: 0, borderBottom: 'none' }}>
                             <Collapse in={expandedDept === dept.department} timeout="auto" unmountOnExit>
-                              <Box sx={{ py: 1.5, px: 2, backgroundColor: 'grey.50' }}>
+                              <Box sx={{ py: 1.5, px: 2, backgroundColor: theme.palette.mode === 'dark' ? 'background.paper' : '#fcfdfa' }}>
                                 <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
                                   Proposals ({dept.proposalCount})
                                 </Typography>
                                 <TableContainer sx={{ overflow: 'auto' }}>
                                   <Table size="small" sx={{ minWidth: 900 }}>
                                     <TableHead>
-                                      <TableRow sx={{ backgroundColor: 'grey.300' }}>
+                                      <TableRow sx={{ backgroundColor: headerBg }}>
                                         <TableCell sx={{ ...tableHeaderCell, pl: 4, minWidth: 200 }}>Proposal Title</TableCell>
                                         <TableCell sx={{ ...tableHeaderCell, minWidth: 90 }}>Budget Type</TableCell>
                                         <TableCell align="center" sx={{ ...tableHeaderCell, minWidth: 80 }}>Fiscal Year</TableCell>
@@ -671,11 +674,10 @@ export default function BRDConsolidationPage() {
             onRowsPerPageChange={handleChangeRowsPerPageCO}
           />
         </TabPanel>
-      </Paper>
 
       {/* Summary Stats */}
       {summary && (
-        <Paper sx={{ p: 3, mt: 4, backgroundColor: 'grey.50' }}>
+        <Paper sx={{ p: 3, mt: 4, backgroundColor: theme.palette.mode === 'dark' ? 'background.paper' : '#fcfdfa', border: '1px solid', borderColor: 'divider' }}>
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
             Model Type Distribution
           </Typography>

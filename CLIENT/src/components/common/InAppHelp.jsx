@@ -22,7 +22,8 @@ import {
   LinearProgress,
   Chip,
   Grid,
-  useTheme
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import {
   HelpOutline as HelpIcon,
@@ -86,6 +87,7 @@ const InAppHelp = ({ open, onClose, context = 'general' }) => {
   const theme = useTheme();
   const { mode } = useThemeContext();
   const isDarkMode = mode === 'dark';
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   return (
     <Dialog 
@@ -140,7 +142,7 @@ const InAppHelp = ({ open, onClose, context = 'general' }) => {
           flexShrink: 0
         }}>
           <Tabs
-            orientation={{ xs: 'horizontal', md: 'vertical' }}
+            orientation={isMobile ? 'horizontal' : 'vertical'}
             variant="scrollable"
             scrollButtons="auto"
             value={activeTab}

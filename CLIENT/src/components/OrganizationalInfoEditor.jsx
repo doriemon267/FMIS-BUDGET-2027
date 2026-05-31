@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTheme } from '@mui/material/styles';
 import {
   Dialog,
   DialogTitle,
@@ -23,6 +24,10 @@ import api from '../config/api';
  * Allows BRD analysts to correct Division, Department, Office, and Central Office assignment
  */
 const OrganizationalInfoEditor = ({ open, consolidationId, onClose, onSaved }) => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
+
   const [record, setRecord] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,11 +129,11 @@ const OrganizationalInfoEditor = ({ open, consolidationId, onClose, onSaved }) =
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ pb: 1 }}>
+      <DialogTitle sx={{ pb: 1.5, bgcolor: headerBg, color: 'white', mb: 2 }}>
         Edit Organizational Information
       </DialogTitle>
 
-      <DialogContent sx={{ pt: 2 }}>
+      <DialogContent>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
             <CircularProgress />
@@ -150,7 +155,7 @@ const OrganizationalInfoEditor = ({ open, consolidationId, onClose, onSaved }) =
             {record && (
               <>
                 {/* Current Info Display */}
-                <Paper sx={{ p: 2, mb: 2, bgcolor: 'action.hover' }}>
+                <Paper sx={{ p: 2, mb: 2, bgcolor: theme.palette.mode === 'dark' ? 'background.default' : '#fcfdfa', border: '1px solid', borderColor: 'divider' }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
                     Proposal: {record.proposalId?.title || 'N/A'}
                   </Typography>
@@ -237,6 +242,12 @@ const OrganizationalInfoEditor = ({ open, consolidationId, onClose, onSaved }) =
           onClick={handleSave}
           variant="contained"
           disabled={loading || saving}
+          sx={{
+            bgcolor: headerBg,
+            "&:hover": {
+              bgcolor: theme.palette.mode === 'dark' ? '#14331d' : '#1e3a0f',
+            }
+          }}
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </Button>

@@ -18,7 +18,7 @@ export const getTheme = (mode) => {
             contrastText: "#ffffff",
           },
           background: {
-            default: "#f4f6f8",
+            default: "#ffffff",
             paper: "#ffffff",
           },
           text: {
@@ -122,6 +122,70 @@ export const getTheme = (mode) => {
             "& .MuiTableSortLabel-icon": {
               color: "#ffffff !important",
             },
+          },
+        },
+      },
+      MuiTabs: {
+        styleOverrides: {
+          root: {
+            backgroundColor: mode === 'light' ? "#2d5016" : "#0b2413",
+            borderTopLeftRadius: "8px",
+            borderTopRightRadius: "8px",
+            minHeight: "48px",
+            padding: "6px 6px 0 6px",
+            "& .MuiTabs-indicator": {
+              display: "none !important",
+            },
+          },
+          flexContainer: {
+            gap: "4px",
+          },
+        },
+      },
+      MuiTab: {
+        styleOverrides: {
+          root: {
+            color: "rgba(255, 255, 255, 0.75)",
+            textTransform: "none",
+            fontWeight: 700,
+            fontSize: "0.85rem",
+            minHeight: "38px",
+            borderRadius: "6px 6px 0 0",
+            margin: "0 2px 0 2px",
+            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+            padding: "6px 16px",
+            "&:hover": {
+              color: "#ffffff",
+              backgroundColor: "rgba(255, 255, 255, 0.08)",
+            },
+            "&.Mui-selected": {
+              color: mode === 'light' ? "#2d5016" : "#0b2413",
+              backgroundColor: "#ffffff",
+              fontWeight: 800,
+              boxShadow: "0 -2px 6px rgba(0, 0, 0, 0.08)",
+              "& .tab-icon-wrapper": {
+                color: mode === 'light' ? "#2d5016 !important" : "#0b2413 !important",
+              }
+            },
+          },
+        },
+      },
+      MuiDialog: {
+        defaultProps: {
+          slotProps: {
+            backdrop: {
+              sx: {
+                backdropFilter: "blur(6px)",
+                backgroundColor: "rgba(0, 0, 0, 0.4)",
+              },
+            },
+          },
+        },
+        styleOverrides: {
+          paper: {
+            borderRadius: "16px !important",
+            boxShadow: "0 20px 48px rgba(0,0,0,0.16) !important",
+            border: "1px solid rgba(255,255,255,0.08) !important",
           },
         },
       },

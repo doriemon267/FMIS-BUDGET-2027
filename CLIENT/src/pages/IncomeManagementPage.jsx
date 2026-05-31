@@ -29,7 +29,8 @@ import {
   Autocomplete,
   CircularProgress,
   FormGroup,
-  FormControlLabel
+  FormControlLabel,
+  Collapse
 } from "@mui/material";
 import { MdCategory, MdList, MdAdd, MdEdit, MdDelete } from "react-icons/md";
 import PesoIcon from "../components/icons/PesoIcon";
@@ -37,6 +38,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import CategoryIcon from "@mui/icons-material/Category";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import HelpIcon from "@mui/icons-material/HelpOutline";
 import CustomAutoComplete from "../global/components/CustomAutoComplete";
 // Import existing components
 import IncomeCategoriesCustomPage from "../components/incomecategories/IncomeCategoriesCustomPage";
@@ -87,6 +89,7 @@ const IncomeManagementPage = () => {
 
   // Manual input for subcategories
   const [manualInput, setManualInput] = useState('');
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   // Auto-hide toast after 6 seconds
   useEffect(() => {
@@ -583,124 +586,91 @@ const IncomeManagementPage = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Enhanced Header Section */}
-      <Paper
-        elevation={3}
-        sx={{
-          p: 3,
-          mb: 3,
-          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-          color: "white",
-          borderRadius: "16px",
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <Box
+      {/* Enhanced Compact Header Section */}
+      <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 2 }}>
+        <Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Typography variant="h4" fontWeight="bold" color="primary">
+              Income Management
+            </Typography>
+            <Tooltip title={showGuidelines ? "Hide Guidelines" : "Show Guidelines"}>
+              <IconButton 
+                onClick={() => setShowGuidelines(!showGuidelines)} 
+                color={showGuidelines ? "primary" : "default"}
+                sx={{ 
+                  backgroundColor: showGuidelines ? alpha(theme.palette.primary.main, 0.1) : "transparent",
+                  "&:hover": { backgroundColor: alpha(theme.palette.primary.main, 0.15) } 
+                }}
+              >
+                <HelpIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            Unified interface for managing income categories with regional or global scope
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Tooltip title="Refresh Data">
+            <IconButton
+              onClick={() => handleRefresh('manual')}
+              disabled={loading}
               sx={{
-                p: 1.5,
-                borderRadius: '12px',
-                backgroundColor: alpha('#fff', 0.15),
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 3,
+                p: 1.25,
+                "&:hover": { 
+                  backgroundColor: theme.palette.action.hover,
+                  transform: "scale(1.02)"
+                },
+                transition: "all 0.2s ease-in-out"
               }}
             >
-              <PesoIcon sx={{ fontSize: 32 }} />
-            </Box>
-            <Box>
-              <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ mb: 0.5 }}>
-                Income Management System
-              </Typography>
-              <Typography variant="h6" sx={{ opacity: 0.9, fontWeight: 400 }}>
-                Unified interface for managing income categories and subcategories
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.8, mt: 0.5 }}>
-                Create, edit, and organize income categories with regional or global scope
-              </Typography>
-            </Box>
-          </Stack>
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="Add New Category">
-              <IconButton
-                sx={{
-                  color: "white",
-                  backgroundColor: alpha("#fff", 0.1),
-                  "&:hover": {
-                    backgroundColor: alpha("#fff", 0.2),
-                    transform: "scale(1.05)",
-                  },
-                  transition: "all 0.2s ease-in-out",
-                }}
-                onClick={handleCreateCategory}
-              >
-                <MdAdd />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Refresh Data">
-              <IconButton
-                sx={{
-                  color: "white",
-                  backgroundColor: alpha("#fff", 0.1),
-                  "&:hover": {
-                    backgroundColor: alpha("#fff", 0.2),
-                    transform: "scale(1.05)",
-                  },
-                  transition: "all 0.2s ease-in-out",
-                }}
-                onClick={() => handleRefresh('manual')}
-              >
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Stack>
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
         </Stack>
-      </Paper>
+      </Box>
 
       {/* Stats Cards - Styled like CompensationSettingsPage */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      {/* Sleek and Compact Stats Cards */}
+      <Grid container spacing={2} sx={{ mb: 2.5 }}>
         {/* Total Categories */}
         <Grid item xs={12} sm={6} md={3}>
           <Card
             sx={{
               height: '100%',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.primary.main, 0.03)} 100%)`,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.15)}`,
+              transition: 'all 0.2s ease-in-out',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: `0 8px 25px ${alpha(theme.palette.primary.main, 0.3)}`,
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.4)}`
+                transform: 'translateY(-2px)',
+                boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.15)}`,
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.25)}`
               }
             }}
           >
-            <CardContent sx={{ p: 2 }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
+            <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Box
                   sx={{
-                    p: 1.5,
+                    p: 1,
                     borderRadius: 2,
                     backgroundColor: theme.palette.primary.main,
                     color: 'white',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '1.5rem'
+                    fontSize: '1.25rem'
                   }}
                 >
-                  <CategoryIcon sx={{ fontSize: 28 }} />
+                  <CategoryIcon sx={{ fontSize: 22 }} />
                 </Box>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ display: 'block', mb: 0.2 }}>
                     Total Categories
                   </Typography>
-                  <Typography variant="h6" fontWeight="bold" color={theme.palette.primary.main}>
+                  <Typography variant="h6" fontWeight="bold" color={theme.palette.primary.main} sx={{ lineHeight: 1.2 }}>
                     {loading ? "..." : (Array.isArray(categories) ? categories.length : 0)}
                   </Typography>
                 </Box>
@@ -713,37 +683,37 @@ const IncomeManagementPage = () => {
           <Card
             sx={{
               height: '100%',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.1)} 0%, ${alpha(theme.palette.success.main, 0.05)} 100%)`,
-              border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.08)} 0%, ${alpha(theme.palette.success.main, 0.03)} 100%)`,
+              border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`,
+              transition: 'all 0.2s ease-in-out',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: `0 8px 25px ${alpha(theme.palette.success.main, 0.3)}`,
-                border: `1px solid ${alpha(theme.palette.success.main, 0.4)}`
+                transform: 'translateY(-2px)',
+                boxShadow: `0 4px 12px ${alpha(theme.palette.success.main, 0.15)}`,
+                border: `1px solid ${alpha(theme.palette.success.main, 0.25)}`
               }
             }}
           >
-            <CardContent sx={{ p: 2 }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
+            <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Box
                   sx={{
-                    p: 1.5,
+                    p: 1,
                     borderRadius: 2,
                     backgroundColor: theme.palette.success.main,
                     color: 'white',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '1.5rem'
+                    fontSize: '1.25rem'
                   }}
                 >
-                  <AccountTreeIcon sx={{ fontSize: 28 }} />
+                  <AccountTreeIcon sx={{ fontSize: 22 }} />
                 </Box>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ display: 'block', mb: 0.2 }}>
                     Total Subcategories
                   </Typography>
-                  <Typography variant="h6" fontWeight="bold" color={theme.palette.success.main}>
+                  <Typography variant="h6" fontWeight="bold" color={theme.palette.success.main} sx={{ lineHeight: 1.2 }}>
                     {loading ? "..." : totalSubcategories}
                   </Typography>
                 </Box>
@@ -756,37 +726,37 @@ const IncomeManagementPage = () => {
           <Card
             sx={{
               height: '100%',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.1)} 0%, ${alpha(theme.palette.info.main, 0.05)} 100%)`,
-              border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.08)} 0%, ${alpha(theme.palette.info.main, 0.03)} 100%)`,
+              border: `1px solid ${alpha(theme.palette.info.main, 0.15)}`,
+              transition: 'all 0.2s ease-in-out',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: `0 8px 25px ${alpha(theme.palette.info.main, 0.3)}`,
-                border: `1px solid ${alpha(theme.palette.info.main, 0.4)}`
+                transform: 'translateY(-2px)',
+                boxShadow: `0 4px 12px ${alpha(theme.palette.info.main, 0.15)}`,
+                border: `1px solid ${alpha(theme.palette.info.main, 0.25)}`
               }
             }}
           >
-            <CardContent sx={{ p: 2 }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
+            <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Box
                   sx={{
-                    p: 1.5,
+                    p: 1,
                     borderRadius: 2,
                     backgroundColor: theme.palette.info.main,
                     color: 'white',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '1.5rem'
+                    fontSize: '1.25rem'
                   }}
                 >
-                  <TrendingUpIcon sx={{ fontSize: 28 }} />
+                  <TrendingUpIcon sx={{ fontSize: 22 }} />
                 </Box>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ display: 'block', mb: 0.2 }}>
                     NIA Wide Categories
                   </Typography>
-                  <Typography variant="h6" fontWeight="bold" color={theme.palette.info.main}>
+                  <Typography variant="h6" fontWeight="bold" color={theme.palette.info.main} sx={{ lineHeight: 1.2 }}>
                     {loading ? "..." : globalCategories}
                   </Typography>
                 </Box>
@@ -799,37 +769,37 @@ const IncomeManagementPage = () => {
           <Card
             sx={{
               height: '100%',
-              background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.1)} 0%, ${alpha(theme.palette.warning.main, 0.05)} 100%)`,
-              border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.08)} 0%, ${alpha(theme.palette.warning.main, 0.03)} 100%)`,
+              border: `1px solid ${alpha(theme.palette.warning.main, 0.15)}`,
+              transition: 'all 0.2s ease-in-out',
               '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: `0 8px 25px ${alpha(theme.palette.warning.main, 0.3)}`,
-                border: `1px solid ${alpha(theme.palette.warning.main, 0.4)}`
+                transform: 'translateY(-2px)',
+                boxShadow: `0 4px 12px ${alpha(theme.palette.warning.main, 0.15)}`,
+                border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`
               }
             }}
           >
-            <CardContent sx={{ p: 2 }}>
-              <Stack direction="row" alignItems="center" spacing={2}>
+            <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
                 <Box
                   sx={{
-                    p: 1.5,
+                    p: 1,
                     borderRadius: 2,
                     backgroundColor: theme.palette.warning.main,
                     color: 'white',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '1.5rem'
+                    fontSize: '1.25rem'
                   }}
                 >
-                  <MdList size={24} style={{ color: 'white' }} />
+                  <MdList size={20} style={{ color: 'white' }} />
                 </Box>
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ display: 'block', mb: 0.2 }}>
                     Regional Categories
                   </Typography>
-                  <Typography variant="h6" fontWeight="bold" color={theme.palette.warning.main}>
+                  <Typography variant="h6" fontWeight="bold" color={theme.palette.warning.main} sx={{ lineHeight: 1.2 }}>
                     {loading ? "..." : regionalCategories}
                   </Typography>
                 </Box>
@@ -840,50 +810,52 @@ const IncomeManagementPage = () => {
       </Grid>
 
       {/* Information Alert - Always show helpful information */}
-      <Alert
-        severity="info"
-        sx={{
-          mb: 3,
-          borderRadius: "16px",
-          border: `2px solid ${alpha(theme.palette.info.main, 0.2)}`,
-          bgcolor: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.08)} 0%, ${alpha(theme.palette.info.main, 0.03)} 100%)`,
-          "& .MuiAlert-icon": {
-            color: theme.palette.info.main,
-            fontSize: '1.5rem'
-          },
-          py: 2
-        }}
-        icon={<PesoIcon />}
-      >
-        <Typography variant="body1" fontWeight={600} sx={{ mb: 1 }}>
-          Income Management System Guidelines
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 2 }}>
-          <strong>Simplified Workflow:</strong> Create income categories and add their subcategories directly in one form. 
-          NIA Wide categories apply to <strong>"All Regions including Central Office"</strong>, while regional categories 
-          are specific to selected regions only.
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Chip 
-            size="small" 
-            label="✓ NIA Wide Scope Available" 
-            color="success" 
-            variant="outlined"
-          />
-          <Chip 
-            size="small" 
-            label="✓ Regional Assignment" 
-            color="primary" 
-            variant="outlined"
-          />
-          <Chip 
-            size="small" 
-            label="✓ Multiple Subcategories" 
-            color="secondary" 
-            variant="outlined"
-          />
-        </Box>
-      </Alert>
+      {/* Interactive Toggleable Guidelines Alert */}
+      <Collapse in={showGuidelines} sx={{ mb: showGuidelines ? 3 : 0 }}>
+        <Alert
+          severity="info"
+          sx={{
+            borderRadius: "16px",
+            border: `2px solid ${alpha(theme.palette.info.main, 0.2)}`,
+            background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.08)} 0%, ${alpha(theme.palette.info.main, 0.03)} 100%)`,
+            "& .MuiAlert-icon": {
+              color: theme.palette.info.main,
+              fontSize: '1.5rem'
+            },
+            py: 2
+          }}
+          icon={<PesoIcon />}
+        >
+          <Typography variant="body1" fontWeight={600} sx={{ mb: 1 }}>
+            Income Management System Guidelines
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            <strong>Simplified Workflow:</strong> Create income categories and add their subcategories directly in one form. 
+            NIA Wide categories apply to <strong>"All Regions including Central Office"</strong>, while regional categories 
+            are specific to selected regions only.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Chip 
+              size="small" 
+              label="✓ NIA Wide Scope Available" 
+              color="success" 
+              variant="outlined"
+            />
+            <Chip 
+              size="small" 
+              label="✓ Regional Assignment" 
+              color="primary" 
+              variant="outlined"
+            />
+            <Chip 
+              size="small" 
+              label="✓ Multiple Subcategories" 
+              color="secondary" 
+              variant="outlined"
+            />
+          </Box>
+        </Alert>
+      </Collapse>
 
       {/* Error Alert with retry option */}
       {error && (

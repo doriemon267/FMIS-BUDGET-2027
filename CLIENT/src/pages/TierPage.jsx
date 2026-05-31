@@ -36,6 +36,7 @@ import {
   TableHead,
   TableRow,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import TierTable from "../components/tier/TierTable";
 import { useUser } from "../context/UserContext";
 import SaveIcon from '@mui/icons-material/Save';
@@ -50,6 +51,9 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import GenericPdfPreviewDialog from '../components/GenericPdfPreviewDialog';
 
 const TierPage = () => {
+  const theme = useTheme();
+  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const { activeRegion, availableRegions } = useRegion();
@@ -687,13 +691,13 @@ const TierPage = () => {
   }; 
 
   return (
-    <Box sx={{ p: 3, bgcolor: "white", minHeight: "100vh" }}>
+    <Box sx={{ p: 3, bgcolor: theme.palette.mode === 'dark' ? 'background.default' : 'white', minHeight: "100vh" }}>
       <Paper
         elevation={3}
         sx={{
           p: 3,
           mb: 3,
-          background: "#375e38",
+          background: headerBg,
           color: "white",
         }}
       >

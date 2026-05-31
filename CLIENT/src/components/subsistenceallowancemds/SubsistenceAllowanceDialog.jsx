@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTheme } from "@mui/material/styles";
 import { useForm, Controller } from "react-hook-form";
 import {
   Button,
@@ -26,6 +27,17 @@ import EditIcon from "@mui/icons-material/Edit";
 import CustomButton from "../../global/components/CustomButton";
 
 const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => {
+  const theme = useTheme();
+  const headerGradient = theme.palette.mode === 'dark' 
+    ? 'linear-gradient(135deg, #0b2413 0%, #1e3320 100%)' 
+    : 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)';
+  const buttonGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #1e3320 0%, #0b2413 100%)'
+    : 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)';
+  const buttonHoverGradient = theme.palette.mode === 'dark'
+    ? 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)'
+    : 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)';
+
   const isEditing = Boolean(row);
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -197,7 +209,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
         }}
       >
         <DialogTitle sx={{
-          background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+          background: headerGradient,
           color: 'white',
           fontWeight: 'bold'
         }}>
@@ -242,7 +254,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
                         sx={{
                           '& .MuiOutlinedInput-root': {
                             '&.Mui-focused fieldset': {
-                              borderColor: '#375e38',
+                              borderColor: theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016',
                             },
                           },
                         }}
@@ -302,9 +314,10 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
             variant="contained"
             disabled={mutation.isLoading}
             sx={{
-              background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+              background: buttonGradient,
+              color: 'white',
               '&:hover': {
-                background: 'linear-gradient(135deg, #2e4d30 0%, #1e3320 100%)',
+                background: buttonHoverGradient,
               }
             }}
           >
