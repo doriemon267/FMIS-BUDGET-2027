@@ -451,6 +451,7 @@ const HomePage = () => {
             sx={{
               p: { xs: 3.5, md: 4.5 },
               borderRadius: 6,
+              mx: -1.5, // Align with grid items
               position: 'relative',
               overflow: 'hidden',
               background: isDarkMode 
@@ -570,7 +571,7 @@ const HomePage = () => {
             elevation={0}
             sx={{
               p: 2,
-              mx: 0.5,
+              mx: -1.5, // Align with grid items
               borderRadius: 4,
               border: `1px solid ${isDarkMode ? alpha('#fff', 0.08) : alpha('#000', 0.05)}`,
               background: isDarkMode ? alpha('#1e293b', 0.4) : '#ffffff',
@@ -685,7 +686,8 @@ const HomePage = () => {
           </Box>
 
           {/* --- HEALTH & CONTEXT SECTION --- */}
-          <Grid container spacing={3} alignItems="stretch" component="section">
+          <Box component="section">
+            <Grid container spacing={3} alignItems="stretch">
             {/* LEFT COLUMN: Proposal Distribution */}
             <Grid item xs={12} md={7}>
               <Paper 
@@ -783,6 +785,7 @@ const HomePage = () => {
               </Paper>
             </Grid>
           </Grid>
+        </Box>
 
           {/* --- ANALYTICS --- */}
           <Paper 
@@ -790,6 +793,7 @@ const HomePage = () => {
             component="section"
             sx={{ 
               p: 4, borderRadius: 6, bgcolor: isDarkMode ? alpha('#fff', 0.01) : alpha(THEME_COLORS.primary, 0.02),
+              mx: -1.5, // Align with grid items
               border: `1px solid ${alpha(THEME_COLORS.primary, 0.08)}`, overflow: 'hidden', position: 'relative', mb: 6
             }}
           >
