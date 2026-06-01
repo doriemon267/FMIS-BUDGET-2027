@@ -121,18 +121,6 @@ const CustomPage = ({
   return (
     <CustomErrorBoundary>
       <Box sx={{ p: 0 }}>
-        {(hasAdd || customAddElement) && (
-          <Box sx={{ mb: 2, mx: 3, display: 'flex', justifyContent: 'flex-end' }}>
-            {customAddElement || (
-              <CustomCreateUpdateDialog
-                endpoint={apiPath}
-                schema={schema}
-                dataListName={dataListName}
-              />
-            )}
-          </Box>
-        )}
-
         {/* Enhanced Action Bar with Stats */}
         <Paper sx={{ 
           mt: 3, 
@@ -167,6 +155,18 @@ const CustomPage = ({
                 </IconButton>
               </Tooltip>
             </Box>
+
+            {(hasAdd || customAddElement) && (
+              <Box>
+                {customAddElement || (
+                  <CustomCreateUpdateDialog
+                    endpoint={apiPath}
+                    schema={schema}
+                    dataListName={dataListName}
+                  />
+                )}
+              </Box>
+            )}
           </Box>
 
           {/* Summary Statistics - matching other pages style */}

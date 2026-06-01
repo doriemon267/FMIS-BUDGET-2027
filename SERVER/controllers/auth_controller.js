@@ -110,8 +110,11 @@ exports.login = async (req, res) => {
     const tokenExpiration = expiresIn * (rememberMe ? 2 : 1); // seconds
     const cookieExpiration = tokenExpiration * 1000; // ms
 
+    const crypto = require("crypto");
+    const sessionId = crypto.randomBytes(16).toString('hex');
+
     const jwtToken = jwt.sign(
-      { accessToken: credentials.access_token, username },
+      { accessToken: credentials.access_token, username, sessionId },
       process.env.JWT_CLIENT_SECRET_PROD,
       { expiresIn: tokenExpiration },
     );
@@ -125,6 +128,32 @@ exports.login = async (req, res) => {
     };
     if (process.env.COOKIE_DOMAIN) cookieOpts.domain = process.env.COOKIE_DOMAIN;
     res.cookie("jwtToken", jwtToken, cookieOpts);
+
+    // Save activeSessionId to database for this user (supports both existing and new users)
+    if (username) {
+      try {
+        const candidateIds = [
+          String(username).trim(),
+          String(username).trim().toUpperCase(),
+          String(username).trim().toLowerCase()
+        ];
+        
+        const updateResult = await User.updateMany(
+          { userId: { $in: candidateIds } },
+          { $set: { activeSessionId: sessionId } }
+        );
+        
+        if (updateResult.matchedCount === 0) {
+          await User.updateOne(
+            { userId: String(username).trim() },
+            { $set: { activeSessionId: sessionId } },
+            { upsert: true }
+          );
+        }
+      } catch (dbErr) {
+        console.error("[AUTH] Failed to update activeSessionId in login:", dbErr.message);
+      }
+    }
 
     // Clear failed attempts on successful login
     if (username) _clearAttempts(String(username).toLowerCase());
@@ -355,6 +384,19 @@ exports.logout = async (req, res) => {
     userId: String(userId),
     details: { success: true },
   }).catch(() => {});
+
+  // Clear the active session id from the User collection
+  if (req?.user?.userId || req?.user?.id || userId !== "anonymous") {
+    try {
+      const uid = String(req?.user?.userId || req?.user?.id || userId);
+      await User.updateMany(
+        { userId: { $in: [uid, uid.toUpperCase(), uid.toLowerCase()] } },
+        { $set: { activeSessionId: null } }
+      );
+    } catch (err) {
+      console.error("[AUTH] Logout session clear error:", err.message);
+    }
+  }
 
   // In dev (HTTP) the browser rejects Secure+SameSite=None — use Lax instead
   const IS_PRODUCTION = require("../utils/IS_PRODUCTION");

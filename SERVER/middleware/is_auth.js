@@ -183,6 +183,38 @@ module.exports = async (req, res, next) => {
                         .replace(/\s+/g, " ")
                         .trim() || userId;
 
+    // --- SINGLE ACTIVE SESSION CHECK ---
+    if (payload.sessionId) {
+      try {
+        const User = require("../models/User");
+        const userDoc = await User.findOne({ 
+          userId: { $in: [userId, userId.toUpperCase(), userId.toLowerCase()] } 
+        }).lean();
+
+        if (userDoc && userDoc.activeSessionId && payload.sessionId !== userDoc.activeSessionId) {
+          AuditLog.create({
+            userId: userId,
+            userName: particular,
+            action: "SESSION_KICKED_OUT",
+            resource: "AUTHENTICATION",
+            ipAddress: req.clientIp,
+            details: { 
+              reason: "Logged in from another device/browser",
+              tokenSessionId: payload.sessionId,
+              activeSessionId: userDoc.activeSessionId
+            }
+          }).catch(() => {});
+
+          return res.status(401).json({ 
+            error: "Ang iyong account ay binuksan sa ibang device o browser. Awtomatiko kang mai-log out.", 
+            expired: true 
+          });
+        }
+      } catch (err) {
+        console.error("[AUTH] Active session verification error:", err.message);
+      }
+    }
+
     // 7. ROLE RESOLUTION
     let roles = payload.roles || payload.Roles || [];
     if (!Array.isArray(roles)) roles = roles ? [roles] : [];

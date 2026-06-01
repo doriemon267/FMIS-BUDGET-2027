@@ -62,16 +62,51 @@ const getVisibleWorkflowIds = async (req, { fiscalYear, budgetType, regions } = 
     visibleStatuses = new Set(VISIBLE_STATUSES_BY_ROLE.BUDGET_PREPARER);
   }
 
-  const npwQuery = { status: { $in: [...visibleStatuses] } };
-  if (fiscalYear) npwQuery.fiscalYear = Number(fiscalYear) || parseInt(fiscalYear, 10);
+  // --- OPSYON A FIX: Get all active/released consolidated proposals to find their merged source IDs ---
+  const activeConsolidatedQuery = {
+    isConsolidated: true,
+    status: { $in: [...visibleStatuses] }
+  };
+  if (fiscalYear) activeConsolidatedQuery.fiscalYear = Number(fiscalYear) || parseInt(fiscalYear, 10);
   if (budgetType) {
     const typeMap = { NEP: 'NEP', GAA: 'GAA' };
-    npwQuery.modelType = typeMap[String(budgetType).toUpperCase()] || 'Initial';
+    activeConsolidatedQuery.modelType = typeMap[String(budgetType).toUpperCase()] || 'Initial';
   }
   if (regions && regions !== 'all') {
     const regionList = Array.isArray(regions) ? regions : [regions];
     const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
-    if (regionDocs.length) npwQuery.region = { $in: regionDocs.map(r => r._id) };
+    if (regionDocs.length) activeConsolidatedQuery.region = { $in: regionDocs.map(r => r._id) };
+  }
+
+  const activeConsolidatedDocs = await NewProposalWorkflow.find(activeConsolidatedQuery).select('mergedFrom').lean();
+  const allowedMergedIds = [];
+  activeConsolidatedDocs.forEach(doc => {
+    if (Array.isArray(doc.mergedFrom)) {
+      allowedMergedIds.push(...doc.mergedFrom);
+    }
+  });
+
+  // Build the main query using an $and array to safely mix $or conditions without key collision
+  const npwQuery = {
+    $and: [
+      {
+        $or: [
+          { status: { $in: [...visibleStatuses] } },
+          { _id: { $in: allowedMergedIds } }
+        ]
+      }
+    ]
+  };
+
+  if (fiscalYear) npwQuery.$and.push({ fiscalYear: Number(fiscalYear) || parseInt(fiscalYear, 10) });
+  if (budgetType) {
+    const typeMap = { NEP: 'NEP', GAA: 'GAA' };
+    npwQuery.$and.push({ modelType: typeMap[String(budgetType).toUpperCase()] || 'Initial' });
+  }
+  if (regions && regions !== 'all') {
+    const regionList = Array.isArray(regions) ? regions : [regions];
+    const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
+    if (regionDocs.length) npwQuery.$and.push({ region: { $in: regionDocs.map(r => r._id) } });
   }
 
   // For PREPARER / REVIEWER / APPROVER, also restrict to their own department/division
@@ -88,8 +123,8 @@ const getVisibleWorkflowIds = async (req, { fiscalYear, budgetType, regions } = 
           const div  = hua.divisionName || '';
           const level = String(hua.assignmentLevel || '').toUpperCase();
           if (dept && !['BUDGET_AND_REVENUE_DIVISION','REGION','FULL'].includes(level)) {
-            npwQuery.department = dept;
-            if (div && level === 'DIVISION') npwQuery.division = div;
+            npwQuery.$and.push({ department: dept });
+            if (div && level === 'DIVISION') npwQuery.$and.push({ division: div });
           }
         }
       } catch (_) {}

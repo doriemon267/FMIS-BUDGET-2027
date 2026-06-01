@@ -156,51 +156,6 @@ const CategoryPage = () => {
               </Typography>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="Add category">
-              <Box component="span">
-                <CustomCreateUpdateDialog
-                  schema={categorySchema}
-                  endpoint="/categories"
-                  dataListName="categories"
-                  parentClose={() => setRefreshTrigger((t) => t + 1)}
-                  trigger={
-                    <Box
-                      sx={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        width: 40,
-                        height: 40,
-                        borderRadius: "50%",
-                        backgroundColor: alpha("#fff", 0.15),
-                        color: "white",
-                        "&:hover": { backgroundColor: alpha("#fff", 0.25) },
-                        cursor: "pointer",
-                      }}
-                    >
-                      <MdAdd size={24} />
-                    </Box>
-                  }
-                />
-              </Box>
-            </Tooltip>
-            <Tooltip title="Refresh">
-              <IconButton
-                onClick={() => {
-                  queryClient.invalidateQueries(["categories"]);
-                  setRefreshTrigger((t) => t + 1);
-                }}
-                sx={{
-                  backgroundColor: alpha("#fff", 0.15),
-                  color: "white",
-                  "&:hover": { backgroundColor: alpha("#fff", 0.25) },
-                }}
-              >
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Stack>
         </Box>
       </Paper>
 

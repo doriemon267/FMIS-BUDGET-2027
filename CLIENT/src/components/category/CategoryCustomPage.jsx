@@ -25,20 +25,24 @@ const CustomPage = ({
   const apiPath = `/${dataListName}`;
   return (
     <>
-      <DashboardHeader
-        title={pageTitle}
-        description={pageDescription}
-        searchable={searchable}
-        childElement={
-          (hasAdd && customAddElement) || (
-            <CustomCreateUpdateDialog
-              endpoint={apiPath}
-              schema={schema}
-              dataListName={dataListName}
-            />
-          )
-        }
-      />
+      {title && title.trim() !== "" ? (
+        <DashboardHeader
+          title={pageTitle}
+          description={pageDescription}
+          searchable={searchable}
+          childElement={
+            hasAdd ? (
+              customAddElement || (
+                <CustomCreateUpdateDialog
+                  endpoint={apiPath}
+                  schema={schema}
+                  dataListName={dataListName}
+                />
+              )
+            ) : null
+          }
+        />
+      ) : null}
 
       <CustomTable
         dataListName={dataListName}

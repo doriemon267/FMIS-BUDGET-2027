@@ -41,6 +41,10 @@ const UserSchema = new mongoose.Schema({
       security: { type: Boolean, default: true },
       system: { type: Boolean, default: false }
     }
+  },
+  activeSessionId: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

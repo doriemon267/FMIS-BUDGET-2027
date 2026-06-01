@@ -19,6 +19,7 @@ import {
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import InfoIcon from '@mui/icons-material/Info';
+import PeopleIcon from '@mui/icons-material/People';
 import { useThemeContext } from "../../context/ThemeContext";
 
 const EmployeeCustomPage = ({
@@ -52,138 +53,53 @@ const EmployeeCustomPage = ({
 
   return (
     <>
+      {headerContent}
+
       <Paper 
-        elevation={2} 
+        elevation={0} 
         sx={{ 
-          borderRadius: '12px',
+          width: "100%",
+          borderRadius: '16px',
           overflow: 'hidden',
-          mb: 3,
-          transition: 'box-shadow 0.3s',
-          '&:hover': {
-            boxShadow: '0 8px 24px rgba(0,0,0,0.1)'
-          }
+          border: `1px solid ${theme.palette.divider}`,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+          mt: 3
         }}
       >
+        {/* Unified Table Header Bar */}
         <Box 
           sx={{ 
-            p: 3,
-            bgcolor: theme.palette.mode === 'light' ? '#fff' : theme.palette.background.paper,
-            borderBottom: `1px solid ${theme.palette.mode === 'light' ? '#e0e0e0' : '#424242'}`
+            p: 2.5,
+            background: theme.palette.mode === 'light' 
+              ? `linear-gradient(135deg, ${theme.palette.grey[100]} 0%, ${theme.palette.grey[50]} 100%)`
+              : `linear-gradient(135deg, ${theme.palette.background.paper} 0%, rgba(255,255,255,0.03) 100%)`,
+            borderBottom: `1px solid ${theme.palette.divider}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 2,
           }}
         >
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-            <Box>
-              <Typography 
-                variant="h5" 
-                component="h1" 
-                fontWeight="bold"
-                color="primary"
-                gutterBottom
-              >
-                {pageTitle}
-              </Typography>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <Typography 
-                  variant="body2" 
-                  color="text.secondary"
-                  sx={{ 
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    maxWidth: isMobile ? '100%' : '80%'
-                  }}
-                >
-                  {pageDescription}
-                </Typography>
-                
-                <Tooltip title={showInfo ? "Hide details" : "Show more details"}>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => setShowInfo(!showInfo)}
-                    sx={{ ml: 0.5 }}
-                  >
-                    {showInfo ? <KeyboardArrowUpIcon fontSize="small" /> : <KeyboardArrowDownIcon fontSize="small" />}
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Box>
-            
-            <Box>
-              {customAddElement ? (
-                React.cloneElement(customAddElement, { onDataChange })
-              ) : hasAdd ? (
-                <CustomCreateUpdateDialog
-                  endpoint={apiPath}
-                  schema={schema}
-                  dataListName={dataListName}
-                />
-              ) : null}
-            </Box>
+          <Box display="flex" alignItems="center" gap={1.5}>
+            <PeopleIcon sx={{ color: theme.palette.primary.main, fontSize: '1.5rem' }} />
+            <Typography variant="h6" fontWeight="600">
+              Employee Directory
+            </Typography>
           </Box>
-          
-          <Collapse in={showInfo}>
-            <Box 
-              sx={{ 
-                mt: 2, 
-                p: 2, 
-                bgcolor: theme.palette.mode === 'light' ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '8px',
-                border: `1px solid ${theme.palette.mode === 'light' ? '#e0e0e0' : '#424242'}`
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                <InfoIcon color="info" sx={{ mt: 0.5 }} />
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    About Employee Management
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    This page allows you to manage all employee records in the system. You can add new employees, 
-                    edit existing records, and update employee status. Use the search and filter options to quickly 
-                    find specific employees.
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Tips:</strong> Click on column headers to sort the data. Use the filter icon next to column 
-                    headers to filter by specific values. Toggle the status switch to activate or deactivate employees.
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-          </Collapse>
+
+          <Box>
+            {customAddElement ? (
+              React.cloneElement(customAddElement, { onDataChange })
+            ) : hasAdd ? (
+              <CustomCreateUpdateDialog
+                endpoint={apiPath}
+                schema={schema}
+                dataListName={dataListName}
+              />
+            ) : null}
+          </Box>
         </Box>
-        
-        <DashboardHeader
-          title=""
-          description=""
-          searchable={searchable}
-          childElement={null}
-          sx={{ 
-            px: 3, 
-            py: 2, 
-            borderBottom: `1px solid ${theme.palette.mode === 'light' ? '#e0e0e0' : '#424242'}`,
-            boxShadow: 'none',
-            bgcolor: theme.palette.primary.main,
-            color: '#fff',
-            '& .MuiInputBase-root': {
-              bgcolor: 'rgba(255, 255, 255, 0.15)',
-              color: '#fff',
-              '&:hover': {
-                bgcolor: 'rgba(255, 255, 255, 0.25)',
-              },
-              '& .MuiInputAdornment-root': {
-                color: 'rgba(255, 255, 255, 0.7)',
-              }
-            }
-          }}
-        />
-        
-        {headerContent && (
-          <Box sx={{ px: 3 }}>
-            {headerContent}
-          </Box>
-        )}
 
         <Box sx={{ p: 3 }}>
           <CustomTable

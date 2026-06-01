@@ -510,32 +510,69 @@ const resolveWorkflowSignatories = async (workflowDocs) => {
 };
 
 const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters, preparerScope }) => {
-  const npwQuery = {
+  // 1. Get all active/released consolidated proposals to find their merged source IDs
+  const activeConsolidatedQuery = {
+    isConsolidated: true,
     status: { $in: REPORT_RELEASE_WORKFLOW_STATUSES }
+  };
+  if (fiscalYear) {
+    const fyNum = Number(fiscalYear) || parseInt(fiscalYear, 10);
+    activeConsolidatedQuery.fiscalYear = Number.isFinite(fyNum) ? fyNum : parseInt(String(fiscalYear), 10);
+  }
+  if (budgetType) {
+    activeConsolidatedQuery.modelType = mapBudgetTypeToModelType(budgetType);
+  }
+  if (regions && regions !== 'all') {
+    const regionList = Array.isArray(regions) ? regions : [regions];
+    const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
+    const regionIds = regionDocs.map((r) => r._id);
+    if (regionIds.length > 0) activeConsolidatedQuery.region = { $in: regionIds };
+  }
+  const activeConsolidatedDocs = await NewProposalWorkflow.find(activeConsolidatedQuery).select('mergedFrom').lean();
+  const allowedMergedIds = [];
+  activeConsolidatedDocs.forEach(doc => {
+    if (Array.isArray(doc.mergedFrom)) {
+      allowedMergedIds.push(...doc.mergedFrom);
+    }
+  });
+
+  // 2. Initialize query with statuses and allowed merged IDs in an $and block to prevent collisions with other filters
+  const npwQuery = {
+    $and: [
+      {
+        $or: [
+          { status: { $in: REPORT_RELEASE_WORKFLOW_STATUSES } },
+          { _id: { $in: allowedMergedIds } }
+        ]
+      }
+    ]
   };
 
   if (fiscalYear) {
     const fyNum = Number(fiscalYear) || parseInt(fiscalYear, 10);
-    npwQuery.fiscalYear = Number.isFinite(fyNum) ? fyNum : parseInt(String(fiscalYear), 10);
+    npwQuery.$and.push({ fiscalYear: Number.isFinite(fyNum) ? fyNum : parseInt(String(fiscalYear), 10) });
   }
 
   if (budgetType) {
-    npwQuery.modelType = mapBudgetTypeToModelType(budgetType);
+    npwQuery.$and.push({ modelType: mapBudgetTypeToModelType(budgetType) });
   }
 
   if (regions && regions !== 'all') {
     const regionList = Array.isArray(regions) ? regions : [regions];
     const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
     const regionIds = regionDocs.map((r) => r._id);
-    npwQuery.region = regionIds.length > 0 ? { $in: regionIds } : null;
+    if (regionIds.length > 0) {
+      npwQuery.$and.push({ region: { $in: regionIds } });
+    } else {
+      npwQuery.$and.push({ region: null });
+    }
   }
 
   if (groupBy === 'office' && Array.isArray(offices) && offices.length > 0) {
-    npwQuery.department = { $in: offices };
+    npwQuery.$and.push({ department: { $in: offices } });
   }
 
   if (groupBy === 'responsibilityCenter' && Array.isArray(responsibilityCenters) && responsibilityCenters.length > 0) {
-    npwQuery.$and = npwQuery.$and || [];
     npwQuery.$and.push({
       $or: [
         { division: { $in: responsibilityCenters } },
@@ -547,16 +584,18 @@ const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType,
   if (preparerScope) {
     const scopeVal = preparerScope.division || preparerScope.department;
     if (scopeVal) {
-      npwQuery.$or = npwQuery.$or || [];
-      npwQuery.$or.push(
-        { division: scopeVal },
-        { department: scopeVal },
-        { responsibilityCenter: scopeVal }
-      );
+      npwQuery.$and.push({
+        $or: [
+          { division: scopeVal },
+          { department: scopeVal },
+          { responsibilityCenter: scopeVal }
+        ]
+      });
     }
   }
 
-  if (npwQuery.region === null) {
+  const regionFilterDoc = npwQuery.$and.find(cond => cond.hasOwnProperty('region'));
+  if (regionFilterDoc && regionFilterDoc.region === null) {
     return { workflowIds: [], proposalIds: [], workflowDocs: [] };
   }
 

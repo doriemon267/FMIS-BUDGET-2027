@@ -25,13 +25,36 @@ const CustomPage = ({
   const apiPath = `/${dataListName}`;
   return (
     <Box sx={{ p: 0 }}>
-      {(hasAdd || customAddElement) && (
-        <Box sx={{ mb: 2, mx: 3, display: 'flex', justifyContent: 'flex-end' }}>
-          {customAddElement || (
-            <CustomCreateUpdateDialog endpoint={apiPath} schema={schema} dataListName={dataListName} />
+      {/* Enhanced Action Bar Header */}
+      <Paper sx={{ 
+        mt: 3, 
+        mx: 3, 
+        p: 2, 
+        mb: 2, 
+        borderRadius: 2, 
+        boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+        transition: 'all 0.3s ease',
+        '&:hover': {
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          backgroundColor: (theme) => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : '#fafafa'
+        }
+      }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+          <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="h6" sx={{ color: (theme) => theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016', fontWeight: 'bold' }}>
+              {pageTitle} Management
+            </Typography>
+          </Box>
+
+          {(hasAdd || customAddElement) && (
+            <Box>
+              {customAddElement || (
+                <CustomCreateUpdateDialog endpoint={apiPath} schema={schema} dataListName={dataListName} />
+              )}
+            </Box>
           )}
         </Box>
-      )}
+      </Paper>
 
       <Box sx={{ mx: 3 }}>
         <Paper sx={{ 

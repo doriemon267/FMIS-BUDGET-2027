@@ -648,21 +648,7 @@ const EmployeeList = () => {
           </Paper>
         </Fade>
       ) : (
-        <Box
-          sx={{
-            // Hide the DashboardHeader component completely
-            "& .MuiPaper-root > div:nth-of-type(2)": {
-              display: "none !important",
-            },
-            // Also target by searching for elements with search functionality
-            "& [role='search']": {
-              display: "none !important",
-            },
-            "& div[class*='search']": {
-              display: "none !important",
-            },
-          }}
-        >
+        <Box>
           <EmployeeCustomPage
             dataListName="employees"
             title=""
@@ -811,8 +797,8 @@ const EmployeeList = () => {
                       <Typography variant="body2" sx={{ opacity: 0.7, mt: 1 }}>
                         Access Level: {displayInfo.level} - {displayInfo.scope}
                       </Typography>
-                      {userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' && !activeRegion && (
-                        <Chip label="Viewing all regions (BRD)" size="small" sx={{ mt: 1 }} />
+                      {(userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' || userAccessLevel === 'FULL') && !activeRegion && (
+                        <Chip label="⚠️ No region selected. Please select a region from the dropdown ->" color="warning" size="small" sx={{ mt: 1, fontWeight: 'bold' }} />
                       )}
                       <Typography variant="body2" sx={{ opacity: 0.6, mt: 0.5 }}>
                         {userAccessLevel === 'DIVISION' 
@@ -842,8 +828,8 @@ const EmployeeList = () => {
                           <RefreshIcon />
                         </IconButton>
                       </Tooltip>
-                      {/* Show inline region selector for BRD-level users */}
-                      {userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' && Array.isArray(availableRegions) && availableRegions.length > 0 && (
+                      {/* Show inline region selector for BRD-level or FULL-access users */}
+                      {(userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' || userAccessLevel === 'FULL') && Array.isArray(availableRegions) && availableRegions.length > 0 && (
                         <FormControl sx={{ minWidth: 200 }} size="small">
                           <InputLabel id="region-select-label" sx={{ color: 'white' }}>Region</InputLabel>
                           <Select
