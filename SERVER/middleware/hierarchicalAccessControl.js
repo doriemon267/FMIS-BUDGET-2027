@@ -368,7 +368,11 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   try {
     const userId = req.user.id;
-    const userRoles = req.user.Roles;
+    const userRoles = req.user.Roles || [];
+
+    const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
+    const isBudgetOfficerRole = userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR');
+    const isBudgetManagerRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('DEPARTMENT_HEAD');
 
     // Load the hierarchical assignment first — use assignment level for scope so dashboard shows Region/Department/Division, not "Full Access"
     let assignmentDoc = await HierarchicalUserAssignment
@@ -397,15 +401,19 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
     }
     // If user has a full-access role, prefer returning concrete assignments when available
     if (hasFullAccess(userRoles)) {
+      let accessibleRegions = [];
+      let accessibleDepartments = [];
+      let accessibleDivisions = [];
+
       if (assignmentDoc) {
         const consolidationInfo = assignmentDoc.getConsolidationTarget();
-        const accessibleRegions = assignmentDoc.regionId
+        accessibleRegions = assignmentDoc.regionId
           ? [{ _id: assignmentDoc.regionId._id, regionName: assignmentDoc.regionId.regionName || assignmentDoc.regionId.RegionName || assignmentDoc.regionId.Region }]
           : [];
-        const accessibleDepartments = assignmentDoc.departmentId
+        accessibleDepartments = assignmentDoc.departmentId
           ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.Department || assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName || null }]
           : [];
-        const accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
+        accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
         
         // Auto-assign workflow roles based on user's main system roles if not already set
         let workflowRoles = assignmentDoc.workflowRoles || [];
@@ -471,19 +479,32 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         if (needsSave) {
           assignmentDoc.save().catch(err => console.warn('Failed to save hierarchical assignment updates:', err.message));
         }
-        // Only treat as full-access if the assignment level is FULL or the user is SUPER_ADMIN
-        const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
-        const isBudgetOfficerRole = userRoles.includes('BUDGET_OFFICER');
-        const isBudgetManagerRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('OVERALL_BUDGET_APPROVER');
+        // Only treat as full-access if the assignment level is FULL or the user has a full-access role
         const isAssignmentFull = assignmentDoc.assignmentLevel === 'FULL';
         const effectiveFull = isSuperAdminRole || isAssignmentFull || isBudgetOfficerRole || isBudgetManagerRole;
+
+        let finalAccessibleRegions = accessibleRegions;
+        if (effectiveFull) {
+          try {
+            const allRegions = await Region.find({ isActive: true }).select('regionName RegionName Region').lean();
+            if (allRegions.length > 0) {
+              finalAccessibleRegions = allRegions.map(r => ({
+                _id: r._id,
+                regionName: r.regionName || r.RegionName || r.Region
+              }));
+            }
+          } catch (regionErr) {
+            console.warn('Failed to fetch all regions for full-access user:', regionErr.message);
+          }
+        }
+
         req.hierarchicalAccessInfo = {
           scope: effectiveFull ? 'FULL' : assignmentDoc.assignmentLevel,
           hasFullAccess: !!effectiveFull,
           canAccessAllRegions: !!effectiveFull,
           canAccessAllDepartments: !!effectiveFull,
           canAccessAllDivisions: !!effectiveFull,
-          accessibleRegions,
+          accessibleRegions: finalAccessibleRegions,
           accessibleDepartments,
           accessibleDivisions,
           consolidationInfo,
@@ -499,10 +520,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       let defaultWorkflowRoles = [];
       
       // Special handling for SUPER ADMIN, BUDGET_OFFICER, BUDGET_MANAGER - give them FULL scope and all permissions
-      const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
-      const isBudgetOfficerRole = userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR');
-      const isBudgetManagerRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('DEPARTMENT_HEAD');
-
       if (isSuperAdminRole || isBudgetOfficerRole || isBudgetManagerRole) {
         defaultScope = 'FULL';
         defaultRolePermissions = {
@@ -522,6 +539,19 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
             defaultWorkflowRoles = ['officeFinalVerifier'];
         } else if (isBudgetManagerRole) {
             defaultWorkflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
+        }
+
+        // For full-access roles without assignments, fetch all regions
+        try {
+          const allRegions = await Region.find({ isActive: true }).select('regionName RegionName Region').lean();
+          if (allRegions.length > 0) {
+            accessibleRegions = allRegions.map(r => ({
+              _id: r._id,
+              regionName: r.regionName || r.RegionName || r.Region
+            }));
+          }
+        } catch (regionErr) {
+          console.warn('Failed to fetch all regions for default full-access user:', regionErr.message);
         }
       }
       // Special handling for BUDGET PREPARER - give them DIVISION scope and creator permissions
@@ -584,24 +614,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         };
         defaultWorkflowRoles = ['budgetAnalyst'];
       }
-      // Special handling for BUDGET_OFFICER - give them OFFICE scope and permissions
-      else if (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR')) {
-        defaultScope = 'OFFICE';
-        defaultRolePermissions = {
-          CreateProposals: true,
-          EditOwnProposals: true,
-          EditAllProposals: true,
-          DeleteProposals: false,
-          ApproveProposals: true,
-          ViewReports: true,
-          ManageUsers: false,
-          ManageSettings: false
-        };
-        defaultWorkflowRoles = ['officeFinalVerifier'];
-      }
-      
       // Only SUPER_ADMIN (or explicit FULL scope) should have full access flags
-      const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
       const hasFull = defaultScope === 'FULL' || isSuperAdminRole;
       req.hierarchicalAccessInfo = {
         scope: defaultScope,
@@ -609,7 +622,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         canAccessAllRegions: hasFull,
         canAccessAllDepartments: hasFull,
         canAccessAllDivisions: hasFull,
-        accessibleRegions: [],
+        accessibleRegions: accessibleRegions,
         accessibleDepartments: [],
         accessibleDivisions: [],
         consolidationInfo: null,
