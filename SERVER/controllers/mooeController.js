@@ -1586,7 +1586,7 @@ exports.getMooeList = async (req, res) => {
     
     // Check if user has special roles that bypass filtering
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     // SUPER_ADMIN sees only their own records, not all records
     if (isSuperAdmin && userIdString) {
@@ -1908,7 +1908,7 @@ exports.getMOOEByParams = async (req, res) => {
       const userIdString = userId ? String(userId) : undefined;
       const userRoles = req.user?.Roles || [];
       
-      const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+      const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
       
       if (!isBudgetManager && userIdString) {
         try {

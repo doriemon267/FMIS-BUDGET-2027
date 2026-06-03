@@ -156,6 +156,8 @@ const adminRoute = () => {
         PERMISSION_LEVELS.BUDGET_MANAGER,
         PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER, // Accept either alias for budget manager
         'OVERALL_BUDGET_APPROVER',
+        PERMISSION_LEVELS.BUDGET_OFFICER,          // ✅ ADDED: Budget Officer now has admin privileges
+        'BUDGET OFFICER',
         'BUDGET_PREPARER',                         // ✅ Support budget preparers accessing hierarchical assignments
         'BUDGET PREPARER',
         'BUDGET_REVIEWER',                         // ✅ Support budget reviewers
@@ -205,9 +207,13 @@ const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessS
           ];
           break;
         case PERMISSION_LEVELS.BUDGET_OFFICER:
-          // Budget Officer no longer allowed by requirement, block by requiring none match
+          // Budget Officer now has the same access level as Budget Manager
           requiredRoles = [
-            "__NO_ROLE__"
+            PERMISSION_LEVELS.BUDGET_OFFICER,
+            PERMISSION_LEVELS.BUDGET_MANAGER,
+            PERMISSION_LEVELS.BUDGET_ADMIN,
+            PERMISSION_LEVELS.BUDGET_ANALYST,
+            PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST
           ];
           break;
         case PERMISSION_LEVELS.SUPER_ADMIN:

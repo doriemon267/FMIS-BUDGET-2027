@@ -77,7 +77,10 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
   const isFullScope = scope === 'FULL';
   const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
   const isBudgetManager = (currentUser?.Roles || []).some(
-    (r) => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER'
+    (r) => {
+      const n = normRole(r);
+      return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER' || n === 'BUDGET_OFFICER';
+    }
   );
   const isPlanningAnalyst = (currentUser?.Roles || []).some((r) => {
     const n = normRole(r);

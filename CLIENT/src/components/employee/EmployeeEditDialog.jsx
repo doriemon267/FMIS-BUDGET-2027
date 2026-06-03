@@ -109,6 +109,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
 
   // Initialize react-hook-form with existing employee data
   const methods = useForm({
+    mode: "onChange",
     defaultValues: {
       EmployeeFullName: row?.EmployeeFullName || "",
       Employee_No: row?.EmployeeID || "",
@@ -539,13 +540,28 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     }
   }, [watch("Division"), organizationStructure]);
 
-  // Initialize salary data when dialog opens with existing employee data
+  // Unified initialization effect when dialog opens or row changes
   useEffect(() => {
-    const initializeSalaryData = async () => {
-      // console.log("🔄 Initializing salary data - isOpen:", isOpen, "row:", row);
-      // console.log("🔄 Row SG:", row?.SG, "StatusOfAppointment:", row?.StatusOfAppointment);
+    const initializeData = async () => {
+      if (!isOpen || !row) return;
 
-      if (isOpen && row?.SG && row.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
+      // 1. Set basic employee information
+      setValue("EmployeeFullName", row.EmployeeFullName || "");
+      setValue("Employee_No", row.EmployeeID || row.Employee_No || "");
+      setValue("Region", row.Region || "");
+      setValue("Department", row.Department || "");
+      setValue("Division", row.Division || "");
+      setValue("Item_No", row.Item_No || row.ItemNumber || row.itemNumber || "");
+      setValue("PositionTitle", row.PositionTitle || "");
+      setValue("StatusOfAppointment", row.StatusOfAppointment || "");
+      setValue("DateOfAppointment", formatDateForInput(row.DateOfAppointment));
+      setValue("DateOfBirth", formatDateForInput(row.DateOfBirth));
+      setValue("Status", row.Status || "Active");
+      setValue("SG", row.SG || "");
+      setValue("PG", row.PG || "");
+
+      // 2. Initialize salary and step data for non-COS employees
+      if (row.SG && row.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
         try {
           const url = useCPCSForEmployeeAdd
             ? `cpcs-salary/grades?salary_grade=${row.SG}`
@@ -558,74 +574,43 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
             setStepOptions(steps);
             setSalaryData(salaryGrades);
 
-            // Also ensure the form values are set
+            // Set JG if it exists in salary data or row
             setValue("JG", salaryGrades.job_grade || row.JG || "");
-            setValue("Step", row.Step || steps[0] || "1");
+            
+            // Set Step - prioritize row data, fallback to first step
+            const targetStep = row.Step != null ? String(row.Step) : (steps[0] || "1");
+            setValue("Step", targetStep);
+
             if (useCPCSForEmployeeAdd && salaryGrades.cpcs2PayGrade != null) {
               setValue("PG", salaryGrades.cpcs2PayGrade);
             }
-            // Always recompute the rate based on salary grade data, don't use stored value
-            const stepKey = String(row.Step || steps[0] || "1");
-            const correctRate = salaryGrades.rates?.[stepKey];
-            setValue("Rate", correctRate || "");
+
+            // Calculate and set Rate based on salary grade data
+            const correctRate = salaryGrades.rates?.[targetStep];
+            setValue("Rate", correctRate || row.Rate || "");
           } else {
-            // console.log("❌ No salary data found for SG:", row.SG);
             setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
             setSalaryData(null);
+            setValue("Step", row.Step != null ? String(row.Step) : "1");
+            setValue("Rate", row.Rate || "");
           }
         } catch (error) {
           console.error("❌ Error initializing salary data:", error);
           setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
           setSalaryData(null);
+          setValue("Step", row.Step != null ? String(row.Step) : "1");
+          setValue("Rate", row.Rate || "");
         }
-      } else if (isOpen && row?.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
-        // If no SG but it's not COS, set default step options
-        // console.log("🔄 Setting default step options for non-COS employee");
+      } else {
+        // Handle COS or no SG
         setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
+        setValue("Step", row.Step != null ? String(row.Step) : "");
+        setValue("Rate", row.Rate || "");
       }
     };
 
-    if (isOpen) {
-      initializeSalaryData();
-    }
+    initializeData();
   }, [isOpen, row, setValue, useCPCSForEmployeeAdd]);
-
-  // Handle row data changes (in case row is loaded asynchronously)
-  useEffect(() => {
-    if (row && isOpen) {
-      // console.log("🔄 Row data changed, updating form values:", row);
-      // Update form values when row data becomes available
-      setValue("EmployeeFullName", row.EmployeeFullName || "");
-      setValue("Employee_No", row.EmployeeID || "");
-      setValue("Region", row.Region || "");
-      setValue("Department", row.Department || "");
-      setValue("Division", row.Division || "");
-      setValue("Item_No", row.ItemNumber || "");
-      setValue("PG", row.PG || "");
-      setValue("PositionTitle", row.PositionTitle || "");
-      setValue("StatusOfAppointment", row.StatusOfAppointment || "");
-      setValue("DateOfAppointment", formatDateForInput(row.DateOfAppointment));
-      setValue("DateOfBirth", formatDateForInput(row.DateOfBirth));
-      setValue("Status", row.Status || "Active");
-      setValue("SG", row.SG || "");
-
-      // Only set JG, Step, and Rate if they haven't been computed yet
-      // This prevents overriding correct computed values with potentially incorrect stored values
-      const currentJG = getValues("JG");
-      const currentStep = getValues("Step");
-      const currentRate = getValues("Rate");
-
-      if (!currentJG) {
-        setValue("JG", row.JG || "");
-      }
-      if (!currentStep) {
-        setValue("Step", row.Step || "");
-      }
-      if (!currentRate) {
-        setValue("Rate", row.Rate || "");
-      }
-    }
-  }, [row, isOpen, setValue, getValues]);
 
   const handleSave = async (data) => {
     // Store the form data and show confirmation dialog
@@ -660,9 +645,9 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
       data.EmployeeFullName = String(data.EmployeeFullName).trim().toUpperCase();
     }
 
-    // Map Item_No to ItemNumber for backend
+    // Map Item_No to itemNumber for backend
     if (data.Item_No != null && data.Item_No !== "") {
-      data.ItemNumber = data.Item_No;
+      data.itemNumber = data.Item_No;
     }
     delete data.Item_No;
     // Map Employee_No to EmployeeID for backend

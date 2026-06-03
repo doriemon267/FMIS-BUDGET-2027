@@ -134,14 +134,14 @@ const applyHierarchicalFilters = (req, res, next) => {
   const assignment = req.userHierarchicalAssignment;
   const roles = req.user?.Roles || req.user?.roles || [];
   const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
-  const isBudgetManager = roles.some((r) => {
+  const isFullAccessBudgetRole = roles.some((r) => {
     const n = normRole(r);
-    return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER';
+    return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER' || n === 'BUDGET_OFFICER';
   });
 
   if (!assignment || assignment.assignmentLevel === 'NONE') {
-    // Budget Manager / Overall Budget Approver without HUA record: see all data (dashboard stats, etc.)
-    if (isBudgetManager) {
+    // Budget Manager / Overall Budget Approver / Budget Officer without HUA record: see all data (dashboard stats, etc.)
+    if (isFullAccessBudgetRole) {
       req.hierarchicalFilters = {};
       return next();
     }
@@ -155,8 +155,8 @@ const applyHierarchicalFilters = (req, res, next) => {
       filters = {};
       break;
     case 'WORKFLOW':
-      // Workflow users with no HUA doc: Budget Manager sees all; others need scope for employee list
-      if (isBudgetManager) {
+      // Workflow users with no HUA doc: Budget Manager/Officer sees all; others need scope for employee list
+      if (isFullAccessBudgetRole) {
         filters = {};
       } else {
         const hasScope = (assignment.regions?.length > 0) || (assignment.departments?.length > 0) || (assignment.divisions?.length > 0);

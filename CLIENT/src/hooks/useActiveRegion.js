@@ -18,12 +18,12 @@ const useActiveRegion = ({
 } = {}) => {
   const navigate = useNavigate();
   const { activeRegion, availableRegions, changeActiveRegion } = useRegion();
-  const [regionField, setRegionField] = useState(activeRegion ? (activeRegion.name || activeRegion.regionName) : '');
+  const [regionField, setRegionField] = useState(activeRegion ? (activeRegion.name || activeRegion.regionName || activeRegion.Region) : '');
   
   // Update the region field when activeRegion changes
   useEffect(() => {
     if (activeRegion) {
-      setRegionField(activeRegion.name || activeRegion.regionName);
+      setRegionField(activeRegion.name || activeRegion.regionName || activeRegion.Region);
     } else {
       setRegionField('');
     }
@@ -46,7 +46,7 @@ const useActiveRegion = ({
     
     // Find the region object that matches the selected value
     const selectedRegion = availableRegions.find(
-      region => region.name === regionValue || region.regionName === regionValue
+      region => region.name === regionValue || region.regionName === regionValue || region.Region === regionValue
     );
     
     if (selectedRegion) {

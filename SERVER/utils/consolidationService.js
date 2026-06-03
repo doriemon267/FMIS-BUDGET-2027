@@ -82,7 +82,7 @@ const createConsolidationRecord = async (proposalData) => {
     }
 
     // If still missing, try to get from createdBy user's organizational assignment
-    if (!division || !department) {
+    if (!division || !department || !proposalData.assignmentLevel) {
       try {
         if (proposalData.createdBy) {
           const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -93,6 +93,15 @@ const createConsolidationRecord = async (proposalData) => {
           if (userAssignment) {
             division = division || userAssignment.division;
             department = department || userAssignment.department;
+            
+            // If the proposal document itself is missing assignmentLevel, persist it for future use
+            if (!proposalData.assignmentLevel && userAssignment.assignmentLevel) {
+               await NewProposalWorkflow.updateOne(
+                 { _id: proposalData._id }, 
+                 { $set: { assignmentLevel: userAssignment.assignmentLevel } }
+               );
+               proposalData.assignmentLevel = userAssignment.assignmentLevel;
+            }
             console.log('[BRD_CONSOLIDATION] Got org data from user assignment');
           }
         }

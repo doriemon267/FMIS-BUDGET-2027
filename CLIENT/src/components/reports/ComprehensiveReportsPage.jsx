@@ -507,7 +507,7 @@ const ComprehensiveReportsPage = () => {
                 }
                 sx={{ py: 1.5 }}
               >
-                {loading ? "Generating..." : "Generate"}
+                {loading ? <CircularProgress size={24} /> : "Generate Report"}
               </Button>
             </Grid>
             {reportData && (
@@ -817,18 +817,11 @@ const ComprehensiveReportsPage = () => {
                               <Collapse in={isExpanded} unmountOnExit>
                                 {filteredItems.map((item, itemIdx) => {
                                   const sublineText = item.title ?? item.name ?? '—';
-                                  const sublineParts = typeof sublineText === 'string'
-                                    ? sublineText.split(/\s*[-•·∙]\s*/).map((s) => s.trim()).filter(Boolean)
-                                    : [sublineText];
                                   return (
                                     <Stack key={itemIdx} direction="row" sx={{ py: 0.5, borderBottom: '1px solid #f0f0f0', pl: 5 }}>
                                       <Typography sx={{ width: '25%' }} />
                                       <Stack sx={{ width: '25%' }} spacing={0}>
-                                        {sublineParts.length > 0
-                                          ? sublineParts.map((part, i) => (
-                                              <Typography key={i} variant="body2">{part}</Typography>
-                                            ))
-                                          : <Typography variant="body2">—</Typography>}
+                                        <Typography variant="body2">{sublineText}</Typography>
                                       </Stack>
                                       <Typography variant="body2" sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(item.income)}</Typography>
                                       <Typography variant="body2" sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(item.subsidy)}</Typography>

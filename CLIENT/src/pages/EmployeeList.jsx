@@ -163,7 +163,7 @@ const EmployeeList = () => {
 
       try {
         // Get the region name - ensure we're using the exact region name
-        const regionName = activeRegion ? (activeRegion.name || activeRegion.regionName) : undefined;
+        const regionName = activeRegion ? (activeRegion.name || activeRegion.regionName || activeRegion.Region) : undefined;
 
         if (!regionName) {
           console.error("Invalid region name");
@@ -659,7 +659,7 @@ const EmployeeList = () => {
             hasEdit={true}
             hasDelete={false}
             ROWS_PER_PAGE={20}
-            customAddElement={<EmployeeCustomAdd />}
+            customAddElement={<EmployeeCustomAdd onDataChange={refreshStats} />}
             customEditElement={<EmployeeEditDialog dataListName="employees" />}
             onDataChange={refreshStats}
             refreshTrigger={refreshTrigger}

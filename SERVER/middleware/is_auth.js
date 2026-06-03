@@ -21,7 +21,7 @@ const pickEmailFromUsernameArray = (value) => {
  * - Development mock auth (x-dev-user-id headers)
  * - Development JWT with flexible secret handling
  * - Production JWT with strict secret verification
- * - Role resolution from token and database
+ * - Role resolution from DB + preserves valid Budget/Admin roles from JWT
  * - SUPER_ADMIN whitelist enforcement (stricter in production)
  */
 module.exports = async (req, res, next) => {
@@ -215,10 +215,28 @@ module.exports = async (req, res, next) => {
       }
     }
 
-    // 7. ROLE RESOLUTION
-    let roles = payload.roles || payload.Roles || [];
-    if (!Array.isArray(roles)) roles = roles ? [roles] : [];
-    roles = roles.map(r => typeof r === 'string' ? r.replace(/\s+/g, '_').toUpperCase() : r);
+    // ==========================================
+    // 7. ROLE RESOLUTION (PRESERVE TOKENS + DB)
+    // ==========================================
+    let roles = [];
+
+    // 7.0 PRESERVE TARGET ROLES FROM JWT
+    const payloadRolesArr = payload.Roles || payload.roles || [];
+    const targetRolesToPreserve = [
+        'SUPER_ADMIN', 'SUPERADMIN', 'BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER', 
+        'BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER', 'BUDGET_PLANNING_ANALYST', 
+        'BUDGET_OFFICER', 'BUDGET_COORDINATOR', 'BUDGET_ADMIN', 'REVIEWER', 'APPROVER'
+    ];
+
+    const preservedRolesFromToken = [];
+    if (Array.isArray(payloadRolesArr)) {
+        payloadRolesArr.forEach(r => {
+            const roleStr = String(r).replace(/\s+/g, '_').toUpperCase();
+            if (targetRolesToPreserve.includes(roleStr) && !preservedRolesFromToken.includes(roleStr)) {
+                preservedRolesFromToken.push(roleStr);
+            }
+        });
+    }
 
     // 7a. FMIS-MAIN JWT with accessToken (NIA API integration)
     if (payload.accessToken && !isProduction) {
@@ -235,7 +253,6 @@ module.exports = async (req, res, next) => {
             const part = `${niaUser.FirstName ?? ''} ${ni} ${niaUser.LastName ?? ''} ${niaUser.Suffix ?? ''}`.replace(/\s+/g, ' ').trim();
             const pidFromNia = (niaUser.Username?.[0] ?? userId).toUpperCase();
 
-            // Look up roles from fmis_main DB using raw collection
             let dbRoles = [];
             if (mainConnection?.readyState === 1) {
               try {
@@ -248,6 +265,13 @@ module.exports = async (req, res, next) => {
                 console.warn('[check_token_unified] fmis_main role lookup failed:', dbErr.message);
               }
             }
+
+            // RE-INJECT PRESERVED ROLES
+            preservedRolesFromToken.forEach(preservedRole => {
+                if (!dbRoles.includes(preservedRole)) {
+                    dbRoles.push(preservedRole);
+                }
+            });
 
             resolvedUser = {
               ...niaUser,
@@ -264,7 +288,6 @@ module.exports = async (req, res, next) => {
         console.warn('[check_token_unified] NIA API fetch failed:', niaErr.message);
       }
 
-      // Fallback: minimal user from payload (dev only)
       if (!resolvedUser) {
         const particularID = String(payload.username || userId).toUpperCase();
         resolvedUser = {
@@ -273,7 +296,7 @@ module.exports = async (req, res, next) => {
           particularID,
           particular: particularID,
           userName: particularID,
-          Roles: ['SUPER_ADMIN'],
+          Roles: preservedRolesFromToken.length > 0 ? preservedRolesFromToken : ['SUPER_ADMIN'], 
         };
       }
 
@@ -283,11 +306,10 @@ module.exports = async (req, res, next) => {
       return requireBudgetRole(req, res, next);
     }
 
-    // 7b. Standard DB role lookup for non-FMIS-MAIN tokens or no accessToken
+    // 7b. Standard DB role lookup
     if (roles.length === 0 && mainConnection?.readyState === 1) {
       try {
         if (isProduction) {
-          // Production: Use Mongoose models for safety
           const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
           const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
 
@@ -313,7 +335,6 @@ module.exports = async (req, res, next) => {
             roles = roleNames;
           }
         } else {
-          // Development: Use raw collection for flexibility
           const arDoc = await mainConnection.db.collection('assigned_roles').findOne({ user: userId });
           if (arDoc?.roles?.length > 0) {
             const roleDocs = await mainConnection.db.collection('roles').find({ _id: { $in: arDoc.roles } }).toArray();
@@ -324,6 +345,17 @@ module.exports = async (req, res, next) => {
         console.error("Role DB Lookup Error:", dbError.message);
       }
     }
+
+    // RE-INJECT PRESERVED ROLES (Kung may nahila man sa DB o wala, isasama ito)
+    preservedRolesFromToken.forEach(preservedRole => {
+        const hasRole = roles.some(r => {
+            const roleStr = String(r).replace(/\s+/g, '_').toUpperCase();
+            return roleStr === preservedRole;
+        });
+        if (!hasRole) {
+            roles.push(preservedRole);
+        }
+    });
 
     // 8. NORMALIZE ROLES
     const normalizedRoles = roles.map(r => String(r).replace(/\s+/g, '_').toUpperCase());

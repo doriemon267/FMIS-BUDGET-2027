@@ -56,7 +56,7 @@ import ComprehensiveReportsPage from "./components/reports/ComprehensiveReportsP
 import DatabaseBackupPage from "./pages/DatabaseBackupPage";
 import HierarchicalUserAssignmentPage from "./pages/HierarchicalUserAssignmentPage";
 import OrganizationSetupPage from "./pages/OrganizationSetupPage";
-import NewProposalWorkflowPage from "./pages/NewProposalWorkflowPage";
+import ProposalOperationsHub from "./pages/ProposalOperationsHub/ProposalOperationsHub";
 import ProposalDetailsPage from "./components/workflow/ProposalDetailsPage";
 import BRDConsolidationPage from "./pages/BRDConsolidationPage";
 import TierComparisonPage from "./pages/TierComparisonPage";
@@ -385,7 +385,7 @@ const App = () => {
           path="/allproposal"
           element={
             <ProtectedRoute routeKey="/allproposal">
-              <NewProposalWorkflowPage />
+              <ProposalOperationsHub />
             </ProtectedRoute>
           }
         />

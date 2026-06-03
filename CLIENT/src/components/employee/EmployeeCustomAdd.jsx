@@ -120,6 +120,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
   // Initialize react-hook-form
   const methods = useForm({
+    mode: "onChange",
     defaultValues: {
       Region: "",
       Department: "",
@@ -167,6 +168,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName
     || currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.Region
     || currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.name || "";
+
+  const activeRegionName = activeRegion ? (activeRegion.Region || activeRegion.name || activeRegion.regionName) : null;
+  const isAllRegionsActive = activeRegionName && String(activeRegionName).toLowerCase() === "all regions";
 
   // Dynamic divisions lookup for bulk upload
   // Filters divisions by activeRegion if available, else aggregates divisions from ALL regional mappings for departments like IMO
@@ -262,13 +266,13 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
   // Set Region value when activeRegion changes
   useEffect(() => {
-    if (activeRegion) {
-      setValue(
-        "Region",
-        activeRegion.Region || activeRegion.name || activeRegion
-      );
+    if (activeRegion && !isAllRegionsActive) {
+      const regionVal = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+      if (regionVal) {
+        setValue("Region", regionVal);
+      }
     }
-  }, [activeRegion, setValue]);
+  }, [activeRegion, isAllRegionsActive, setValue]);
 
   // Auto-populate fields based on user's hierarchical access level
   useEffect(() => {
@@ -277,44 +281,34 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       
       switch (accessLevel) {
         case 'DIVISION':
-          // For DIVISION level: Auto-select Division and Region, only Section is selectable
-          if (userDivision) {
-            setValue("Division", userDivision);
-          }
-          if (userRegion) {
-            setValue("Region", userRegion);
-          }
-          if (userDepartment) {
-            setValue("Department", userDepartment);
-          }
+          if (userDivision) setValue("Division", userDivision);
+          if (userRegion) setValue("Region", userRegion);
+          if (userDepartment) setValue("Department", userDepartment);
           break;
           
         case 'DEPARTMENT':
-          // For DEPARTMENT level: Auto-select Department and Region, Division and Section are selectable
-          if (userDepartment) {
-            setValue("Department", userDepartment);
-          }
-          if (userRegion) {
-            setValue("Region", userRegion);
-          }
+          if (userDepartment) setValue("Department", userDepartment);
+          if (userRegion) setValue("Region", userRegion);
           break;
           
         case 'REGION':
-          // For REGION level: Auto-select Region, Department, Division, and Section are selectable
-          if (userRegion) {
-            setValue("Region", userRegion);
-          }
+          if (userRegion) setValue("Region", userRegion);
           break;
           
+        case 'BUDGET_AND_REVENUE_DIVISION':
+        case 'FULL':
         default:
-          // For other levels or no specific access, use activeRegion
-          if (activeRegion) {
-            setValue("Region", activeRegion.Region || activeRegion.name || activeRegion);
+          // For BRD, FULL, or others: default to activeRegion if it's a specific region
+          if (activeRegion && !isAllRegionsActive) {
+            const regionVal = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+            if (regionVal) {
+              setValue("Region", regionVal);
+            }
           }
           break;
       }
     }
-  }, [currentUser, userAccessLevel, userDivision, userDepartment, userRegion, activeRegion, setValue]);
+  }, [currentUser, userAccessLevel, userDivision, userDepartment, userRegion, activeRegion, isAllRegionsActive, setValue]);
 
   // Fetch position options
   useEffect(() => {
@@ -469,17 +463,29 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
         }
 
         // Find the department in the hierarchical structure
-        // Aggregates divisions from ALL regional mappings for departments like IMO
         const departmentsWithDivisions =
           organizationStructure?.availableUnits?.departmentsWithDivisions || [];
-        const matched = departmentsWithDivisions.filter(
+        let matched = departmentsWithDivisions.filter(
           (d) =>
             String(d.departmentName).toLowerCase() ===
             String(deptName).toLowerCase()
         );
 
+        // FILTER BY REGION: If a specific region is selected (not "All Regions"), filter divisions by that region
+        const currentRegion = values?.Region || activeRegion;
+        const regionName = typeof currentRegion === "string" 
+          ? currentRegion 
+          : (currentRegion?.Region || currentRegion?.name || currentRegion?.regionName || "");
+
+        if (regionName && String(regionName).toLowerCase() !== "all regions") {
+          const regionLower = String(regionName).toLowerCase();
+          matched = matched.filter(m => 
+            m.regionName && String(m.regionName).toLowerCase() === regionLower
+          );
+        }
+
         if (matched && matched.length > 0) {
-          // Aggregate all divisions from all mappings and remove duplicates
+          // Aggregate all divisions from matched mappings and remove duplicates
           const allDivisions = new Set();
           matched.forEach((mapping) => {
             mapping.divisions?.forEach((div) => {
@@ -502,22 +508,40 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
           const departmentsWithDivisions =
             organizationStructure?.availableUnits?.departmentsWithDivisions ||
             [];
-          const matchedDept = departmentsWithDivisions.find((dept) =>
-            dept.divisions?.some((div) => div.name === divName)
+          
+          const deptName = values?.Department || "";
+          const currentRegion = values?.Region || activeRegion;
+          const regionName = typeof currentRegion === "string" 
+            ? currentRegion 
+            : (currentRegion?.Region || currentRegion?.name || currentRegion?.regionName || "");
+
+          // Find specific division matching both department and region if possible
+          let matchedMappings = departmentsWithDivisions.filter(dept => 
+            String(dept.departmentName).toLowerCase() === String(deptName).toLowerCase()
           );
 
-          if (matchedDept) {
-            const matchedDiv = matchedDept.divisions.find(
-              (div) => div.name === divName
+          if (regionName && String(regionName).toLowerCase() !== "all regions") {
+            const regionLower = String(regionName).toLowerCase();
+            matchedMappings = matchedMappings.filter(m => 
+              m.regionName && String(m.regionName).toLowerCase() === regionLower
             );
-            if (matchedDiv && matchedDiv.sections) {
-              const sections = matchedDiv.sections
-                .map((section) => section.name)
-                .filter(Boolean);
-              setSectionOptions(sections);
-            } else {
-              setSectionOptions([]);
-            }
+          }
+
+          // If no specific region match, fall back to all mappings for that department
+          if (matchedMappings.length === 0) {
+            matchedMappings = departmentsWithDivisions.filter(dept => 
+              String(dept.departmentName).toLowerCase() === String(deptName).toLowerCase()
+            );
+          }
+
+          const matchedDiv = matchedMappings.flatMap(m => m.divisions || [])
+            .find(div => String(div.name).toLowerCase() === String(divName).toLowerCase());
+
+          if (matchedDiv && matchedDiv.sections) {
+            const sections = matchedDiv.sections
+              .map((section) => section.name)
+              .filter(Boolean);
+            setSectionOptions(sections);
           } else {
             setSectionOptions([]);
           }
@@ -535,6 +559,14 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   // Handle default Region value changes - fetch departments
   useEffect(() => {
     const regionValue = watch("Region");
+    
+    // Reset lower fields when region changes to prevent invalid data (IMO in Region 2 but Region 1 selected)
+    setValue("Department", "");
+    setValue("Division", "");
+    setValue("Section", "");
+    setDivisionOptions([]);
+    setSectionOptions([]);
+
     if (!regionValue || !organizationStructure) return;
     const allDepts = organizationStructure?.availableUnits?.departments || [];
     const allMappings = organizationStructure?.mappings || [];
@@ -575,59 +607,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
         : [];
     setDepartmentOptions(depts.length > 0 ? depts : allDepts);
   }, [watch("Region"), organizationStructure]);
-
-  // Handle default Department value changes - fetch divisions
-  useEffect(() => {
-    const deptValue = watch("Department");
-    if (deptValue && organizationStructure) {
-      // Find the department in the hierarchical structure
-      const departmentsWithDivisions =
-        organizationStructure?.availableUnits?.departmentsWithDivisions || [];
-      const matched = departmentsWithDivisions.find(
-        (d) =>
-          String(d.departmentName).toLowerCase() ===
-          String(deptValue).toLowerCase()
-      );
-
-      if (matched) {
-        const divisions =
-          matched.divisions?.map((div) => div.name).filter(Boolean) || [];
-        setDivisionOptions(divisions);
-      } else {
-        setDivisionOptions([]);
-      }
-    }
-  }, [watch("Department"), organizationStructure]);
-
-  // Handle default Division value changes - fetch sections
-  useEffect(() => {
-    const divValue = watch("Division");
-    if (divValue && organizationStructure) {
-      // Find the selected division in the hierarchical structure
-      const departmentsWithDivisions =
-        organizationStructure?.availableUnits?.departmentsWithDivisions ||
-        [];
-      const matchedDept = departmentsWithDivisions.find((dept) =>
-        dept.divisions?.some((div) => div.name === divValue)
-      );
-
-      if (matchedDept) {
-        const matchedDiv = matchedDept.divisions.find(
-          (div) => div.name === divValue
-        );
-        if (matchedDiv && matchedDiv.sections) {
-          const sections = matchedDiv.sections
-            .map((section) => section.name)
-            .filter(Boolean);
-          setSectionOptions(sections);
-        } else {
-          setSectionOptions([]);
-        }
-      } else {
-        setSectionOptions([]);
-      }
-    }
-  }, [watch("Division"), organizationStructure]);
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
@@ -866,16 +845,16 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     }
 
     // Ensure the Region field is set to the selected region value
-    data.Region = (activeRegion ? (activeRegion.name || activeRegion.regionName) : data.Region) || selectedRegionValue;
+    data.Region = (activeRegion ? (activeRegion.name || activeRegion.regionName || activeRegion.Region) : data.Region) || selectedRegionValue;
 
     // Convert EmployeeFullName to uppercase
     if (data.EmployeeFullName) {
       data.EmployeeFullName = String(data.EmployeeFullName).trim().toUpperCase();
     }
 
-    // Map Item_No to ItemNumber for backend
+    // Map Item_No to itemNumber for backend
     if (data.Item_No != null && data.Item_No !== "") {
-      data.ItemNumber = data.Item_No;
+      data.itemNumber = data.Item_No;
     }
     delete data.Item_No;
     // Map Employee_No to EmployeeID; for VACANT leave empty to let backend auto-generate (e.g. V00001)
@@ -1011,6 +990,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
         return [
           "PositionTitle",
           "StatusOfAppointment",
+          "DateOfAppointment",
         ];
       case 2: // Salary Information - SG, JG, PG not required (bases from employee-salary-table / cos-salary-table)
         return ["Rate"]; // Only Rate required; SG/JG/PG optional
@@ -1236,7 +1216,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                     </Grid>
 
                     <Grid item xs={12}>
-                      {activeRegion ? (
+                      {activeRegion && !isAllRegionsActive && userAccessLevel !== 'BUDGET_AND_REVENUE_DIVISION' && userAccessLevel !== 'FULL' ? (
                         <Paper
                           variant="outlined"
                           sx={{
@@ -1268,16 +1248,19 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                             sx={{ display: "none" }}
                           />
                         </Paper>
-                      ) : userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' ? (
+                      ) : (userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' || userAccessLevel === 'FULL' || isAllRegionsActive || !activeRegion) ? (
                         <Box sx={{ mb: 2 }}>
                           <CustomAutoComplete
                             fieldName="Region"
                             label="Region"
-                            options={availableRegions || []}
+                            options={availableRegions?.filter(r => {
+                              const rName = r.name || r.regionName || r.Region;
+                              return rName && String(rName).toLowerCase() !== "all regions";
+                            }) || []}
                             control={control}
                             getOptionLabel={(opt) => opt.name || opt.regionName || opt.Region || opt}
                             required
-                            rules={{ required: "Region is required for BRD users" }}
+                            rules={{ required: "Region is required" }}
                           />
                         </Box>
                       ) : (
@@ -1406,6 +1389,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         control={control}
                         label="Date of Appointment"
                         type="date"
+                        required
+                        rules={{ required: "Date of Appointment is required" }}
                         InputLabelProps={{ shrink: true }}
                       />
                     </Grid>
@@ -2330,7 +2315,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                     Rate: auto-computed from SG+Step (cos-salary-table for COS, employee-salary-table for others). Leave empty when SG+Step provided.
                   </li>
                   <li>
-                    Optional: DateOfBirth, DateOfAppointment, Division, Item_No, PG, SG, JG, Step (PG with SG/JG in Salary section)
+                    Optional: DateOfBirth, Division, Item_No, PG, SG, JG, Step (PG with SG/JG in Salary section)
                   </li>
                   <li>Rate will be auto-computed based on employee type (see above)</li>
                   <li>Region must match the currently selected region</li>

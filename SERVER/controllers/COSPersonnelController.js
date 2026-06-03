@@ -653,7 +653,7 @@ exports.getCOSByParams = async (req, res) => {
     const userRoles = req.user?.Roles || [];
 
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
 
     // SUPER_ADMIN must filter by the region parameter passed from frontend
     // BUDGET_MANAGER sees ALL records (no filtering)

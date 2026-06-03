@@ -170,3 +170,23 @@ export const ASSIGNMENT_LEVEL_LABELS = {
   [ASSIGNMENT_LEVELS.BUDGET_AND_REVENUE_DIVISION]: 'Budget & Revenue Division',
   [ASSIGNMENT_LEVELS.FULL]: 'Full Admin'
 };
+
+// UI metadata for workflow statuses (label & color chips)
+export const WORKFLOW_STATUS_UI_METADATA = {
+  DRAFT: { label: "Draft", color: "default" },
+  FORWARDED_TO_REVIEWER: { label: "Forwarded to Reviewer", color: "primary" },
+  FORWARDED_TO_APPROVER: { label: "Forwarded to Approver", color: "primary" },
+  FORWARDED_TO_BRD_ANALYST: { label: "Forwarded to Analyst", color: "primary" },
+  FORWARDED_TO_BRD_OFFICER: { label: "Forwarded to Officer", color: "primary" },
+  FORWARDED_TO_BRD_MANAGER: { label: "Forwarded to Manager", color: "primary" },
+  FINALIZED: { label: "Finalized", color: "success" },
+  RETURNED_TO_PREPARER: { label: "Returned to Preparer", color: "warning" },
+  RETURNED_TO_REVIEWER: { label: "Returned to Reviewer", color: "warning" },
+  RETURNED_TO_APPROVER: { label: "Returned to Approver", color: "warning" },
+  RETURNED_TO_PLANNING_ANALYST: {
+    label: "Returned to Analyst",
+    color: "warning",
+  },
+  RETURNED_TO_OFFICER: { label: "Returned to Officer", color: "warning" },
+  MERGED: { label: "Consolidated (Archived)", color: "default" },
+};

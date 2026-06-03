@@ -24,7 +24,7 @@ exports.getAllRetirees = async (req, res) => {
     const userId = req.user?.id || req.user?._id;
     const userRoles = req.user?.Roles || [];
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     let filteredRetirees = retirees;
 
@@ -318,7 +318,7 @@ exports.getRetireeStats = async (req, res) => {
     const userId = req.user?.id || req.user?._id;
     const userRoles = req.user?.Roles || [];
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
 
     if (!isSuperAdmin && !isBudgetManager && userId) {
       try {
@@ -417,7 +417,7 @@ exports.getRetireesSummary = async (req, res) => {
     const userId = req.user?.id || req.user?._id;
     const userRoles = req.user?.Roles || [];
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
 
     if (!isSuperAdmin && !isBudgetManager && userId) {
       try {

@@ -70,6 +70,10 @@ const newProposalWorkflowSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  assignmentLevel: {
+    type: String,
+    trim: true
+  },
   office: {
     type: String,
     trim: true,

@@ -14,20 +14,20 @@ export default defineConfig({
     proxy: {
       // Forward all API calls to the Express backend — same-origin as far as the browser is concerned
       '/api': {
-        target: 'http://localhost:5005',
+        target: 'http://127.0.0.1:5005',
         changeOrigin: true,
         secure: false,
       },
       // Forward Socket.IO (WebSocket) to the backend
       '/socket.io': {
-        target: 'http://localhost:5005',
+        target: 'http://127.0.0.1:5005',
         changeOrigin: true,
         ws: true,
         secure: false,
       },
       // Forward uploaded files (attachments, etc.)
       '/uploads': {
-        target: 'http://localhost:5005',
+        target: 'http://127.0.0.1:5005',
         changeOrigin: true,
         secure: false,
       },

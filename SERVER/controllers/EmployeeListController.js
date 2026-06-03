@@ -416,8 +416,34 @@ exports.addEmployee = async (req, res) => {
       });
     }
 
-    // Add processBy field to track who added the employee
-    req.body.processBy = req.user._id;
+    // Add processBy field to track who added the employee - use name instead of ID for consistency with stats filtering
+    if (!req.body.processBy) {
+      const user = req.user || {};
+      req.body.processBy = (user.FirstName && user.LastName) 
+        ? `${user.FirstName} ${user.LastName}` 
+        : (user.fullName || user.name || user.username || user.userId || user.id || "Admin");
+    }
+
+    // AUTO-GENERATE EMPLOYEE NUMBER IF NOT PROVIDED
+    if (!req.body.EmployeeID || String(req.body.EmployeeID).trim() === "") {
+      const isVacant = String(req.body.EmployeeFullName || "").toUpperCase().includes("VACANT");
+      const prefix = isVacant ? "V" : "T"; // V for Vacant, T for Temporary/Manual Add
+      
+      // Find the last employee with this prefix to increment
+      const lastEmployee = await Employee.findOne({ 
+        EmployeeID: { $regex: new RegExp(`^${prefix}`) } 
+      }).sort({ EmployeeID: -1 });
+
+      let nextNumber = 1;
+      if (lastEmployee && lastEmployee.EmployeeID) {
+        const currentNumber = parseInt(lastEmployee.EmployeeID.substring(1));
+        if (!isNaN(currentNumber)) {
+          nextNumber = currentNumber + 1;
+        }
+      }
+      
+      req.body.EmployeeID = `${prefix}${String(nextNumber).padStart(5, '0')}`;
+    }
 
     const newEmployee = new Employee(req.body);
     await newEmployee.save();
@@ -427,7 +453,8 @@ exports.addEmployee = async (req, res) => {
     });
   } catch (error) {
     // Error creating employee
-    return res.status(500).json({ error: "Failed to create employee." });
+    console.error("Error adding employee:", error);
+    return res.status(500).json({ error: "Failed to create employee.", message: error.message });
   }
 };
 exports.editEmployee = async (req, res) => {
@@ -456,7 +483,8 @@ exports.editEmployee = async (req, res) => {
     });
   } catch (error) {
     // Error updating employee
-    return res.status(500).json({ error: "Failed to update employee." });
+    console.error("Error editing employee:", error);
+    return res.status(500).json({ error: "Failed to update employee.", message: error.message });
   }
 };
 exports.deleteEmployee = async (req, res) => {
@@ -469,7 +497,8 @@ exports.deleteEmployee = async (req, res) => {
     return res.json({ message: "Employee deleted successfully." });
   } catch (error) {
     // Error deleting employee
-    return res.status(500).json({ error: "Failed to delete employee." });
+    console.error("Error deleting employee:", error);
+    return res.status(500).json({ error: "Failed to delete employee.", message: error.message });
   }
 };
 exports.getPersonnels = async (req, res) => {
@@ -504,7 +533,7 @@ exports.getPersonnels = async (req, res) => {
     
     // Check if user has special roles that bypass filtering
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {

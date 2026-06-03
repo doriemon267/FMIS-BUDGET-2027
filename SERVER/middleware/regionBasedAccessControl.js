@@ -43,7 +43,7 @@ const regionBasedAccessControl = (operation = 'read', options = {}) => {
         console.log(`[RBAC] User ${userName} (${userId}) attempting ${operation} operation`);
       }
 
-      // BYPASS: Full access roles (SUPER_ADMIN, BUDGET_MANAGER) have unrestricted access
+      // BYPASS: Full access roles (SUPER_ADMIN, BUDGET_MANAGER, BUDGET_OFFICER) have unrestricted access
       if (hasFullAccess(userRoles)) {
         if (logAccess) {
           console.log(`[RBAC] Full access granted for ${userName} due to privileged role`);

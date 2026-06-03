@@ -68,6 +68,33 @@ const formatRoleDisplay = (role) => {
   return clean;
 };
 
+const getPrimaryBudgetRole = (roles) => {
+  if (!roles || !Array.isArray(roles) || roles.length === 0) return roles?.[0] || 'User';
+  
+  // Prioritize budget-related roles
+  const budgetRoles = [
+    'BUDGET_PREPARER',
+    'BUDGET_REVIEWER',
+    'BUDGET_APPROVER',
+    'BUDGET_MANAGER',
+    'BUDGET_OFFICER',
+    'OVERALL_BUDGET_APPROVER',
+    'BUDGET_PLANNING_ANALYST',
+    'BUDGET_COORDINATOR',
+  ];
+  
+  const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
+  
+  for (const budgetRole of budgetRoles) {
+    if (roles.some(r => normRole(r) === budgetRole)) {
+      return budgetRole;
+    }
+  }
+  
+  // Fall back to first role if no budget role found
+  return roles[0];
+};
+
 const formatNumber = (num) => {
   if (num === null || num === undefined) return '0';
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
@@ -337,14 +364,29 @@ const HomePage = () => {
 
   const divisionName = typeof userDivision === 'string' ? userDivision : (userDivision?.name || userDivision?.divisionName);
   const normRole = r => String(r || '').toUpperCase().replace(/\s+/g, '_').replace(/-/g, '_').trim();
+  
+  // Check for high-level roles to determine access level (must be before useMemo)
+  const isBudgetManagerRole = userRoles.some(r => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER');
+  const isBudgetOfficerRole = userRoles.some(r => normRole(r) === 'BUDGET_OFFICER');
+  const isBudgetPlanningAnalystRole = userRoles.some(r => normRole(r) === 'BUDGET_PLANNING_ANALYST');
+  
+  // Ensure high-level roles have FULL access scope
+  if (isBudgetManagerRole || isBudgetOfficerRole || isBudgetPlanningAnalystRole) {
+    userAccessLevel = 'FULL';
+  }
+
   const isBudgetManager = useMemo(() =>
-    userRoles.some(r => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER')
-  , [userRoles]);
+    isBudgetManagerRole
+  , [isBudgetManagerRole]);
+
+  const isBudgetOfficer = useMemo(() =>
+    isBudgetOfficerRole
+  , [isBudgetOfficerRole]);
 
   const isReviewer = useMemo(() =>
     userRoles.some(r => {
       const nr = normRole(r);
-      return nr === 'BUDGET_REVIEWER' || nr === 'BUDGET_OFFICER' || nr.includes('REVIEWER');
+      return nr === 'BUDGET_REVIEWER' || nr.includes('REVIEWER');
     })
   , [userRoles]);
 
@@ -360,7 +402,7 @@ const HomePage = () => {
     return upper.some(r => ['SUPER ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'ADMIN'].includes(r));
   }, [userRoles]);
 
-  const regionName = (isBudgetManager && availableRegions?.length > 1)
+  const regionName = ((isBudgetManager || isBudgetOfficer) && availableRegions?.length > 1)
     ? 'All Regions'
     : (activeRegion?.name || activeRegion?.regionName || 'Your Region');
 
@@ -510,11 +552,11 @@ const HomePage = () => {
         badgeColor: '#10b981',
         icon: LuCalendar,
         title: 'Drafting & Submission Phase',
-        message: <>Magandang araw! Kasalukuyan kang nasa <strong>Preparer role</strong>. Mayroon kang <strong>{totalProposals} budget proposal</strong> na nakarehistro. Mangyaring tapusin at ipasa ang mga ito bago sumapit ang takdang panahon.</>,
+        message: <>Good day! You are currently in the <strong>Preparer role</strong>. You have <strong>{totalProposals} budget proposal</strong> registered. Please finalize and submit these before the deadline.</>,
         metrics: [
           { label: 'Registered Proposals', value: totalProposals, color: '#38bdf8' },
           { label: 'Approved Proposals', value: approvedProposals, color: '#34d399' },
-          { label: daysRemaining !== null ? 'Days Remaining' : 'Deadline', value: daysRemaining !== null ? `${daysRemaining} Araw` : (deadlineStr || 'N/A'), color: daysRemaining !== null && daysRemaining <= 5 ? '#f43f5e' : '#fbbf24' }
+          { label: daysRemaining !== null ? 'Days Remaining' : 'Deadline', value: daysRemaining !== null ? `${daysRemaining} Days` : (deadlineStr || 'N/A'), color: daysRemaining !== null && daysRemaining <= 5 ? '#f43f5e' : '#fbbf24' }
         ]
       };
     }
@@ -525,7 +567,7 @@ const HomePage = () => {
         badgeColor: '#fbbf24',
         icon: LuClipboardList,
         title: 'Proposal Validation Queue',
-        message: <>Magandang araw! Bilang isang <strong>Reviewer</strong>, mayroon kang <strong>{pendingProposals} proposal</strong> na naghihintay ng iyong pag-validate at rekomendasyon.</>,
+        message: <>Good day! As a <strong>Reviewer</strong>, you have <strong>{pendingProposals} proposal</strong> awaiting your validation and recommendation.</>,
         metrics: [
           { label: 'Pending Evaluation', value: pendingProposals, color: '#fbbf24' },
           { label: 'Reviewed Items', value: approvedProposals, color: '#34d399' },
@@ -540,7 +582,7 @@ const HomePage = () => {
         badgeColor: '#3b82f6',
         icon: LuShieldCheck,
         title: 'Executive Approval Hub',
-        message: <>Magandang araw! Naka-login ka bilang <strong>Approver</strong>. Mayroong <strong>{pendingProposals} proposal</strong> na naghihintay ng iyong final endorsement at lagda.</>,
+        message: <>Good day! You are logged in as <strong>Approver</strong>. There are <strong>{pendingProposals} proposal</strong> awaiting your final endorsement and signature.</>,
         metrics: [
           { label: 'Awaiting Endorsement', value: pendingProposals, color: '#60a5fa' },
           { label: 'Signed/Approved', value: approvedProposals, color: '#34d399' },
@@ -555,7 +597,7 @@ const HomePage = () => {
         badgeColor: '#a855f7',
         icon: LuTrendingUp,
         title: 'Budget Management Dashboard',
-        message: <>Magandang araw, <strong>Budget Manager</strong>! Ang pangkalahatang Submission Health ng rehiyon ay nasa <strong>{completionRate}%</strong> ({approvedProposals} sa {totalProposals} proposals ang finalized).</>,
+        message: <>Good day, <strong>Budget Manager</strong>! The overall Submission Health of the region is at <strong>{completionRate}%</strong> ({approvedProposals} out of {totalProposals} proposals are finalized).</>,
         metrics: [
           { label: 'Overall Completion', value: `${completionRate}%`, color: '#a7c957' },
           { label: 'Finalized Proposals', value: approvedProposals, color: '#34d399' },
@@ -570,7 +612,7 @@ const HomePage = () => {
       badgeColor: '#10b981',
       icon: LuInfo,
       title: 'Budget Information Hub',
-      message: <>Magandang araw! Maligayang pagdating sa OSBPIS system. Ang pangkalahatang Submission Health ng rehiyon ay nasa <strong>{completionRate}%</strong>.</>,
+      message: <>Good day! Welcome to the OSBPIS system. The overall Submission Health of the region is at <strong>{completionRate}%</strong>.</>,
       metrics: [
         { label: 'Submission Health', value: `${completionRate}%`, color: '#34d399' },
         { label: 'Total Proposals', value: totalProposals, color: '#38bdf8' },
@@ -1110,7 +1152,7 @@ const HomePage = () => {
               {/* User role badge */}
               <div style={{ padding:'12px 16px', background:'rgba(167,201,87,0.08)', border:'1px solid rgba(167,201,87,0.2)', borderRadius:12, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                 <span style={{ fontSize:'0.72rem', fontWeight:700, color:'rgba(255,255,255,0.5)' }}>Primary Role</span>
-                <span style={{ fontSize:'0.72rem', fontWeight:900, color:'#a7c957' }}>{formatRoleDisplay(userRoles[0])}</span>
+                <span style={{ fontSize:'0.72rem', fontWeight:900, color:'#a7c957' }}>{formatRoleDisplay(getPrimaryBudgetRole(userRoles))}</span>
               </div>
             </div>
           </section>

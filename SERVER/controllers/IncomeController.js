@@ -379,7 +379,7 @@ exports.getAllIncome = async (req, res) => {
     const userRoles = req.user?.Roles || [];
     
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
@@ -732,7 +732,7 @@ exports.getIncomeByParams = async (req, res) => {
       const userRoles = req.user?.Roles || [];
       
       const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-      const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+      const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
       
       if (!isSuperAdmin && !isBudgetManager && userIdString) {
         try {

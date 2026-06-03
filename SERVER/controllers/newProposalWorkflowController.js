@@ -1847,19 +1847,23 @@ exports.createProposal = async (req, res) => {
         regionId = undefined;
       }
     }
+    
     // Ensure only a valid ObjectId goes into NewProposalWorkflow.region
     const finalRegionId = (regionId && /^[0-9a-fA-F]{24}$/.test(String(regionId))) ? regionId : undefined;
+    
     // Derive default department/division from user assignment if not provided
-    let derivedDepartment = department || '';
-    let derivedDivision = division || '';
+    let derivedDepartment = department !== undefined ? department : '';
+    let derivedDivision = division !== undefined ? division : '';
+    let derivedAssignmentLevel = undefined;
     try {
-      if (!department || !division) {
+      if (department === undefined || division === undefined || true) {
         const hua = await HierarchicalUserAssignment.findOne({ userId, isActive: true })
           .populate('departmentId', 'Department departmentName DepartmentName')
           .populate('regionId', 'Region regionName RegionName');
         if (hua) {
-          if (!derivedDivision && hua.divisionName) derivedDivision = hua.divisionName;
-          if (!derivedDepartment && hua.departmentId) {
+          derivedAssignmentLevel = hua.assignmentLevel;
+          if (derivedDivision === '' && hua.divisionName) derivedDivision = hua.divisionName;
+          if (derivedDepartment === '' && hua.departmentId) {
             derivedDepartment = hua.departmentId.Department || hua.departmentId.departmentName || hua.departmentId.DepartmentName || '';
           }
         }
@@ -1916,6 +1920,7 @@ exports.createProposal = async (req, res) => {
       region: finalRegionId,
       division: derivedDivision || undefined,
       department: derivedDepartment || undefined,
+      assignmentLevel: derivedAssignmentLevel,
       isCentralOffice: false, // Default to false; can be changed later
       status: 'DRAFT'
     };
@@ -2853,39 +2858,25 @@ exports.getProposals = async (req, res) => {
     const mappedNewProposals = newProposals.map(p => {
       const legacy = legacyMap.get(String(p._id));
       const orgFallback = orgFallbackMap.get(String(p._id)) || {};
-      // Use legacy info if available, otherwise fallback to NewProposalWorkflow fields
-      const regionName = legacy?.region || p.region?.Region || p.region?.regionName || p.region?.RegionName || orgFallback.region || '';
-      const divisionName = legacy?.division || legacy?.originalDivision || p.division || orgFallback.division || '';
-      const departmentName = legacy?.department || legacy?.originalDepartment || p.department || orgFallback.department || '';
-      // Responsibility Center display should respect the user's organizational level.
-      // If user is DEPARTMENT level, only show department. If DIVISION level, show division.
-      const rawLevel = String(userAssignment?.assignmentLevel || '').toUpperCase();
-      const resolvedLevel = ({
-        DIVISION_LEVEL: 'DIVISION',
-        BUDGET_AND_REVENUE_DIVISION: 'REGION',
-        DEPARTMENT_LEVEL: 'DEPARTMENT',
-        DEPARTMENT_REGIONAL_LEVEL: 'DEPARTMENT',
-        RESPONSIBILITY_CENTER: 'DIVISION',
-        OFFICE_LEVEL: 'OFFICE',
-        REGION_LEVEL: 'REGION'
-      })[rawLevel] || rawLevel;
+      
+      const regionName = p.region?.Region || p.region?.regionName || p.region?.RegionName || legacy?.region || orgFallback.region || '';
+      const divisionName = p.division !== undefined && p.division !== null ? p.division : (legacy?.division || legacy?.originalDivision || orgFallback.division || '');
+      const departmentName = p.department !== undefined && p.department !== null ? p.department : (legacy?.department || legacy?.originalDepartment || orgFallback.department || '');
+      
+      // Clean name to remove any suffix (e.g. "DIVISION 2 / OFFICE OF THE DIVISION MANAGER" -> "DIVISION 2")
+      const cleanName = (name) => {
+        if (!name) return '';
+        const parts = String(name).split(' / ');
+        return parts[0].trim();
+      };
 
-      let responsibilityCenter;
-      if (resolvedLevel === 'DEPARTMENT' || resolvedLevel === 'OFFICE') {
-        responsibilityCenter = departmentName || regionName || undefined;
-      } else if (resolvedLevel === 'DIVISION') {
-        responsibilityCenter = divisionName || departmentName || regionName || undefined;
-      } else if (resolvedLevel === 'REGION') {
-        responsibilityCenter = regionName || undefined;
-      } else {
-        // Default (Super Admin or no assignment): show full hierarchy
-        responsibilityCenter =
-          [departmentName, divisionName].filter(Boolean).join(' / ') ||
-          divisionName ||
-          departmentName ||
-          regionName ||
-          undefined;
-      }
+      // Responsibility Center display: always show the department (where it originated) first, then division, then region
+      const responsibilityCenter =
+        cleanName(departmentName) ||
+        cleanName(divisionName) ||
+        regionName ||
+        undefined;
+
       return ({
         _id: p._id,
         title: p.title,
@@ -3130,15 +3121,22 @@ exports.getProposalById = async (req, res) => {
 
     // Map to same format as getProposals so Responsibility Center and Budget Type display correctly
     const legacy = await Proposal.findOne({ workflowRef: id }).lean();
-    const regionName = legacy?.region || proposal.region?.Region || proposal.region?.regionName || proposal.region?.RegionName || '';
-    const divisionName = legacy?.division || proposal.division || '';
-    const departmentName = legacy?.department || proposal.department || '';
-    // Responsibility Center display should prioritize the actual organizational unit
-    // (department/division) and only fallback to region when unit fields are unavailable.
+    
+    const regionName = proposal.region?.Region || proposal.region?.regionName || proposal.region?.RegionName || legacy?.region || '';
+    const divisionName = proposal.division !== undefined && proposal.division !== null ? proposal.division : (legacy?.division || '');
+    const departmentName = proposal.department !== undefined && proposal.department !== null ? proposal.department : (legacy?.department || '');
+    
+    // Clean name to remove any suffix (e.g. "DIVISION 2 / OFFICE OF THE DIVISION MANAGER" -> "DIVISION 2")
+    const cleanName = (name) => {
+      if (!name) return '';
+      const parts = String(name).split(' / ');
+      return parts[0].trim();
+    };
+
+    // Responsibility Center display: prioritize departmentName, then cleaned divisionName, then regionName
     const responsibilityCenter =
-      [departmentName, divisionName].filter(Boolean).join(' / ') ||
-      divisionName ||
-      departmentName ||
+      cleanName(departmentName) ||
+      cleanName(divisionName) ||
       regionName ||
       undefined;
 
@@ -4305,22 +4303,22 @@ exports.getProposalTotalsByWorkflowRef = async (req, res) => {
  * Body: { proposalIds: string[], title?: string }
  *
  * What this does:
- *  1. Validates that the caller is a Budget Approver / Super Admin.
- *  2. Fetches and validates all source proposals:
- *     - Must all be in FORWARDED_TO_APPROVER or RETURNED_TO_APPROVER status.
- *     - Must all share the same region and fiscalYear.
- *     - Must be at least 2 proposals.
- *  3. Creates a new consolidated NewProposalWorkflow document that:
- *     - Sums all budget amounts (amount, projectedCorporateIncome, projectedSubsidy).
- *     - Concatenates personnel, MOOE, capital outlay, and income data arrays.
- *     - Has status FORWARDED_TO_APPROVER so the Approver can still submit to BRD.
- *     - Records which source proposals it was built from (mergedFrom[]).
- *  4. Marks every source proposal as:
- *     - status: 'MERGED'  (archived)
- *     - isLocked: true    (no further edits)
- *     - isMergedSource: true
- *     - mergedInto: <consolidated proposal _id>
- *  5. Returns the new consolidated proposal.
+ * 1. Validates that the caller is a Budget Approver / Super Admin.
+ * 2. Fetches and validates all source proposals:
+ * - Must all be in FORWARDED_TO_APPROVER or RETURNED_TO_APPROVER status.
+ * - Must all share the same region and fiscalYear.
+ * - Must be at least 2 proposals.
+ * 3. Creates a new consolidated NewProposalWorkflow document that:
+ * - Sums all budget amounts (amount, projectedCorporateIncome, projectedSubsidy).
+ * - Concatenates personnel, MOOE, capital outlay, and income data arrays.
+ * - Has status FORWARDED_TO_APPROVER so the Approver can still submit to BRD.
+ * - Records which source proposals it was built from (mergedFrom[]).
+ * 4. Marks every source proposal as:
+ * - status: 'MERGED'  (archived)
+ * - isLocked: true    (no further edits)
+ * - isMergedSource: true
+ * - mergedInto: <consolidated proposal _id>
+ * 5. Returns the new consolidated proposal.
  */
 exports.mergeProposals = async (req, res) => {
   try {
@@ -4481,6 +4479,7 @@ exports.mergeProposals = async (req, res) => {
       fiscalYear: firstFiscalYear,
       region: regionObjectId || undefined,
       isCentralOffice: sources.some(s => s.isCentralOffice),
+      assignmentLevel: 'DEPARTMENT', // Consolidated proposals are treated as department level
       amount: totalAmount,
       projectedCorporateIncome: totalCorporateIncome,
       projectedSubsidy: totalSubsidy,

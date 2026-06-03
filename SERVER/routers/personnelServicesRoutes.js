@@ -157,7 +157,7 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
     const userRoles = req.user?.Roles || [];
     
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
@@ -265,7 +265,7 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
     const userRoles = req.user?.Roles || [];
     
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
@@ -377,7 +377,7 @@ personnelServicesRouter.get("/api/personnel-services", async (req, res) => {
     const userIdString = userId ? String(userId) : undefined;
     const userRoles = req.user?.Roles || [];
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');

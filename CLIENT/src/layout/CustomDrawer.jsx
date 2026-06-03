@@ -126,6 +126,26 @@ const CustomDrawer = () => {
       if (isSuperAdmin(currentUser)) return 'Admin';
       return 'User';
     }
+    
+    // Prioritize budget-related roles
+    const budgetRoles = [
+      JOB_ROLES.BUDGET_PREPARER,
+      JOB_ROLES.BUDGET_REVIEWER,
+      JOB_ROLES.BUDGET_APPROVER,
+      JOB_ROLES.BUDGET_MANAGER,
+      JOB_ROLES.BUDGET_OFFICER,
+      JOB_ROLES.OVERALL_BUDGET_APPROVER,
+      JOB_ROLES.BUDGET_PLANNING_ANALYST,
+      JOB_ROLES.BUDGET_COORDINATOR,
+    ];
+    
+    for (const budgetRole of budgetRoles) {
+      if (roles.includes(budgetRole)) {
+        return budgetRole.replace(/_/g, ' ');
+      }
+    }
+    
+    // Fall back to first role if no budget role found
     const primary = roles[0];
     if (primary.toLowerCase().includes('super')) return 'Admin';
     return primary.replace(/_/g, ' ');
@@ -529,21 +549,21 @@ const CustomDrawer = () => {
             icon={<LuUsers size={18} />}
             name="Employees"
             link="/employee"
-            isAllow={!isReviewer}
+            isAllow={canSeeBRDOnlyMenus && !isReviewer && !isOverallApprover && !isBudgetOfficer}
             collapsed={collapsed}
           />
           <LinkTo
             icon={<LuBriefcase size={18} />}
             name="Benefits"
             link="/employeeBenefits"
-            isAllow={true}
+            isAllow={canSeeBRDOnlyMenus && !isReviewer && !isOverallApprover && !isBudgetOfficer}
             collapsed={collapsed}
           />
 
           <LinkTo
             icon={<LuSettings size={18} />}
             name="Settings"
-            isAllow={isSuperAdmin(currentUser) || isBudgetAdmin}
+            isAllow={isSuperAdmin(currentUser) || isBudgetAdmin || isOverallApprover || isBudgetOfficer}
             collapsed={collapsed}
             subLinks={[
               {

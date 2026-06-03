@@ -79,9 +79,15 @@ const CustomAutoComplete = ({
           return "";
         }
         
-        const label = typeof option === "string"
-          ? option
-          : option[getOptionColumn || getOptionLabel] || "";
+        if (typeof option === "string") {
+          return option;
+        }
+
+        if (typeof getOptionLabel === "function") {
+          return String(getOptionLabel(option) || "");
+        }
+        
+        const label = option[getOptionColumn || getOptionLabel] || "";
         
         return String(label);
       }}
@@ -91,12 +97,18 @@ const CustomAutoComplete = ({
           return option === value;
         }
         if (typeof option === "object" && typeof value === "object") {
-          return option._id === value._id;
+          if (option._id && value._id) return option._id === value._id;
+          if (option.id && value.id) return option.id === value.id;
         }
-        // Handle mixed types (object vs string)
-        const optionLabel = typeof option === "string" ? option : option[getOptionColumn || getOptionLabel] || "";
-        const valueLabel = typeof value === "string" ? value : value[getOptionColumn || getOptionLabel] || "";
-        return optionLabel === valueLabel;
+
+        // Helper to get label for comparison
+        const getLabel = (opt) => {
+          if (typeof opt === "string") return opt;
+          if (typeof getOptionLabel === "function") return getOptionLabel(opt);
+          return opt[getOptionColumn || getOptionLabel] || "";
+        };
+
+        return String(getLabel(option)).toLowerCase() === String(getLabel(value)).toLowerCase();
       }}
       value={field.value || null}
       inputValue={undefined} // Let autocomplete manage its own input value
@@ -104,7 +116,9 @@ const CustomAutoComplete = ({
         const newValue =
           typeof value === "string" || getObject
             ? value
-            : value?.[getOptionLabel];
+            : typeof getOptionLabel === "function" 
+              ? getOptionLabel(value)
+              : value?.[getOptionLabel];
 
         field.onChange(
           getOptionColumn && value ? value[getOptionColumn] : newValue
@@ -123,8 +137,10 @@ const CustomAutoComplete = ({
         const filtered = options.filter((option) => {
           const label = typeof option === "string"
             ? option
-            : option[getOptionColumn || getOptionLabel] || "";
-          const matches = label.toLowerCase().includes(inputValue.toLowerCase());
+            : typeof getOptionLabel === "function"
+              ? getOptionLabel(option)
+              : option[getOptionColumn || getOptionLabel] || "";
+          const matches = String(label || "").toLowerCase().includes(inputValue.toLowerCase());
           return matches;
         });
 
@@ -146,14 +162,19 @@ const CustomAutoComplete = ({
           />
         );
       }}
-      renderOption={(props, option, _state) => {
-        const label = typeof option === "string"
+      renderOption={(props, option, state) => {
+        const labelText = typeof option === "string"
           ? option
-          : option[getOptionColumn || getOptionLabel] || "";
+          : typeof getOptionLabel === "function"
+            ? getOptionLabel(option)
+            : option[getOptionColumn || getOptionLabel] || "";
+
+        // Ensure key is unique and not just [object Object]
+        const key = option._id || option.id || (typeof option === "string" ? option : `opt-${state.index}`);
 
         return (
-          <li {...props} key={option._id || option}>
-            {label}
+          <li {...props} key={key}>
+            {labelText}
           </li>
         );
       }}

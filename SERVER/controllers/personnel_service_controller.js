@@ -6,6 +6,13 @@ const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const LoyaltyPay = require("../models/loyaltyPay");
+const Retiree = require("../models/Retiree");
+const {
+  calculateLoyaltyPayYearsOfService,
+  getEligibleLoyaltyPayYear,
+  calculateLoyaltyPayAmount
+} = require("../utils/loyaltyPayUtils");
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { getActiveSettingsWithCompensation, getCompensationField } = require("../utils/settingsUtils");
 const { validateNonNegativeFields, validateNonNegativeInItems, PERSONNEL_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
@@ -408,7 +415,7 @@ exports.getAllPersonnelServices = async (req, res) => {
     const userRoles = req.user?.Roles || [];
     
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     // SUPER_ADMIN must filter by the region parameter passed from frontend (from employee page)
     // BUDGET_MANAGER sees ALL records (no filtering)
@@ -996,6 +1003,98 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
       const resolvedWorkflowLevel =
         workflowData.workflowLevel || workflowData.originalLevel || orgLevelFromUser || 'BUDGET PREPARER';
 
+      // ==========================================
+      // Evaluate Loyalty Pay Eligibility
+      // ==========================================
+      let calculatedLoyaltyAmount = 0;
+      let loyaltyPayData = null;
+      if (employee.DateOfAppointment && activeSettings?.loyaltyPay) {
+        const cutoffDate = activeSettings.loyaltyPay.cutoffDate || "06-22";
+        const yearsOfService = calculateLoyaltyPayYearsOfService(
+          employee.DateOfAppointment,
+          fiscalYear,
+          cutoffDate
+        );
+        const eligibleYear = getEligibleLoyaltyPayYear(yearsOfService);
+        if (eligibleYear !== null) {
+          calculatedLoyaltyAmount = calculateLoyaltyPayAmount(yearsOfService, activeSettings.loyaltyPay);
+          if (calculatedLoyaltyAmount > 0) {
+            loyaltyPayData = {
+              employeeNumber: employee.EmployeeID || "",
+              employeeFullName: employee.EmployeeFullName || "",
+              positionTitle: employee.PositionTitle || "",
+              department: employee.Department || "",
+              division: employee.Division || "",
+              region: employee.Region || "",
+              yearsOfService: eligibleYear,
+              amount: calculatedLoyaltyAmount,
+              processBy: req.body.processBy || "Unknown",
+              processDate: new Date(),
+              fiscalYear: fiscalYear,
+              budgetType: budgetType,
+            };
+          }
+        }
+      }
+
+      // ==========================================
+      // Evaluate Retiree Eligibility
+      // ==========================================
+      let retireeData = null;
+      if (employee.DateOfBirth && employee.DateOfAppointment) {
+        let referenceYear = fiscalYear ? parseInt(String(fiscalYear), 10) : new Date().getFullYear();
+        const referenceDate = new Date(referenceYear, 11, 31, 12, 0, 0); // Dec 31
+        
+        const dob = new Date(employee.DateOfBirth);
+        const doa = new Date(employee.DateOfAppointment);
+        
+        if (!isNaN(dob.getTime()) && !isNaN(doa.getTime())) {
+          let age = referenceDate.getFullYear() - dob.getFullYear();
+          if (
+            referenceDate.getMonth() < dob.getMonth() ||
+            (referenceDate.getMonth() === dob.getMonth() && referenceDate.getDate() < dob.getDate())
+          ) {
+            age--;
+          }
+          
+          let serviceYears = referenceDate.getFullYear() - doa.getFullYear();
+          if (
+            referenceDate.getMonth() < doa.getMonth() ||
+            (referenceDate.getMonth() === doa.getMonth() && referenceDate.getDate() < doa.getDate())
+          ) {
+            serviceYears--;
+          }
+          
+          let eligibleType = null;
+          if (age >= 65) {
+            eligibleType = "Compulsory";
+          } else if (age >= 60 && age < 65 && serviceYears >= 15) {
+            eligibleType = "Optional";
+          }
+          
+          if (eligibleType) {
+            retireeData = {
+              employeeNumber: employee.EmployeeID || "",
+              employeeFullName: employee.EmployeeFullName || "",
+              positionTitle: employee.PositionTitle || "",
+              department: employee.Department || "",
+              division: employee.Division || "",
+              region: employee.Region || "",
+              retirementType: eligibleType,
+              dateOfRetirement: null,
+              leaveDays: 0,
+              terminalLeave: 0,
+              retirementGratuity: 0,
+              total: 0,
+              processBy: req.body.processBy || "Unknown",
+              processDate: new Date(),
+              fiscalYear: fiscalYear,
+              budgetType: budgetType,
+            };
+          }
+        }
+      }
+
       let personnelService = {
         processBy: req.body.processBy || "Unknown",
         processDate: new Date(),
@@ -1049,7 +1148,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         subsistenceAllowanceMDS: 0,
         subsistenceAllowanceST: 0,
         overtimePay: 0,
-        loyaltyAward: 0,
+        loyaltyAward: calculatedLoyaltyAmount,
         earnedLeaves: monthlySalary * 30 * (activeSettings.earnedLeaves || 0), // Assuming 12 months of leaves for each employee
         retirementBenefits: 0,
         terminalLeave: 0,
@@ -1130,12 +1229,61 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
           0
         ));
       }
-      personnelServicesData.push(personnelService);
+      personnelServicesData.push({
+        ps: personnelService,
+        loyalty: loyaltyPayData,
+        retiree: retireeData
+      });
     }
       if (personnelServicesData.length > 0) {
       const addedPersonnelServices = await PersonnelServices.insertMany(
-        personnelServicesData
+        personnelServicesData.map(item => item.ps)
       );
+
+      // Filter and insert generated Loyalty Pay records
+      const newLoyaltyPays = personnelServicesData
+        .filter(item => item.loyalty)
+        .map(item => item.loyalty);
+      
+      let addedLoyaltyPays = [];
+      if (newLoyaltyPays.length > 0) {
+        // Prevent inserting duplicates in LoyaltyPay
+        const existingLoyalty = await LoyaltyPay.find({
+          fiscalYear: fiscalYear,
+          employeeNumber: { $in: newLoyaltyPays.map(lp => lp.employeeNumber) }
+        }).lean();
+        
+        const existingLoyaltySet = new Set(existingLoyalty.map(lp => `${lp.employeeNumber}-${lp.yearsOfService}`));
+        const filteredNewLoyaltyPays = newLoyaltyPays.filter(lp => !existingLoyaltySet.has(`${lp.employeeNumber}-${lp.yearsOfService}`));
+        
+        if (filteredNewLoyaltyPays.length > 0) {
+          addedLoyaltyPays = await LoyaltyPay.insertMany(filteredNewLoyaltyPays);
+          console.log(`✅ [BULK ADD] Inserted ${addedLoyaltyPays.length} eligible Loyalty Pay records.`);
+        }
+      }
+
+      // Filter and insert generated Retiree records
+      const newRetirees = personnelServicesData
+        .filter(item => item.retiree)
+        .map(item => item.retiree);
+
+      let addedRetirees = [];
+      if (newRetirees.length > 0) {
+        // Prevent inserting duplicates in Retirees
+        const existingRetirees = await Retiree.find({
+          fiscalYear: fiscalYear,
+          employeeNumber: { $in: newRetirees.map(r => r.employeeNumber) }
+        }).lean();
+
+        const existingRetireeSet = new Set(existingRetirees.map(r => r.employeeNumber));
+        const filteredNewRetirees = newRetirees.filter(r => !existingRetireeSet.has(r.employeeNumber));
+        
+        if (filteredNewRetirees.length > 0) {
+          addedRetirees = await Retiree.insertMany(filteredNewRetirees);
+          console.log(`✅ [BULK ADD] Inserted ${addedRetirees.length} eligible Retiree records.`);
+        }
+      }
+
         // Direct recompute for linked legacy proposal
         if (legacyProposalPS?._id) {
           try {
@@ -1176,8 +1324,10 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
       }
       res.status(200).json({
         added: addedPersonnelServices,
+        addedLoyaltyPays: addedLoyaltyPays.length,
+        addedRetirees: addedRetirees.length,
         duplicates: duplicates,
-        message: `Successfully added ${addedPersonnelServices.length} personnel services. ${duplicates.length} duplicates were skipped.`
+        message: `Successfully added ${addedPersonnelServices.length} personnel services, ${addedLoyaltyPays.length} loyalty pay records, and ${addedRetirees.length} retiree records. ${duplicates.length} duplicates were skipped.`
       });
     } else {
       res.status(200).json({ 

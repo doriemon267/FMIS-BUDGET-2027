@@ -229,7 +229,7 @@ const budgetRoleAccessControl = (operation = 'read') => {
             visibilityFilter = analystBaseFilter;
           }
         } else if (isOverallBudgetApprover) {
-          // Overall Budget Approvers can see all proposals within their organizational scope
+          // Overall Budget Approvers can see all proposals
           const overallBaseFilter = { 
             status: { 
               $in: [
@@ -241,16 +241,8 @@ const budgetRoleAccessControl = (operation = 'read') => {
             } 
           };
           
-          if (Object.keys(orgScope).length > 0) {
-            // For managers, we usually restrict by region if they are regional managers
-            // but allow them to see all departments/divisions within that region
-            const managerOrgFilter = {};
-            if (userRegion) managerOrgFilter.region = userRegion;
-            
-            visibilityFilter = { $and: [overallBaseFilter, managerOrgFilter] };
-          } else {
-            visibilityFilter = overallBaseFilter;
-          }
+          // Overall Budget Approvers have access to all regions
+          visibilityFilter = overallBaseFilter;
         } else if (isBudgetCoordinator) {
           // Budget Coordinators can see:
           // 1. Proposals submitted by analysts in their division/department (Division Submitted)
@@ -271,21 +263,15 @@ const budgetRoleAccessControl = (operation = 'read') => {
           // 4. Finalized proposals for reference
           const officerBaseFilter = { status: { $in: ['Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'] } };
           
-          if (userRegion) {
-            visibilityFilter = { $and: [officerBaseFilter, { region: userRegion }] };
-          } else {
-            visibilityFilter = officerBaseFilter;
-          }
+          // Budget Officers now have access to all regions same as Budget Manager
+          visibilityFilter = officerBaseFilter;
         } else if (isOverallApprover) {
           // Budget Managers: primarily see items forwarded to them (Forwarded to Manager)
           // Also allow viewing of items that reached 'Officer Approved' or 'Finalized' so managers can review completed items
           const managerBaseFilter = { status: { $in: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Officer Approved', 'Finalized'] } };
           
-          if (userRegion) {
-            visibilityFilter = { $and: [managerBaseFilter, { region: userRegion }] };
-          } else {
-            visibilityFilter = managerBaseFilter;
-          }
+          // Budget Managers have access to all regions
+          visibilityFilter = managerBaseFilter;
         }
 
         // Apply the filter to the query

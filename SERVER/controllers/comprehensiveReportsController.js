@@ -432,7 +432,7 @@ const resolveWorkflowSignatories = async (workflowDocs) => {
       const workflowRole = resolveRoleFromWorkflowAction(entry);
       const hasDigitalSignature = Boolean(entry?.digitalSignature?.signedPayloadHash || entry?.digitalSignature?.signatureAlgorithm);
       const hasESignature = Boolean(entry?.eSignature?.imageDataUrl);
-      if (!workflowRole || (!hasDigitalSignature && !hasESignature)) return;
+      if (!workflowRole) return;
 
       rawEntries.push({
         workflowRole,
@@ -1165,6 +1165,16 @@ const processPersonnelServicesData = async (psData, query) => {
     };
   }
 };
+// Helper to normalize keys to ensure matching regardless of spacing around dashes
+const normalizeKey = (str) => {
+  if (!str) return 'UNSPECIFIED';
+  return str.toString()
+    .replace(/[^a-zA-Z0-9\s]/g, '') // Remove ALL special characters, punctuation, and dashes
+    .replace(/\s+/g, ' ')           // Condense multiple spaces into one
+    .trim()
+    .toUpperCase();
+};
+
 // Process MOOE data
 const processMOOEData = async (mooeData, query) => {
   const regionSet = new Set();
@@ -1199,31 +1209,42 @@ const processMOOEData = async (mooeData, query) => {
       if (amount <= 0) return;
       regionSet.add(proposal.region || 'Unspecified');
       totalEntries++;
-      const category = proposal.accountingTitle || 'Uncategorized';
-      if (!consolidatedCategories[category]) {
-        consolidatedCategories[category] = {
-          name: category,
+      // Fix: Use sublineItem as the parent category, normalize key
+      const categoryName = proposal.sublineItem || 'Uncategorized';
+      const categoryKey = normalizeKey(categoryName);
+      if (!consolidatedCategories[categoryKey]) {
+        consolidatedCategories[categoryKey] = {
+          name: categoryName,
           total: 0,
           totalIncome: 0,
           totalSubsidy: 0,
           itemCount: 0,
           regions: new Set(),
-          items: []
+          items: {}
         };
       }
-      consolidatedCategories[category].total += amount;
-      consolidatedCategories[category].totalIncome += income;
-      consolidatedCategories[category].totalSubsidy += subsidy;
-      consolidatedCategories[category].itemCount++;
-      consolidatedCategories[category].regions.add(proposal.region || 'Unspecified');
-      consolidatedCategories[category].items.push({
-        name: proposal.sublineItem || proposal.accountingTitle || 'N/A',
-        title: proposal.sublineItem || proposal.accountingTitle || 'N/A',
-        uacsCode: proposal.uacsCode,
-        income,
-        subsidy,
-        amount
-      });
+      consolidatedCategories[categoryKey].total += amount;
+      consolidatedCategories[categoryKey].totalIncome += income;
+      consolidatedCategories[categoryKey].totalSubsidy += subsidy;
+      consolidatedCategories[categoryKey].itemCount++;
+      consolidatedCategories[categoryKey].regions.add(proposal.region || 'Unspecified');
+      
+      const childName = proposal.accountingTitle || proposal.sublineItem || 'N/A';
+      const childKey = normalizeKey(childName);
+      if (!consolidatedCategories[categoryKey].items[childKey]) {
+        consolidatedCategories[categoryKey].items[childKey] = {
+          name: childName,
+          title: childName,
+          uacsCode: proposal.uacsCode,
+          income: 0,
+          subsidy: 0,
+          amount: 0
+        };
+      }
+      consolidatedCategories[categoryKey].items[childKey].income += income;
+      consolidatedCategories[categoryKey].items[childKey].subsidy += subsidy;
+      consolidatedCategories[categoryKey].items[childKey].amount += amount;
+      
       sectionTotal += amount;
     });
     // Remove categories with total 0
@@ -1268,22 +1289,33 @@ const processMOOEData = async (mooeData, query) => {
         };
       }
       grouped[region].totalEntries++;
-      const category = proposal.accountingTitle || 'Uncategorized';
-      if (!grouped[region].categories[category]) {
-        grouped[region].categories[category] = {
-          name: category,
-          items: [],
+      const categoryName = proposal.sublineItem || 'Uncategorized';
+      const categoryKey = normalizeKey(categoryName);
+      if (!grouped[region].categories[categoryKey]) {
+        grouped[region].categories[categoryKey] = {
+          name: categoryName,
+          items: {},
           total: 0
         };
       }
-      grouped[region].categories[category].items.push({
-        title: proposal.sublineItem || proposal.accountingTitle || 'N/A',
-        uacsCode: proposal.uacsCode,
-        income: income,
-        subsidy: subsidy,
-        amount: amount
-      });
-      grouped[region].categories[category].total += amount;
+      
+      const childName = proposal.accountingTitle || proposal.sublineItem || 'N/A';
+      const childKey = normalizeKey(childName);
+      if (!grouped[region].categories[categoryKey].items[childKey]) {
+        grouped[region].categories[categoryKey].items[childKey] = {
+          name: childName,
+          title: childName,
+          uacsCode: proposal.uacsCode,
+          income: 0,
+          subsidy: 0,
+          amount: 0
+        };
+      }
+      grouped[region].categories[categoryKey].items[childKey].income += income;
+      grouped[region].categories[categoryKey].items[childKey].subsidy += subsidy;
+      grouped[region].categories[categoryKey].items[childKey].amount += amount;
+      
+      grouped[region].categories[categoryKey].total += amount;
       sectionTotal += amount;
     });
     return {
@@ -1348,30 +1380,40 @@ const processCapitalOutlayData = async (coData, query) => {
           if (amount <= 0) return;
           regionSet.add(proposal.region || 'Unspecified');
           totalEntries++;
-          if (!consolidatedCategories[categoryName]) {
-            consolidatedCategories[categoryName] = {
+          const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
+          const categoryKey = normalizeKey(categoryName);
+          if (!consolidatedCategories[categoryKey]) {
+            consolidatedCategories[categoryKey] = {
               name: categoryName,
               total: 0,
               totalIncome: 0,
               totalSubsidy: 0,
               itemCount: 0,
               regions: new Set(),
-              items: []
+              items: {}
             };
           }
-          consolidatedCategories[categoryName].total += amount;
-          consolidatedCategories[categoryName].totalIncome += income;
-          consolidatedCategories[categoryName].totalSubsidy += subsidy;
-          consolidatedCategories[categoryName].itemCount++;
-          consolidatedCategories[categoryName].regions.add(proposal.region || 'Unspecified');
-          consolidatedCategories[categoryName].items.push({
-            name: (detail.particulars || '').trim() || 'N/A',
-            title: (detail.particulars || '').trim() || 'N/A',
-            uacsCode: proposal.uacsCode,
-            income,
-            subsidy,
-            amount
-          });
+          consolidatedCategories[categoryKey].total += amount;
+          consolidatedCategories[categoryKey].totalIncome += income;
+          consolidatedCategories[categoryKey].totalSubsidy += subsidy;
+          consolidatedCategories[categoryKey].itemCount++;
+          consolidatedCategories[categoryKey].regions.add(proposal.region || 'Unspecified');
+          
+          const childName = (detail.particulars || '').trim() || 'N/A';
+          const childKey = normalizeKey(childName);
+          if (!consolidatedCategories[categoryKey].items[childKey]) {
+            consolidatedCategories[categoryKey].items[childKey] = {
+              name: childName,
+              title: childName,
+              income: 0,
+              subsidy: 0,
+              amount: 0
+            };
+          }
+          consolidatedCategories[categoryKey].items[childKey].income += income;
+          consolidatedCategories[categoryKey].items[childKey].subsidy += subsidy;
+          consolidatedCategories[categoryKey].items[childKey].amount += amount;
+          
           sectionTotal += amount;
         });
       } else {
@@ -1382,30 +1424,42 @@ const processCapitalOutlayData = async (coData, query) => {
         if (amount <= 0) return;
         regionSet.add(proposal.region || 'Unspecified');
         totalEntries++;
-        if (!consolidatedCategories[categoryName]) {
-          consolidatedCategories[categoryName] = {
+        
+        const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
+        const categoryKey = normalizeKey(categoryName);
+        if (!consolidatedCategories[categoryKey]) {
+          consolidatedCategories[categoryKey] = {
             name: categoryName,
             total: 0,
             totalIncome: 0,
             totalSubsidy: 0,
             itemCount: 0,
             regions: new Set(),
-            items: []
+            items: {}
           };
         }
-        consolidatedCategories[categoryName].total += amount;
-        consolidatedCategories[categoryName].totalIncome += income;
-        consolidatedCategories[categoryName].totalSubsidy += subsidy;
-        consolidatedCategories[categoryName].itemCount++;
-        consolidatedCategories[categoryName].regions.add(proposal.region || 'Unspecified');
-        consolidatedCategories[categoryName].items.push({
-          name: proposal.particulars || proposal.sublineItem || proposal.accountingTitle || 'N/A',
-          title: proposal.particulars || proposal.sublineItem || proposal.accountingTitle || 'N/A',
-          uacsCode: proposal.uacsCode,
-          income,
-          subsidy,
-          amount
-        });
+        consolidatedCategories[categoryKey].total += amount;
+        consolidatedCategories[categoryKey].totalIncome += income;
+        consolidatedCategories[categoryKey].totalSubsidy += subsidy;
+        consolidatedCategories[categoryKey].itemCount++;
+        consolidatedCategories[categoryKey].regions.add(proposal.region || 'Unspecified');
+        
+        const childName = proposal.particulars || proposal.sublineItem || proposal.accountingTitle || 'N/A';
+        const childKey = normalizeKey(childName);
+        if (!consolidatedCategories[categoryKey].items[childKey]) {
+          consolidatedCategories[categoryKey].items[childKey] = {
+            name: childName,
+            title: childName,
+            uacsCode: proposal.uacsCode,
+            income: 0,
+            subsidy: 0,
+            amount: 0
+          };
+        }
+        consolidatedCategories[categoryKey].items[childKey].income += income;
+        consolidatedCategories[categoryKey].items[childKey].subsidy += subsidy;
+        consolidatedCategories[categoryKey].items[childKey].amount += amount;
+        
         sectionTotal += amount;
       }
     });
@@ -1450,18 +1504,28 @@ const processCapitalOutlayData = async (coData, query) => {
             grouped[region] = { region, totalEntries: 0, categories: {} };
           }
           grouped[region].totalEntries++;
-          if (!grouped[region].categories[categoryName]) {
-            grouped[region].categories[categoryName] = { name: categoryName, items: [], total: 0 };
+          const categoryKey = normalizeKey(categoryName);
+          if (!grouped[region].categories[categoryKey]) {
+            grouped[region].categories[categoryKey] = { name: categoryName, items: {}, total: 0 };
           }
-          grouped[region].categories[categoryName].items.push({
-            title: (detail.particulars || '').trim() || 'N/A',
-            name: (detail.particulars || '').trim() || 'N/A',
-            uacsCode: proposal.uacsCode,
-            income,
-            subsidy,
-            amount
-          });
-          grouped[region].categories[categoryName].total += amount;
+          
+          const childName = (detail.particulars || '').trim() || 'N/A';
+          const childKey = normalizeKey(childName);
+          if (!grouped[region].categories[categoryKey].items[childKey]) {
+            grouped[region].categories[categoryKey].items[childKey] = {
+              title: childName,
+              name: childName,
+              uacsCode: proposal.uacsCode,
+              income: 0,
+              subsidy: 0,
+              amount: 0
+            };
+          }
+          grouped[region].categories[categoryKey].items[childKey].income += income;
+          grouped[region].categories[categoryKey].items[childKey].subsidy += subsidy;
+          grouped[region].categories[categoryKey].items[childKey].amount += amount;
+          
+          grouped[region].categories[categoryKey].total += amount;
           sectionTotal += amount;
         });
       } else {
@@ -1476,18 +1540,28 @@ const processCapitalOutlayData = async (coData, query) => {
           grouped[region] = { region, totalEntries: 0, categories: {} };
         }
         grouped[region].totalEntries++;
-        if (!grouped[region].categories[categoryName]) {
-          grouped[region].categories[categoryName] = { name: categoryName, items: [], total: 0 };
+        const categoryKey = normalizeKey(categoryName);
+        if (!grouped[region].categories[categoryKey]) {
+          grouped[region].categories[categoryKey] = { name: categoryName, items: {}, total: 0 };
         }
-        grouped[region].categories[categoryName].items.push({
-          title: proposal.particulars || proposal.sublineItem || 'N/A',
-          name: proposal.particulars || proposal.sublineItem || 'N/A',
-          uacsCode: proposal.uacsCode,
-          income,
-          subsidy,
-          amount
-        });
-        grouped[region].categories[categoryName].total += amount;
+        
+        const childName = proposal.particulars || proposal.sublineItem || 'N/A';
+        const childKey = normalizeKey(childName);
+        if (!grouped[region].categories[categoryKey].items[childKey]) {
+          grouped[region].categories[categoryKey].items[childKey] = {
+            title: childName,
+            name: childName,
+            uacsCode: proposal.uacsCode,
+            income: 0,
+            subsidy: 0,
+            amount: 0
+          };
+        }
+        grouped[region].categories[categoryKey].items[childKey].income += income;
+        grouped[region].categories[categoryKey].items[childKey].subsidy += subsidy;
+        grouped[region].categories[categoryKey].items[childKey].amount += amount;
+        
+        grouped[region].categories[categoryKey].total += amount;
         sectionTotal += amount;
       }
     });
@@ -1607,9 +1681,9 @@ const getComprehensiveReportPdf = async (req, res) => {
     // Create PDF using Muhammara Recipe — A4 portrait (Annex A format)
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
-    // A4 portrait dimensions in points (1/72 inch)
-    const PAGE_WIDTH = 595.28;
-    const PAGE_HEIGHT = 841.89;
+    // A4 portrait dimensions in points (1/72 inch) -> 8.27 x 11.69 inches
+    const PAGE_WIDTH = 595.44;
+    const PAGE_HEIGHT = 841.68;
 
     // Standard "Narrow" Margin = 0.5 inch = 36 points
     const MARGIN_SIDE = 36;
@@ -1630,16 +1704,47 @@ const getComprehensiveReportPdf = async (req, res) => {
     const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
 
     const drawBorder = () => {
-      pdfDoc.rectangle(MARGIN_SIDE, MARGIN_TOP, PAGE_WIDTH - MARGIN_SIDE * 2, PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM, {
-        stroke: '#4d4c4c',
-        lineWidth: 1.5
+      // Outer page border/margin line disabled as requested to match other print-friendly reports
+    };
+
+    const wrapText = (text, maxWidth, fontSize) => {
+      const words = String(text || '').split(' ');
+      const lines = [];
+      let currentLine = '';
+      const getWidth = (t) => {
+        try { return pdfDoc.calculateTextDimensions(t, { fontSize }).width; }
+        catch (e) { return t.length * (fontSize * 0.55); }
+      };
+      words.forEach(word => {
+        let testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (getWidth(testLine) > maxWidth) {
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            let part = '';
+            for (let char of word) {
+              if (getWidth(part + char) > maxWidth) {
+                lines.push(part);
+                part = char;
+              } else {
+                part += char;
+              }
+            }
+            currentLine = part;
+          }
+        } else {
+          currentLine = testLine;
+        }
       });
+      if (currentLine) lines.push(currentLine);
+      return lines;
     };
 
     const drawFooter = () => {
-      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN_BOTTOM - 25, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN_BOTTOM - 15, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - MARGIN_BOTTOM - 15, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - 20, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT + 10, PAGE_HEIGHT - 10, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - 10, textOpt({ fontSize: 8 }));
     };
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
@@ -1786,7 +1891,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     const startNewPage = () => {
       drawFooter();
       pdfDoc.endPage();
-      pdfDoc.createPage('A4');
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage++;
       currentY = MARGIN_TOP + 20; // Start content a bit below the top
       drawBorder();
@@ -1802,7 +1907,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     };
 
     // First page — A4 portrait with Annex A format
-    pdfDoc.createPage('A4');
+    pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
     drawBorder();
     drawWatermark();
     drawHeader(true); // true = include title section on first page
@@ -1927,16 +2032,22 @@ const getComprehensiveReportPdf = async (req, res) => {
       const categoryEntries = Object.entries(section.categories || {});
       
       categoryEntries.forEach(([, category], idx) => {
-        ensureSpace(2); // Ensure space for category line
-
         const categoryAmount = Number(
           category.total ?? category.totalSubsidy ?? category.totalIncome
         ) || 0;
 
-        pdfDoc
-          .text(`${idx + 1}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9, bold: true }))
-          .text(String(category.name || ''), CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 9, bold: true }))
-          .text(formatPhp(categoryAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+        const categoryLines = wrapText(String(category.name || ''), 370, 9);
+        ensureSpace(categoryLines.length);
+
+        pdfDoc.text(`${idx + 1}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9, bold: true }));
+        pdfDoc.text(formatPhp(categoryAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+
+        categoryLines.forEach((line, lineIdx) => {
+          pdfDoc.text(line, CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 9, bold: true }));
+          if (lineIdx < categoryLines.length - 1) {
+            currentY += LINE_HEIGHT * 0.78;
+          }
+        });
         currentY += LINE_HEIGHT * 0.78;
 
         const itemEntries = Array.isArray(category.items)
@@ -1944,8 +2055,6 @@ const getComprehensiveReportPdf = async (req, res) => {
           : Object.entries(category.items || {});
 
         itemEntries.forEach(([itemKey, item], itemIdx) => {
-          ensureSpace(1); // Ensure space for sub-item
-
           const letter = /^[a-z]$/i.test(String(itemKey || ''))
             ? String(itemKey).toLowerCase()
             : String.fromCharCode(97 + (itemIdx % 26));
@@ -1953,10 +2062,18 @@ const getComprehensiveReportPdf = async (req, res) => {
           const itemName = String(item?.name || item?.title || '').trim();
 
           if (itemName || itemAmount > 0) {
-            pdfDoc
-              .text(`${letter}.`, CONTENT_LEFT + 45, currentY, textOpt({ fontSize: 8 }))
-              .text(itemName || '—', CONTENT_LEFT + 58, currentY, textOpt({ fontSize: 8 }))
-              .text(formatPhp(itemAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 8, align: 'right' }));
+            const itemLines = wrapText(itemName || '—', 340, 8);
+            ensureSpace(itemLines.length);
+
+            pdfDoc.text(`${letter}.`, CONTENT_LEFT + 45, currentY, textOpt({ fontSize: 8 }));
+            pdfDoc.text(formatPhp(itemAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 8, align: 'right' }));
+
+            itemLines.forEach((line, lineIdx) => {
+              pdfDoc.text(line, CONTENT_LEFT + 58, currentY, textOpt({ fontSize: 8 }));
+              if (lineIdx < itemLines.length - 1) {
+                currentY += LINE_HEIGHT * 0.68;
+              }
+            });
             currentY += LINE_HEIGHT * 0.68;
           }
         });
@@ -2007,7 +2124,7 @@ const getComprehensiveReportPdf = async (req, res) => {
       // Not enough space, create new page without header (just border)
       drawFooter();
       pdfDoc.endPage();
-      pdfDoc.createPage('A4');
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage++;
       currentY = MARGIN_TOP + 20;
       drawBorder();
@@ -2028,22 +2145,22 @@ const getComprehensiveReportPdf = async (req, res) => {
       stroke: '#000000',
       lineWidth: 0.5
     });
-    currentY += LINE_HEIGHT * 4;
+    currentY += LINE_HEIGHT * 2; // Reduced gap after net income
 
-    // Check if signature blocks fit on current page (needs ~280 points)
-    if (currentY + 280 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+    // Check if signature blocks fit on current page (needs ~90 points for just the signatures)
+    if (currentY + 90 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
       // Not enough space, create new page without header for signatures
       drawFooter();
       pdfDoc.endPage();
-      pdfDoc.createPage('A4');
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage++;
-      currentY = MARGIN_TOP + 40;
+      currentY = MARGIN_TOP + 20;
       drawBorder();
       drawWatermark();
     }
 
     // Signature blocks
-    const sigY = currentY + 50;
+    const sigY = currentY + 40; // Reduced gap for signature line
     const preparedByInfo = reportData?.summary?.preparedBy || null;
     const preparedByName = preparedByInfo?.name || 'Budget Preparer';
     const preparedByDesignation = preparedByInfo?.position || 'Budget Preparer';

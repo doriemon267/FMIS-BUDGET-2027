@@ -29,7 +29,18 @@ export const RegionProvider = ({ children }) => {
       setError(null);
       
       try {
-        // Check if user already has regions from UserContext first
+        const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
+        const isSuperAdmin = currentUser.Roles?.some((r) => {
+          const n = normRole(r);
+          return n === 'SUPERADMIN' || n === 'SUPER_ADMIN';
+        });
+        const isBudgetManager = (currentUser.Roles || []).some((r) => {
+          const n = normRole(r);
+          return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER' || n === 'BUDGET_OFFICER';
+        });
+        const userScope = currentUser.hierarchicalAccess?.scope || currentUser.hierarchicalAccess?.assignmentLevel || 'REGION';
+
+        // Check if user already has regions from UserContext
         if (currentUser.regions && currentUser.regions.length > 0) {
           const userRegions = currentUser.regions;
           setAvailableRegions(userRegions);
@@ -49,38 +60,33 @@ export const RegionProvider = ({ children }) => {
               );
               
               if (isStillAvailable) {
-                // Find the exact region object from current user regions
                 targetRegion = userRegions.find(r => 
                   r._id === parsedRegion._id || 
                   r.name === parsedRegion.name ||
                   r.Region === parsedRegion.Region
                 );
-              } else {
               }
-            } catch (error) {
-            }
+            } catch (error) {}
           }
           
-          // If no valid saved region, use the first available region
-          if (!targetRegion) {
+          // If high-privilege user and no saved region, default to "All Regions" (null)
+          if ((isSuperAdmin || isBudgetManager || userScope === 'FULL') && !targetRegion) {
+            setActiveRegion(null);
+            localStorage.removeItem('activeRegion');
+          } else if (!targetRegion) {
+            // Normal user must have a region, default to first available
             targetRegion = userRegions[0];
+            setActiveRegion(targetRegion);
+            localStorage.setItem('activeRegion', JSON.stringify(targetRegion));
+          } else {
+            setActiveRegion(targetRegion);
+            localStorage.setItem('activeRegion', JSON.stringify(targetRegion));
           }
           
-          setActiveRegion(targetRegion);
-          localStorage.setItem('activeRegion', JSON.stringify(targetRegion));
-          
-          const regionName = targetRegion.name || targetRegion.Region;
-          return; // Exit early, no need to call API
+          return;
         }
 
         // Only super-admins, budget managers/overall approvers, or FULL-scope users should get the full regions list
-        const isSuperAdmin = currentUser.Roles?.some((r) => String(r).toUpperCase().replace(/\s/g, '') === 'SUPERADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
-        const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
-        const isBudgetManager = (currentUser.Roles || []).some((r) => {
-          const n = normRole(r);
-          return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER';
-        });
-        const userScope = currentUser.hierarchicalAccess?.scope || currentUser.hierarchicalAccess?.assignmentLevel || 'REGION';
         if (
           isSuperAdmin ||
           isBudgetManager ||
@@ -111,11 +117,11 @@ export const RegionProvider = ({ children }) => {
                 }
               } catch (e) {}
             }
-            // Super Admin or Budget Manager: if no saved region (or invalid), auto-select first so they see data (all regions available)
+            // Super Admin or Budget Manager (including Officer): if no saved region (or invalid), 
+            // set activeRegion to null so they see "All Regions" by default
             if ((isSuperAdmin || isBudgetManager) && !regionSet && regions.length > 0) {
-              const first = regions[0];
-              setActiveRegion(first);
-              localStorage.setItem('activeRegion', JSON.stringify(first));
+              setActiveRegion(null);
+              localStorage.removeItem('activeRegion');
             }
             setLoading(false);
             return;
@@ -145,7 +151,7 @@ export const RegionProvider = ({ children }) => {
     if (!region) {
       // Prevent clearing region for normal users but allow FULL-scope, Budget Manager, or Super Admin
       const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
-      const isBM = (currentUser?.Roles || []).some((r) => { const n = String(r).toUpperCase().replace(/\s+/g, '_'); return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER'; });
+      const isBM = (currentUser?.Roles || []).some((r) => { const n = String(r).toUpperCase().replace(/\s+/g, '_'); return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER' || n === 'BUDGET_OFFICER'; });
       const isSuperAdmin = (currentUser?.Roles || []).some(r => String(r).toUpperCase().replace(/\s/g, '') === 'SUPERADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
       if (userScope === 'FULL' || isBM || isSuperAdmin) {
         setActiveRegion(null);
@@ -186,7 +192,10 @@ export const RegionProvider = ({ children }) => {
   // Clear the active region explicitly
   const clearActiveRegion = () => {
     const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
-    const isBM = (currentUser?.Roles || []).some((r) => { const n = String(r).toUpperCase().replace(/\s+/g, '_'); return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER'; });
+    const isBM = (currentUser?.Roles || []).some((r) => { 
+      const n = String(r).toUpperCase().replace(/\s+/g, '_'); 
+      return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER' || n === 'BUDGET_OFFICER'; 
+    });
     const isSuperAdmin = (currentUser?.Roles || []).some(r => String(r).toUpperCase().replace(/\s/g, '') === 'SUPERADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
     if (userScope === 'FULL' || isBM || isSuperAdmin) {
       setActiveRegion(null);

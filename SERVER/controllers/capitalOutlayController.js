@@ -583,7 +583,7 @@ exports.getCapitalOutlayList = async (req, res) => {
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
     const userIdString = userId ? String(userId) : undefined;
     
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_OFFICER', 'BUDGET OFFICER'].includes(r));
     
     if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {

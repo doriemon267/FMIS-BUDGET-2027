@@ -33,28 +33,32 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
       if (logAccess) {
         // Logging removed as requested
       }
-      // Full access users no longer bypass hierarchical restrictions; they still follow assigned scope
-      if (hasFullAccess(userRoles)) {
-        // SUPER ADMIN gets full access regardless of assignment
-        if (userRoles.includes('SUPER_ADMIN')) {
-          req.hierarchicalAccess = {
-            scope: 'FULL',
-            canCreate: true,
-            canUpdate: true,
-            canDelete: true,
-            canRead: true,
-            canAccessAllRegions: true,
-            canAccessAllDepartments: true,
-            canAccessAllDivisions: true,
-            filters: {} // No filters for SUPER ADMIN
-          };
-          return next();
-        }
-        if (logAccess) {
-          // Logging removed as requested
-        }
-        // Do not return here; continue to load assignment
+    // Full access users (SUPER ADMIN, BUDGET MANAGER, BUDGET OFFICER) no longer bypass hierarchical restrictions; they still follow assigned scope
+    if (hasFullAccess(userRoles)) {
+      const isSuperAdmin = userRoles.includes('SUPER_ADMIN');
+      const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
+      const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('OVERALL_BUDGET_APPROVER');
+
+      // These roles get full access regardless of assignment
+      if (isSuperAdmin || isBudgetOfficer || isBudgetManager) {
+        req.hierarchicalAccess = {
+          scope: 'FULL',
+          canCreate: true,
+          canUpdate: true,
+          canDelete: true,
+          canRead: true,
+          canAccessAllRegions: true,
+          canAccessAllDepartments: true,
+          canAccessAllDivisions: true,
+          filters: {} // No filters for these privileged roles
+        };
+        return next();
       }
+      if (logAccess) {
+        // Logging removed as requested
+      }
+      // Do not return here; continue to load assignment
+    }
       // Get user's hierarchical assignments
       const assignment = await HierarchicalUserAssignment.getUserPermissions(userId, req.user?.Roles);
       if (!assignment || assignment.assignmentLevel === 'NONE') {
@@ -469,10 +473,12 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         }
         // Only treat as full-access if the assignment level is FULL or the user is SUPER_ADMIN
         const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
+        const isBudgetOfficerRole = userRoles.includes('BUDGET_OFFICER');
+        const isBudgetManagerRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('OVERALL_BUDGET_APPROVER');
         const isAssignmentFull = assignmentDoc.assignmentLevel === 'FULL';
-        const effectiveFull = isSuperAdminRole || isAssignmentFull;
+        const effectiveFull = isSuperAdminRole || isAssignmentFull || isBudgetOfficerRole || isBudgetManagerRole;
         req.hierarchicalAccessInfo = {
-          scope: assignmentDoc.assignmentLevel,
+          scope: effectiveFull ? 'FULL' : assignmentDoc.assignmentLevel,
           hasFullAccess: !!effectiveFull,
           canAccessAllRegions: !!effectiveFull,
           canAccessAllDepartments: !!effectiveFull,
@@ -492,8 +498,12 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       let defaultRolePermissions = {};
       let defaultWorkflowRoles = [];
       
-      // Special handling for SUPER ADMIN - give them FULL scope and all permissions
-      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
+      // Special handling for SUPER ADMIN, BUDGET_OFFICER, BUDGET_MANAGER - give them FULL scope and all permissions
+      const isSuperAdminRole = userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN');
+      const isBudgetOfficerRole = userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR');
+      const isBudgetManagerRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('DEPARTMENT_HEAD');
+
+      if (isSuperAdminRole || isBudgetOfficerRole || isBudgetManagerRole) {
         defaultScope = 'FULL';
         defaultRolePermissions = {
           CreateProposals: true,
@@ -505,7 +515,14 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           ManageUsers: true,
           ManageSettings: true
         };
-        defaultWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator','superAdmin', 'regionFinalVerifier'];
+        
+        if (isSuperAdminRole) {
+            defaultWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator','superAdmin', 'regionFinalVerifier'];
+        } else if (isBudgetOfficerRole) {
+            defaultWorkflowRoles = ['officeFinalVerifier'];
+        } else if (isBudgetManagerRole) {
+            defaultWorkflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
+        }
       }
       // Special handling for BUDGET PREPARER - give them DIVISION scope and creator permissions
       else if (userRoles.includes('BUDGET_PREPARER') || userRoles.includes('BUDGET PREPARER')) {

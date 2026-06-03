@@ -1,5 +1,6 @@
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
+const { hasFullAccess } = require('./securityMiddleware');
 
 // Re-implemented to use HierarchicalUserAssignment (legacy controller removed)
 const checkUserRegionAccess = async (userId, regionName) => {
@@ -43,9 +44,10 @@ const checkUserRegionAccess = async (userId, regionName) => {
 const checkRegionAccess = async (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   try {
-    // SUPER ADMIN has access to all regions
     const userRoles = req.user?.Roles || [];
-    if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
+    
+    // Roles with full access (SUPER_ADMIN, BUDGET_MANAGER, BUDGET_OFFICER, etc.) bypass region check
+    if (hasFullAccess(userRoles)) {
       return next();
     }
     

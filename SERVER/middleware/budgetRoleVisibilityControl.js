@@ -295,12 +295,9 @@ const budgetRoleVisibilityControl = () => {
             ]
           };
 
-          // Apply organizational restriction
-          if (Object.keys(orgScope).length > 0) {
-            visibilityFilter = { $and: [officerBaseFilter, orgScope] };
-          } else {
-            visibilityFilter = officerBaseFilter;
-          }
+          // Apply organizational restriction (unless it's a high-level officer who should see all regions)
+          // User requested Budget Officer and Budget Manager to have access to all regions
+          visibilityFilter = officerBaseFilter;
           break;
 
         case 'SUPER ADMIN':
@@ -532,12 +529,9 @@ const budgetRoleVisibilityControl = () => {
             ]
           };
 
-          // Apply organizational restriction
-          if (Object.keys(orgScope).length > 0) {
-            visibilityFilter = { $and: [managerBaseFilter, orgScope] };
-          } else {
-            visibilityFilter = managerBaseFilter;
-          }
+          // Apply organizational restriction (unless it's a high-level manager who should see all regions)
+          // User requested Budget Officer and Budget Manager to have access to all regions
+          visibilityFilter = managerBaseFilter;
           break;
 
         default:
