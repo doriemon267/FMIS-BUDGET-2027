@@ -5,23 +5,51 @@ const fs = require('fs');
 /**
  * Extracts standard signatories from a workflow object
  */
-const extractSignatoriesFromWorkflow = (workflow) => {
+const extractSignatoriesFromWorkflow = (workflow, currentUser = null) => {
   const result = {
     preparer: { name: workflow?.createdByName || '', title: 'Budget Preparer' },
     reviewer: { name: '', title: 'Budget Reviewer' },
     approver: { name: '', title: 'Budget Approver' }
   };
 
-  if (!workflow || !Array.isArray(workflow.workflowHistory)) return result;
+  if (workflow && Array.isArray(workflow.workflowHistory)) {
+    const history = workflow.workflowHistory.slice().reverse();
 
-  const notedEntry = workflow.workflowHistory.find(h => h.toStatus === 'FORWARDED_TO_APPROVER');
-  if (notedEntry) {
-    result.reviewer.name = notedEntry.performedByName || '';
+    const notedEntry = history.find(h => 
+      h.toStatus === 'FORWARDED_TO_APPROVER' || 
+      h.action === 'submit-to-approver'
+    );
+    if (notedEntry) {
+      result.reviewer.name = notedEntry.performedByName || '';
+    }
+
+    const approvedEntry = history.find(h => 
+      h.toStatus === 'FORWARDED_TO_BRD_ANALYST' || 
+      h.action === 'submit-to-analyst' ||
+      h.toStatus === 'FORWARDED_TO_BRD_OFFICER' ||
+      h.action === 'merge' ||
+      h.toStatus === 'MERGED'
+    );
+    
+    if (approvedEntry) {
+      result.approver.name = approvedEntry.performedByName || '';
+    } else {
+      const finalizedEntry = history.find(h => h.toStatus === 'FINALIZED' || h.action === 'finalize');
+      if (finalizedEntry) {
+        result.approver.name = finalizedEntry.performedByName || '';
+      } else if (workflow.consolidatedByName) {
+        result.approver.name = workflow.consolidatedByName;
+      }
+    }
   }
 
-  const approvedEntry = workflow.workflowHistory.find(h => h.toStatus === 'FINALIZED');
-  if (approvedEntry) {
-    result.approver.name = approvedEntry.performedByName || '';
+  // Fallback to current user if they are an approver and name is still blank
+  if (!result.approver.name && currentUser) {
+    const roles = currentUser.roles || currentUser.Roles || [];
+    const isApprover = roles.some(r => r === 'BUDGET_APPROVER' || r === 'BUDGET APPROVER');
+    if (isApprover) {
+      result.approver.name = currentUser.name || currentUser.UserName || currentUser.username || '';
+    }
   }
   
   return result;

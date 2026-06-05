@@ -68,6 +68,7 @@ const ConsolidatedCorporateIncomePage = () => {
   const [expandedCategories, setExpandedCategories] = useState(new Set());
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [pdfFilename, setPdfFilename] = useState('');
   const [pdfLoading, setPdfLoading] = useState(false);
   const [lastGeneratedParamsKey, setLastGeneratedParamsKey] = useState('');
   const [organizationStructure, setOrganizationStructure] = useState(null);
@@ -492,6 +493,23 @@ const ConsolidatedCorporateIncomePage = () => {
         params,
         { responseType: 'blob' }
       );
+
+      // Extract filename from Content-Disposition header
+      let filename = `Consolidated_Corporate_Income_${fiscalYear}_${budgetType}.pdf`;
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        // Try to match filename* (UTF-8) first, then fallback to filename
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (filenameStarMatch && filenameStarMatch[1]) {
+          filename = decodeURIComponent(filenameStarMatch[1]);
+        } else {
+          const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1];
+          }
+        }
+      }
+      setPdfFilename(filename);
 
       // Verify we actually got a PDF blob
       if (response.data.type !== 'application/pdf') {
@@ -1244,7 +1262,7 @@ const ConsolidatedCorporateIncomePage = () => {
         onClose={closePdfDialog}
         pdfUrl={pdfPreviewUrl}
         title="Consolidated Corporate Income PDF Preview"
-        downloadFilename={`Consolidated_Corporate_Income_${fiscalYear}_${budgetType}.pdf`}
+        downloadFilename={pdfFilename}
       />
     </ReportPageLayout>
   );

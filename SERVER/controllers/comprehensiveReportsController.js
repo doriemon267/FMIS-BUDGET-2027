@@ -2226,67 +2226,72 @@ const getComprehensiveReportPdf = async (req, res) => {
       const docId = reportData?.summary?.documentId || reportData?.documentId || `COMP-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
       reportData.summary.documentId = docId; // ensure it's saved in the object
 
-      try {
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5005';
-        const verifyUrl = `${frontendUrl}/verify-document?id=${docId}`;
-        
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verifyUrl)}`;
-        qrImagePath = path.join(os.tmpdir(), `qr_${Date.now()}.png`);
-        
-        await new Promise((resolve, reject) => {
-          require('https').get(qrUrl, (response) => {
-            if (response.statusCode === 200) {
-              const file = fs.createWriteStream(qrImagePath);
-              response.pipe(file);
-              file.on('finish', () => { file.close(); resolve(); });
-            } else {
-              reject(new Error(`Failed to fetch QR: ${response.statusCode}`));
-            }
-          }).on('error', reject);
+      // Temporarily hide the Workflow Digital Signatures Audit box
+      const showSignatureAudit = false;
+      
+      if (showSignatureAudit) {
+        try {
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5005';
+          const verifyUrl = `${frontendUrl}/verify-document?id=${docId}`;
+          
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verifyUrl)}`;
+          qrImagePath = path.join(os.tmpdir(), `qr_${Date.now()}.png`);
+          
+          await new Promise((resolve, reject) => {
+            require('https').get(qrUrl, (response) => {
+              if (response.statusCode === 200) {
+                const file = fs.createWriteStream(qrImagePath);
+                response.pipe(file);
+                file.on('finish', () => { file.close(); resolve(); });
+              } else {
+                reject(new Error(`Failed to fetch QR: ${response.statusCode}`));
+              }
+            }).on('error', reject);
+          });
+          tempSignatureImagePaths.push(qrImagePath);
+        } catch (err) {
+          console.warn('Failed to generate QR code:', err.message);
+          qrImagePath = null;
+        }
+
+        const neededHeight = Math.max((signatories.length + 1.5) * LINE_HEIGHT + 10, 70);
+        if (currentY + neededHeight > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+          startNewPage();
+        }
+
+        const boxTop = currentY;
+        pdfDoc.rectangle(CONTENT_LEFT + 10, boxTop, CONTENT_RIGHT - CONTENT_LEFT - 20, neededHeight, {
+          stroke: '#888888',
+          lineWidth: 0.5,
+          fill: '#fcfcfc'
         });
-        tempSignatureImagePaths.push(qrImagePath);
-      } catch (err) {
-        console.warn('Failed to generate QR code:', err.message);
-        qrImagePath = null;
-      }
-
-      const neededHeight = Math.max((signatories.length + 1.5) * LINE_HEIGHT + 10, 70);
-      if (currentY + neededHeight > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-        startNewPage();
-      }
-
-      const boxTop = currentY;
-      pdfDoc.rectangle(CONTENT_LEFT + 10, boxTop, CONTENT_RIGHT - CONTENT_LEFT - 20, neededHeight, {
-        stroke: '#888888',
-        lineWidth: 0.5,
-        fill: '#fcfcfc'
-      });
-      
-      if (qrImagePath) {
-        pdfDoc.image(qrImagePath, CONTENT_LEFT + 20, boxTop + 5, { width: 60, height: 60, keepAspectRatio: true });
-      }
-
-      const textStartX = qrImagePath ? CONTENT_LEFT + 95 : CONTENT_LEFT + 20;
-      currentY = boxTop + 10;
-
-      pdfDoc.text('Workflow Digital Signatures Audit:', textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#333333' }));
-      currentY += LINE_HEIGHT;
-      pdfDoc.text(`Document ID: ${docId}`, textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#2a52be' }));
-      currentY += LINE_HEIGHT;
-
-      signatories.forEach((signatory, index) => {
-        const roleLabel = roleToPositionLabel(signatory.workflowRole || '');
-        const signedDate = signatory?.signedAt ? new Date(signatory.signedAt).toLocaleString('en-US') : 'N/A';
-        const name = signatory.fullName || 'Unknown Signatory';
-        const verifyStatus = signatory?.verificationStatus || 'Unverifiable';
         
-        pdfDoc.text(`${index + 1}. ${name} (${signatory.position || roleLabel})`, textStartX, currentY, textOpt({ fontSize: 7, bold: true }));
-        pdfDoc.text(`Date: ${signedDate}   |   Status: ${verifyStatus}`, textStartX + 200, currentY, textOpt({ fontSize: 7, color: '#444444' }));
-        
+        if (qrImagePath) {
+          pdfDoc.image(qrImagePath, CONTENT_LEFT + 20, boxTop + 5, { width: 60, height: 60, keepAspectRatio: true });
+        }
+
+        const textStartX = qrImagePath ? CONTENT_LEFT + 95 : CONTENT_LEFT + 20;
+        currentY = boxTop + 10;
+
+        pdfDoc.text('Workflow Digital Signatures Audit:', textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#333333' }));
         currentY += LINE_HEIGHT;
-      });
-      
-      currentY = boxTop + neededHeight + LINE_HEIGHT;
+        pdfDoc.text(`Document ID: ${docId}`, textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#2a52be' }));
+        currentY += LINE_HEIGHT;
+
+        signatories.forEach((signatory, index) => {
+          const roleLabel = roleToPositionLabel(signatory.workflowRole || '');
+          const signedDate = signatory?.signedAt ? new Date(signatory.signedAt).toLocaleString('en-US') : 'N/A';
+          const name = signatory.fullName || 'Unknown Signatory';
+          const verifyStatus = signatory?.verificationStatus || 'Unverifiable';
+          
+          pdfDoc.text(`${index + 1}. ${name} (${signatory.position || roleLabel})`, textStartX, currentY, textOpt({ fontSize: 7, bold: true }));
+          pdfDoc.text(`Date: ${signedDate}   |   Status: ${verifyStatus}`, textStartX + 200, currentY, textOpt({ fontSize: 7, color: '#444444' }));
+          
+          currentY += LINE_HEIGHT;
+        });
+        
+        currentY = boxTop + neededHeight + LINE_HEIGHT;
+      }
     }
     
     // Final page footer
@@ -2340,11 +2345,10 @@ const getComprehensiveReportPdf = async (req, res) => {
 
       if (res.headersSent) return;
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader(
-        'Content-Disposition',
-        `inline; filename=Comprehensive_Report_${String(fiscalYear || 'AllYears')}_${String(budgetType || 'AllTypes')}.pdf`
-      );
+      const filename = `Comprehensive_Report_${String(fiscalYear || 'AllYears')}_${String(budgetType || 'AllTypes')}.pdf`;
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.setHeader('X-Document-ID', documentId);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Document-ID');
 
       const readStream = fs.createReadStream(tmpFilePath);
       readStream.on('error', (streamErr) => {

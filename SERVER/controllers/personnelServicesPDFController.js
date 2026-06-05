@@ -395,8 +395,10 @@ const exportPermanentPersonnelPDF = async (req, res) => {
     pdfDoc.endPage().endPDF();
 
     // Send PDF file
+    const filename = `Personnel-Services-Permanent-Report-${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Personnel-Services-Permanent-Report-${Date.now()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.on('finish', () => cleanupTempImages(globalTempImagePaths));
 
     const fileStream = fs.createReadStream(tmpFilePath);
@@ -793,8 +795,10 @@ const exportCasualPersonnelPDF = async (req, res) => {
     pdfDoc.endPage().endPDF();
 
     // Send PDF file
+    const filename = `Personnel-Services-Casual-Report-${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Personnel-Services-Casual-Report-${Date.now()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.on('finish', () => cleanupTempImages(globalTempImagePaths));
 
     const fileStream = fs.createReadStream(tmpFilePath);
@@ -1189,8 +1193,10 @@ const exportCOSPersonnelPDF = async (req, res) => {
     pdfDoc.endPage().endPDF();
 
     // Send PDF file
+    const filename = `Personnel-Services-COS-Report-${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Personnel-Services-COS-Report-${Date.now()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     res.on('finish', () => cleanupTempImages(globalTempImagePaths));
 
     const fileStream = fs.createReadStream(tmpFilePath);

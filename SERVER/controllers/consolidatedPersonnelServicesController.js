@@ -538,7 +538,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       }
     }
 
-    const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
+    const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : (region ? [region] : null);
     let query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
@@ -577,8 +577,9 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     const psData = await PersonnelServices.find(query).lean();
 
     // FINAL FALLBACK: Extract from data if still missing
-    if (!department && psData.length > 0) department = psData[0].department;
-    if (!division && psData.length > 0) division = psData[0].division;
+    // Track what to SHOW in the PDF header
+    const headerDept = isSuperAdmin ? null : department;
+    const headerDiv  = isSuperAdmin ? null : division;
 
     const generateDocumentId = () => {
       const timestamp = Date.now().toString(36);
@@ -587,20 +588,26 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     };
     const documentId = generateDocumentId();
 
-    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
     const workflowRefId = psData.map((m) => m.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
       const workflow = await NewProposalWorkflow.findById(workflowRefId)
-        .select('createdByName workflowHistory')
+        .select('createdByName workflowHistory consolidatedByName')
         .lean();
       if (workflow) {
-        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow, req.user);
       }
     }
 
     const grouped = {};
     psData.forEach((employee) => {
-      const rcName = employee.department || employee.division || employee.region || 'Unknown Responsibility Center';
+      const isMultiRegion = !regionList || regionList.length > 1;
+      let rcName;
+      if (isMultiRegion) {
+        rcName = employee.region || 'Unknown Region';
+      } else {
+        rcName = employee.department || employee.division || employee.region || 'Unknown Responsibility Center';
+      }
       if (!grouped[rcName]) grouped[rcName] = {};
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         const categoryName = `${categoryKey} ${categoryData.name}`;
@@ -714,10 +721,10 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       hy += LINE_H;
       
       let rcHeader = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
-      if (department || division) {
+      if (headerDept || headerDiv) {
         let subHeader = '';
-        if (department) subHeader += department;
-        if (division) subHeader += (subHeader ? ' - ' : '') + division;
+        if (headerDept) subHeader += headerDept;
+        if (headerDiv) subHeader += (subHeader ? ' - ' : '') + headerDiv;
         pdfDoc.text(rcHeader, cx, hy, textOpt({ fontSize: 10, bold: true, align: 'center' }));
         hy += LINE_H;
         pdfDoc.text(subHeader, cx, hy, textOpt({ fontSize: 9, align: 'center' }));
@@ -825,8 +832,10 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       }
       if (res.headersSent) return;
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename=Consolidated_PS_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
+      const filename = `Consolidated_PS_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`;
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.setHeader('X-Document-ID', documentId);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Document-ID');
       const stream = fs.createReadStream(tmpFilePath);
       stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
       res.on('finish', () => {

@@ -205,8 +205,10 @@ exports.exportCourtAppearancePDF = async (req, res) => {
     pdfDoc.endPage().endPDF();
 
     // Send via Stream
+    const filename = `court-appearance-report-${Date.now()}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="court-appearance-report-${Date.now()}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
     const readStream = fs.createReadStream(tmpFilePath);
     readStream.pipe(res);
     readStream.on('end', async () => { try { await fsPromises.unlink(tmpFilePath); } catch (e) {} });

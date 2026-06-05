@@ -28,8 +28,7 @@ import {
 
 import { useDrawer } from "../context/DrawerContext";
 import { useUser } from "../context/UserContext";
-import Swal from "sweetalert2";
-import { toast } from "react-toastify";
+import LogoutDialog from "./LogoutDialog"; // Tiyaking tama ang path papunta sa component
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import {
   isAccountingRoles,
@@ -43,7 +42,7 @@ import env from "../utils/env";
 
 export default function Sidebar() {
   const location = useLocation();
-  const { currentUser, logout } = useUser();
+  const { currentUser } = useUser(); // Tinanggal ang logout dito dahil nasa Dialog na ang logic
   const { open, toggleDrawer, setOpen } = useDrawer();
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === 'dark';
@@ -63,13 +62,12 @@ export default function Sidebar() {
     return label.length > 15 ? label.slice(0, 15) + "..." : label;
   };
 
-  // Mapped from your old LinkTo configuration
   const navItems = [
     {
       title: "Dashboard",
       path: "/dashboard",
       icon: LuLayoutDashboard,
-      isAllow: true, // Replicating old logic where Dashboard was unconditionally allowed via "isAllow" prop
+      isAllow: true,
     },
     {
       title: "Roles Management",
@@ -119,7 +117,7 @@ export default function Sidebar() {
       title: "Nature Of Collections",
       path: "/nature-of-collections",
       icon: LuBookmark,
-      isAllow: isPersonnel, // Assuming this is evaluated as a boolean/constant in your checkRole
+      isAllow: isPersonnel,
     },
     {
       title: "Fund Clusters",
@@ -179,7 +177,7 @@ export default function Sidebar() {
             ? env("DV_URL_PROD") + "/dashboard"
             : env("DV_URL_DEV") + "/dashboard",
           icon: LuReceipt,
-          isAllow: true, // No specific role required in old code
+          isAllow: true,
         },
         {
           title: "Cash System",
@@ -203,7 +201,7 @@ export default function Sidebar() {
             ? env("ITINERARY_URL_PROD") + "/itinerary_info"
             : env("ITINERARY_URL_DEV") + "/itinerary_info",
           icon: LuWallet,
-          isAllow: true, // No specific role required in old code
+          isAllow: true,
         },
       ],
     },
@@ -214,43 +212,6 @@ export default function Sidebar() {
       isAllow: true,
     },
   ];
-
-  const handleLogout = async () => {
-    const result = await Swal.fire({
-      title: "Sign Out?",
-      text: "Are you sure you want to sign out?",
-      icon: "warning",
-      iconColor: "#e63946",
-      showCancelButton: true,
-      confirmButtonText: "Yes, Sign Out",
-      cancelButtonText: "Cancel",
-      background: isDarkMode ? "#152e22" : "#ffffff", // Sleek backdrop matching theme mode
-      color: isDarkMode ? "#cbd5e1" : "#1e293b", // Sleek text matching theme mode
-      confirmButtonColor: "#e63946", // Modern soft red
-      cancelButtonColor: "#386641", // Sleek deep green
-      reverseButtons: true,
-      allowOutsideClick: false,
-      customClass: {
-        popup: 'premium-swal-popup',
-        title: 'premium-swal-title',
-        htmlContainer: 'premium-swal-text',
-        confirmButton: 'premium-swal-confirm',
-        cancelButton: 'premium-swal-cancel',
-      }
-    });
-
-    if (result.isConfirmed) {
-      try {
-        await logout();
-        if (!IS_PRODUCTION) {
-          toast.success("Logged out successfully");
-        }
-      } catch (error) {
-        toast.error("Logout failed!");
-        console.error("Logout Error:", error);
-      }
-    }
-  };
 
   useEffect(() => {
     if (!open) {
@@ -297,48 +258,6 @@ export default function Sidebar() {
 
   return (
     <>
-      <style>{`
-        .premium-swal-popup {
-          border-radius: 24px !important;
-          font-family: 'Outfit', 'Inter', 'Roboto', sans-serif !important;
-          border: 1px solid rgba(255,255,255,0.08) !important;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
-          padding: 2.5rem 1.5rem !important;
-        }
-        .premium-swal-title {
-          font-weight: 900 !important;
-          font-size: 1.6rem !important;
-          letter-spacing: -0.5px !important;
-          margin-bottom: 0.5rem !important;
-        }
-        .premium-swal-text {
-          font-weight: 500 !important;
-          font-size: 1rem !important;
-          opacity: 0.85 !important;
-          margin-bottom: 1.5rem !important;
-        }
-        .premium-swal-confirm {
-          border-radius: 12px !important;
-          font-weight: 700 !important;
-          font-size: 0.95rem !important;
-          padding: 12px 24px !important;
-          transition: all 0.3s ease !important;
-        }
-        .premium-swal-confirm:hover {
-          transform: translateY(-2px) !important;
-        }
-        .premium-swal-cancel {
-          border-radius: 12px !important;
-          font-weight: 700 !important;
-          font-size: 0.95rem !important;
-          padding: 12px 24px !important;
-          transition: all 0.3s ease !important;
-        }
-        .premium-swal-cancel:hover {
-          transform: translateY(-2px) !important;
-        }
-      `}</style>
-
       <Box
         sx={{
           display: "flex",
@@ -688,7 +607,6 @@ export default function Sidebar() {
               );
             }
 
-            // Fallback for sub-item isAllow checking (if sub-items are defined but parent isn't)
             if (item.isAllow !== undefined && !item.isAllow) return null;
 
             const hasSubmenu = !!item.subItems;
@@ -925,60 +843,62 @@ export default function Sidebar() {
           })}
         </Box>
 
-        {/* LOGOUT BUTTON AREA */}
+        {/* LOGOUT BUTTON AREA (Pinalitan at Binalot na sa LogoutDialog) */}
         <Box sx={{ p: 2, pb: 3, borderTop: "1px solid rgba(255, 255, 255, 0.05)", flexShrink: 0 }}>
-          <Box
-            component="button"
-            onClick={handleLogout}
-            onMouseEnter={(e) => handleMouseEnter(e, "Sign Out")}
-            onMouseLeave={handleMouseLeave}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: open ? "flex-start" : "center",
-              gap: 1.5,
-              width: "100%",
-              px: 2,
-              py: 1.5,
-              borderRadius: 2,
-              border: "none",
-              background: "transparent",
-              color: "rgba(255, 255, 255, 0.6)",
-              cursor: "pointer",
-              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-              "&:hover": {
-                bgcolor: "rgba(239, 68, 68, 0.08)",
-                color: "#f87171",
-                "& .logout-icon": {
-                  opacity: 1,
-                  transform: "translateX(3px)",
-                }
-              },
-            }}
-          >
-            <LuLogOut 
-              className="logout-icon"
-              size={17} 
-              style={{ 
-                opacity: 0.6,
+          <LogoutDialog>
+            <Box
+              component="button"
+              onMouseEnter={(e) => handleMouseEnter(e, "Sign Out")}
+              onMouseLeave={handleMouseLeave}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: open ? "flex-start" : "center",
+                gap: 1.5,
+                width: "100%",
+                px: 2,
+                py: 1.5,
+                borderRadius: 2,
+                border: "none",
+                background: "transparent",
+                color: "rgba(255, 255, 255, 0.6)",
+                cursor: "pointer",
                 transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-              }} 
-            />
-            {open && (
-              <Typography
-                sx={{
-                  fontSize: "0.85rem",
-                  fontWeight: 500,
-                  whiteSpace: "nowrap",
-                  letterSpacing: "0.01em",
-                }}
-              >
-                Sign Out
-              </Typography>
-            )}
-          </Box>
+                "&:hover": {
+                  bgcolor: "rgba(239, 68, 68, 0.08)",
+                  color: "#f87171",
+                  "& .logout-icon": {
+                    opacity: 1,
+                    transform: "translateX(3px)",
+                  }
+                },
+              }}
+            >
+              <LuLogOut 
+                className="logout-icon"
+                size={17} 
+                style={{ 
+                  opacity: 0.6,
+                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                }} 
+              />
+              {open && (
+                <Typography
+                  sx={{
+                    fontSize: "0.85rem",
+                    fontWeight: 500,
+                    whiteSpace: "nowrap",
+                    letterSpacing: "0.01em",
+                  }}
+                >
+                  Sign Out
+                </Typography>
+              )}
+            </Box>
+          </LogoutDialog>
         </Box>
 
+        {/* TOOLTIP */}
         {tooltip.visible && (
           <Box
             sx={{

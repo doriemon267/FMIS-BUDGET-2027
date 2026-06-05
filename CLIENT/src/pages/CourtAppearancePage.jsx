@@ -92,6 +92,7 @@ const EmployeeCourtAppearancePage = () => {
   // PDF Preview State
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState('');
+  const [pdfFilename, setPdfFilename] = useState('');
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -219,6 +220,22 @@ const EmployeeCourtAppearancePage = () => {
         { filters },
         { responseType: 'blob' }
       );
+
+      // Extract filename from Content-Disposition header
+      let filename = `court-appearance-report-${Date.now()}.pdf`;
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (filenameStarMatch && filenameStarMatch[1]) {
+          filename = decodeURIComponent(filenameStarMatch[1]);
+        } else {
+          const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1];
+          }
+        }
+      }
+      setPdfFilename(filename);
 
       // Create blob URL and show in preview dialog
       const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -697,7 +714,7 @@ const EmployeeCourtAppearancePage = () => {
         }}
         pdfUrl={pdfPreviewUrl}
         title="Court Appearance PDF Preview"
-        downloadFilename={`Court_Appearance_Report_${Date.now()}.pdf`}
+        downloadFilename={pdfFilename}
       />
     </>
   );

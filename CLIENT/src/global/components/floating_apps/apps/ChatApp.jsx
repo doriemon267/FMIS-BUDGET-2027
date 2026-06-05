@@ -117,8 +117,8 @@ const resolveSocketOptions = () => {
 
   if (IS_PRODUCTION) {
     return {
-      transports: ['polling'],
-      upgrade: false,
+      transports: ['websocket', 'polling'],
+      upgrade: true,
     };
   }
 
@@ -639,7 +639,6 @@ export default function ChatApp() {
     if (socketToken) authObj.token = socketToken;
     const socketOptions = resolveSocketOptions();
     const conn = io(serverUrl, {
-      path: "/socket.io",
       transports: socketOptions.transports,
       upgrade: socketOptions.upgrade,
       withCredentials: true,

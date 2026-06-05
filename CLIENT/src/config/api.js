@@ -190,6 +190,27 @@ api.interceptors.response.use(undefined, async (error) => {
       return Promise.reject(error);
     }
 
+    // NEW: If the user was kicked out, do NOT attempt silent refresh. 
+    // Go straight to the "Sticky" toast and logout.
+    if (response.status === 401 && response.data?.expired) {
+      const displayMessage = response.data?.error || 'Ang iyong account ay binuksan sa ibang device.';
+      toast.error(displayMessage, { 
+        autoClose: false, 
+        closeOnClick: false,
+        draggable: false,
+        onClose: () => {
+          if (IS_PRODUCTION) {
+            const currentUrl = typeof window !== 'undefined' ? window.location.href : "https://budget.nia.gov.ph";
+            const base = env("LOGIN_REDIRECT_URL") || "https://fmis.nia.gov.ph/login";
+            window.location.href = `${base}?ReturnUrl=${encodeURIComponent(currentUrl)}&error=${encodeURIComponent(displayMessage)}`;
+          } else {
+            goTo('/login', { state: { error: displayMessage } });
+          }
+        }
+      });
+      return Promise.reject(error);
+    }
+
     try {
       config.__isRetryRequest = true;
       // Attempt to refresh user session by calling auth server's get-user endpoint
@@ -217,14 +238,26 @@ api.interceptors.response.use(undefined, async (error) => {
       // If refresh fails, redirect appropriately for better UX
       // Redirect: 401 -> login, 403 -> not-authorized (avoids stuck UI)
       if (response.status === 401) {
-        toast.error('Session expired. Please log in again.');
-        if (IS_PRODUCTION) {
-          const currentUrl = typeof window !== 'undefined' ? window.location.href : "https://budget.nia.gov.ph";
-          const base = env("LOGIN_REDIRECT_URL") || "https://fmis.nia.gov.ph/login";
-          window.location.href = `${base}?ReturnUrl=${encodeURIComponent(currentUrl)}`;
-        } else {
-          goTo('/login');
-        }
+        const serverError = response.data?.error || response.data?.message;
+        const displayMessage = serverError || 'Session expired. Please log in again.';
+        
+        // Use a persistent toast (autoClose: false) so they MUST see it
+        toast.error(displayMessage, { 
+          autoClose: false, 
+          closeOnClick: false,
+          draggable: false,
+          onClose: () => {
+            if (IS_PRODUCTION) {
+              const currentUrl = typeof window !== 'undefined' ? window.location.href : "https://budget.nia.gov.ph";
+              const base = env("LOGIN_REDIRECT_URL") || "https://fmis.nia.gov.ph/login";
+              window.location.href = `${base}?ReturnUrl=${encodeURIComponent(currentUrl)}&error=${encodeURIComponent(displayMessage)}`;
+            } else {
+              goTo('/login', { state: { error: displayMessage } });
+            }
+          }
+        });
+
+        // We removed the automatic setTimeout redirection here to wait for user to close the toast
       } else if (response.status === 403) {
         goTo('/not-authorized');
         toast.error('You do not have permission to perform this action.');

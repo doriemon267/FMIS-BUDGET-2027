@@ -19,7 +19,7 @@ export const getErrorMessage = (error) => {
       case 400:
         return data?.message || data?.error || 'Invalid request. Please check your input.';
       case 401:
-        return 'You are not authorized. Please log in again.';
+        return data?.message || data?.error || 'You are not authorized. Please log in again.';
       case 403:
         return 'You do not have permission to perform this action.';
       case 404:

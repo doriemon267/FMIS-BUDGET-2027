@@ -162,31 +162,26 @@ const ConsolidatedReportsPage = () => {
   // Enforce restrictions based on role/scope
   useEffect(() => {
     if (isRestricted) {
-      if (consolidationType !== 'current') {
-        setConsolidationType('current');
-      }
+      setConsolidationType((prev) => (prev !== 'current' ? 'current' : prev));
       
       const userRegion = hierarchical.accessibleRegions?.[0]?.regionName || activeRegion?.name || activeRegion?.Region;
-      if (userRegion && selectedCurrentRegion !== userRegion) {
-        setSelectedCurrentRegion(userRegion);
+      if (userRegion) {
+        setSelectedCurrentRegion((prev) => (prev !== userRegion ? userRegion : prev));
       }
       
       if ((scope === 'DEPARTMENT' || scope === 'DIVISION') && hierarchical.accessibleDepartments?.[0]) {
         const userDeptId = String(hierarchical.accessibleDepartments[0]._id || hierarchical.accessibleDepartments[0].id);
-        if (selectedDepartment !== userDeptId) {
-          setSelectedDepartment(userDeptId);
-        }
+        setSelectedDepartment((prev) => (prev !== userDeptId ? userDeptId : prev));
       }
       if (scope === 'DIVISION' && hierarchical.accessibleDivisions?.[0]) {
         const userDiv = hierarchical.accessibleDivisions[0];
-        if (selectedDivision !== userDiv) {
-          setSelectedDivision(userDiv);
-        }
+        setSelectedDivision((prev) => (prev !== userDiv ? userDiv : prev));
       }
     }
-  }, [isRestricted, scope, consolidationType, hierarchical, activeRegion, selectedCurrentRegion, selectedDepartment, selectedDivision]);
+  }, [isRestricted, scope, hierarchical, activeRegion]);
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [pdfFilename, setPdfFilename] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
@@ -661,6 +656,23 @@ const ConsolidatedReportsPage = () => {
       const response = await api.get(`/api/consolidated-reports/consolidated-data-pdf?${params.toString()}`, {
         responseType: "blob",
       });
+
+      // Extract filename from Content-Disposition header
+      let filename = `Consolidated_MOOE_${fy}.pdf`;
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (filenameStarMatch && filenameStarMatch[1]) {
+          filename = decodeURIComponent(filenameStarMatch[1]);
+        } else {
+          const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1];
+          }
+        }
+      }
+      setPdfFilename(filename);
+
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
       if (pdfPreviewUrl) window.URL.revokeObjectURL(pdfPreviewUrl);
@@ -1201,7 +1213,7 @@ const ConsolidatedReportsPage = () => {
         onClose={closePdfDialog}
         pdfUrl={pdfPreviewUrl}
         title="Consolidated MOOE PDF Preview"
-        downloadFilename={`Consolidated_MOOE_${activeSettings?.fiscalYear || "All"}_${activeSettings?.budgetType || "All"}.pdf`}
+        downloadFilename={pdfFilename}
       />
 
     </ReportPageLayout>

@@ -280,7 +280,11 @@ const CalendarApp = () => {
     if (!currentUser) return;
     try {
       const baseUrl = import.meta.env.VITE_SERVER_URL || import.meta.env.VITE_API_BASE_URL || window.location.origin;
-      const s = io(baseUrl, { path: '/socket.io', transports: ['polling', 'websocket'] });
+      const s = io(baseUrl, { 
+        path: '/socket.io/', 
+        transports: ['polling', 'websocket'],
+        withCredentials: true 
+      });
       socketRef.current = s;
       const userId = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
       if (userId) s.emit('join-user-room', userId);

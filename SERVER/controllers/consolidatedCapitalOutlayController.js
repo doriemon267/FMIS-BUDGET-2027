@@ -316,7 +316,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     };
     const documentId = generateDocumentId();
 
-    const { regions, fiscalYear, budgetType } = req.query;
+    const { regions, region, fiscalYear, budgetType } = req.query;
     let { department, division } = req.query;
     
     // --- SECURITY OVERRIDE FOR PDF: enforce dept scope same as data endpoint ---
@@ -383,7 +383,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const headerDept = isSuperAdmin ? null : department;
     const headerDiv  = isSuperAdmin ? null : division;
 
-    const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
+    const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : (region ? [region] : null);
 
     let regionFilter = {};
     if (req.submissionWorkflowFilters) {
@@ -411,14 +411,14 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const allDetails = await CapitalOutlayDetails.find({ capital_outlay_id: { $in: parentIds } }).sort({ createdAt: 1 }).lean();
 
     // Resolve workflow signatories
-    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
     const workflowRefId = coData.map((c) => c.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
       const workflow = await NewProposalWorkflow.findById(workflowRefId)
-        .select('createdByName workflowHistory')
+        .select('createdByName workflowHistory consolidatedByName')
         .lean();
       if (workflow) {
-        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow, req.user);
       }
     }
 
@@ -449,7 +449,13 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const catGroups = {};
     coData.forEach((parent) => {
       const catKey = (parent.category?.categoryName) || parent.accountingTitle || parent.sublineItem || 'Other';
-      const rcName = parent.department || parent.division || parent.region || '';
+      const isMultiRegion = !regionList || regionList.length > 1;
+      let rcName;
+      if (isMultiRegion) {
+        rcName = parent.region || 'Unknown Region';
+      } else {
+        rcName = parent.department || parent.division || parent.region || 'Unknown Responsibility Center';
+      }
       const details = detailsByParentId[parent._id.toString()];
 
       if (Array.isArray(details) && details.length > 0) {
@@ -752,8 +758,10 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       }
       if (res.headersSent) return;
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename=Capital_Outlay_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`);
+      const filename = `Capital_Outlay_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`;
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.setHeader('X-Document-ID', documentId);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Document-ID');
       const stream = fs.createReadStream(tmpFilePath);
       stream.on('error', (e) => { if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message }); });
       res.on('finish', () => {

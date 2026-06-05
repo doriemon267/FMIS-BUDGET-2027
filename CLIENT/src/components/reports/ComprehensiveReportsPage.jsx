@@ -84,6 +84,7 @@ const ComprehensiveReportsPage = () => {
   const [expandedMooeCoKeys, setExpandedMooeCoKeys] = useState(() => new Set());
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [pdfFilename, setPdfFilename] = useState("");
 
   // --- ROLE-BASED SCOPING LOGIC ---
   const isHighLevel = React.useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
@@ -451,6 +452,22 @@ const ComprehensiveReportsPage = () => {
           responseType: "blob",
         }
       );
+
+      // Extract filename from Content-Disposition header
+      let filename = `Comprehensive_Report_${selectedFiscalYear}_${selectedBudgetType}.pdf`;
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (filenameStarMatch && filenameStarMatch[1]) {
+          filename = decodeURIComponent(filenameStarMatch[1]);
+        } else {
+          const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1];
+          }
+        }
+      }
+      setPdfFilename(filename);
 
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
@@ -942,7 +959,7 @@ const ComprehensiveReportsPage = () => {
         onClose={closePdfDialog}
         pdfUrl={pdfPreviewUrl}
         title="Comprehensive Report PDF Preview"
-        downloadFilename={`Comprehensive_Report_${selectedFiscalYear}_${selectedBudgetType}.pdf`}
+        downloadFilename={pdfFilename}
       />
 
       {!reportData && !loading && (

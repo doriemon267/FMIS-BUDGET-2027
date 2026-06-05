@@ -1,6 +1,6 @@
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
-const { hasFullAccess } = require('./securityMiddleware');
+const { hasFullAccess } = require('../utils/authHelpers');
 
 // Re-implemented to use HierarchicalUserAssignment (legacy controller removed)
 const checkUserRegionAccess = async (userId, regionName) => {

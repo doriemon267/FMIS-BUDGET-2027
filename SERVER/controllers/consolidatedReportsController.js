@@ -409,7 +409,7 @@ const consolidatedReportsController = {
     }
 
     try {
-      const { regions, fiscalYear, budgetType } = req.query;
+      const { regions, region, fiscalYear, budgetType } = req.query;
       let { department, division } = req.query;
 
       // --- SECURITY OVERRIDE: Enforce scope based on user roles and assignments ---
@@ -465,7 +465,7 @@ const consolidatedReportsController = {
         }
       }
 
-      const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : null;
+      const regionList = regions ? (Array.isArray(regions) ? regions : [regions]) : (region ? [region] : null);
 
       let regionFilter = {};
       if (regionList && regionList.length) {
@@ -487,19 +487,19 @@ const consolidatedReportsController = {
 
       const mooeData = await MooeProposal.find(mooeQuery).lean();
 
-      // FINAL FALLBACK: Extract from data if still missing
-      if (!department && mooeData.length > 0) department = mooeData[0].department;
-      if (!division && mooeData.length > 0) division = mooeData[0].division;
+      // Track what to SHOW in the PDF header (only explicitly scoped values)
+      const headerDept = isSuperAdmin ? null : department;
+      const headerDiv  = isSuperAdmin ? null : division;
 
       // --- Resolve signatories from workflow ---
-      let signatoriesInfo = extractSignatoriesFromWorkflow(null);
+      let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
       const workflowRefId = mooeData.map((m) => m.workflowRef).filter(Boolean)[0];
       if (workflowRefId) {
         const workflow = await NewProposalWorkflow.findById(workflowRefId)
-          .select('createdByName createdByTitle workflowHistory')
+          .select('createdByName createdByTitle workflowHistory consolidatedByName')
           .lean();
         if (workflow) {
-          signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
+          signatoriesInfo = extractSignatoriesFromWorkflow(workflow, req.user);
         }
       }
 
@@ -513,7 +513,13 @@ const consolidatedReportsController = {
         // Skip rows with no financial value (0 or null)
         if (income === 0 && subsidy === 0 && amount === 0) return;
 
-        const rcName = item.department || item.division || item.region || 'Unknown Responsibility Center';
+        const isMultiRegion = !regionList || regionList.length > 1;
+        let rcName;
+        if (isMultiRegion) {
+          rcName = item.region || 'Unknown Region';
+        } else {
+          rcName = item.department || item.division || item.region || 'Unknown Responsibility Center';
+        }
         const categoryName = item.sublineItem || 'Uncategorized';
         const uacs = item.uacsCode || '';
         const title = item.accountingTitle || '';
@@ -738,10 +744,10 @@ const consolidatedReportsController = {
         hy += 11;
 
         let rcHeader = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
-        if (department || division) {
+        if (headerDept || headerDiv) {
           let subHeader = '';
-          if (department) subHeader += department;
-          if (division) subHeader += (subHeader ? ' - ' : '') + division;
+          if (headerDept) subHeader += headerDept;
+          if (headerDiv) subHeader += (subHeader ? ' - ' : '') + headerDiv;
           pdfDoc.text(rcHeader, cx, hy, { color: MID, fontSize: 9, bold: true, align: 'center' });
           hy += 12;
           pdfDoc.text(subHeader, cx, hy, { color: MID, fontSize: 8, align: 'center' });
@@ -1015,11 +1021,10 @@ const consolidatedReportsController = {
         }
         if (res.headersSent) return;
         res.setHeader('Content-Type', 'application/pdf');
+        const filename = `Consolidated_MOOE_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`;
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
         res.setHeader('X-Document-ID', documentId);
-        res.setHeader(
-          'Content-Disposition',
-          `inline; filename=Consolidated_MOOE_${safeStr(fiscalYear) || 'All'}_${safeStr(budgetType) || 'All'}.pdf`
-        );
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Document-ID');
         const stream = fs.createReadStream(tmpFilePath);
         stream.on('error', (e) => {
           if (!res.headersSent) res.status(500).json({ message: 'Stream error', error: e.message });

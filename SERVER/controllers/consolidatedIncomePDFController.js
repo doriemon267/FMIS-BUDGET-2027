@@ -688,7 +688,11 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     // Get regions
     let regions;
     if (regionFilter) {
-      regions = [{ Region: regionFilter }];
+      if (Array.isArray(regionFilter)) {
+        regions = regionFilter.map(r => ({ Region: r }));
+      } else {
+        regions = [{ Region: regionFilter }];
+      }
     } else {
       regions = await Region.find().sort({ Region: 1 });
     }
@@ -715,21 +719,25 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     // Get income entries
     const incomeQuery = { fiscalYear, budgetType: { $regex: new RegExp(queryBudgetType, 'i') } };
     if (regionFilter) {
-      incomeQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
+      if (Array.isArray(regionFilter)) {
+        incomeQuery.region = { $in: regionFilter.map(r => new RegExp(`^${r}$`, 'i')) };
+      } else {
+        incomeQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
+      }
     }
     
     // Fetch data using the same query as the screen report (reports.controller.js)
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
 
     // Resolve workflow signatories from linked NewProposalWorkflow
-    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
     const workflowRefId = incomeEntries.map((e) => e.workflowRef).filter(Boolean)[0];
     if (workflowRefId) {
       const workflow = await NewProposalWorkflow.findById(workflowRefId)
-        .select('createdByName workflowHistory')
+        .select('createdByName workflowHistory consolidatedByName')
         .lean();
       if (workflow) {
-        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow, req.user);
       }
     }
     
@@ -913,16 +921,43 @@ const exportConsolidatedIncomePDF = async (req, res) => {
 
     let currentPage = 0;
 
-    const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
-    const drawBorder = () => {
-      // Border disabled as requested
-    };
     const resolveLogoPath = (name) => {
       const serverAsset = path.join(__dirname, `../assets/${name}`);
       if (fs.existsSync(serverAsset)) return serverAsset;
       const clientAsset = path.join(__dirname, `../../CLIENT/public/${name}`);
       if (fs.existsSync(clientAsset)) return clientAsset;
       return null;
+    };
+
+    const resolveExisting = (...candidates) => {
+      for (const c of candidates) { if (c && fs.existsSync(c)) return c; }
+      return null;
+    };
+
+    // ── Font resolution: Cambria & Trajan Pro (Windows fonts) ────────────────
+    const F_CAMBRIA      = resolveExisting('C:/Windows/Fonts/cambria.ttc',  'C:/Windows/Fonts/CAMBRIA.TTC')  || 'Times-Roman';
+    const F_CAMBRIA_B    = resolveExisting('C:/Windows/Fonts/cambriab.ttf', 'C:/Windows/Fonts/CAMBRIAB.TTF') || 'Times-Bold';
+    const F_TRAJAN       = resolveExisting(
+      'C:/Windows/Fonts/TrajanPro3Regular.otf',
+      'C:/Windows/Fonts/TrajanPro-Regular.otf',
+      'C:/Windows/Fonts/trajan.ttf',
+      'C:/Program Files/Adobe/Acrobat DC/Resource/Font/TrajanPro3-Regular.otf',
+      'C:/Program Files (x86)/Common Files/Adobe/Fonts/TrajanPro3-Regular.otf'
+    ) || 'Times-Bold';
+    const F_TRAJAN_B     = resolveExisting(
+      'C:/Windows/Fonts/TrajanPro3Bold.otf',
+      'C:/Windows/Fonts/TrajanPro-Bold.otf'
+    ) || 'Times-Bold';
+
+    const textOpt = (opts = {}) => ({
+      color: opts.color || '#000000',
+      fontSize: opts.fontSize || 9,
+      bold: opts.bold || false,
+      align: opts.align || 'left',
+      font: opts.font || (opts.bold ? F_CAMBRIA_B : F_CAMBRIA)
+    });
+    const drawBorder = () => {
+      // Border disabled as requested
     };
 
     const tabType = parseInt(activeTab, 10);
@@ -984,19 +1019,30 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       const logoPath = resolveLogoPath('logo.png');
       const bagongPath = resolveLogoPath('Bagong_Pilipinas.png');
       const logoY = MARGIN_TOP - 2;
-      const logoW = 26;
-      const logoH = 26;
+      const logoW = 44;
+      const logoH = 44;
       try {
         if (sealPath) pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoW, height: logoH });
-        if (logoPath) pdfDoc.image(logoPath, CONTENT_LEFT + 30, logoY, { width: logoW, height: logoH });
+        if (logoPath) pdfDoc.image(logoPath, CONTENT_LEFT + logoW + 5, logoY, { width: logoW, height: logoH });
         if (bagongPath) pdfDoc.image(bagongPath, CONTENT_RIGHT - logoW, logoY, { width: logoW, height: logoH });
       } catch (e) {
         console.warn('Consolidated header logo load failed:', e.message);
       }
 
       const headerY = MARGIN_TOP;
+      const cx = (CONTENT_LEFT + CONTENT_RIGHT) / 2;
+      
+      let hy = headerY;
+      pdfDoc.text('Republic of the Philippines', cx, hy, textOpt({ fontSize: 11, bold: true, align: 'center', font: F_CAMBRIA_B }));
+      hy += 12;
+      pdfDoc.text('OFFICE OF THE PRESIDENT', cx, hy, textOpt({ fontSize: 11, align: 'center', font: F_CAMBRIA }));
+      hy += 12;
+      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, textOpt({ fontSize: 11, bold: true, align: 'center', font: F_TRAJAN_B }));
+      hy += 16;
+      
       const title = continuation ? `${getTabTitle()} (CONT.)` : getTabTitle();
-      pdfDoc.text(title, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
+      pdfDoc.text(title, cx, hy, textOpt({ fontSize: 13, bold: true, align: 'center', font: F_CAMBRIA_B }));
+      hy += 12;
       
       let subTitle = `Fiscal Year: ${fiscalYear} | Budget Type: ${budgetType}`;
       const filterDept = department || req.submissionWorkflowFilters?.department || req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
@@ -1004,14 +1050,16 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       if (filterDept) subTitle += ` | Dept: ${filterDept}`;
       if (filterDiv) subTitle += ` > Div: ${filterDiv}`;
       
-      pdfDoc.text(subTitle, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 12, textOpt({ fontSize: 8, align: 'center' }));
-      pdfDoc.text(`Regions: ${groupRegions.join(', ')}`, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 22, textOpt({ fontSize: 8, align: 'center' }));
-      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 46, headerY + 24, textOpt({ fontSize: 9, bold: true }));
+      pdfDoc.text(subTitle, cx, hy, textOpt({ fontSize: 8, align: 'center' }));
+      hy += 10;
+      const regionsText = selectedRegions === 'all' ? 'ALL REGIONS' : groupRegions.join(', ');
+      pdfDoc.text(`Regions: ${regionsText}`, cx, hy, textOpt({ fontSize: 8, align: 'center' }));
+      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 46, hy + 2, textOpt({ fontSize: 9, bold: true }));
 
       pdfDoc.text(`Doc ID: ${reportData.documentId}`, CONTENT_LEFT, PAGE_HEIGHT - 10, textOpt({ fontSize: 7 }));
       pdfDoc.text(`Page ${pageNo} of ${totalPages}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - 10, textOpt({ fontSize: 7 }));
 
-      return headerY + 40;
+      return hy + 20;
     };
 
     const estimatedRowsPerPage = 24;
@@ -1032,12 +1080,13 @@ const exportConsolidatedIncomePDF = async (req, res) => {
         pdfDoc.rectangle(CONTENT_LEFT, y, TABLE_WIDTH, 16, { stroke: '#1565C0', lineWidth: 0.8, fill: '#EAF2FF' });
         let x = CONTENT_LEFT + 3;
         pdfDoc.text('INCOME CATEGORY', x, y + 4, textOpt({ fontSize: 8, bold: true }));
-        x = CONTENT_LEFT + descColW;
+        let colX = CONTENT_LEFT + descColW;
         groupRegions.forEach((regionName) => {
-          pdfDoc.text(regionName, x + 2, y + 4, textOpt({ fontSize: 7, bold: true }));
-          x += regionColW;
+          // Right align the column header text to perfectly match the amounts
+          pdfDoc.text(regionName, colX + regionColW - 5, y + 4, textOpt({ fontSize: 7, bold: true, align: 'right' }));
+          colX += regionColW;
         });
-        pdfDoc.text('TOTAL', CONTENT_RIGHT - 42, y + 4, textOpt({ fontSize: 8, bold: true }));
+        pdfDoc.text('TOTAL', CONTENT_RIGHT - 5, y + 4, textOpt({ fontSize: 8, bold: true, align: 'right' }));
         y += 18;
 
         while (rowIndex < rows.length && y <= PAGE_HEIGHT - MARGIN_BOTTOM - 100) {
@@ -1047,10 +1096,10 @@ const exportConsolidatedIncomePDF = async (req, res) => {
           let colX = CONTENT_LEFT + descColW;
           groupRegions.forEach((regionName) => {
             const value = row.valuesByRegion(regionName);
-            pdfDoc.text(formatCurrency(value), colX + 2, y, textOpt({ fontSize: 7, align: 'right' }));
+            pdfDoc.text(formatCurrency(value), colX + regionColW - 5, y, textOpt({ fontSize: 7, align: 'right' }));
             colX += regionColW;
           });
-          pdfDoc.text(formatCurrency(row.total), CONTENT_RIGHT - 95, y, textOpt({ fontSize: row.bold ? 8 : 7, bold: row.bold, align: 'right' }));
+          pdfDoc.text(formatCurrency(row.total), CONTENT_RIGHT - 5, y, textOpt({ fontSize: row.bold ? 8 : 7, bold: row.bold, align: 'right' }));
           y += 12;
           rowIndex += 1;
         }
@@ -1061,10 +1110,10 @@ const exportConsolidatedIncomePDF = async (req, res) => {
           let totalX = CONTENT_LEFT + descColW;
           groupRegions.forEach((regionName) => {
             const regionGrand = reportData.regionData?.[regionName]?.total || 0;
-            pdfDoc.text(formatCurrency(regionGrand), totalX + 2, y + 6, textOpt({ fontSize: 7, bold: true, color: '#FFFFFF', align: 'right' }));
+            pdfDoc.text(formatCurrency(regionGrand), totalX + regionColW - 5, y + 6, textOpt({ fontSize: 7, bold: true, color: '#FFFFFF', align: 'right' }));
             totalX += regionColW;
           });
-          pdfDoc.text(formatCurrency(reportData.grandTotal), CONTENT_RIGHT - 95, y + 6, textOpt({ fontSize: 8, bold: true, color: '#FFFFFF', align: 'right' }));
+          pdfDoc.text(formatCurrency(reportData.grandTotal), CONTENT_RIGHT - 5, y + 6, textOpt({ fontSize: 8, bold: true, color: '#FFFFFF', align: 'right' }));
         }
 
         continuation = true;
@@ -1074,7 +1123,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     // Signature block (workflow-based)
     if (currentPage > 0) {
       const sigY = PAGE_HEIGHT - MARGIN_BOTTOM - 80;
-      drawWorkflowSignatureBlock(pdfDoc, reportData.signatoriesInfo || extractSignatoriesFromWorkflow(null), sigY, CONTENT_LEFT, TABLE_WIDTH, tempSignatureImagePaths);
+      drawWorkflowSignatureBlock(pdfDoc, reportData.signatoriesInfo || extractSignatoriesFromWorkflow(null, req.user), sigY, CONTENT_LEFT, TABLE_WIDTH, tempSignatureImagePaths);
     }
 
     // Log audit trail
@@ -1098,8 +1147,9 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       }
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.setHeader('X-Document-ID', reportData.documentId);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Document-ID');
 
       const readStream = fs.createReadStream(tmpFilePath);
       readStream.on('error', (streamErr) => {

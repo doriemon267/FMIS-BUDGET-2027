@@ -1090,8 +1090,9 @@ const generateTierPDF = async (req, res) => {
       }
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.setHeader('X-Document-ID', documentId);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Document-ID');
 
       const readStream = fs.createReadStream(tmpFilePath);
       readStream.on('error', (streamErr) => {
@@ -1220,7 +1221,8 @@ const generateTierExcel = async (req, res) => {
 
     const filename = `Tier_Report_${fiscalYear}_${regionDisplay}_${departmentDisplay}_${divisionDisplay}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
     const buffer = await workbook.xlsx.writeBuffer();
     res.send(buffer);

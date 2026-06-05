@@ -228,23 +228,26 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
 
+      const originStr = String(origin).toLowerCase();
+
       const allowedOrigins = [
         process.env.CLIENT1,
         process.env.CLIENT2,
         process.env.CLIENT3,
         "https://budget.nia.gov.ph",
         "https://budget-server.nia.gov.ph"
-      ].filter(Boolean);
+      ].filter(Boolean).map(o => o.toLowerCase());
 
-      const isAllowed = allowedOrigins.includes(origin);
-      const isNia = origin.endsWith(".nia.gov.ph") || origin === "https://nia.gov.ph";
-      const isLocal = origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1");
-      const isFmisLocal = origin && origin.includes("fmis.local");
+      const isAllowed = allowedOrigins.includes(originStr);
+      const isNia = originStr.includes("nia.gov.ph");
+      const isLocal = originStr.includes("localhost") || originStr.includes("127.0.0.1") || originStr.includes("fmis.local");
 
-      if (isAllowed || isNia || isLocal || isFmisLocal) return callback(null, true);
+      if (isAllowed || isNia || isLocal) {
+        return callback(null, true);
+      }
 
       console.warn("CORS: Origin blocked:", origin);
-      return callback(new Error('Not allowed by CORS'), false); // Properly throw a CORS error
+      return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -254,7 +257,7 @@ app.use(
       "X-Reauth-Password", "X-Reauth-User",
     ],
     optionsSuccessStatus: 204,
-    exposedHeaders: ["X-Auth-Token"],
+    exposedHeaders: ["X-Auth-Token", "Content-Disposition", "X-Document-ID"],
   }),
 );
 

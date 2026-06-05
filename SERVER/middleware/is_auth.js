@@ -184,14 +184,14 @@ module.exports = async (req, res, next) => {
                         .trim() || userId;
 
     // --- SINGLE ACTIVE SESSION CHECK ---
-    if (payload.sessionId) {
+    if (payload.iat) {
       try {
         const User = require("../models/User");
         const userDoc = await User.findOne({ 
           userId: { $in: [userId, userId.toUpperCase(), userId.toLowerCase()] } 
         }).lean();
 
-        if (userDoc && userDoc.activeSessionId && payload.sessionId !== userDoc.activeSessionId) {
+        if (userDoc && payload.iat < userDoc.lastLoginIat) {
           AuditLog.create({
             userId: userId,
             userName: particular,
@@ -200,15 +200,27 @@ module.exports = async (req, res, next) => {
             ipAddress: req.clientIp,
             details: { 
               reason: "Logged in from another device/browser",
-              tokenSessionId: payload.sessionId,
-              activeSessionId: userDoc.activeSessionId
+              tokenIat: payload.iat,
+              lastLoginIat: userDoc.lastLoginIat
             }
           }).catch(() => {});
 
           return res.status(401).json({ 
-            error: "Ang iyong account ay binuksan sa ibang device o browser. Awtomatiko kang mai-log out.", 
+            error: "Your account has been accessed on another device or browser. You will be automatically signed out.", 
             expired: true 
           });
+        }
+
+        if (!userDoc || payload.iat > userDoc.lastLoginIat) {
+          await User.findOneAndUpdate(
+            { userId: userId },
+            { 
+              userId: userId, 
+              lastLoginIat: payload.iat, 
+              updatedAt: new Date() 
+            },
+            { upsert: true, new: true }
+          ).catch(err => console.error("[AUTH] User sync error:", err.message));
         }
       } catch (err) {
         console.error("[AUTH] Active session verification error:", err.message);

@@ -79,6 +79,7 @@ const TierPage = () => {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
+  const [pdfFilename, setPdfFilename] = useState("");
   const [tableKey, setTableKey] = useState(Date.now());
   const lastSavedJsonRef = useRef(null);
   const tierDataPrevRef = useRef(null);
@@ -632,6 +633,22 @@ const TierPage = () => {
         version: currentVersion,
       }, { responseType: 'blob' });
 
+      // Extract filename from Content-Disposition header
+      let filename = `Tier_Report_${activeFiscalYear}.pdf`;
+      const contentDisposition = response.headers['content-disposition'];
+      if (contentDisposition) {
+        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (filenameStarMatch && filenameStarMatch[1]) {
+          filename = decodeURIComponent(filenameStarMatch[1]);
+        } else {
+          const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1];
+          }
+        }
+      }
+      setPdfFilename(filename);
+
       if (pdfBlobUrl) window.URL.revokeObjectURL(pdfBlobUrl);
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       setPdfBlobUrl(url);
@@ -922,7 +939,7 @@ const TierPage = () => {
         onClose={handleClosePdfViewer}
         pdfUrl={pdfBlobUrl}
         title="Tier Report PDF Preview"
-        downloadFilename={`Tier_Report_${activeFiscalYear}_${selectedRegion}.pdf`}
+        downloadFilename={pdfFilename}
       />
 
       <Dialog

@@ -4,7 +4,7 @@ import api, { authApi, setDevUser, setAuthToken } from "../config/api";
 import Loading from "../global/components/Loading";
 import InactivityWarningDialog from "../components/InactivityWarningDialog";
 import env from "../utils/env";
-import IS_PRODUCTION from "../utils/IS_PRODUCTION"; // Import mo ito ulit
+import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import useInactivityLogout from "../hooks/useInactivityLogout";
 
 const UserContext = createContext({
@@ -160,7 +160,7 @@ const UserProvider = ({ children }) => {
   };
 
   const handleLogout = async () => {
-    // 1. Clear sessions
+    // 1. Clear API sessions
     try {
       await api.get("/api/logout");
       await authApi.get("/logout");
@@ -168,19 +168,23 @@ const UserProvider = ({ children }) => {
       console.warn("Logout error:", e.message);
     }
 
-    // 2. Clear local states
+    // 2. Clear browser storage (Ito ang fix para ma-logout sa main FMIS at tuluyang burahin ang session)
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    sessionStorage.clear();
+
+    // 3. Clear local states
     setAuthToken(null);
     setCurrentUser(null);
     setUnauthorizedSuperAdmin(false);
 
-    // 3. LOGOUT REDIRECT
-    if (!IS_PRODUCTION) {
-      // DEV REDIRECT
-      const authBase = env("AUTH_SERVER_URL_DEV") || env("AUTH_CLIENT_URL_DEV") || "http://localhost:5000";
-      const budgetUrl = env("CLIENT_URL_DEV") || "http://localhost:3005";
-      const returnUrl = encodeURIComponent(`${budgetUrl}/dashboard`);
-
-      window.location.href = `${authBase}/login?redirect=${returnUrl}`;
+    // 4. LOGOUT REDIRECT
+   if (!IS_PRODUCTION) {
+      // TAMA: Itapon ang user sa /logout route ng Main FMIS para ang Main FMIS ang magbura ng sarili nitong Local Storage
+      const authBase = env("AUTH_CLIENT_URL_DEV") || "http://localhost:3000";
+      
+      // Ibabato natin siya sa logout path imbes na login
+      window.location.href = `${authBase}/logout`; 
     } else {
       // PRODUCTION REDIRECT (NIA SSO)
       const clientId = env("CLIENT_ID");

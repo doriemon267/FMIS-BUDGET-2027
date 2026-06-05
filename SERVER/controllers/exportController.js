@@ -280,8 +280,10 @@ const exportBudgetSummaryPDF = async (req, res) => {
         return res.status(500).json({ error: 'Failed to generate PDF report', details: err.message || String(err) });
       }
 
+      const filename = `Budget-Summary-Report-${Date.now()}.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="Budget-Summary-Report-${Date.now()}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
       
       res.on('finish', () => {
         cleanupTempImages(tempSignatureImagePaths);
