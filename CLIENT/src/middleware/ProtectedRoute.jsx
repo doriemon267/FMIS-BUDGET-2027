@@ -154,11 +154,12 @@ const ProtectedRoute = ({
   const hasExcludedRoles =
     excludeRoles.length > 0 &&
     !effectiveWorkflowRoles.includes("superAdmin") &&
-    excludeRoles.some((role) => effectiveWorkflowRoles.includes(role));
+    !normalizedJobRoles.includes("SUPER_ADMIN") &&
+    excludeRoles.some((role) => effectiveWorkflowRoles.includes(role) || normalizedJobRoles.includes(role.toUpperCase()));
 
   const hasRequiredWorkflowRoles =
     requiredWorkflowRoles.length === 0 ||
-    requiredWorkflowRoles.some((role) => effectiveWorkflowRoles.includes(role));
+    requiredWorkflowRoles.some((role) => effectiveWorkflowRoles.includes(role) || normalizedJobRoles.includes(role.toUpperCase()));
 
   if (!hasRequiredPermissions || !hasRequiredWorkflowRoles || hasExcludedRoles) {
     return <Navigate to="/not-authorized" />;

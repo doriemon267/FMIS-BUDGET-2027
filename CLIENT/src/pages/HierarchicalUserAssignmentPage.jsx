@@ -24,7 +24,11 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Autocomplete
+  Autocomplete,
+  Switch,
+  FormControlLabel,
+  Checkbox,
+  FormGroup
 } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../config/api';
@@ -175,6 +179,8 @@ const HierarchicalUserAssignmentPage = () => {
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPageAccessDialogOpen, setIsPageAccessDialogOpen] = useState(false);
 
   // Check if user is admin (match both underscore and space variants from FMIS)
   const roles = currentUser?.Roles || [];
@@ -588,6 +594,7 @@ const HierarchicalUserAssignmentPage = () => {
       workflowRoles: null
     });
     setEditingAssignment(null);
+    setIsDialogOpen(false);
   };
 
   const handleSubmit = (e) => {
@@ -849,6 +856,80 @@ const HierarchicalUserAssignmentPage = () => {
     return emailRegex.test(email);
   };
 
+  const handleStatusToggle = async (userId, currentStatus) => {
+    try {
+      const res = await api.patch(`/api/hierarchical-rbac/assignments/${userId}/status`, {
+        isActive: !currentStatus
+      });
+      if (res.data.success) {
+        setSnackbar({ open: true, message: res.data.message, severity: 'success' });
+        queryClient.invalidateQueries(['hierarchical-assignments']);
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Error updating status',
+        severity: 'error'
+      });
+    }
+  };
+
+  // State for Page Access Settings
+  const [pageAccessConfig, setPageAccessConfig] = useState(null);
+  const [loadingPageAccess, setLoadingPageAccess] = useState(false);
+
+  const loadPageAccessConfig = async () => {
+    setLoadingPageAccess(true);
+    try {
+      const res = await api.get("/api/route-permissions/all");
+      if (res.data.success) {
+        const config = res.data.data.find(r => r.path === "/hierarchical-user-assignments");
+        if (config) {
+          setPageAccessConfig(config);
+        } else {
+          setSnackbar({ open: true, message: "Route permission config not found for this page", severity: "warning" });
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load route permissions:", error);
+      setSnackbar({ open: true, message: "Failed to load access settings", severity: "error" });
+    } finally {
+      setLoadingPageAccess(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (isPageAccessDialogOpen) {
+      loadPageAccessConfig();
+    }
+  }, [isPageAccessDialogOpen]);
+
+  const handleSavePageAccess = async () => {
+    if (!pageAccessConfig || !pageAccessConfig._id) return;
+    try {
+      const res = await api.put(`/api/route-permissions/${pageAccessConfig._id}`, {
+        requiredWorkflowRoles: pageAccessConfig.requiredWorkflowRoles
+      });
+      if (res.data.success) {
+        setSnackbar({ open: true, message: "Page access settings updated", severity: "success" });
+        setIsPageAccessDialogOpen(false);
+      }
+    } catch (error) {
+      setSnackbar({ open: true, message: "Failed to save settings", severity: "error" });
+    }
+  };
+
+  const toggleRoleAccess = (roleValue) => {
+    setPageAccessConfig(prev => {
+      const currentRoles = prev.requiredWorkflowRoles || [];
+      const newRoles = currentRoles.includes(roleValue)
+        ? currentRoles.filter(r => r !== roleValue)
+        : [...currentRoles, roleValue];
+      return { ...prev, requiredWorkflowRoles: newRoles };
+    });
+  };
+
   if (!isAdmin) {
     return (
       <Box sx={{ p: 3 }}>
@@ -869,14 +950,37 @@ const HierarchicalUserAssignmentPage = () => {
     <Box sx={{ p: 3 }}>
       <DashboardHeader title="Hierarchical User Assignments" />
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              {editingAssignment ? 'Edit' : 'Create'} Hierarchical Assignment
-            </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <PersonIcon color="primary" /> Current Assignments ({assignments.filter(a => a.userRole !== 'SUPER_ADMIN').length})
+        </Typography>
+        <Box>
+          {roles.includes('SUPER_ADMIN') && (
+            <Button 
+              variant="outlined" 
+              color="secondary"
+              onClick={() => setIsPageAccessDialogOpen(true)} 
+              sx={{ mr: 2 }}
+            >
+              ⚙️ Page Access Settings
+            </Button>
+          )}
+          <Button 
+            variant="contained" 
+            startIcon={<AssignmentIcon />}
+            onClick={() => { resetForm(); setIsDialogOpen(true); }}
+          >
+            Create Hierarchical Assignment
+          </Button>
+        </Box>
+      </Box>
 
-            <Grid container spacing={2}>
+      <Dialog open={isDialogOpen} onClose={() => { setIsDialogOpen(false); resetForm(); }} maxWidth="md" fullWidth>
+        <DialogTitle>
+          {editingAssignment ? 'Edit' : 'Create'} Hierarchical Assignment
+        </DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -1854,27 +1958,24 @@ const HierarchicalUserAssignmentPage = () => {
                 </Stack>
               </Grid>
             </Grid>
-          </Paper>
-        </Grid>
+        </DialogContent>
+      </Dialog>
 
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Current Assignments ({assignments.filter(a => a.userRole !== 'SUPER_ADMIN').length})
-            </Typography>
+      <Paper sx={{ p: 3 }}>
 
             {loadingAssignments ? (
               <CircularProgress />
             ) : (
               <TableContainer>
                 <Table size="small" aria-label="Assignments Table">
-                  <TableHead>
+                  <TableHead sx={{ backgroundColor: 'action.hover' }}>
                     <TableRow>
-                      <TableCell>User</TableCell>
-                      <TableCell>Role</TableCell>
-                      <TableCell>Level</TableCell>
-                      <TableCell>Organization</TableCell>
-                      <TableCell>Actions</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>User</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Level</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Organization</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1883,7 +1984,10 @@ const HierarchicalUserAssignmentPage = () => {
                       return filteredAssignments
                         .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                         .map((assignment) => (
-                        <TableRow key={assignment.userId}>
+                        <TableRow 
+                          key={assignment.userId}
+                          sx={{ opacity: assignment.isActive === false ? 0.6 : 1 }}
+                        >
                           <TableCell>
                             <Typography variant="body2" fontWeight="bold">
                               {assignment.userName}
@@ -2067,6 +2171,23 @@ const HierarchicalUserAssignmentPage = () => {
                             </Tooltip>
                           </TableCell>
                           <TableCell>
+                            <FormControlLabel
+                              control={
+                                <Switch
+                                  checked={assignment.isActive !== false}
+                                  onChange={() => handleStatusToggle(assignment.userId, assignment.isActive !== false)}
+                                  color="success"
+                                  size="small"
+                                />
+                              }
+                              label={
+                                <Typography variant="caption" color={assignment.isActive !== false ? "success.main" : "text.secondary"}>
+                                  {assignment.isActive !== false ? 'Active' : 'Inactive'}
+                                </Typography>
+                              }
+                            />
+                          </TableCell>
+                          <TableCell align="center">
                             <Tooltip title="Edit Assignment">
                               <IconButton
                                 size="small"
@@ -2158,6 +2279,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   };
                                   
                                   setFormData(formFields);
+                                  setIsDialogOpen(true);
                                   
                                   // Fetch fresh user data from FMIS-Main when editing (sync roles if changed there)
                                   if (assignment.userId) {
@@ -2234,8 +2356,6 @@ const HierarchicalUserAssignmentPage = () => {
               </TableContainer>
             )}
           </Paper>
-        </Grid>
-      </Grid>
 
       <CustomSnackbar
         open={snackbar.open}
@@ -2243,6 +2363,50 @@ const HierarchicalUserAssignmentPage = () => {
         message={snackbar.message}
         severity={snackbar.severity}
       />
+
+      <Dialog open={isPageAccessDialogOpen} onClose={() => setIsPageAccessDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Page Access Settings</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Select which roles are authorized to access the Hierarchical User Assignments page. (Super Admins always have access).
+          </Typography>
+          {loadingPageAccess ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : pageAccessConfig ? (
+            <FormGroup sx={{ mt: 2 }}>
+              {USER_ROLES.map((role) => (
+                <FormControlLabel
+                  key={role.value}
+                  control={
+                    <Checkbox
+                      checked={(pageAccessConfig.requiredWorkflowRoles || []).includes(role.value) || role.value === 'SUPER_ADMIN'}
+                      disabled={role.value === 'SUPER_ADMIN'}
+                      onChange={() => toggleRoleAccess(role.value)}
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight="bold">{role.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">{role.description}</Typography>
+                    </Box>
+                  }
+                  sx={{ mb: 1 }}
+                />
+              ))}
+            </FormGroup>
+          ) : (
+            <Typography color="error">Configuration not available.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsPageAccessDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleSavePageAccess} variant="contained" disabled={loadingPageAccess || !pageAccessConfig}>
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
         <DialogTitle>Confirm Delete</DialogTitle>

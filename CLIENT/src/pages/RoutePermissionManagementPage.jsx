@@ -27,26 +27,30 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Tabs,
+  Tab,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Autocomplete,
 } from "@mui/material";
 import {
   MdSearch,
   MdAdd,
   MdDeleteOutline,
+  MdSync,
 } from "react-icons/md";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../config/api";
+import { PAGE_TITLES } from "../layout/Dashboard";
 
 const roleOptions = [
-  { id: "superAdmin", label: "Super Admin", color: "error" },
-  { id: "preparer", label: "Preparer", color: "primary" },
-  { id: "reviewer", label: "Reviewer", color: "warning" },
-  { id: "approver", label: "Approver", color: "success" },
-  { id: "overallBudgetApprover", label: "Overall Approver", color: "info" },
-  { id: "budgetAnalyst", label: "Budget Analyst", color: "secondary" },
-  { id: "regionCreator", label: "Region Creator", color: "default" },
-  { id: "divisionCreator", label: "Division Creator", color: "default" },
-  { id: "departmentCreator", label: "Department Creator", color: "default" },
-  { id: "BUDGET_PLANNING_ANALYST", label: "Planning Analyst", color: "secondary" },
+  { id: "SUPER_ADMIN", label: "Admin", color: "error" },
+  { id: "BUDGET_PREPARER", label: "Budget Preparer", color: "primary" },
+  { id: "BUDGET_REVIEWER", label: "Budget Reviewer", color: "warning" },
+  { id: "BUDGET_APPROVER", label: "Budget Approver", color: "success" },
+  { id: "BUDGET_PLANNING_ANALYST", label: "Budget Planning Analyst", color: "secondary" },
   { id: "BUDGET_OFFICER", label: "Budget Officer", color: "info" },
   { id: "BUDGET_MANAGER", label: "Budget Manager", color: "primary" },
 ];
@@ -60,6 +64,9 @@ const RoutePermissionManagementPage = () => {
   // States for Add Route Dialog
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [newRoute, setNewRoute] = useState({ path: "", label: "", group: "General" });
+
+  const [activeTab, setActiveTab] = useState(0);
+  const [selectedRoleForView, setSelectedRoleForView] = useState(roleOptions[0].id);
 
   // 1. Fetch all routes from backend
   const { data, isLoading, error } = useQuery({
@@ -78,7 +85,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
-      setSnackbar({ open: true, message: "Matagumpay na na-update ang permission!", severity: "success" });
+      setSnackbar({ open: true, message: "Permission updated successfully!", severity: "success" });
     },
     onError: (err) => {
       setSnackbar({
@@ -99,7 +106,7 @@ const RoutePermissionManagementPage = () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
       setOpenAddDialog(false);
       setNewRoute({ path: "", label: "", group: "General" });
-      setSnackbar({ open: true, message: "Matagumpay na naidagdag ang bagong ruta!", severity: "success" });
+      setSnackbar({ open: true, message: "New route added successfully!", severity: "success" });
     },
     onError: (err) => {
       setSnackbar({
@@ -110,7 +117,45 @@ const RoutePermissionManagementPage = () => {
     },
   });
 
-  // 4. Mutation to delete a custom route
+  // Bulk update mutation
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (data) => {
+      const res = await api.post("/route-permissions/bulk-update", data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["route-permissions-all"]);
+      setSnackbar({ open: true, message: "Bulk update successful!", severity: "success" });
+    },
+    onError: (err) => {
+      setSnackbar({
+        open: true,
+        message: "Failed bulk update: " + (err.response?.data?.error || err.message),
+        severity: "error",
+      });
+    },
+  });
+
+  // 4. Mutation to sync routes
+  const syncRoutesMutation = useMutation({
+    mutationFn: async (routesToSync) => {
+      const res = await api.post("/route-permissions/sync", { routes: routesToSync });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries(["route-permissions-all"]);
+      setSnackbar({ open: true, message: `Routes synced successfully! Inserted: ${data.inserted?.length}, Skipped: ${data.skipped?.length}`, severity: "success" });
+    },
+    onError: (err) => {
+      setSnackbar({
+        open: true,
+        message: "Failed to sync routes: " + (err.response?.data?.error || err.message),
+        severity: "error",
+      });
+    },
+  });
+
+  // 5. Mutation to delete a custom route
   const deleteRouteMutation = useMutation({
     mutationFn: async (id) => {
       const res = await api.delete(`/route-permissions/${id}`);
@@ -118,7 +163,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
-      setSnackbar({ open: true, message: "Matagumpay na nabura ang ruta!", severity: "success" });
+      setSnackbar({ open: true, message: "Route deleted successfully!", severity: "success" });
     },
     onError: (err) => {
       setSnackbar({
@@ -165,21 +210,53 @@ const RoutePermissionManagementPage = () => {
     });
   };
 
+  const handleBulkToggle = (groupRoutes, roleId, isSelectAll) => {
+    const routeIds = groupRoutes.map(r => r._id);
+    if (routeIds.length === 0) return;
+    bulkUpdateMutation.mutate({
+      routeIds,
+      roleId,
+      action: isSelectAll ? "add" : "remove"
+    });
+  };
+
   const handleAddRoute = () => {
     if (!newRoute.path.startsWith("/")) {
-      setSnackbar({ open: true, message: "Ang Route Path ay kailangang magsimula sa '/' (e.g. /rata)", severity: "warning" });
+      setSnackbar({ open: true, message: "Route path must start with '/' (e.g. /rata)", severity: "warning" });
       return;
     }
     if (!newRoute.label) {
-      setSnackbar({ open: true, message: "Kailangan ang Display Label.", severity: "warning" });
+      setSnackbar({ open: true, message: "Display label is required.", severity: "warning" });
       return;
     }
     addRouteMutation.mutate(newRoute);
   };
 
   const handleDeleteRoute = (id) => {
-    if (window.confirm("Sigurado ka bang gusto mong burahin ang rutang ito?")) {
+    if (window.confirm("Are you sure you want to delete this route?")) {
       deleteRouteMutation.mutate(id);
+    }
+  };
+
+  const handleSyncRoutes = () => {
+    if (window.confirm("Sync all system routes? This will automatically add any missing routes to the list.")) {
+      const routesToSync = Object.entries(PAGE_TITLES).map(([path, label]) => {
+        let group = "General";
+        if (path === '/dashboard') group = "Dashboard";
+        else if (['/proposal', '/allproposal', '/brd-consolidation', '/nep-ceiling', '/tier', '/tier-comparison'].includes(path)) group = "Proposal Management";
+        else if (['/consolidated-corporate-income', '/consolidated-reports', '/consolidated-capital-outlay-reports', '/consolidated-personnel-services-reports', '/comparative-report', '/comprehensive-reports'].includes(path)) group = "Reports & Analytics";
+        else if (['/employee'].includes(path)) group = "Employees";
+        else if (['/employeeBenefits', '/courtAppearance', '/overTime', '/subsistenceAllowanceMDS', '/subsistenceAllowanceST', '/subsistenceAllowance', '/loyaltyPay', '/mealallowance', '/medicalAllowance', '/childrenAllowance', '/retirees'].includes(path)) group = "Benefits";
+        else if (['/fysettings', '/compensation-management', '/rata', '/categories', '/income-management', '/salary-table', '/cos-salary-table', '/employee-salary-table', '/salary-management', '/setup/organization', '/hierarchical-user-assignments', '/user-activity-logs', '/bulk-upload-management', '/route-permissions', '/settings', '/fiscalYear', '/audit-logs'].includes(path)) group = "Settings";
+        else if (['/subsidy-monitoring', '/corporate-income-upload', '/mooe-upload', '/database-backup', '/grouped-income-categories', '/region-selection'].includes(path)) group = "System / Utility";
+        else if (path.includes("report")) group = "Reports & Analytics";
+        else if (path.includes("proposal")) group = "Proposal Management";
+        else if (path.includes("tier") || path.includes("ceiling") || path.includes("brd")) group = "Proposal Management";
+        else if (path.includes("setting") || path.includes("salary") || path.includes("setup") || path.includes("upload") || path.includes("permission") || path.includes("log")) group = "Settings";
+        else if (path.includes("allowance") || path.includes("pay") || path.includes("employee") || path.includes("retiree") || path.includes("court")) group = "Benefits";
+        return { path, label, group };
+      });
+      syncRoutesMutation.mutate(routesToSync);
     }
   };
 
@@ -207,7 +284,7 @@ const RoutePermissionManagementPage = () => {
   if (error) {
     return (
       <Box p={3}>
-        <Alert severity="error">Nagka-error sa pag-load ng route permissions: {error.message}</Alert>
+        <Alert severity="error">Error loading route permissions: {error.message}</Alert>
       </Box>
     );
   }
@@ -222,26 +299,35 @@ const RoutePermissionManagementPage = () => {
                 🛡️ Route Permission Matrix
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Magtakda ng access rules sa bawat ruta gamit ang switches at checkboxes. Awtomatikong mase-save ang mga pagbabago.
+                Configure access rules for each route using switches and checkboxes. Changes are saved automatically.
               </Typography>
             </Box>
             
             <Box display="flex" alignItems="center" gap={2}>
-              {(updateMutation.isPending || addRouteMutation.isPending || deleteRouteMutation.isPending) && (
+              {(updateMutation.isPending || addRouteMutation.isPending || deleteRouteMutation.isPending || syncRoutesMutation.isPending) && (
                 <Chip
                   icon={<CircularProgress size={14} color="inherit" />}
-                  label="Sine-save..."
+                  label="Saving..."
                   color="info"
                   variant="outlined"
                 />
               )}
+              <Button
+                variant="outlined"
+                startIcon={<MdSync />}
+                onClick={handleSyncRoutes}
+                disabled={syncRoutesMutation.isPending}
+                sx={{ borderRadius: "8px", textTransform: "none", fontWeight: "600" }}
+              >
+                Sync Routes
+              </Button>
               <Button
                 variant="contained"
                 startIcon={<MdAdd />}
                 onClick={() => setOpenAddDialog(true)}
                 sx={{ borderRadius: "8px", textTransform: "none", fontWeight: "600" }}
               >
-                Magdagdag ng Ruta
+                Add Route
               </Button>
             </Box>
           </Box>
@@ -252,7 +338,7 @@ const RoutePermissionManagementPage = () => {
           <Box display="flex" gap={2} mb={3} flexWrap="wrap" alignItems="center">
             <TextField
               size="small"
-              placeholder="Maghanap ng Ruta o Path..."
+              placeholder="Search Route or Path..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               sx={{ width: { xs: "100%", md: "350px" } }}
@@ -280,37 +366,59 @@ const RoutePermissionManagementPage = () => {
             </Box>
           </Box>
 
-          {/* Permission Matrix Table */}
-          <TableContainer component={Paper} sx={{ borderRadius: "8px", border: "1px solid", borderColor: "divider", maxHeight: "65vh" }}>
+          <Tabs
+            value={activeTab}
+            onChange={(e, val) => setActiveTab(val)}
+            sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
+          >
+            <Tab label="Matrix View (By Route)" sx={{ fontWeight: 600, textTransform: "none" }} />
+            <Tab label="Role Management (By Role)" sx={{ fontWeight: 600, textTransform: "none" }} />
+          </Tabs>
+
+          {activeTab === 0 && (
+            <TableContainer component={Paper} sx={{ borderRadius: "8px", border: "1px solid", borderColor: "divider", maxHeight: "65vh" }}>
             <Table stickyHeader size="small">
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ fontWeight: "700", minWidth: 280, backgroundColor: "background.paper", zIndex: 3 }}>
-                    Ruta / Page Path
+                    Route / Page Path
                   </TableCell>
                   <TableCell align="center" sx={{ fontWeight: "700", minWidth: 100, backgroundColor: "background.paper", zIndex: 3 }}>
                     Active Status
                   </TableCell>
-                  {roleOptions.map((role) => (
+                  {roleOptions.map((role) => {
+                    const allInRoleAssigned = filteredRoutes.length > 0 && filteredRoutes.every(r => r.requiredWorkflowRoles?.includes(role.id));
+                    const someInRoleAssigned = filteredRoutes.some(r => r.requiredWorkflowRoles?.includes(role.id));
+                    return (
                     <TableCell
                       key={role.id}
                       align="center"
-                      sx={{ fontWeight: "700", minWidth: 120, backgroundColor: "background.paper", zIndex: 3 }}
+                      sx={{ fontWeight: "700", minWidth: 80, backgroundColor: "background.paper", zIndex: 3, p: 1 }}
                     >
                       <Tooltip title={role.label}>
-                        <Box display="flex" flexDirection="column" alignItems="center" gap={0.5}>
-                          <Chip label={role.label} size="small" color={role.color} variant="outlined" sx={{ fontSize: "10px", height: "20px" }} />
+                        <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center">
+                          <Typography variant="caption" sx={{ fontSize: "0.75rem", fontWeight: 700, textAlign: "center", lineHeight: 1.2, color: "text.primary" }}>
+                            {role.label}
+                          </Typography>
+                          <Checkbox
+                            size="small"
+                            sx={{ p: 0, mt: 0.5 }}
+                            checked={allInRoleAssigned}
+                            indeterminate={someInRoleAssigned && !allInRoleAssigned}
+                            onChange={() => handleBulkToggle(filteredRoutes, role.id, !allInRoleAssigned)}
+                            color={role.color}
+                          />
                         </Box>
                       </Tooltip>
                     </TableCell>
-                  ))}
+                  )})}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredRoutes.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={roleOptions.length + 2} align="center" sx={{ py: 4 }}>
-                      <Typography color="text.secondary">Walang rutang tumutugma sa iyong hinahanap.</Typography>
+                      <Typography color="text.secondary">No routes match your search.</Typography>
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -345,7 +453,7 @@ const RoutePermissionManagementPage = () => {
                             </Box>
                           </Box>
                           {!route.isSeeded && (
-                            <Tooltip title="Burahin itong custom ruta">
+                            <Tooltip title="Delete this custom route">
                               <IconButton
                                 size="small"
                                 color="error"
@@ -361,7 +469,7 @@ const RoutePermissionManagementPage = () => {
 
                       {/* Active Toggle Switch */}
                       <TableCell align="center">
-                        <Tooltip title={route.isActive ? "Active (Gumagana ang rules)" : "Inactive (Naka-bypass)"}>
+                        <Tooltip title={route.isActive ? "Active (Rules apply)" : "Inactive (Bypassed)"}>
                           <Switch
                             checked={route.isActive}
                             onChange={() => handleToggleActive(route)}
@@ -392,16 +500,96 @@ const RoutePermissionManagementPage = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          )}
+
+          {activeTab === 1 && (
+            <Box>
+              <FormControl sx={{ minWidth: 300, mb: 3 }}>
+                <InputLabel>Select Role</InputLabel>
+                <Select
+                  value={selectedRoleForView}
+                  label="Select Role"
+                  onChange={(e) => setSelectedRoleForView(e.target.value)}
+                  size="small"
+                >
+                  {roleOptions.map((role) => (
+                    <MenuItem key={role.id} value={role.id}>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Chip label={role.label} size="small" color={role.color} variant="outlined" sx={{ height: 20, fontSize: '10px' }} />
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              {groups.filter(g => g !== 'All').map(group => {
+                const routesInGroup = filteredRoutes.filter(r => (r.group || "General") === group);
+                if (routesInGroup.length === 0) return null;
+                return (
+                  <Box key={group} mb={4}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                      <Typography variant="subtitle1" fontWeight="700" color="primary">
+                        {group}
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => {
+                          const allAssigned = routesInGroup.every(r => r.requiredWorkflowRoles?.includes(selectedRoleForView));
+                          handleBulkToggle(routesInGroup, selectedRoleForView, !allAssigned);
+                        }}
+                        disabled={bulkUpdateMutation.isPending}
+                        sx={{ fontSize: '0.7rem', height: 24, textTransform: "none" }}
+                      >
+                        {routesInGroup.every(r => r.requiredWorkflowRoles?.includes(selectedRoleForView)) ? "Deselect All" : "Select All"}
+                      </Button>
+                    </Box>
+                    <Paper variant="outlined" sx={{ borderRadius: "8px", overflow: "hidden" }}>
+                      <Table size="small">
+                        <TableBody>
+                          {routesInGroup.map(route => {
+                            const isAssigned = route.requiredWorkflowRoles?.includes(selectedRoleForView);
+                            return (
+                              <TableRow key={route._id} hover>
+                                <TableCell sx={{ width: 60, borderRight: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
+                                  <Switch
+                                    checked={isAssigned || false}
+                                    disabled={!route.isActive}
+                                    onChange={() => handleToggleRole(route, selectedRoleForView)}
+                                    color="primary"
+                                    size="small"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Box display="flex" flexDirection="column">
+                                    <Typography variant="body2" fontWeight="600">{route.label}</Typography>
+                                    <Typography variant="caption" color="text.secondary" fontFamily="monospace">{route.path}</Typography>
+                                  </Box>
+                                </TableCell>
+                                <TableCell align="right" sx={{ width: 100 }}>
+                                  {!route.isActive && <Chip label="Inactive Route" size="small" color="error" variant="outlined" sx={{ fontSize: '9px', height: '20px' }}/>}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </Paper>
+                  </Box>
+                )
+              })}
+            </Box>
+          )}
         </CardContent>
       </Card>
 
       {/* Add Route Dialog */}
       <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: "700" }}>Magdagdag ng Bagong Ruta</DialogTitle>
+        <DialogTitle sx={{ fontWeight: "700" }}>Add New Route</DialogTitle>
         <DialogContent dividers>
           <Box display="flex" flexDirection="column" gap={2} mt={1}>
             <TextField
-              label="Route Path (dapat magsimula sa '/')"
+              label="Route Path (must start with '/')"
               placeholder="/rata"
               size="small"
               fullWidth
@@ -416,19 +604,28 @@ const RoutePermissionManagementPage = () => {
               value={newRoute.label}
               onChange={(e) => setNewRoute({ ...newRoute, label: e.target.value })}
             />
-            <TextField
-              label="Group / Kategorya"
-              placeholder="Settings"
-              size="small"
-              fullWidth
+            <Autocomplete
+              freeSolo
+              options={groups.filter(g => g !== "All")}
               value={newRoute.group}
-              onChange={(e) => setNewRoute({ ...newRoute, group: e.target.value })}
+              onInputChange={(event, newInputValue) => {
+                setNewRoute({ ...newRoute, group: newInputValue });
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Group / Category"
+                  placeholder="Settings"
+                  size="small"
+                  fullWidth
+                />
+              )}
             />
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenAddDialog(false)} sx={{ textTransform: "none" }}>
-            I-cancel
+            Cancel
           </Button>
           <Button
             onClick={handleAddRoute}
@@ -436,7 +633,7 @@ const RoutePermissionManagementPage = () => {
             disabled={addRouteMutation.isPending}
             sx={{ textTransform: "none", borderRadius: "6px" }}
           >
-            I-save
+            Save
           </Button>
         </DialogActions>
       </Dialog>

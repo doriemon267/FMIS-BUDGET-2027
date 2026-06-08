@@ -54,6 +54,7 @@ import {
 } from '../constants/roles';
 import { useUser } from '../context/UserContext';
 import { useDrawer } from '../context/DrawerContext';
+import { useRoutePermissions } from '../context/RoutePermissionContext';
 import IS_PRODUCTION from '../utils/IS_PRODUCTION';
 import api from '../config/api';
 import logger from '../utils/logger';
@@ -161,6 +162,25 @@ const CustomDrawer = () => {
   const canSeeReports =
     canSeeBRDOnlyMenus ||
     roles.some(r => [JOB_ROLES.BUDGET_PREPARER, JOB_ROLES.BUDGET_REVIEWER, JOB_ROLES.BUDGET_APPROVER].includes(String(r)));
+
+  const { getRoutePermission, isLoading: permissionsLoading } = useRoutePermissions();
+
+  const checkAccess = (path, fallbackAllow) => {
+    if (permissionsLoading) return true; 
+    const perm = getRoutePermission(path);
+    if (!perm) return fallbackAllow;
+    if (!perm.isActive) return false;
+    if (!perm.requiredWorkflowRoles || perm.requiredWorkflowRoles.length === 0) return true;
+    
+    const required = perm.requiredWorkflowRoles.map(r => r.toUpperCase());
+    const userRoles = (currentUser?.Roles || []).map(r => String(r).toUpperCase().trim());
+    const userWfRoles = (currentUser?.workflowRoles || []).map(r => String(r).toUpperCase().trim());
+    
+    const isSuper = userRoles.some(r => r === 'SUPER_ADMIN' || r === 'SUPERADMIN');
+    if (isSuper) return true; 
+
+    return required.some(r => userRoles.includes(r) || userWfRoles.includes(r));
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -457,44 +477,44 @@ const CustomDrawer = () => {
             icon={<LuLayoutDashboard size={18} />}
             name="Dashboard"
             link="/dashboard"
-            isAllow
+            isAllow={checkAccess('/dashboard', true)}
             collapsed={collapsed}
           />
 
           <LinkTo
             icon={<LuFileText size={18} />}
             name="Proposal Management"
-            isAllow
+            isAllow={true}
             collapsed={collapsed}
             subLinks={[
               {
                 link: '/proposal',
                 name: 'Create Proposal',
-                isAllow: canAccessCreateProposal,
+                isAllow: checkAccess('/proposal', canAccessCreateProposal),
                 icon: <LuFilePlus size={18} />,
               },
               {
                 link: '/allproposal',
                 name: 'All Proposals',
-                isAllow: true,
+                isAllow: checkAccess('/allproposal', true),
                 icon: <LuFileText size={18} />,
               },
               {
                 link: '/brd-consolidation',
                 name: 'BRD Consolidation',
-                isAllow: canSeeBRDOnlyMenus,
+                isAllow: checkAccess('/brd-consolidation', canSeeBRDOnlyMenus),
                 icon: <LuDatabase size={18} />,
               },
               {
                 link: '/nep-ceiling',
                 name: 'NEP Ceiling',
-                isAllow: canSeeBRDOnlyMenus && hasFinalizedProposals,
+                isAllow: checkAccess('/nep-ceiling', canSeeBRDOnlyMenus && hasFinalizedProposals),
                 icon: <LuLayoutDashboard size={18} />,
               },
               {
                 link: '/tier',
                 name: 'Tier',
-                isAllow: canSeeBRDOnlyMenus,
+                isAllow: checkAccess('/tier', canSeeBRDOnlyMenus),
                 icon: <LuLayers size={18} />,
               },
             ]}
@@ -503,43 +523,43 @@ const CustomDrawer = () => {
           <LinkTo
             icon={<LuLayoutDashboard size={18} />}
             name="Reports & Analytics"
-            isAllow={canSeeReports}
+            isAllow={true}
             collapsed={collapsed}
             subLinks={[
               {
                 link: '/consolidated-corporate-income',
                 name: reportLinkName('Consolidated Corporate Income'),
-                isAllow: true,
+                isAllow: checkAccess('/consolidated-corporate-income', true),
                 icon: <LuBanknote size={18} />,
               },
               {
                 link: '/consolidated-reports',
                 name: reportLinkName('Consolidated MOOE'),
-                isAllow: true,
+                isAllow: checkAccess('/consolidated-reports', true),
                 icon: <LuFileText size={18} />,
               },
               {
                 link: '/consolidated-capital-outlay-reports',
                 name: reportLinkName('Consolidated Capital Outlay Reports'),
-                isAllow: true,
+                isAllow: checkAccess('/consolidated-capital-outlay-reports', true),
                 icon: <LuBanknote size={18} />,
               },
               {
                 link: '/consolidated-personnel-services-reports',
                 name: reportLinkName('Consolidated Personnel Services Reports'),
-                isAllow: true,
+                isAllow: checkAccess('/consolidated-personnel-services-reports', true),
                 icon: <LuUsers size={18} />,
               },
               {
                 link: '/comparative-report',
                 name: 'Comparative Budget Report',
-                isAllow: true,
+                isAllow: checkAccess('/comparative-report', true),
                 icon: <LuLayoutDashboard size={18} />,
               },
               {
                 link: '/comprehensive-reports',
                 name: 'Budget Summary Report',
-                isAllow: true,
+                isAllow: checkAccess('/comprehensive-reports', true),
                 icon: <LuLayoutDashboard size={18} />,
               },
             ]}
@@ -549,84 +569,90 @@ const CustomDrawer = () => {
             icon={<LuUsers size={18} />}
             name="Employees"
             link="/employee"
-            isAllow={canSeeBRDOnlyMenus && !isReviewer && !isOverallApprover && !isBudgetOfficer}
+            isAllow={checkAccess('/employee', canSeeBRDOnlyMenus && !isReviewer && !isOverallApprover && !isBudgetOfficer)}
             collapsed={collapsed}
           />
           <LinkTo
             icon={<LuBriefcase size={18} />}
             name="Benefits"
             link="/employeeBenefits"
-            isAllow={canSeeBRDOnlyMenus && !isReviewer && !isOverallApprover && !isBudgetOfficer}
+            isAllow={checkAccess('/employeeBenefits', canSeeBRDOnlyMenus && !isReviewer && !isOverallApprover && !isBudgetOfficer)}
             collapsed={collapsed}
           />
 
           <LinkTo
             icon={<LuSettings size={18} />}
             name="Settings"
-            isAllow={isSuperAdmin(currentUser) || isBudgetAdmin || isOverallApprover || isBudgetOfficer}
+            isAllow={true}
             collapsed={collapsed}
             subLinks={[
               {
                 link: '/fysettings',
                 name: 'Set Cut-Off',
-                isAllow: true,
+                isAllow: checkAccess('/fysettings', true),
                 icon: <LuClock size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/compensation-management',
                 name: 'Compensation Management Settings',
-                isAllow: true,
+                isAllow: checkAccess('/compensation-management', true),
                 icon: <LuTrendingUp size={18} strokeWidth={1.5} />,
               },
-              { link: '/rata', name: 'RATA', isAllow: true, icon: <LuCar size={18} strokeWidth={1.5} /> },
+              { link: '/rata', name: 'RATA', isAllow: checkAccess('/rata', true), icon: <LuCar size={18} strokeWidth={1.5} /> },
               {
                 link: '/categories',
                 name: 'Capital Outlay',
-                isAllow: true,
+                isAllow: checkAccess('/categories', true),
                 icon: <LuBuilding size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/income-management',
                 name: 'Income Management',
-                isAllow: true,
+                isAllow: checkAccess('/income-management', true),
                 icon: <LuWallet size={18} strokeWidth={1.5} />,
               },
               { isDivider: true },
               {
                 link: '/salary-table',
                 name: 'Permanent & Casual Salary Table',
-                isAllow: true,
+                isAllow: checkAccess('/salary-table', true),
                 icon: <LuBanknote size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/cos-salary-table',
                 name: 'COS Salary Table (SSL4)',
-                isAllow: true,
+                isAllow: checkAccess('/cos-salary-table', true),
                 icon: <LuBanknote size={18} strokeWidth={1.5} />,
               },
               { isDivider: true },
               {
                 link: '/setup/organization',
                 name: 'Organization Structure Setup',
-                isAllow: true,
+                isAllow: checkAccess('/setup/organization', true),
                 icon: <LuNetwork size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/hierarchical-user-assignments',
                 name: 'Hierarchical User Assignments',
-                isAllow: true,
+                isAllow: checkAccess('/hierarchical-user-assignments', true),
                 icon: <LuUserCog size={18} strokeWidth={1.5} />,
+              },
+              {
+                link: '/route-permissions',
+                name: 'Route Permissions',
+                isAllow: checkAccess('/route-permissions', isSuperAdmin(currentUser)),
+                icon: <LuShieldCheck size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/user-activity-logs',
                 name: 'User Activity Logs',
-                isAllow: isSuperAdmin(currentUser),
+                isAllow: checkAccess('/user-activity-logs', isSuperAdmin(currentUser)),
                 icon: <LuHistory size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/bulk-upload-management',
                 name: 'Bulk Upload Management',
-                isAllow: isSuperAdmin(currentUser),
+                isAllow: checkAccess('/bulk-upload-management', isSuperAdmin(currentUser)),
                 icon: <LuDatabase size={18} strokeWidth={1.5} />,
               },
             ]}

@@ -57,7 +57,7 @@ const fadeSlideIn = keyframes`
 `;
 
 // Route → friendly page title map
-const PAGE_TITLES = {
+export const PAGE_TITLES = {
   '/dashboard': 'Dashboard',
   '/proposal': 'Create Proposal',
   '/allproposal': 'All Proposals',
