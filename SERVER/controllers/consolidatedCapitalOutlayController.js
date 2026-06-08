@@ -514,8 +514,8 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
-    const PAGE_WIDTH  = 595.28; 
-    const PAGE_HEIGHT = 841.89; 
+    const PAGE_WIDTH  = 576; 
+    const PAGE_HEIGHT = 936; 
     const MARGIN        = 18;   // reduced — closer to paper edge
     const CONTENT_LEFT  = MARGIN;
     const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;

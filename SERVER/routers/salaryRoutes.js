@@ -1,6 +1,7 @@
 const express = require('express');
 const salaryRouter = express.Router();
 const isAuth = require('../middleware/is_auth');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 
 const salaryController = require('../controllers/salaryController');
 
@@ -18,17 +19,16 @@ salaryRouter.get('/rate-by-job-grade-and-step/:job_grade/:step', salaryControlle
 // ==================== CPSC Template Management Routes ====================
 salaryRouter.get('/cpsc-templates', salaryController.getCPSCTemplates);
 salaryRouter.get('/cpsc-templates/:id', salaryController.getCPSCTemplateById);
-salaryRouter.post('/cpsc-templates', salaryController.createCPSCTemplate);
-salaryRouter.put('/cpsc-templates/:id', salaryController.updateCPSCTemplate);
-salaryRouter.delete('/cpsc-templates/:id', salaryController.deleteCPSCTemplate);
+salaryRouter.post('/cpsc-templates', requireDynamicPermission(['/salary-table', '/cos-salary-table']), salaryController.createCPSCTemplate);
+salaryRouter.put('/cpsc-templates/:id', requireDynamicPermission(['/salary-table', '/cos-salary-table']), salaryController.updateCPSCTemplate);
+salaryRouter.delete('/cpsc-templates/:id', requireDynamicPermission(['/salary-table', '/cos-salary-table']), salaryController.deleteCPSCTemplate);
 
 // ==================== Template-based Salary Operations ====================
 salaryRouter.get('/salary-grades/template/:templateId', salaryController.getSalaryGradesByTemplate);
 salaryRouter.get('/salary-grades/fiscal-year/:fiscalYear/budget-type/:budgetType', salaryController.getSalaryGradesByFiscalYearAndBudgetType);
 salaryRouter.get('/salary-grades/active/:fiscalYear/:budgetType', salaryController.getActiveSalaryGrades);
-salaryRouter.post('/salary-grades/with-template', salaryController.createSalaryGradeWithTemplate);
-salaryRouter.put('/salary-grades/:id', salaryController.updateSalaryGrade);
-salaryRouter.delete('/salary-grades/:id', salaryController.deleteSalaryGrade);
+salaryRouter.post('/salary-grades/with-template', requireDynamicPermission(['/salary-table', '/cos-salary-table']), salaryController.createSalaryGradeWithTemplate);
+salaryRouter.put('/salary-grades/:id', requireDynamicPermission(['/salary-table', '/cos-salary-table']), salaryController.updateSalaryGrade);
+salaryRouter.delete('/salary-grades/:id', requireDynamicPermission(['/salary-table', '/cos-salary-table']), salaryController.deleteSalaryGrade);
 
 module.exports = salaryRouter;
-

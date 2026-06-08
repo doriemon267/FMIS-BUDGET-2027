@@ -566,8 +566,8 @@ const consolidatedReportsController = {
       const tempSignatureImagePaths = [];
 
       // A4 Landscape — more horizontal space for columns
-      const PAGE_WIDTH  = 841.89;
-      const PAGE_HEIGHT = 595.28;
+      const PAGE_WIDTH  = 936;
+      const PAGE_HEIGHT = 576;
       const MARGIN      = 18;
       const CONTENT_LEFT  = MARGIN;
       const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;

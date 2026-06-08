@@ -1681,9 +1681,9 @@ const getComprehensiveReportPdf = async (req, res) => {
     // Create PDF using Muhammara Recipe — A4 portrait (Annex A format)
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
-    // A4 portrait dimensions in points (1/72 inch) -> 8.27 x 11.69 inches
-    const PAGE_WIDTH = 595.44;
-    const PAGE_HEIGHT = 841.68;
+    // Folio (8" x 13") dimensions in points (1/72 inch) -> 8 x 13 inches
+    const PAGE_WIDTH = 576;
+    const PAGE_HEIGHT = 936;
 
     // Standard "Narrow" Margin = 0.5 inch = 36 points
     const MARGIN_SIDE = 36;
@@ -1950,26 +1950,83 @@ const getComprehensiveReportPdf = async (req, res) => {
     const casualEmployees = casualCount > 0 ? casualCount : 0;
     const cosPersonnel = cosCount > 0 ? cosCount : 0;
 
-    pdfDoc
-      .text(`No. of  Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-      .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
-    currentY += LINE_HEIGHT * 0.75;
-    pdfDoc
-      .text(`No. of  Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-      .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
-    currentY += LINE_HEIGHT * 0.75;
-    pdfDoc
-      .text(`No. of  Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-      .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
-    currentY += LINE_HEIGHT * 0.75;
-    pdfDoc
-      .text(`No. of  Appointive Casual Employees`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-      .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
-    currentY += LINE_HEIGHT * 0.75;
-    pdfDoc
-      .text(`No. of  COS (Contract of Service) Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-      .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
-    currentY += LINE_HEIGHT * 1.2;
+    const regionsArrayCheck = Array.isArray(reportData.summary.regions) ? reportData.summary.regions : [reportData.summary.regions];
+    const isCentralOffice = regionsArrayCheck.some(r => String(r || '').toLowerCase().includes('central office'));
+
+    if (!isCentralOffice) {
+      pdfDoc.text(`No. of System:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`Responsibility Center:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`Service Area (HA)`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`Firmed - Up S.A. (HA)`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`No. of Farmers:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`Irrigated Area:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`  Wet Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`  Dry Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`  3rd Crop (QTA)`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`Benefited Area:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`  Wet Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc.text(`  Dry Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 1.5;
+
+      pdfDoc
+        .text(`No. of Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of Authorized Daily Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of Contractual Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of Dependents of Qualified Recipients`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of Qualified Recipients of Medical and Meal Allowance`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      currentY += LINE_HEIGHT * 1.2;
+    } else {
+      pdfDoc
+        .text(`No. of  Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of  Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of  Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of  Appointive Casual Employees`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 0.75;
+      pdfDoc
+        .text(`No. of  COS (Contract of Service) Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+        .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+      currentY += LINE_HEIGHT * 1.2;
+    }
 
     // USES OF FUNDS section header
     ensureSpace(3);

@@ -20,8 +20,10 @@ const {
   updateWorkflowRoles,
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation,
-  lookupUserFromMainDB
+  lookupUserFromMainDB,
+  updateAssignmentStatus
 } = require('../controllers/HierarchicalUserAssignmentController');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 
 // NEW: Import new organizational assignment controller
 let newOrgAssignmentController = null;
@@ -40,6 +42,7 @@ try {
 router.post(
   '/assignments',
   ...adminRoute(),
+  requireDynamicPermission('/hierarchical-user-assignments'),
   createOrUpdateHierarchicalAssignment
 );
 /**
@@ -67,7 +70,19 @@ router.get(
 router.delete(
   '/assignments/:userId',
   ...adminRoute(),
+  requireDynamicPermission('/hierarchical-user-assignments'),
   deleteHierarchicalAssignment
+);
+
+/**
+ * Update hierarchical assignment status
+ * PATCH /api/hierarchical-rbac/assignments/:userId/status
+ */
+router.patch(
+  '/assignments/:userId/status',
+  ...adminRoute(),
+  requireDynamicPermission('/hierarchical-user-assignments'),
+  updateAssignmentStatus
 );
 
 /**
@@ -87,6 +102,7 @@ router.get(
 router.post(
   '/assignments/:userId/workflow-roles',
   ...adminRoute(),
+  requireDynamicPermission('/hierarchical-user-assignments'),
   updateWorkflowRoles
 );
 /**
@@ -96,6 +112,7 @@ router.post(
 router.post(
   '/test-consolidation',
   ...adminRoute(),
+  requireDynamicPermission('/hierarchical-user-assignments'),
   testHierarchicalConsolidation
 );
 
@@ -111,6 +128,7 @@ router.post(
 router.post(
   '/organizational-assignments',
   ...adminRoute(),
+  requireDynamicPermission('/hierarchical-user-assignments'),
   async (req, res) => {
     try {
       // Redirect to hierarchical assignments controller to focus on hierarchical system
@@ -183,6 +201,7 @@ router.get(
 router.delete(
   '/organizational-assignments/:userId',
   ...adminRoute(),
+  requireDynamicPermission('/hierarchical-user-assignments'),
   async (req, res) => {
     try {
       // Redirect to hierarchical assignments controller to focus on hierarchical system

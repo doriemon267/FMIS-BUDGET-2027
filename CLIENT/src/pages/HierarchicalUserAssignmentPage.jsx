@@ -951,16 +951,19 @@ const HierarchicalUserAssignmentPage = () => {
       <DashboardHeader title="Hierarchical User Assignments" />
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PersonIcon color="primary" /> Current Assignments ({assignments.filter(a => a.userRole !== 'SUPER_ADMIN').length})
+        <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.primary', fontWeight: 600 }}>
+          <PersonIcon sx={{ color: '#386641' }} /> Current Assignments ({assignments.filter(a => a.userRole !== 'SUPER_ADMIN').length})
         </Typography>
-        <Box>
+        <Box sx={{ display: 'flex', gap: 2 }}>
           {roles.includes('SUPER_ADMIN') && (
             <Button 
               variant="outlined" 
-              color="secondary"
               onClick={() => setIsPageAccessDialogOpen(true)} 
-              sx={{ mr: 2 }}
+              sx={{ 
+                borderColor: '#386641', 
+                color: '#386641', 
+                '&:hover': { borderColor: '#2d5334', background: 'rgba(56, 102, 65, 0.1)' } 
+              }}
             >
               ⚙️ Page Access Settings
             </Button>
@@ -969,17 +972,36 @@ const HierarchicalUserAssignmentPage = () => {
             variant="contained" 
             startIcon={<AssignmentIcon />}
             onClick={() => { resetForm(); setIsDialogOpen(true); }}
+            sx={{ 
+              background: '#386641', 
+              color: 'white', 
+              fontWeight: 600, 
+              '&:hover': { background: '#2d5334', transform: 'scale(1.02)' }, 
+              transition: 'all 0.2s' 
+            }}
           >
             Create Hierarchical Assignment
           </Button>
         </Box>
       </Box>
 
-      <Dialog open={isDialogOpen} onClose={() => { setIsDialogOpen(false); resetForm(); }} maxWidth="md" fullWidth>
-        <DialogTitle>
+      <Dialog 
+        open={isDialogOpen} 
+        onClose={() => { setIsDialogOpen(false); resetForm(); }} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            background: '#ffffff',
+            borderRadius: '16px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ borderBottom: '1px solid rgba(0,0,0,0.08)', fontWeight: 600, color: '#386641' }}>
           {editingAssignment ? 'Edit' : 'Create'} Hierarchical Assignment
         </DialogTitle>
-        <DialogContent dividers>
+        <DialogContent sx={{ mt: 2 }}>
           <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12}>
                 <TextField
@@ -1961,21 +1983,31 @@ const HierarchicalUserAssignmentPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Paper sx={{ p: 3 }}>
+      <Paper 
+        sx={{ 
+          p: 3, 
+          background: '#ffffff', 
+          borderRadius: '16px', 
+          boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+          border: '1px solid rgba(0, 0, 0, 0.05)' 
+        }}
+      >
 
             {loadingAssignments ? (
-              <CircularProgress />
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress sx={{ color: '#386641' }} />
+              </Box>
             ) : (
               <TableContainer>
                 <Table size="small" aria-label="Assignments Table">
-                  <TableHead sx={{ backgroundColor: 'action.hover' }}>
+                  <TableHead sx={{ backgroundColor: 'rgba(56, 102, 65, 0.05)' }}>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>User</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Level</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Organization</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 'bold' }}>Actions</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: '#386641', borderBottom: '1px solid rgba(0, 0, 0, 0.05)', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>User</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: '#386641', borderBottom: '1px solid rgba(0, 0, 0, 0.05)', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Role</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: '#386641', borderBottom: '1px solid rgba(0, 0, 0, 0.05)', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Level</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: '#386641', borderBottom: '1px solid rgba(0, 0, 0, 0.05)', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Organization</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: '#386641', borderBottom: '1px solid rgba(0, 0, 0, 0.05)', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Status</TableCell>
+                      <TableCell align="center" sx={{ fontWeight: 700, color: '#386641', borderBottom: '1px solid rgba(0, 0, 0, 0.05)', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1986,17 +2018,21 @@ const HierarchicalUserAssignmentPage = () => {
                         .map((assignment) => (
                         <TableRow 
                           key={assignment.userId}
-                          sx={{ opacity: assignment.isActive === false ? 0.6 : 1 }}
+                          sx={{ 
+                            opacity: assignment.isActive === false ? 0.6 : 1,
+                            transition: 'all 0.2s',
+                            '&:hover': { background: 'rgba(0, 0, 0, 0.02)' }
+                          }}
                         >
-                          <TableCell>
-                            <Typography variant="body2" fontWeight="bold">
+                          <TableCell sx={{ borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
+                            <Typography variant="body2" fontWeight="600" color="text.primary">
                               {assignment.userName}
                             </Typography>
-                            <Typography variant="caption" color="textSecondary">
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                               {assignment.userId}
                             </Typography>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                             {(assignment.userRoles && assignment.userRoles.length > 0) ? (
                               assignment.userRoles.map((roleVal) => {
@@ -2067,7 +2103,7 @@ const HierarchicalUserAssignmentPage = () => {
                             )}
                             </Box>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
                             <Chip
                               label={getAccessLevelInfo(assignment.assignmentLevel).label}
                               size="small"
@@ -2077,7 +2113,7 @@ const HierarchicalUserAssignmentPage = () => {
                               }}
                             />
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
                             <Tooltip
                               title={
                                 loadingOrganization ? 'Loading organization details...' :
@@ -2170,7 +2206,7 @@ const HierarchicalUserAssignmentPage = () => {
                               </Box>
                             </Tooltip>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
                             <FormControlLabel
                               control={
                                 <Switch
@@ -2187,10 +2223,11 @@ const HierarchicalUserAssignmentPage = () => {
                               }
                             />
                           </TableCell>
-                          <TableCell align="center">
+                          <TableCell align="center" sx={{ borderBottom: '1px solid rgba(0, 0, 0, 0.05)' }}>
                             <Tooltip title="Edit Assignment">
                               <IconButton
                                 size="small"
+                                sx={{ color: '#386641', '&:hover': { background: 'rgba(56, 102, 65, 0.1)' } }}
                                 onClick={async () => {
                                   setEditingAssignment(assignment);
                                   setUserLookupId(String(assignment.userId || ''));
@@ -2333,6 +2370,7 @@ const HierarchicalUserAssignmentPage = () => {
                               <IconButton
                                 size="small"
                                 color="error"
+                                sx={{ '&:hover': { background: 'rgba(211, 47, 47, 0.1)' } }}
                                 onClick={() => handleDelete(assignment.userId)}
                               >
                                 <DeleteIcon />
@@ -2345,6 +2383,7 @@ const HierarchicalUserAssignmentPage = () => {
                   </TableBody>
                 </Table>
                 <TablePagination
+                  sx={{ color: 'text.primary', borderTop: '1px solid rgba(0, 0, 0, 0.08)' }}
                   rowsPerPageOptions={[5, 10, 25]}
                   component="div"
                   count={assignments.filter(a => a.userRole !== 'SUPER_ADMIN').length}
@@ -2364,10 +2403,22 @@ const HierarchicalUserAssignmentPage = () => {
         severity={snackbar.severity}
       />
 
-      <Dialog open={isPageAccessDialogOpen} onClose={() => setIsPageAccessDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Page Access Settings</DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+      <Dialog 
+        open={isPageAccessDialogOpen} 
+        onClose={() => setIsPageAccessDialogOpen(false)} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            background: '#ffffff',
+            borderRadius: '16px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ borderBottom: '1px solid rgba(0,0,0,0.08)', fontWeight: 600, color: '#386641' }}>Page Access Settings</DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }} gutterBottom>
             Select which roles are authorized to access the Hierarchical User Assignments page. (Super Admins always have access).
           </Typography>
           {loadingPageAccess ? (

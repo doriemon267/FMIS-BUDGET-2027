@@ -909,8 +909,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       subject: 'Corporate Income Report',
     });
 
-    const PAGE_WIDTH = 842;
-    const PAGE_HEIGHT = 595;
+    const PAGE_WIDTH = 936;
+    const PAGE_HEIGHT = 576;
     const MARGIN = 18;
     const MARGIN_TOP = 25;
     const MARGIN_BOTTOM = 18;
@@ -1010,8 +1010,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       if (currentPage > 0) {
         pdfDoc.endPage();
       }
-      // Use standard A4 Landscape
-      pdfDoc.createPage('A4', 90);
+      // Use Folio Landscape
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage += 1;
       drawBorder();
 
@@ -1134,7 +1134,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       pdfDoc.endPage();
     } else {
       // Create a blank page if no data was found to avoid corrupt PDF
-      pdfDoc.createPage('A4', 90).endPage();
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT).endPage();
     }
 
     pdfDoc.endPDF((err) => {

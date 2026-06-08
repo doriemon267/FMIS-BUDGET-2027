@@ -80,8 +80,8 @@ const exportBudgetSummaryPDF = async (req, res) => {
       subject: 'Budget Proposal Summary Report',
     });
 
-    const PAGE_WIDTH = 595;
-    const PAGE_HEIGHT = 842;
+    const PAGE_WIDTH = 576;
+    const PAGE_HEIGHT = 936;
     const MARGIN = 40;
     const MARGIN_TOP = 50;
     const MARGIN_BOTTOM = 60;
@@ -108,7 +108,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
       if (currentY + (lines * LINE_HEIGHT) > PAGE_HEIGHT - MARGIN_BOTTOM) {
         drawFooter();
         pdfDoc.endPage();
-        pdfDoc.createPage('A4');
+        pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
         currentPage += 1;
         currentY = MARGIN_TOP;
         drawBorder();
@@ -155,7 +155,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
       currentY += LINE_HEIGHT * 1.3;
     };
 
-    pdfDoc.createPage('A4');
+    pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
     drawBorder();
     drawHeader();
 
@@ -243,7 +243,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
     ensureSpace(2);
     drawFooter();
     pdfDoc.endPage();
-    pdfDoc.createPage('A4');
+    pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
     currentPage += 1;
     currentY = MARGIN_TOP;
     drawBorder();

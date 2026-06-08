@@ -8,6 +8,7 @@ const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const isAuth = require('../middleware/is_auth');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 const mongoose = require('mongoose');
 /**
  * Budget Ceiling Management Routes
@@ -169,7 +170,7 @@ router.get('/:fiscalYear/:region', isAuth, async (req, res) => {
  * POST /api/budget-ceiling/initialize
  * Initialize ceiling from finalized Initial proposals
  */
-router.post('/initialize', isAuth, isBRDStaff, async (req, res) => {
+router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ceiling'), async (req, res) => {
   try {
     const { fiscalYear, region, budgetPhase = 'NEP', totalBudgetPool = 0 } = req.body;
     const user = req.user;
@@ -317,7 +318,7 @@ router.post('/initialize', isAuth, isBRDStaff, async (req, res) => {
  * PUT /api/budget-ceiling/:id/allocation
  * Update a specific allocation's ceiling
  */
-router.put('/:id/allocation', isAuth, isBRDStaff, async (req, res) => {
+router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep-ceiling'), async (req, res) => {
   try {
     const { id } = req.params;
     const { division, ceilingAmount, ceilingSubsidy, ceilingIncome, priority, remarks } = req.body;
@@ -391,7 +392,7 @@ router.put('/:id/allocation', isAuth, isBRDStaff, async (req, res) => {
  * PUT /api/budget-ceiling/:id/budget-pool
  * Update the total budget pool
  */
-router.put('/:id/budget-pool', isAuth, isBRDStaff, async (req, res) => {
+router.put('/:id/budget-pool', isAuth, isBRDStaff, requireDynamicPermission('/nep-ceiling'), async (req, res) => {
   try {
     const { id } = req.params;
     const { totalBudgetPool } = req.body;
@@ -440,7 +441,7 @@ router.put('/:id/budget-pool', isAuth, isBRDStaff, async (req, res) => {
  * POST /api/budget-ceiling/:id/publish
  * Publish the ceiling (make visible to divisions)
  */
-router.post('/:id/publish', isAuth, isBRDStaff, async (req, res) => {
+router.post('/:id/publish', isAuth, isBRDStaff, requireDynamicPermission('/nep-ceiling'), async (req, res) => {
   try {
     const { id } = req.params;
     const user = req.user;
@@ -500,7 +501,7 @@ router.post('/:id/publish', isAuth, isBRDStaff, async (req, res) => {
  * POST /api/budget-ceiling/:id/generate-nep
  * Generate NEP proposals from finalized Initial proposals with ceiling
  */
-router.post('/:id/generate-nep', isAuth, isBRDStaff, async (req, res) => {
+router.post('/:id/generate-nep', isAuth, isBRDStaff, requireDynamicPermission('/nep-ceiling'), async (req, res) => {
   try {
     const { id } = req.params;
     const { divisionFilter } = req.body; // Optional: generate for specific division only

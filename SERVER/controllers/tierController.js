@@ -918,8 +918,8 @@ const generateTierPDF = async (req, res) => {
       subject: 'Tier Budget Report',
     });
 
-    const PAGE_WIDTH = 842;
-    const PAGE_HEIGHT = 595;
+    const PAGE_WIDTH = 936;
+    const PAGE_HEIGHT = 576;
     const MARGIN = 40;
     const MARGIN_TOP = 50;
     const MARGIN_BOTTOM = 60;

@@ -1,4 +1,20 @@
 const RoutePermission = require("../models/RoutePermission");
+const UserActivityLog = require("../models/UserActivityLog");
+const routePermissionCache = require("../utils/routePermissionCache");
+
+const logActivity = (req, action, details) => {
+  if (!req.user) return;
+  UserActivityLog.create({
+    userId: req.user.userId || "SYSTEM",
+    userName: req.user.userName || "SYSTEM",
+    userRoles: req.user.Roles || [],
+    action,
+    resource: "ROUTE_PERMISSION",
+    method: req.method,
+    ipAddress: req.clientIp || req.ip,
+    details
+  }).catch(e => console.error("[AuditLog Error]", e.message));
+};
 
 // ─── DEFAULT SEED DATA ────────────────────────────────────────────────────────
 // These mirror the hard-coded values from CLIENT/src/App.jsx.
@@ -487,6 +503,8 @@ exports.update = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Route permission not found." });
     }
+    routePermissionCache.invalidate();
+    logActivity(req, "UPDATE_ROUTE_PERMISSION", { routeId: id, path: updated.path, group: updated.group });
     return res.json({ message: "Updated successfully.", route: updated });
   } catch (e) {
     console.error("[routePermissionController.update]", e);
@@ -513,6 +531,8 @@ exports.updateByPath = async (req, res) => {
     if (!updated) {
       return res.status(404).json({ error: "Route permission not found." });
     }
+    routePermissionCache.invalidate();
+    logActivity(req, "UPDATE_ROUTE_PERMISSION_BY_PATH", { path, group: updated.group });
     return res.json({ message: "Updated successfully.", route: updated });
   } catch (e) {
     console.error("[routePermissionController.updateByPath]", e);
@@ -539,6 +559,10 @@ exports.seed = async (req, res) => {
       }
     }
 
+    if (results.inserted.length > 0) {
+      routePermissionCache.invalidate();
+      logActivity(req, "SEED_ROUTE_PERMISSIONS", { insertedCount: results.inserted.length });
+    }
     return res.json({
       message: `Seed complete. Inserted: ${results.inserted.length}, Skipped: ${results.skipped.length}`,
       ...results,
@@ -546,6 +570,98 @@ exports.seed = async (req, res) => {
   } catch (e) {
     console.error("[routePermissionController.seed]", e);
     return res.status(500).json({ error: "Seed failed: " + (e.message || e) });
+  }
+};
+
+/**
+ * POST /api/route-permissions/sync
+ * Syncs routes from the frontend dashboard.
+ * If a route path doesn't exist, it creates a new entry.
+ */
+exports.sync = async (req, res) => {
+  const { routes } = req.body;
+  if (!routes || !Array.isArray(routes)) {
+    return res.status(400).json({ error: "routes array is required." });
+  }
+
+  try {
+    const results = { inserted: [], skipped: [] };
+
+    for (const route of routes) {
+      if (!route.path || !route.label) continue;
+      
+      const existing = await RoutePermission.findOne({ path: route.path });
+      if (existing) {
+        let updated = false;
+        if (existing.group !== (route.group || "General")) {
+          existing.group = route.group || "General";
+          updated = true;
+        }
+        if (existing.label !== route.label) {
+          existing.label = route.label;
+          updated = true;
+        }
+        if (updated) {
+          await existing.save();
+        }
+        results.skipped.push(route.path);
+      } else {
+        await RoutePermission.create({
+          path: route.path,
+          label: route.label,
+          group: route.group || "General",
+          requiredPermissions: [],
+          requiredWorkflowRoles: [],
+          excludeRoles: [],
+          isActive: true,
+          isSeeded: true
+        });
+        results.inserted.push(route.path);
+      }
+    }
+
+    if (results.inserted.length > 0 || results.skipped.length > 0) {
+      routePermissionCache.invalidate();
+      logActivity(req, "SYNC_ROUTE_PERMISSIONS", { insertedCount: results.inserted.length, skippedCount: results.skipped.length });
+    }
+    return res.json({
+      message: `Sync complete. Inserted: ${results.inserted.length}, Skipped: ${results.skipped.length}`,
+      ...results,
+    });
+  } catch (e) {
+    console.error("[routePermissionController.sync]", e);
+    return res.status(500).json({ error: "Sync failed: " + (e.message || e) });
+  }
+};
+
+/**
+ * POST /api/route-permissions/bulk-update
+ * Bulk assigns or removes a role from multiple routes at once.
+ */
+exports.bulkUpdateRole = async (req, res) => {
+  const { routeIds, roleId, action } = req.body;
+  if (!Array.isArray(routeIds) || !roleId || !action) {
+    return res.status(400).json({ error: "routeIds array, roleId, and action are required." });
+  }
+
+  try {
+    if (action === "add") {
+      await RoutePermission.updateMany(
+        { _id: { $in: routeIds } },
+        { $addToSet: { requiredWorkflowRoles: roleId } }
+      );
+    } else if (action === "remove") {
+      await RoutePermission.updateMany(
+        { _id: { $in: routeIds } },
+        { $pull: { requiredWorkflowRoles: roleId } }
+      );
+    }
+    routePermissionCache.invalidate();
+    logActivity(req, "BULK_UPDATE_ROLE_PERMISSION", { action, roleId, routeIdsCount: routeIds.length });
+    return res.json({ message: "Bulk update successful." });
+  } catch (e) {
+    console.error("[routePermissionController.bulkUpdateRole]", e);
+    return res.status(500).json({ error: "Something went wrong." });
   }
 };
 
@@ -575,6 +691,8 @@ exports.resetToDefault = async (req, res) => {
       { new: true }
     );
 
+    routePermissionCache.invalidate();
+    logActivity(req, "RESET_ROUTE_PERMISSION", { routeId: id });
     return res.json({ message: "Reset to default.", route: reset });
   } catch (e) {
     console.error("[routePermissionController.resetToDefault]", e);
@@ -610,6 +728,8 @@ exports.create = async (req, res) => {
       isSeeded: false,
     });
 
+    routePermissionCache.invalidate();
+    logActivity(req, "CREATE_ROUTE_PERMISSION", { path });
     return res.status(201).json({ message: "Created successfully.", route: created });
   } catch (e) {
     console.error("[routePermissionController.create]", e);
@@ -628,6 +748,8 @@ exports.deleteRoute = async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: "Route permission not found." });
     }
+    routePermissionCache.invalidate();
+    logActivity(req, "DELETE_ROUTE_PERMISSION", { routeId: id });
     return res.json({ message: "Deleted successfully." });
   } catch (e) {
     console.error("[routePermissionController.deleteRoute]", e);

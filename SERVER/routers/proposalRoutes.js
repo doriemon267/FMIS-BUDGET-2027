@@ -16,6 +16,23 @@ const {
   updateMissingRegions,
   returnProposal,
   getProposalDetails,
+const {
+  getProposals,
+  createProposal,
+  getProposalById,
+  updateProposal,
+  deleteProposal,
+  updateProposalStatus,
+  getAllProposals,
+  approveProposal,    
+  rejectAllProposals,      
+  getMyProposals,
+  deleteAllProposals,
+  saveAsDraft,
+  getAllUserProposals,
+  updateMissingRegions,
+  returnProposal,
+  getProposalDetails,
   saveDraftProposal,
   getDraftProposal,
   consolidateProposals,
@@ -24,6 +41,7 @@ const {
 } = require("../controllers/proposalController");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 
 const {
   loadHierarchicalAssignment,
@@ -80,6 +98,7 @@ proposalRouter.get("/proposals/:id",
 // Add a new proposal (requires create permission, applies submission workflow)
 proposalRouter.post(
   "/proposals",
+  requireDynamicPermission('/proposal'),
   submissionWorkflowControl('create'),
   requirePermission('canCreateProposals'),
   enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }),
@@ -88,6 +107,7 @@ proposalRouter.post(
 // Edit an existing proposal (requires edit permission and ownership unless canEditAllProposals)
 proposalRouter.put(
   "/proposals/:id",
+  requireDynamicPermission('/proposal'),
   submissionWorkflowControl('update'),
   requirePermission('canEditOwnProposals'),
   checkProposalOwnership(Proposal),
@@ -97,6 +117,7 @@ proposalRouter.put(
 // Delete a proposal (requires delete permission and ownership unless admin)
 proposalRouter.delete(
   "/proposals/:id",
+  requireDynamicPermission('/proposal'),
   submissionWorkflowControl('delete'),
   requirePermission('canDeleteProposals'),
   checkProposalOwnership(Proposal),
@@ -105,6 +126,7 @@ proposalRouter.delete(
 // Update proposal status (requires update permission, applies submission workflow)
 proposalRouter.post(
   "/updateProposalStatus",
+  requireDynamicPermission('/proposal'),
   submissionWorkflowControl('update'),
   requirePermission('canEditOwnProposals'),
   updateProposalStatus
@@ -112,24 +134,26 @@ proposalRouter.post(
 // Approve a proposal (requires canApproveProposals)
 proposalRouter.put(
   "/approveProposal",
+  requireDynamicPermission('/proposal'),
   requirePermission('canApproveProposals'),
   approveProposal
 );
 // Reject a proposal
-proposalRouter.put("/rejectAllProposals", rejectAllProposals);
+proposalRouter.put("/rejectAllProposals", requireDynamicPermission('/proposal'), rejectAllProposals);
 // Delete all proposals
-proposalRouter.delete("/deleteAllProposals", deleteAllProposals);
+proposalRouter.delete("/deleteAllProposals", requireDynamicPermission('/proposal'), deleteAllProposals);
 // Save as Draft
 proposalRouter.post(
   "/saveAsDraft",
+  requireDynamicPermission('/proposal'),
   submissionWorkflowControl('update'),
   requirePermission('canEditOwnProposals'),
   saveAsDraft
 );
 // Add this new route
-proposalRouter.post("/update-missing-regions", updateMissingRegions);
+proposalRouter.post("/update-missing-regions", requireDynamicPermission('/proposal'), updateMissingRegions);
 // Return a proposal
-proposalRouter.post("/returnProposal", returnProposal);
+proposalRouter.post("/returnProposal", requireDynamicPermission('/proposal'), returnProposal);
 // Add a simplified fallback endpoint
 proposalRouter.get('/proposal-simple', async (req, res) => {
   try {
@@ -159,13 +183,13 @@ if (typeof getDraftProposal === 'function') {
 }
 // Add route to save draft proposals
 if (typeof saveDraftProposal === 'function') {
-  proposalRouter.post('/proposals/draft', saveDraftProposal);
+  proposalRouter.post('/proposals/draft', requireDynamicPermission('/proposal'), saveDraftProposal);
 }
 // Manual consolidation route for fixing missing proposals
-proposalRouter.post('/consolidate-proposals', applyHierarchicalFilters, consolidateProposals);
+proposalRouter.post('/consolidate-proposals', requireDynamicPermission('/proposal'), applyHierarchicalFilters, consolidateProposals);
 // Auto-consolidate Draft items into Proposals
 const { consolidateAllDrafts } = require('../utils/autoConsolidateDrafts');
-proposalRouter.post('/consolidate-drafts', async (req, res) => {
+proposalRouter.post('/consolidate-drafts', requireDynamicPermission('/proposal'), async (req, res) => {
   try {
     const results = await consolidateAllDrafts();
     res.status(200).json({
@@ -185,6 +209,5 @@ proposalRouter.post('/consolidate-drafts', async (req, res) => {
 // Debug route to check database content
 proposalRouter.get('/debug-proposals', debugProposals);
 // Recalculate totals for a specific proposal
-proposalRouter.post('/proposals/:id/recalculate', recalculateProposalTotals);
+proposalRouter.post('/proposals/:id/recalculate', requireDynamicPermission('/proposal'), recalculateProposalTotals);
 module.exports = proposalRouter;
-

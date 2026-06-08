@@ -43,6 +43,11 @@ const LinkTo = ({
     [subLinks]
   );
 
+  const hasActualLinks = useMemo(
+    () => allowedSubLinks.some((s) => !s.isDivider),
+    [allowedSubLinks]
+  );
+
   const promoteChild = useMemo(
     () => allowedSubLinks.length === 1 && !link,
     [allowedSubLinks, link]
@@ -56,6 +61,10 @@ const LinkTo = ({
   }, [link, location.pathname, allowedSubLinks]);
 
   if (!isAllow) return null;
+  
+  // If this item is meant to be a parent (has subLinks) but NONE of the subLinks are allowed (excluding dividers),
+  // we completely hide the parent item.
+  if (subLinks.length > 0 && !hasActualLinks) return null;
 
   if (collapsed) {
     const label = promoteChild && promotedLink ? promotedLink.name : name;

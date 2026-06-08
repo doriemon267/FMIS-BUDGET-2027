@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const isAuth = require('../middleware/is_auth');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 const organizationStructureController = require('../controllers/OrganizationStructureController');
 
 // Apply authentication middleware
@@ -13,10 +14,10 @@ router.get('/', organizationStructureController.getMappings);
 router.get('/specific', organizationStructureController.getMappingByRegionAndDepartment);
 
 // Create or update a mapping
-router.post('/', organizationStructureController.saveMapping);
+router.post('/', requireDynamicPermission('/setup/organization'), organizationStructureController.saveMapping);
 
 // Delete a mapping
-router.delete('/:id', organizationStructureController.deleteMapping);
+router.delete('/:id', requireDynamicPermission('/setup/organization'), organizationStructureController.deleteMapping);
 
 module.exports = router;
 

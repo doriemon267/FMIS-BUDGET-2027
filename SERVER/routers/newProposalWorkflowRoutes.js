@@ -3,6 +3,7 @@ const router = express.Router();
 const newProposalWorkflowController = require('../controllers/newProposalWorkflowController');
 const consolidationController = require('../controllers/consolidationController');
 const isAuth = require('../middleware/is_auth');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 const multer = require('multer');
 const path = require('path');
 
@@ -52,17 +53,17 @@ router.get('/uploads/:filename', (req, res) => {
 });
 
 // Routes for proposal management
-router.post('/proposals', newProposalWorkflowController.createProposal);
+router.post('/proposals', requireDynamicPermission('/proposal'), newProposalWorkflowController.createProposal);
 router.get('/proposals', newProposalWorkflowController.getProposals);
 router.get('/proposals/my-proposals', newProposalWorkflowController.getMyProposals);
 router.get('/proposals/pending-review', newProposalWorkflowController.getPendingReview);
 
 // ── Merge route: MUST be BEFORE generic /:id routes to avoid param clash ──────
-router.post('/proposals/merge', newProposalWorkflowController.mergeProposals);
+router.post('/proposals/merge', requireDynamicPermission('/proposal'), newProposalWorkflowController.mergeProposals);
 
 // Specific routes with parameters must come BEFORE generic /:id routes
 router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
-router.post('/proposals/:id/action', async (req, res, next) => {
+router.post('/proposals/:id/action', requireDynamicPermission('/proposal'), async (req, res, next) => {
   // Lock enforcement: block workflow actions if proposal is currently locked by a different user
   try {
     const ProposalLockingService = require('../services/ProposalLockingService');
@@ -95,8 +96,8 @@ router.post('/proposals/:id/action', async (req, res, next) => {
 router.get('/proposals/:workflowRefId/totals', newProposalWorkflowController.getProposalTotalsByWorkflowRef);
 
 // Attachment routes - BEFORE generic /:id routes
-router.post('/proposals/:id/attachments', upload.single('file'), newProposalWorkflowController.uploadAttachment);
-router.delete('/proposals/:id/attachments/:attachmentId', newProposalWorkflowController.deleteAttachment);
+router.post('/proposals/:id/attachments', requireDynamicPermission('/proposal'), upload.single('file'), newProposalWorkflowController.uploadAttachment);
+router.delete('/proposals/:id/attachments/:attachmentId', requireDynamicPermission('/proposal'), newProposalWorkflowController.deleteAttachment);
 router.get('/proposals/:id/attachments', newProposalWorkflowController.getAttachments);
 
 // Get analysts eligible for a specific proposal (region-based routing)
@@ -104,8 +105,8 @@ router.get('/proposals/:id/analysts-for-proposal', newProposalWorkflowController
 
 // Generic routes AFTER specific ones
 router.get('/proposals/:id', newProposalWorkflowController.getProposalById);
-router.put('/proposals/:id', newProposalWorkflowController.updateProposal);
-router.delete('/proposals/:id', newProposalWorkflowController.deleteProposal);
+router.put('/proposals/:id', requireDynamicPermission('/proposal'), newProposalWorkflowController.updateProposal);
+router.delete('/proposals/:id', requireDynamicPermission('/proposal'), newProposalWorkflowController.deleteProposal);
 
 // BRD Consolidation Routes
 router.get('/consolidation/folders', consolidationController.getFolders);
@@ -114,6 +115,6 @@ router.get('/consolidation/regions', consolidationController.getRegionStructure)
 router.get('/consolidation/central-office', consolidationController.getCentralOfficeStructure);
 router.get('/consolidation/summary', consolidationController.getSummary);
 router.get('/consolidation/:consolidationId', consolidationController.getConsolidationRecord);
-router.put('/consolidation/:consolidationId/org-info', consolidationController.updateOrganizationalInfo);
+router.put('/consolidation/:consolidationId/org-info', requireDynamicPermission('/proposal'), consolidationController.updateOrganizationalInfo);
 
 module.exports = router;

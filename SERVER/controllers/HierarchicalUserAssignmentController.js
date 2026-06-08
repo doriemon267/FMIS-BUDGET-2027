@@ -865,7 +865,7 @@ const getAllHierarchicalAssignments = async (req, res) => {
       });
     }
     const assignments = await HierarchicalUserAssignment
-      .find({ isActive: true })
+      .find({})
       .populate('regionId', 'Region regionName RegionName RegionCode _id')
       .populate('departmentId', 'Department departmentName DepartmentName _id')
       .sort({ assignmentLevel: 1, userName: 1 })
@@ -1089,7 +1089,7 @@ const updateWorkflowRoles = async (req, res) => {
         code: 'INVALID_WORKFLOW_ROLES' 
       });
     }
-    const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
+    const assignment = await HierarchicalUserAssignment.findOne({ userId });
     if (!assignment) {
       return res.status(404).json({ success: false, message: 'User assignment not found', code: 'NOT_FOUND' });
     }
@@ -1135,7 +1135,7 @@ const deleteHierarchicalAssignment = async (req, res) => {
         code: 'ADMIN_REQUIRED'
       });
     }
-    const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
+    const assignment = await HierarchicalUserAssignment.findOne({ userId });
     if (!assignment) {
       return res.status(404).json({
         success: false,
@@ -1143,7 +1143,7 @@ const deleteHierarchicalAssignment = async (req, res) => {
         code: 'ASSIGNMENT_NOT_FOUND'
       });
     }
-    await HierarchicalUserAssignment.deleteOne({ userId, isActive: true });
+    await HierarchicalUserAssignment.deleteOne({ userId });
     return res.status(200).json({
       success: true,
       message: 'Hierarchical assignment deleted successfully',
@@ -1561,6 +1561,58 @@ const getConsolidationExplanation = (scope) => {
       return 'Own-only users can only create and edit their own records.';
   }
 };
+/**
+ * Update the active status of a hierarchical assignment
+ */
+const updateAssignmentStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { isActive } = req.body;
+    const adminUserRoles = req.user.Roles;
+    
+    if (!hasFullAccess(adminUserRoles)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.',
+        code: 'ADMIN_REQUIRED'
+      });
+    }
+
+    if (isActive === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'isActive status is required'
+      });
+    }
+
+    const assignment = await HierarchicalUserAssignment.findOneAndUpdate(
+      { userId },
+      { $set: { isActive, lastModifiedBy: req.user.id } },
+      { new: true }
+    );
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assignment not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Assignment status updated to ${isActive ? 'Active' : 'Inactive'}`,
+      assignment
+    });
+  } catch (error) {
+    console.error('Error updating assignment status:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error updating assignment status',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createOrUpdateHierarchicalAssignment,
   getHierarchicalAssignment,
@@ -1569,7 +1621,8 @@ module.exports = {
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation,
   buildHierarchicalAssignment,
-  lookupUserFromMainDB
+  lookupUserFromMainDB,
+  updateAssignmentStatus
 };
 
 // ----- Internal helper utilities -----

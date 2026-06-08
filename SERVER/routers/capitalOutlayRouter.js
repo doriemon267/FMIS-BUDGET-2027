@@ -17,18 +17,19 @@ const isAuth = require("../middleware/is_auth");
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 const CapitalOutlay = require("../models/CapitalOutlay"); // New model import
 const capitalOutlayRouter = Router();
 // Apply authentication to all capital outlay routes
 capitalOutlayRouter.use(isAuth);
 capitalOutlayRouter.get("/capital-outlays", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllCapitalOutlays);
-capitalOutlayRouter.post("/capital-outlays", checkDueDateWithRoleBypass, submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
-capitalOutlayRouter.put("/capital-outlays/:id", checkDueDateWithRoleBypass, submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
-capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, deleteCapitalOutlay);
+capitalOutlayRouter.post("/capital-outlays", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
+capitalOutlayRouter.put("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
+capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), deleteCapitalOutlay);
 capitalOutlayRouter.get("/capital-outlay-list", getCapitalOutlayList);
 capitalOutlayRouter.get("/subline-items", getSublineItems);
 capitalOutlayRouter.get("/accounting-titles", getAccountingTitles);
-capitalOutlayRouter.delete("/deleteAllCapitalOutlays", deleteAllCapitalOutlays);
+capitalOutlayRouter.delete("/deleteAllCapitalOutlays", requireDynamicPermission('/categories'), deleteAllCapitalOutlays);
 // Check due date status
 capitalOutlayRouter.get("/due-date-status", async (req, res) => {
   try {
@@ -65,7 +66,7 @@ capitalOutlayRouter.get("/due-date-status", async (req, res) => {
   }
 });
 // Route to manually seed Capital Outlay chart of accounts
-capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
+capitalOutlayRouter.post("/seed-chart-of-accounts", requireDynamicPermission('/categories'), async (req, res) => {
   res.status(410).json({
     message: "This endpoint is deprecated. Chart of Accounts data now comes directly from the FMIS main database (MONGODB_MAIN_URL). Update the source dataset there if changes are needed.",
   });
@@ -309,6 +310,6 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
   }
 });
 // Bulk update Capital Outlay entries
-capitalOutlayRouter.put("/capital-outlay/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
+capitalOutlayRouter.put("/capital-outlay/bulk-update", requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
 module.exports = capitalOutlayRouter;
 

@@ -642,8 +642,8 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     const recipeOptions = { version: 1.6, author: 'FMIS-BUDGET', title: 'Consolidated Personnel Services Report' };
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
-    const PAGE_WIDTH = 595.28;
-    const PAGE_HEIGHT = 841.89;
+    const PAGE_WIDTH = 576;
+    const PAGE_HEIGHT = 936;
     const MARGIN = 18;
     const CONTENT_LEFT = MARGIN;
     const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
