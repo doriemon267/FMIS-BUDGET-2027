@@ -84,93 +84,9 @@ const { initializeCleanupScheduler, stopCleanupScheduler } = require("./utils/ba
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
 const { initializeScheduledJobs, stopScheduledJobs } = require("./controllers/databaseBackupController");
 
-// ROUTE IMPORTS
-const personnelRoutes = require("./routers/personnel");
-const positionTitleRoutes = require("./routers/PositionTitle");
-const departmentRouter = require("./routers/Department");
-const employeeRouter = require("./routers/employeeListRoutes");
-const statusRouter = require("./routers/Status");
-const salaryRouter = require("./routers/salaryRoutes");
-const cpcsSalaryRoutes = require("./routers/cpcsSalaryRoutes");
-const cosSalaryRoutes = require("./routers/cosSalaryRoutes");
-const mooeRoutes = require("./routers/mooeRoutes");
-const fiscalYearRoutes = require("./routers/fiscalYearRoutes");
-const personnelServicesRouter = require("./routers/personnelServices_router");
-const excelUploadRouter = require("./routers/excelUpload");
-const capitalOutlayRouter = require("./routers/capitalOutlayRouter");
-const capitalOutlayDetailsRouter = require("./routers/capitalOutlayDetailsRouter");
-const categoryRouter = require("./routers/category");
-const proposalRBACRouter = require("./routers/proposalRoutesRBAC"); 
-const rataRoutes = require("./routers/RATARoutes");
-const regionRouter = require("./routers/RegionRoutes");
-const settings = require("./routers/settingsRoutes");
-const annexRouter = require("./routers/annex");
-const personnelServicesAnnexesRoutes = require("./routers/ps_annexes");
-const setupRouter = require("./routers/setupRoutes");
-const organizationStructureRouter = require("./routers/OrganizationStructureRoutes");
-const employeeCourtAppearanceRouter = require("./routers/employeeCourtAppearanceRoutes");
-const subsistenceSTRouter = require("./routers/subsistenceAllowanceSTRoutes");
-const overtimeRouter = require("./routers/overtimeRoutes");
-const subsistenceAllowanceRouter = require("./routers/subsistenceAllowanceMDSRoutes");
-const subsistenceAllowanceGeneralRouter = require("./routers/subsistenceAllowanceRoutes");
-const loyaltyPayRouter = require("./routers/loyaltyPayRoutes");
-const reportsRouter = require("./routers/reports.routes");
-const cosPersonnelRouter = require("./routers/cosPersonnelRoutes");
-const proposalSummaryRoutes = require("./routers/proposalSummary");
-const newProposalWorkflowRoutes = require("./routes/newProposalWorkflowRoutes");
-const debugRoutes = require("./routers/debugRoutes");
-const todoRouter = require("./routers/todo_router");
-const eventsRouter = require("./routers/eventsRouter");
-
-// UPLOADER ROUTERS
-const chartOfAccountsRouter = require("./routers/uploader/chartOfAccounts");
-const uploadcategories = require("./routers/uploader/categories");
-const uploadstatus = require("./routers/uploader/statuses"); // Unified duplicate
-const uploadregions = require("./routers/uploader/regions");
-const uploaddepartments = require("./routers/uploader/departments");
-const uploadpositions = require("./routers/uploader/positionTitles");
-const uploadsalaries = require("./routers/uploader/salaryGrades");
-const uploadratas = require("./routers/uploader/ratas");
-
-// ADDITIONAL ROUTERS
-const mealAllowance = require("./routers/mealAllowanceRoutes");
-const incomeCategoryRouter = require("./routers/incomeCategoryRoutes");
-const incomeCategoryGroupRouter = require("./routers/incomeCategoryGroupRoutes");
-const incomeSubcategoryRouter = require("./routers/incomeSubcategoryRoutes");
-const incomeSubcategoryRoutes = require("./routers/income_subcategories");
-const statsRouter = require("./routers/statsRoutes");
-const childrenAllowance = require("./routers/childrenAllowanceRoutes");
-const exportRoutes = require("./routers/exportRoutes");
-const medicalAllowanceRouter = require("./routers/medicalAllowanceRoutes");
-const incomeRouter = require("./routers/incomeRoutes");
-const incomeExcelUploadRouter = require("./routers/incomeExcelUploadRoutes");
-const capitalOutlayExcelUploadRoutes = require("./routers/capitalOutlayExcelUploadRoutes");
-const mooeExcelUploadRoutes = require("./routers/mooeExcelUploadRoutes");
-const discountSettingsRouter = require("./routes/discountSettings");
-const retireeRouter = require("./routers/retireeRoutes");
-const budgetarySupportRoutes = require("./routers/budgetarySupportRoutes");
-const tierRoutes = require("./routers/tierRoutes");
-const chartOfAccountsCRUDRouter = require("./routers/chartOfAccountsRoutes");
-const titleMappingRouter = require("./routers/titleMappingRoutes");
-const employeeMasterRouter = require("./routers/employeeMasterRoutes");
-const iasOMCostRouter = require("./routers/iasOMCostRoutes");
-const consolidatedReportsRouter = require("./routers/consolidatedReportsRoutes");
-const consolidatedCapitalOutlayRouter = require("./routers/consolidatedCapitalOutlayRoutes");
-const consolidatedPersonnelServicesRouter = require("./routers/consolidatedPersonnelServicesRoutes");
-const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes");
-const databaseBackupRouter = require("./routers/databaseBackupRoutes");
-const bulkUploadManagementRoutes = require("./routers/bulkUploadManagementRoutes");
-const budgetOfficerEditRouter = require("./routers/budgetOfficerEditRoutes");
-const personnelServicesPDFRouter = require("./routers/personnelServicesPDFRoutes");
+// ROUTE IMPORTS (Moved to centralized matrix)
 const isAuth = require("./middleware/is_auth");
-const authRouter = require("./routers/auth_router");
 const enforceOrgAccess = require("./middleware/enforceOrgAccess");
-const income_categories = require("./routers/income_categories");
-const myProposalsRoutes = require("./routes/myProposalsRoutes");
-const budgetManagerOrgRoutes = require("./routers/BudgetManagerOrgRoutes");
-const hierarchicalRBACRoutes = require("./routers/hierarchicalRBACRoutes");
-const proposalLockingRouter = require("./routers/proposalLockingRouter");
-const routePermissionRouter = require("./routers/routePermissionRouter");
 
 // Database Trigger Connection
 connectMongo();
@@ -189,6 +105,10 @@ mongoose.connection.once("open", async () => {
 
 const app = express();
 app.set('trust proxy', 1); // Trust Nginx / Load Balancer proxy
+
+// Compression Middleware Setup
+const compression = require('compression');
+app.use(compression({ threshold: 1024 }));
 
 const apiPrefix = "/api";
 
@@ -240,7 +160,7 @@ app.use(
 
       const isAllowed = allowedOrigins.includes(originStr);
       const isNia = originStr.includes("nia.gov.ph");
-      const isLocal = originStr.includes("localhost") || originStr.includes("127.0.0.1") || originStr.includes("fmis.local");
+      const isLocal = process.env.NODE_ENV !== 'production' && (originStr.includes("localhost") || originStr.includes("127.0.0.1") || originStr.includes("fmis.local"));
 
       if (isAllowed || isNia || isLocal) {
         return callback(null, true);
@@ -262,8 +182,8 @@ app.use(
 );
 
 // Express Standard Parsers & Security Middlewares
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ limit: "5mb", extended: true }));
 app.use(cookieParser());
 
 const mongoSanitize = require('express-mongo-sanitize');
@@ -273,13 +193,7 @@ const { securityHeaders, permissionsPolicy } = require('./middleware/security');
 app.use(securityHeaders);
 app.use(permissionsPolicy);
 
-// Gzip Compression
-try {
-  const compression = require('compression');
-  app.use(compression({ threshold: 1024 }));
-} catch (e) {
-  console.warn("[Server] Optional compression package is missing.");
-}
+// Gzip Compression (Moved to top of middleware stack)
 
 // Rate Limiting & Audit Logging
 const { apiLimiter, authLimiter, uploadLimiter, proposalLimiter } = require('./middleware/rateLimiter');
@@ -364,53 +278,7 @@ app.use((err, req, res, next) => {
 // PUBLIC UTILITY ENDPOINTS
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
 
-app.get(`${apiPrefix}/compensation`, async (req, res) => {
-  try {
-    const CompensationSettings = require("./models/CompensationSettings");
-    const Settings = require("./models/Settings");
-    const compensations = await CompensationSettings.find().sort({ createdAt: -1 });
-
-    const enrichedCompensations = await Promise.all(
-      compensations.map(async (compensation) => {
-        const linkedSettings = await Settings.find({ compensationSettingsId: compensation._id }).select("_id fiscalYear budgetType");
-        const linkedFiscalYears = linkedSettings.map((setting) => setting._id);
-        const linkedBudgetTypes = linkedSettings.map((setting) => setting.budgetType).filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
-
-        return {
-          ...compensation.toObject(),
-          linkedFiscalYears,
-          linkedBudgetTypes,
-          linkedCount: linkedFiscalYears.length,
-        };
-      })
-    );
-    res.status(200).json({ message: "Compensation settings retrieved successfully", count: enrichedCompensations.length, compensationSettings: enrichedCompensations });
-  } catch (error) {
-    console.error("Error in getCompensationSettings:", error.stack);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
-app.get(`${apiPrefix}/excel-upload/template`, isAuth, async (req, res) => {
-  try {
-    const userAccess = req.user?.hierarchicalAccess || {};
-    const { scope = "REGION", accessibleDepartments = [], accessibleDivisions = [], accessibleSections = [] } = userAccess;
-    const region = req.query.region || req.user?.region || "";
-    const { generateEmployeeTemplate } = require("./utils/employeeTemplateGenerator");
-
-    const templateBuffer = generateEmployeeTemplate({
-      region, fiscalYear: "", scope, accessibleDepartments, accessibleDivisions, accessibleSections
-    });
-
-    const fileName = `employee_import_template_${region || "authenticated"}.xlsx`;
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.send(templateBuffer);
-  } catch (error) {
-    console.error("Error generating template:", error);
-    res.status(500).json({ error: "Error generating template", details: error.message });
-  }
-});
+// Inline endpoints extracted to router files
 
 app.get(`${apiPrefix}/test`, (req, res) => {
   res.json({ message: "Server is working without MongoDB!", timestamp: new Date(), status: "OK" });
@@ -435,111 +303,8 @@ app.use((req, res, next) => {
 app.use("/uploads", isAuth, express.static(path.join(__dirname, "uploads")));
 
 // ENDPOINT / ROUTER MOUNTING
-app.use(apiPrefix, authRouter);
-app.use(apiPrefix, employeeRouter);
-app.use(apiPrefix, statusRouter);
-app.use(apiPrefix, salaryRouter);
-app.use(`${apiPrefix}/cpcs-salary`, cpcsSalaryRoutes);
-app.use(`${apiPrefix}/cos-salary`, cosSalaryRoutes);
-app.use(apiPrefix, personnelRoutes);
-app.use(apiPrefix, positionTitleRoutes);
-app.use(apiPrefix, attachWorkflowRef, mooeRoutes);
-app.use(apiPrefix, fiscalYearRoutes);
-app.use(apiPrefix, departmentRouter);
-app.use(apiPrefix, require("./routers/personnelParamsRoutes")); // Mounted BEFORE personnelServicesRouter
-app.use(apiPrefix, attachWorkflowRef, personnelServicesRouter);
-app.use(apiPrefix, excelUploadRouter);
-app.use(`${apiPrefix}/capitaloutlay`, capitalOutlayExcelUploadRoutes);
-app.use(apiPrefix, attachWorkflowRef, capitalOutlayRouter);
-app.use(apiPrefix, capitalOutlayDetailsRouter);
-app.use(apiPrefix, categoryRouter);
-app.use(apiPrefix, proposalRBACRouter);
-
-const { comparisonRouter } = require("./routers/budgetOfficerEditRoutes");
-app.use(`${apiPrefix}/budget-officer-edits`, comparisonRouter);
-app.use(`${apiPrefix}/budget-officer-edits`, budgetOfficerEditRouter);
-app.use(`${apiPrefix}/my-proposals`, myProposalsRoutes);
-app.use(`${apiPrefix}/workflow`, require("./routers/proposalWorkflowRoutes"));
-app.use(`${apiPrefix}/workflow-templates`, require("./routers/workflowTemplateRoutes"));
-app.use(`${apiPrefix}/submission-workflow`, require("./routers/submissionWorkflowRoutes"));
-app.use(`${apiPrefix}/status-workflow`, require("./routers/statusWorkflowRoutes"));
-app.use(apiPrefix, require("./routers/notificationRoutes"));
-app.use(`${apiPrefix}/tier-comparison`, require("./routers/tierComparisonRoutes"));
-app.use(`${apiPrefix}/budget-ceiling`, require("./routers/budgetCeilingRoutes"));
-app.use(apiPrefix, rataRoutes);
-app.use(apiPrefix, settings);
-app.use(`${apiPrefix}/regions`, regionRouter);
-app.use(apiPrefix, todoRouter);
-app.use(`${apiPrefix}/events`, eventsRouter);
-app.use(apiPrefix, annexRouter);
-app.use(apiPrefix, personnelServicesAnnexesRoutes);
-app.use(apiPrefix, setupRouter);
-app.use(`${apiPrefix}/organization-structure`, organizationStructureRouter);
-app.use(apiPrefix, employeeCourtAppearanceRouter);
-app.use(apiPrefix, overtimeRouter);
-app.use(apiPrefix, subsistenceAllowanceRouter);
-app.use(apiPrefix, subsistenceAllowanceGeneralRouter);
-app.use(apiPrefix, iasOMCostRouter);
-app.use(apiPrefix, subsistenceSTRouter);
-app.use(apiPrefix, loyaltyPayRouter);
-app.use(`${apiPrefix}/reports`, reportsRouter);
-app.use(apiPrefix, cosPersonnelRouter);
-app.use(`${apiPrefix}/proposalSummary`, proposalSummaryRoutes);
-app.use(`${apiPrefix}/allproposal`, logWorkflowAction, newProposalWorkflowRoutes);
-app.use(`${apiPrefix}`, require('./routers/commentRoutes'));
-
-if (process.env.DEBUG_MODE === "true" || process.env.ALLOW_MOCK_AUTH === "true") {
-  app.use(`${apiPrefix}/debug`, debugRoutes);
-}
-
-// Uploader Mounted Endpoints
-app.use(apiPrefix, chartOfAccountsRouter);
-app.use(apiPrefix, uploadcategories);
-app.use(apiPrefix, uploadstatus);
-app.use(apiPrefix, uploadregions);
-app.use(apiPrefix, uploaddepartments);
-app.use(apiPrefix, uploadpositions);
-app.use(apiPrefix, uploadsalaries);
-app.use(apiPrefix, uploadratas);
-app.use(apiPrefix, mealAllowance);
-app.use(apiPrefix, incomeCategoryRouter);
-app.use(apiPrefix, incomeCategoryGroupRouter);
-app.use(apiPrefix, incomeSubcategoryRouter);
-app.use(apiPrefix, incomeSubcategoryRoutes);
-app.use(`${apiPrefix}/stats`, statsRouter);
-app.use(apiPrefix, childrenAllowance);
-app.use(`${apiPrefix}/export`, exportRoutes);
-app.use(`${apiPrefix}/personnel-services-pdf`, personnelServicesPDFRouter);
-app.use(apiPrefix, medicalAllowanceRouter);
-
-// CRITICAL FIX: Fixed namespace collision for endpoints using /income prefix
-app.use(apiPrefix, attachWorkflowRef, incomeRouter);
-app.use(apiPrefix, income_categories);
-app.use(`${apiPrefix}/income`, attachWorkflowRef, incomeExcelUploadRouter); // Remapped endpoint wrapper prefix
-app.use(`${apiPrefix}/income`, attachWorkflowRef, mooeExcelUploadRoutes);
-app.use(`${apiPrefix}/mooe-upload`, excelUploadRouter); // Keep for legacy if any, but re-evaluate later
-
-app.use(`${apiPrefix}/consolidated-reports`, consolidatedReportsRouter);
-app.use(`${apiPrefix}/consolidated-reports`, consolidatedCapitalOutlayRouter);
-app.use(`${apiPrefix}/consolidated-reports`, consolidatedPersonnelServicesRouter);
-app.use(`${apiPrefix}/comprehensive-reports`, comprehensiveReportsRouter);
-app.use(`${apiPrefix}/database-backup`, databaseBackupRouter);
-app.use(`${apiPrefix}/bulk-upload-management`, bulkUploadManagementRoutes);
-app.use(`${apiPrefix}/discount-settings`, discountSettingsRouter);
-app.use(apiPrefix, retireeRouter);
-app.use(apiPrefix, budgetarySupportRoutes);
-app.use(`${apiPrefix}/tier`, tierRoutes);
-app.use(apiPrefix, chartOfAccountsCRUDRouter);
-app.use(apiPrefix, titleMappingRouter);
-app.use(`${apiPrefix}/chat`, require("./routers/chatRoutes"));
-app.use(apiPrefix, require("./routers/UserProfileRoutes"));
-app.use(`${apiPrefix}/user`, require("./routers/userPreferencesRoutes"));
-app.use(`${apiPrefix}/user-activity-logs`, require("./routers/userActivityLogRoutes"));
-app.use(apiPrefix, budgetManagerOrgRoutes);
-app.use(`${apiPrefix}/hierarchical-rbac`, hierarchicalRBACRoutes);
-app.use(apiPrefix, employeeMasterRouter);
-app.use(`${apiPrefix}/proposals`, proposalLockingRouter);
-app.use(apiPrefix, routePermissionRouter);
+const masterRouter = require("./routers");
+app.use(apiPrefix, masterRouter);
 
 let isShuttingDown = false;
 
