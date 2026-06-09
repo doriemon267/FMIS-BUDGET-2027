@@ -109,7 +109,7 @@ exports.getAllEmployees = async (req, res) => {
     // Start with active filters as base
     let query = { ...dbFilters };
 
-    // processBy = "additional access": show employees in scope OR employees the user processed (same logic as getEmployeeStats)
+    // Apply processBy logic first
     if (processBy && Object.keys(dbFilters).length > 0) {
       query = {
         $or: [
@@ -118,32 +118,6 @@ exports.getAllEmployees = async (req, res) => {
           { createdBy: processBy }
         ]
       };
-    }
-
-    // Apply StatusOfAppointment filter early if provided
-    if (StatusOfAppointment) {
-      if (query.$and) {
-        query.$and.push({ StatusOfAppointment: StatusOfAppointment });
-      } else if (Object.keys(query).length > 0) {
-        query = {
-          $and: [query, { StatusOfAppointment: StatusOfAppointment }]
-        };
-      } else {
-        query.StatusOfAppointment = StatusOfAppointment;
-      }
-    }
-
-    // Apply employeeStatus filter early if provided (exact match to prevent Active matching Inactive)
-    if (activeStatus) {
-      if (query.$and) {
-        query.$and.push({ employeeStatus: activeStatus });
-      } else if (Object.keys(query).length > 0) {
-        query = {
-          $and: [query, { employeeStatus: activeStatus }]
-        };
-      } else {
-        query.employeeStatus = activeStatus;
-      }
     }
 
     // If no active filters and no processBy, require region parameter (except for FULL access users)
@@ -183,6 +157,24 @@ exports.getAllEmployees = async (req, res) => {
         }
       }
     }
+
+    // Helper to safely add conditions to the query without overwriting existing ones
+    const addQueryCondition = (condition) => {
+      if (Object.keys(condition).length === 0) return;
+      if (query.$and) {
+        query.$and.push(condition);
+      } else if (Object.keys(query).length > 0) {
+        query = { $and: [query, condition] };
+      } else {
+        query = condition;
+      }
+    };
+
+    // Apply employeeStatus filter (exact match to prevent Active matching Inactive)
+    if (activeStatus) {
+      addQueryCondition({ employeeStatus: activeStatus });
+    }
+
     // Add search functionality if provided
     if (search) {
       const searchConditions = {
@@ -197,34 +189,9 @@ exports.getAllEmployees = async (req, res) => {
           { Status: { $regex: search, $options: "i" } },
         ]
       };
-
-      // Combine access conditions with search
-      if (query.$or) {
-        query = {
-          $and: [
-            { $or: query.$or },
-            searchConditions
-          ]
-        };
-      } else if (Object.keys(dbFilters).length > 0) {
-        query = {
-          $and: [
-            dbFilters,
-            searchConditions
-          ]
-        };
-      } else if (activeRegion && userLevel !== 'FULL' && userLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
-        query = {
-          $and: [
-            { Region: activeRegion },
-            searchConditions
-          ]
-        };
-      } else {
-        // For FULL access users or when no region is specified, search across all employees
-        query = searchConditions;
-      }
+      addQueryCondition(searchConditions);
     }
+
     // Apply other filters while preserving hierarchical filters
     const filterParams = {
       PositionTitle: positionTitle || PositionTitle,
@@ -235,6 +202,7 @@ exports.getAllEmployees = async (req, res) => {
       Department,
       Division,
       Section,
+      StatusOfAppointment,
     };
     // Remove undefined values
     Object.keys(filterParams).forEach(key => {
@@ -247,24 +215,7 @@ exports.getAllEmployees = async (req, res) => {
       const textFilterQuery = {};
       textFilter(textFilterQuery, filterParams);
       if (Object.keys(textFilterQuery).length > 0) {
-        if (query.$and) {
-          query.$and.push(textFilterQuery);
-        } else if (query.$or) {
-          query = {
-            $and: [
-              { $or: query.$or },
-              textFilterQuery
-            ]
-          };
-        } else if (Object.keys(dbFilters).length > 0) {
-          query = {
-            $and: [dbFilters, textFilterQuery]
-          };
-        } else {
-          query = {
-            $and: [{ Region: activeRegion }, textFilterQuery]
-          };
-        }
+        addQueryCondition(textFilterQuery);
       }
     }
     // Apply number filters
@@ -278,24 +229,7 @@ exports.getAllEmployees = async (req, res) => {
       const numberFilterQuery = {};
       numberFilter(numberFilterQuery, numberParams, operator);
       if (Object.keys(numberFilterQuery).length > 0) {
-        if (query.$and) {
-          query.$and.push(numberFilterQuery);
-        } else if (query.$or) {
-          query = {
-            $and: [
-              { $or: query.$or },
-              numberFilterQuery
-            ]
-          };
-        } else if (Object.keys(dbFilters).length > 0) {
-          query = {
-            $and: [dbFilters, numberFilterQuery]
-          };
-        } else {
-          query = {
-            $and: [{ Region: activeRegion }, numberFilterQuery]
-          };
-        }
+        addQueryCondition(numberFilterQuery);
       }
     }
     // Apply date filters
@@ -309,24 +243,7 @@ exports.getAllEmployees = async (req, res) => {
       const dateFilterQuery = {};
       dateFilter(dateFilterQuery, dateParams);
       if (Object.keys(dateFilterQuery).length > 0) {
-        if (query.$and) {
-          query.$and.push(dateFilterQuery);
-        } else if (query.$or) {
-          query = {
-            $and: [
-              { $or: query.$or },
-              dateFilterQuery
-            ]
-          };
-        } else if (Object.keys(dbFilters).length > 0) {
-          query = {
-            $and: [dbFilters, dateFilterQuery]
-          };
-        } else {
-          query = {
-            $and: [{ Region: activeRegion }, dateFilterQuery]
-          };
-        }
+        addQueryCondition(dateFilterQuery);
       }
     }
     // );
@@ -654,6 +571,12 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
     const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
     // Start with hierarchical filters as base
     const baseFilters = { ...dbHierarchicalFilters };
+
+    // Apply the requested region filter to limit the result set significantly
+    if (region) {
+      baseFilters.region = region;
+    }
+
     // // Get active settings to determine the fiscal year
     const {
       calculateLoyaltyPayYearsOfService,
@@ -712,8 +635,9 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
       ...baseFilters // Apply hierarchical filters
     };
     const personnelServices = await PersonnelService.find(personnelQuery).lean();
-    // Filter employees based on years of service with June 22 cutoff
-    const eligibleEmployees = [];
+    
+    // First pass: identify employees who have reached a milestone
+    const milestoneEmployees = [];
     for (const employee of personnelServices) {
       if (!employee.DateOfAppointment) continue;
       // Calculate years of service with June 22 cutoff
@@ -724,23 +648,39 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
       );
       // Get the eligible loyalty pay year (milestone) - must be exact match
       const eligibleYear = getEligibleLoyaltyPayYear(yearsOfService);
-      // // Only include employees who have reached a milestone year
+      // Only include employees who have reached a milestone year
       if (eligibleYear !== null) {
-        // Check if this employee already received loyalty pay for this milestone in this fiscal year
-        const LoyaltyPay = require("../models/loyaltyPay");
-        const existingRecord = await LoyaltyPay.findOne({
-          employeeNumber: employee.employeeNumber,
-          yearsInService: eligibleYear,
-          fiscalYear: fiscalYear.toString()
-        }).lean();
-        if (!existingRecord) {
+        milestoneEmployees.push({
+          employee,
+          eligibleYear,
+          actualYearsOfService: yearsOfService
+        });
+      }
+    }
+
+    const eligibleEmployees = [];
+    
+    // Second pass: check which milestone employees already received loyalty pay (using a single batch query)
+    if (milestoneEmployees.length > 0) {
+      const LoyaltyPay = require("../models/loyaltyPay");
+      const employeeNumbers = milestoneEmployees.map(m => m.employee.employeeNumber);
+      
+      const existingRecords = await LoyaltyPay.find({
+        employeeNumber: { $in: employeeNumbers },
+        fiscalYear: fiscalYear.toString()
+      }).lean();
+      
+      // Create a set for O(1) lookups
+      const existingMap = new Set(existingRecords.map(r => `${r.employeeNumber}-${r.yearsInService}`));
+      
+      for (const m of milestoneEmployees) {
+        // If they haven't received it yet for this milestone, add them to eligible
+        if (!existingMap.has(`${m.employee.employeeNumber}-${m.eligibleYear}`)) {
           eligibleEmployees.push({
-            ...employee,
-            yearsInService: eligibleYear,
-            actualYearsOfService: yearsOfService // Include actual years for reference
+            ...m.employee,
+            yearsInService: m.eligibleYear,
+            actualYearsOfService: m.actualYearsOfService
           });
-        } else {
-          // Employee already received loyalty pay for this milestone
         }
       }
     }
