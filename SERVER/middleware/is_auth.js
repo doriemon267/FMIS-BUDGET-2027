@@ -168,6 +168,7 @@ module.exports = async (req, res, next) => {
     let userId = String(
       payload.userId ||
       payload.id ||
+      payload.username ||
       payload.UserName ||
       (Array.isArray(payload.Username) ? payload.Username[0] : payload.Username) ||
       ''

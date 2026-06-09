@@ -18,23 +18,26 @@ exports.getAllEmployees = async (req, res) => {
       order = "asc",
       operator,
       Department,
-      positionTitle,
+      positionTitle, PositionTitle,
       Division,
       Section,
-      region, // Changed from Region to region to match client-side parameter
+      region, Region,
       StatusOfAppointment,
-      sg,
-      step,
-      jg,
+      sg, SG,
+      step, Step,
+      jg, JG,
       Rate,
       charging,
-      employeeID,
+      employeeID, EmployeeID,
       EmployeeFullName,
       DateOfAppointment,
       DateOfBirth,
-      Status,
-      processBy, // Add processBy parameter for additional access control
+      Status, employeeStatus,
+      processBy,
     } = req.query;
+
+    const activeRegion = region || Region;
+    const activeStatus = Status || employeeStatus;
     // Get filters from middleware - prioritize submission workflow filters over hierarchical filters
     const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
     const hierarchicalFilters = req.hierarchicalFilters || {};
@@ -58,9 +61,9 @@ exports.getAllEmployees = async (req, res) => {
 
     // Declare variables needed for access control
     const assignedRegions = Array.isArray(assignment.regions) ? assignment.regions : [];
-    const hasRequestedRegionAccess = region ? assignedRegions.some(r => {
+    const hasRequestedRegionAccess = activeRegion ? assignedRegions.some(r => {
       const rn = (r.Region || r.regionName || r.name || '').trim();
-      return rn && (rn.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${region.trim()}$`, 'i').test(rn));
+      return rn && (rn.localeCompare(activeRegion.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${activeRegion.trim()}$`, 'i').test(rn));
     }) : false;
 
     // For Division and Department level users, strictly enforce their assigned scope
@@ -68,7 +71,7 @@ exports.getAllEmployees = async (req, res) => {
     const isDivisionOrDeptLevel = ['DIVISION', 'DEPARTMENT', 'DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'RESPONSIBILITY_CENTER', 'OFFICE'].includes(userLevel);
     if (isDivisionOrDeptLevel) {
       // Override any region parameter - they can only see their assigned scope
-      if (region && !hasRequestedRegionAccess) {
+      if (activeRegion && !hasRequestedRegionAccess) {
         return res.status(403).json({
           success: false,
           message: `Access denied: You can only view employees from your assigned ${userLevel.toLowerCase()}`,
@@ -130,8 +133,21 @@ exports.getAllEmployees = async (req, res) => {
       }
     }
 
+    // Apply employeeStatus filter early if provided (exact match to prevent Active matching Inactive)
+    if (activeStatus) {
+      if (query.$and) {
+        query.$and.push({ employeeStatus: activeStatus });
+      } else if (Object.keys(query).length > 0) {
+        query = {
+          $and: [query, { employeeStatus: activeStatus }]
+        };
+      } else {
+        query.employeeStatus = activeStatus;
+      }
+    }
+
     // If no active filters and no processBy, require region parameter (except for FULL access users)
-    if (!Object.keys(dbFilters).length && !processBy && !region && userLevel !== 'FULL' && userLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
+    if (!Object.keys(dbFilters).length && !processBy && !activeRegion && userLevel !== 'FULL' && userLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employees"
@@ -139,20 +155,20 @@ exports.getAllEmployees = async (req, res) => {
     }
     // Allow requested region to override hierarchical Region if user has access to it
 
-    if (region) {
+    if (activeRegion) {
       // For REGION level users, allow region switching within their assigned regions
       if (userLevel === 'REGION') {
         if (query.$or) {
           query.$or = query.$or.map(condition => ({
             ...condition,
-            Region: region
+            Region: activeRegion
           }));
         } else if (!query.Region) {
           // No hierarchical region set, use requested region
-          query.Region = region;
+          query.Region = activeRegion;
         } else if (hasRequestedRegionAccess) {
           // User has access to requested region, override hierarchical Region to match UI selection
-          query.Region = region;
+          query.Region = activeRegion;
         }
       } else if (userLevel === 'DIVISION' || userLevel === 'DEPARTMENT') {
         // For Division/Department level users, they can only see their assigned scope
@@ -163,7 +179,7 @@ exports.getAllEmployees = async (req, res) => {
       } else {
         // For other levels (NONE), use region parameter if provided
         if (!query.Region) {
-          query.Region = region;
+          query.Region = activeRegion;
         }
       }
     }
@@ -197,10 +213,10 @@ exports.getAllEmployees = async (req, res) => {
             searchConditions
           ]
         };
-      } else if (region && userLevel !== 'FULL' && userLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
+      } else if (activeRegion && userLevel !== 'FULL' && userLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
         query = {
           $and: [
-            { Region: region },
+            { Region: activeRegion },
             searchConditions
           ]
         };
@@ -211,15 +227,14 @@ exports.getAllEmployees = async (req, res) => {
     }
     // Apply other filters while preserving hierarchical filters
     const filterParams = {
-      positionTitle,
-      jg,
+      PositionTitle: positionTitle || PositionTitle,
+      JG: jg || JG,
       charging,
-      employeeID,
+      EmployeeID: employeeID || EmployeeID,
       EmployeeFullName,
       Department,
       Division,
       Section,
-      Status,
     };
     // Remove undefined values
     Object.keys(filterParams).forEach(key => {
@@ -247,7 +262,7 @@ exports.getAllEmployees = async (req, res) => {
           };
         } else {
           query = {
-            $and: [{ Region: region }, textFilterQuery]
+            $and: [{ Region: activeRegion }, textFilterQuery]
           };
         }
       }
@@ -278,7 +293,7 @@ exports.getAllEmployees = async (req, res) => {
           };
         } else {
           query = {
-            $and: [{ Region: region }, numberFilterQuery]
+            $and: [{ Region: activeRegion }, numberFilterQuery]
           };
         }
       }
@@ -309,7 +324,7 @@ exports.getAllEmployees = async (req, res) => {
           };
         } else {
           query = {
-            $and: [{ Region: region }, dateFilterQuery]
+            $and: [{ Region: activeRegion }, dateFilterQuery]
           };
         }
       }
@@ -333,9 +348,9 @@ exports.getAllEmployees = async (req, res) => {
     };
     if (query.Region && typeof query.Region === 'string') {
       query.Region = normalizeExact(query.Region);
-    } else if (!query.Region && region) {
+    } else if (!query.Region && activeRegion) {
       // Ensure Region gets set when only hierarchicalFilters had CENTRAL OFFICE
-      query.Region = normalizeExact(region);
+      query.Region = normalizeExact(activeRegion);
     }
     if (query.Department && typeof query.Department === 'string') {
       query.Department = normalizeExact(query.Department);
@@ -357,11 +372,11 @@ exports.getAllEmployees = async (req, res) => {
     if (employees.length > 0) {
       }
     // Double-check that all returned employees belong to the requested region (case-insensitive exact)
-    const verifiedEmployees = region
+    const verifiedEmployees = activeRegion
       ? employees.filter(emp => {
           const empRegion = (emp.Region || '').trim();
-          return empRegion.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 ||
-                 new RegExp(`^${region.trim()}$`, 'i').test(empRegion);
+          return empRegion.localeCompare(activeRegion.trim(), undefined, { sensitivity: 'accent' }) === 0 ||
+                 new RegExp(`^${activeRegion.trim()}$`, 'i').test(empRegion);
         })
       : employees;
     if (employees.length !== verifiedEmployees.length) {
@@ -374,13 +389,13 @@ exports.getAllEmployees = async (req, res) => {
       totalPages: limitNum ? Math.ceil(totalRecords / limitNum) : 1,
       currentPage: limitNum ? pageNum : 1,
       totalRecords: totalRecords,
-      region,
+      region: activeRegion,
       queryUsed: query,
       debug: {
         originalEmployeeCount: employees.length,
         verifiedEmployeeCount: verifiedEmployees.length,
         hierarchicalFilters: dbFilters,
-        requestedRegion: region,
+        requestedRegion: activeRegion,
         note: 'Region/Department/Division are matched case-insensitively and Division omitted when empty.'
       }
     };
