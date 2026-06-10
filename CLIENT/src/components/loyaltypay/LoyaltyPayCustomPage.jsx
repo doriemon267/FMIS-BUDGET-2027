@@ -1,5 +1,6 @@
-import React, { Component } from "react";
+import React, { Component, useState } from "react";
 import CustomCreateUpdateDialog from "../loyaltypay/LoyaltyPayDialog";
+import LongevityPayReportDialog from "./LongevityPayReportDialog";
 import CustomMenu from "../../global/components/CustomMenu";
 import CustomTable from "../loyaltypay/LoyaltyPayCustomTable";
 import PropTypes from "prop-types";
@@ -13,13 +14,15 @@ import {
   Grid,
   Paper,
   IconButton,
-  Tooltip
+  Tooltip,
+  Button
 } from "@mui/material";
 import {
   Assessment as AssessmentIcon,
   People as PeopleIcon,
   EmojiEvents as LoyaltyIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Print as PrintIcon
 } from "@mui/icons-material";
 import PesoIcon from "../icons/PesoIcon";
 import { useQuery } from "@tanstack/react-query";
@@ -73,6 +76,8 @@ const CustomPage = ({
   const pageDescription = description || `Manage ${dataListName}`;
   const apiPath = `/${dataListName}`;
 
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+
   // Add stats query
   const { data: stats, isLoading: statsLoading, refetch } = useQuery({
     queryKey: [dataListName, "stats"],
@@ -118,6 +123,18 @@ const CustomPage = ({
                 >
                   <RefreshIcon />
                 </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Print Report">
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<PrintIcon />}
+                  onClick={() => setReportDialogOpen(true)}
+                  sx={{ ml: 1 }}
+                >
+                  Print
+                </Button>
               </Tooltip>
             </Box>
 
@@ -371,6 +388,11 @@ const CustomPage = ({
             />
           </Paper>
         </Box>
+
+        <LongevityPayReportDialog 
+          open={reportDialogOpen} 
+          onClose={() => setReportDialogOpen(false)} 
+        />
       </Box>
     </CustomErrorBoundary>
   );
