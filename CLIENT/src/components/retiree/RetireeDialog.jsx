@@ -527,6 +527,9 @@ const RetireeDialog = ({
                           <Typography variant="body1">
                             {option.employeeNumber} - {option.employeeFullName}
                           </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ mt: -0.5, mb: 0.5 }}>
+                            {option.positionTitle}
+                          </Typography>
                           <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                             <Chip
                               size="small"

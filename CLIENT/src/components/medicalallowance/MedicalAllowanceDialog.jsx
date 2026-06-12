@@ -521,7 +521,12 @@ const MedicalAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
                       )}
                       renderOption={(props, option) => (
                         <li {...props} key={option.uniqueKey}>
-                          {option.employeeFullName}
+                          <Box>
+                            <Typography variant="body1">{option.employeeFullName}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {option.positionTitle}
+                            </Typography>
+                          </Box>
                         </li>
                       )}
                     />

@@ -357,7 +357,12 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
                       const { key, ...otherProps } = props;
                       return (
                         <li key={option.uniqueKey} {...otherProps}>
-                          {option.employeeFullName}
+                          <Box>
+                            <Typography variant="body1">{option.employeeFullName}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {option.positionTitle}
+                            </Typography>
+                          </Box>
                         </li>
                       );
                     }}

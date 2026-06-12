@@ -260,6 +260,16 @@ const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
                         disabled={isEditing}
                       />
                     )}
+                    renderOption={(props, option) => (
+                      <li {...props} key={option.uniqueKey}>
+                        <Box>
+                          <Typography variant="body1">{option.employeeFullName}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {option.positionTitle}
+                          </Typography>
+                        </Box>
+                      </li>
+                    )}
                   />
                 )}
               />

@@ -340,12 +340,14 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
                     }
                     renderOption={(props, option) => (
                       <li {...props} key={option._id}>
-                        <div>
-                          <strong>{option.employeeFullName}</strong>
-                          <div style={{ fontSize: '0.8rem', color: 'gray' }}>
-                            Position: {option.positionTitle} | Years: {option.yearsInService}
-                          </div>
-                        </div>
+                        <Box>
+                          <Typography variant="body1">
+                            <strong>{option.employeeFullName}</strong> - {option.yearsInService} years of service
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {option.positionTitle}
+                          </Typography>
+                        </Box>
                       </li>
                     )}
                     value={
