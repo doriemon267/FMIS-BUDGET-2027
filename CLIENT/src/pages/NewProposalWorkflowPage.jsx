@@ -371,6 +371,10 @@ const NewProposalWorkflowPage = () => {
   const [historyPage, setHistoryPage] = useState(0);
   const [historyRowsPerPage, setHistoryRowsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState({});
+  const [expandedConsolidated, setExpandedConsolidated] = useState({});
+  const toggleConsolidated = (id) => {
+    setExpandedConsolidated(prev => ({ ...prev, [id]: !prev[id] }));
+  };
   const [personnelPage, setPersonnelPage] = useState(0);
   const [personnelRowsPerPage, setPersonnelRowsPerPage] = useState(10);
   const [expandedPersonnel, setExpandedPersonnel] = useState({});
@@ -2091,6 +2095,58 @@ const NewProposalWorkflowPage = () => {
     return matchesSearch && matchesFilter;
   });
 
+  const { topLevelProposals, childrenMap } = useMemo(() => {
+    const parentMap = {};
+    const childMap = {};
+    
+    proposals.forEach(p => {
+      // 1. If child knows its parent
+      if (p.mergedInto) {
+        parentMap[String(p._id)] = String(p.mergedInto);
+      }
+      
+      // 2. If parent knows its children
+      if (p.isConsolidated && p.mergedFrom) {
+        p.mergedFrom.forEach(childId => {
+          parentMap[String(childId)] = String(p._id);
+        });
+      }
+    });
+
+    proposals.forEach(p => {
+      const parentId = parentMap[String(p._id)];
+      if (parentId) {
+        if (!childMap[parentId]) childMap[parentId] = [];
+        childMap[parentId].push(p);
+      }
+    });
+
+    const topLevelAdded = new Set();
+    const topLevel = [];
+
+    filteredProposals.forEach(p => {
+      const pId = String(p._id);
+      const parentId = parentMap[pId];
+      if (parentId) {
+        const parentObj = proposals.find(parent => String(parent._id) === parentId);
+        if (parentObj && !topLevelAdded.has(parentId)) {
+          topLevel.push(parentObj);
+          topLevelAdded.add(parentId);
+        } else if (!parentObj && !topLevelAdded.has(pId)) {
+          topLevel.push(p);
+          topLevelAdded.add(pId);
+        }
+      } else {
+        if (!topLevelAdded.has(pId)) {
+          topLevel.push(p);
+          topLevelAdded.add(pId);
+        }
+      }
+    });
+    
+    return { topLevelProposals: topLevel, childrenMap: childMap };
+  }, [proposals, filteredProposals]);
+
   // Render proposal status chip
   const renderStatusChip = (status) => {
     const statusColorMap = {
@@ -2149,7 +2205,7 @@ const NewProposalWorkflowPage = () => {
   };
 
   const handleSelectAllMergeable = () => {
-    const mergeableIds = filteredProposals
+    const mergeableIds = topLevelProposals
       .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
       .filter(isProposalMergeable)
       .map((p) => p._id);
@@ -2722,8 +2778,8 @@ const NewProposalWorkflowPage = () => {
               ) : null}
 
               <Chip
-                label={`${filteredProposals.length} Result${
-                  filteredProposals.length !== 1 ? "s" : ""
+                label={`${topLevelProposals.length} Result${
+                  topLevelProposals.length !== 1 ? "s" : ""
                 }`}
                 sx={{
                   bgcolor: BRAND_COLORS.darkGreen,
@@ -2740,7 +2796,7 @@ const NewProposalWorkflowPage = () => {
               <Box sx={{ p: 3 }}>
                 <TableSkeleton rows={10} columns={6} />
               </Box>
-            ) : filteredProposals.length === 0 ? (
+            ) : topLevelProposals.length === 0 ? (
               <Box
                 sx={{
                   display: "flex",
@@ -2909,10 +2965,10 @@ const NewProposalWorkflowPage = () => {
                                 id="consolidate-select-all"
                                 style={{ cursor: "pointer", accentColor: "#fff", width: 16, height: 16 }}
                                 checked={
-                                  filteredProposals
+                                  topLevelProposals
                                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                     .filter(isProposalMergeable).length > 0 &&
-                                  filteredProposals
+                                  topLevelProposals
                                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                                     .filter(isProposalMergeable)
                                     .every((p) => selectedForMerge.has(p._id))
@@ -2925,12 +2981,15 @@ const NewProposalWorkflowPage = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {filteredProposals
+                      {topLevelProposals
                         .slice(
                           page * rowsPerPage,
                           page * rowsPerPage + rowsPerPage
                         )
-                        .map((proposal, index) => (
+                        .map((topLevelObj, index) => {
+                          const isParent = topLevelObj.isConsolidated && childrenMap[topLevelObj._id]?.length > 0;
+                          const isExpanded = expandedConsolidated[topLevelObj._id];
+                          const renderRow = (proposal, isChild = false) => (
                           <TableRow
                             key={proposal._id}
                             sx={{
@@ -2941,6 +3000,7 @@ const NewProposalWorkflowPage = () => {
                               "&:hover": {
                                 bgcolor: "#f0f7ed",
                               },
+                              ...(isChild ? { bgcolor: "#fdfdfd", "& > td": { borderBottom: "1px dashed #e8e8e8" } } : {})
                             }}
                           >
                             <TableCell
@@ -2950,14 +3010,29 @@ const NewProposalWorkflowPage = () => {
                                 borderRight: "1px solid #e8e8e8",
                               }}
                             >
-                              <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 600, color: "#333" }}
-                              >
-                                {proposal.responsibilityCenter ||
-                                  proposal.division ||
-                                  "N/A"}
-                              </Typography>
+                              <Box display="flex" alignItems="center" gap={1}>
+                                {!isChild && isParent && (
+                                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); toggleConsolidated(proposal._id); }}>
+                                    {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                                  </IconButton>
+                                )}
+                                {isChild && (
+                                  <span style={{ marginLeft: 24, color: "#888" }}>└</span>
+                                )}
+                                <Typography
+                                  variant="body2"
+                                  sx={{ fontWeight: isChild ? 400 : 600, color: isChild ? "#666" : "#333" }}
+                                >
+                                  {proposal.responsibilityCenter ||
+                                    proposal.division ||
+                                    "N/A"}
+                                  <div style={{ fontSize: '10px', color: 'red', marginTop: '4px' }}>
+                                    ID: {String(proposal._id)}<br/>
+                                    mergedInto: {proposal.mergedInto ? String(proposal.mergedInto) : 'none'}<br/>
+                                    mergedFrom: {proposal.mergedFrom ? proposal.mergedFrom.length : 'none'}
+                                  </div>
+                                </Typography>
+                              </Box>
                             </TableCell>
                             <TableCell
                               sx={{
@@ -3305,7 +3380,15 @@ const NewProposalWorkflowPage = () => {
                               </TableCell>
                             )}
                           </TableRow>
-                        ))}
+                          );
+                          
+                          return (
+                            <React.Fragment key={topLevelObj._id}>
+                              {renderRow(topLevelObj, false)}
+                              {isExpanded && childrenMap[topLevelObj._id]?.map(child => renderRow(child, true))}
+                            </React.Fragment>
+                          );
+                        })}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -3313,12 +3396,12 @@ const NewProposalWorkflowPage = () => {
                 <Box sx={{ mt: 0.75, width: "100%" }}>
                   <TablePagination
                     component="div"
-                    count={filteredProposals.length}
+                    count={topLevelProposals.length}
                     page={page}
                     onPageChange={handleChangePage}
                     rowsPerPage={rowsPerPage}
                     onRowsPerPageChange={handleChangeRowsPerPage}
-                    rowsPerPageOptions={[5, 10, 25, 50]}
+                    rowsPerPageOptions={[5, 10, 25, 50, 100]}
                     labelRowsPerPage="Rows per page:"
                     labelDisplayedRows={({ from, to, count }) =>
                       `${from}-${to} of ${count}`

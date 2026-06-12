@@ -149,7 +149,7 @@ const defaultFilterState = {
 
 const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false, locked = false }) => {
   const theme = useTheme();
-  const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
+  const headerBg = theme.palette.mode === 'dark' ? theme.palette.primary.dark : theme.palette.primary.main;
   const { currentUser } = useUser();
   const isSuperAdmin = useMemo(() => {
     return (currentUser?.Roles || []).some((role) =>
@@ -1271,20 +1271,20 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
             overflowX: 'auto',
             overflowY: 'auto',
             borderRadius: 2,
-            border: '1px solid #e0e0e0',
+            border: `1px solid ${theme.palette.divider}`,
             '&::-webkit-scrollbar': {
               width: '10px',
               height: '10px',
             },
             '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
+              background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : '#f1f1f1',
               borderRadius: '4px',
             },
             '&::-webkit-scrollbar-thumb': {
-              background: '#c1c1c1',
+              background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : '#c1c1c1',
               borderRadius: '4px',
               '&:hover': {
-                background: '#a8a8a8',
+                background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.3)' : '#a8a8a8',
               },
             },
           }}
@@ -1442,8 +1442,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                             fontWeight: 'bold',
                             fontSize: compactView ? '0.85rem' : '0.95rem',
                             verticalAlign: 'middle',
-                            borderRight: '2px solid #e0e0e0',
-                            backgroundColor: '#ffffff',
+                            borderRight: `2px solid ${theme.palette.divider}`,
+                            backgroundColor: theme.palette.background.paper,
                             position: 'sticky',
                             left: 0,
                             zIndex: 2,
@@ -1467,9 +1467,11 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                           key={item._id}
                           id={`capital-outlay-row-${item._id}`}
                           sx={{
-                            backgroundColor: itemIndex % 2 === 0 ? "#ffffff" : "#f9f9f9",
+                            backgroundColor: itemIndex % 2 === 0 
+                              ? theme.palette.background.paper 
+                              : (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : "#f9f9f9"),
                             "&:hover": {
-                              backgroundColor: "#e8f5e9",
+                              backgroundColor: theme.palette.action.hover,
                             },
                             height: compactView ? '48px' : '60px'
                           }}
@@ -1482,8 +1484,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                 fontWeight: 'bold',
                                 fontSize: compactView ? '0.85rem' : '0.95rem',
                                 verticalAlign: 'middle',
-                                borderRight: '2px solid #e0e0e0',
-                                backgroundColor: '#ffffff',
+                                borderRight: `2px solid ${theme.palette.divider}`,
+                                backgroundColor: theme.palette.background.paper,
                                 position: 'sticky',
                                 left: 0,
                                 zIndex: 2,
@@ -1599,8 +1601,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                           }
                         }}
                         sx={{
-                          backgroundColor: '#f0f8f0',
-                          borderTop: '2px dashed #4caf50',
+                          backgroundColor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.1)' : '#f0f8f0',
+                          borderTop: `2px dashed ${theme.palette.success.main}`,
                           '& .MuiTableCell-root': {
                             padding: compactView ? '8px' : '12px',
                           }
@@ -1612,8 +1614,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                             position: 'sticky',
                             left: 0,
                             zIndex: 2,
-                            backgroundColor: '#f0f8f0',
-                            borderRight: '1px solid rgba(224, 224, 224, 1)',
+                            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.1)' : '#f0f8f0',
+                            borderRight: `1px solid ${theme.palette.divider}`,
                             fontWeight: 'bold',
                             verticalAlign: 'middle'
                           }}
@@ -1632,7 +1634,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                         </TableCell>
 
                         {/* Actions Column - Status */}
-                        <TableCell sx={{ textAlign: 'center', backgroundColor: '#f0f8f0' }}>
+                        <TableCell sx={{ textAlign: 'center', backgroundColor: theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.1)' : '#f0f8f0' }}>
                           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
                             <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', fontWeight: 'medium', textAlign: 'center' }}>
                               {!newOutlays[group.categoryId]?.sublineItem 

@@ -24,7 +24,10 @@ import {
   Tabs,
   Tab,
   Fade,
+  InputAdornment,
+  Grid
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import {
   KeyboardArrowDown,
   KeyboardArrowUp,
@@ -36,6 +39,9 @@ import {
   FolderOpen,
   Folder,
   Description,
+  Search,
+  UnfoldMore,
+  UnfoldLess
 } from "@mui/icons-material";
 import { NumericFormat } from "react-number-format";
 import { toast } from "react-toastify";
@@ -76,132 +82,172 @@ const formatNumber = (number) => {
 };
 
 // Custom Toolbar
-function CustomToolbar({ onRefresh, onAddNew, loading, locked = false, lockedReason = "" }) {
+function CustomToolbar({ onRefresh, onAddNew, onExpandAll, onCollapseAll, searchQuery, onSearchChange, loading, locked = false, lockedReason = "" }) {
+  const theme = useTheme();
+  
   return (
     <Toolbar 
       sx={{ 
         gap: 1, 
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        bgcolor: theme.palette.mode === 'dark' ? theme.palette.background.paper : theme.palette.primary.main,
         color: "white",
         borderRadius: "8px 8px 0 0",
+        flexWrap: "wrap",
+        py: 1.5,
+        borderBottom: `1px solid ${theme.palette.divider}`
       }}
     >
-      <Typography variant="h6" sx={{ flex: 1, fontWeight: 600 }}>
+      <Typography variant="h6" sx={{ flex: { xs: '100%', sm: 1 }, fontWeight: 600, color: theme.palette.mode === 'dark' ? theme.palette.primary.light : 'white' }}>
         💼 Capital Outlay Management
       </Typography>
-      <Button
-        size="small"
-        startIcon={<Refresh />}
-        onClick={onRefresh}
-        disabled={loading}
-        sx={{ 
-          color: "white", 
-          borderColor: "rgba(255,255,255,0.5)",
-          "&:hover": { 
-            borderColor: "white",
-            bgcolor: "rgba(255,255,255,0.1)" 
-          }
-        }}
-        variant="outlined"
-      >
-        Refresh
-      </Button>
-      <Tooltip
-        title={locked ? lockedReason || "Adding entries is currently disabled." : ""}
-        disableFocusListener={!locked}
-        disableHoverListener={!locked}
-        disableTouchListener={!locked}
-      >
-        <span>
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<Add />}
-            onClick={onAddNew}
-            disabled={locked}
-            sx={{ 
-              bgcolor: "white", 
-              color: "#667eea",
-              "&:hover": { bgcolor: "#f0f0f0" }
-            }}
-          >
-            Add New
-          </Button>
-        </span>
-      </Tooltip>
+      
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+        <TextField
+          size="small"
+          placeholder="Search..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          sx={{
+            minWidth: 200,
+            '& .MuiOutlinedInput-root': {
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.15)',
+              color: 'white',
+              '& fieldset': { borderColor: 'rgba(255,255,255,0.3)' },
+              '&:hover fieldset': { borderColor: 'white' },
+              '&.Mui-focused fieldset': { borderColor: 'white' },
+            },
+            '& input::placeholder': { color: 'rgba(255,255,255,0.7)', opacity: 1 }
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search sx={{ color: 'rgba(255,255,255,0.7)' }} />
+              </InputAdornment>
+            ),
+          }}
+        />
+
+        <Tooltip title="Expand All">
+          <IconButton size="small" onClick={onExpandAll} sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' } }}>
+            <UnfoldMore />
+          </IconButton>
+        </Tooltip>
+        
+        <Tooltip title="Collapse All">
+          <IconButton size="small" onClick={onCollapseAll} sx={{ color: 'white', bgcolor: 'rgba(255,255,255,0.1)', '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' } }}>
+            <UnfoldLess />
+          </IconButton>
+        </Tooltip>
+
+        <Button
+          size="small"
+          startIcon={<Refresh />}
+          onClick={onRefresh}
+          disabled={loading}
+          sx={{ 
+            color: "white", 
+            borderColor: "rgba(255,255,255,0.5)",
+            "&:hover": { 
+              borderColor: "white",
+              bgcolor: "rgba(255,255,255,0.1)" 
+            }
+          }}
+          variant="outlined"
+        >
+          Refresh
+        </Button>
+        <Tooltip
+          title={locked ? lockedReason || "Adding entries is currently disabled." : ""}
+          disableFocusListener={!locked}
+          disableHoverListener={!locked}
+          disableTouchListener={!locked}
+        >
+          <span>
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<Add />}
+              onClick={onAddNew}
+              disabled={locked}
+              sx={{ 
+                bgcolor: "white", 
+                color: theme.palette.mode === 'dark' ? theme.palette.primary.dark : theme.palette.primary.main,
+                "&:hover": { bgcolor: "#f0f0f0" }
+              }}
+            >
+              Add New
+            </Button>
+          </span>
+        </Tooltip>
+      </Box>
     </Toolbar>
   );
 }
 
 // Level 3: Detail Row (Particulars Breakdown) - EDITABLE
 function DetailRow({ detail, onEdit, canEdit }) {
+  const theme = useTheme();
   const total = (detail.income_amount || 0) + (detail.subsidy_amount || 0);
 
   return (
-    <>
-      <Paper
-        elevation={0}
-        sx={{
-          p: 1.5,
-          mb: 1,
-          border: "1px solid #e0e0e0",
-          borderLeft: "4px solid #4caf50",
-          borderRadius: 1,
-          display: "flex",
-          gap: 2,
-          transition: "all 0.2s",
-          "&:hover": {
-            boxShadow: 2,
-            borderLeftColor: "#2e7d32",
-          },
-        }}
-      >
-        <Description sx={{ color: "#4caf50", fontSize: 20 }} />
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+    <Paper
+      elevation={0}
+      sx={{
+        p: 1.5,
+        mb: 1,
+        border: "1px solid",
+        borderColor: theme.palette.divider,
+        borderLeft: `4px solid ${theme.palette.success.main}`,
+        borderRadius: 1,
+        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'white',
+        transition: "all 0.2s",
+        "&:hover": {
+          boxShadow: 2,
+          borderLeftColor: theme.palette.success.dark,
+        },
+      }}
+    >
+      <Grid container alignItems="center" spacing={2}>
+        <Grid item xs={12} sm={6} md={5} display="flex" alignItems="center" gap={1.5}>
+          <Description sx={{ color: theme.palette.success.main, fontSize: 20 }} />
+          <Typography variant="body2" sx={{ fontWeight: 500, color: theme.palette.text.primary }}>
             {detail.particulars || "No particulars"}
           </Typography>
-        </Box>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-          <Box sx={{ textAlign: "right", minWidth: 100 }}>
-            <Typography variant="caption" color="text.secondary">
-              Income
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500, color: "#1976d2" }}>
-              ₱{formatNumber(detail.income_amount)}
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: "right", minWidth: 100 }}>
-            <Typography variant="caption" color="text.secondary">
-              Subsidy
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500, color: "#ed6c02" }}>
-              ₱{formatNumber(detail.subsidy_amount)}
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: "right", minWidth: 100 }}>
-            <Typography variant="caption" color="text.secondary">
-              Total
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 600, color: "#2e7d32" }}>
-              ₱{formatNumber(total)}
-            </Typography>
-          </Box>
-          {canEdit && (
-            <Tooltip title="Edit Detail">
-              <IconButton
-                size="small"
-                color="primary"
-                onClick={() => onEdit(detail)}
-                sx={{ ml: 1 }}
-              >
-                <Edit fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Box>
-      </Paper>
-    </>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={7}>
+          <Grid container alignItems="center" spacing={2}>
+            <Grid item xs={3} textAlign="right">
+              <Typography variant="caption" color="text.secondary">Income</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500, color: theme.palette.info.main }}>
+                ₱{formatNumber(detail.income_amount)}
+              </Typography>
+            </Grid>
+            <Grid item xs={3} textAlign="right">
+              <Typography variant="caption" color="text.secondary">Subsidy</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500, color: theme.palette.warning.main }}>
+                ₱{formatNumber(detail.subsidy_amount)}
+              </Typography>
+            </Grid>
+            <Grid item xs={4} textAlign="right">
+              <Typography variant="caption" color="text.secondary">Total</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
+                ₱{formatNumber(total)}
+              </Typography>
+            </Grid>
+            <Grid item xs={2} textAlign="right">
+              {canEdit && (
+                <Tooltip title="Edit Detail">
+                  <IconButton size="small" color="primary" onClick={() => onEdit(detail)}>
+                    <Edit fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Grid>
+          </Grid>
+        </Grid>
+      </Grid>
+    </Paper>
   );
 }
 
@@ -215,6 +261,7 @@ function SublineRow({
   canEdit,
   onEditDetail 
 }) {
+  const theme = useTheme();
   const isExpanded = expandedSublines.has(sublineItem._id);
   const detailsList = details || [];
   const total = (sublineItem.income || 0) + (sublineItem.subsidy || 0);
@@ -223,102 +270,68 @@ function SublineRow({
     <>
       <Box
         sx={{
-          display: "flex",
-          alignItems: "center",
           p: 1.5,
-          pl: 6,
-          bgcolor: isExpanded ? "#f5f5f5" : "white",
-          borderBottom: "1px solid #e0e0e0",
+          pl: { xs: 2, sm: 6 },
+          bgcolor: isExpanded 
+            ? (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : "#f5f5f5") 
+            : (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.02)' : "white"),
+          borderBottom: `1px solid ${theme.palette.divider}`,
           cursor: "pointer",
           transition: "all 0.2s",
           "&:hover": {
-            bgcolor: "#f0f0f0",
+            bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : "#f0f0f0",
           },
         }}
         onClick={() => onToggleSubline(sublineItem._id)}
       >
-        <IconButton size="small" sx={{ mr: 1 }}>
-          {isExpanded ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
-        </IconButton>
-        
-        <Box sx={{ flex: 1, display: "flex", gap: 3 }}>
-          <Box sx={{ minWidth: 150 }}>
-            <Typography variant="caption" color="text.secondary">
-              Subline Item
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-              {sublineItem.sublineItem || "-"}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ minWidth: 200 }}>
-            <Typography variant="caption" color="text.secondary">
-              Accounting Title
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-              {sublineItem.accountingTitle || "-"}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ minWidth: 120 }}>
-            <Typography variant="caption" color="text.secondary">
-              UACS Code
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-              {sublineItem.uacsCode || "-"}
-            </Typography>
-          </Box>
-          
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="caption" color="text.secondary">
-              Particulars
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                {sublineItem.particulars || "-"}
+        <Grid container alignItems="center" spacing={2}>
+          <Grid item xs={12} sm={6} md={5} display="flex" alignItems="center">
+            <IconButton size="small" sx={{ mr: 1, color: theme.palette.text.secondary }}>
+              {isExpanded ? <KeyboardArrowUp /> : <KeyboardArrowDown />}
+            </IconButton>
+            
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
+                {sublineItem.sublineItem || "-"}
               </Typography>
-              {detailsList.length > 0 && (
-                <Chip
-                  label={`${detailsList.length}`}
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                />
-              )}
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <span><b>Acct:</b> {sublineItem.accountingTitle || "-"}</span>
+                <span><b>UACS:</b> {sublineItem.uacsCode || "-"}</span>
+                {detailsList.length > 0 && (
+                  <Chip label={`${detailsList.length} items`} size="small" color="primary" variant="outlined" sx={{ height: 16, fontSize: '0.65rem' }} />
+                )}
+              </Typography>
             </Box>
-          </Box>
-        </Box>
+          </Grid>
 
-        <Box sx={{ display: "flex", gap: 2, mr: 2 }}>
-          <Box sx={{ textAlign: "right", minWidth: 100 }}>
-            <Typography variant="caption" color="text.secondary">
-              Income
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500, color: "#1976d2" }}>
-              ₱{formatNumber(sublineItem.income)}
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: "right", minWidth: 100 }}>
-            <Typography variant="caption" color="text.secondary">
-              Subsidy
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500, color: "#ed6c02" }}>
-              ₱{formatNumber(sublineItem.subsidy)}
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: "right", minWidth: 100 }}>
-            <Typography variant="caption" color="text.secondary">
-              Total
-            </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 600, color: "#2e7d32" }}>
-              ₱{formatNumber(total)}
-            </Typography>
-          </Box>
-        </Box>
+          <Grid item xs={12} sm={6} md={7}>
+            <Grid container alignItems="center" spacing={2}>
+              <Grid item xs={3} textAlign="right">
+                <Typography variant="caption" color="text.secondary">Income</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: theme.palette.info.main }}>
+                  ₱{formatNumber(sublineItem.income)}
+                </Typography>
+              </Grid>
+              <Grid item xs={3} textAlign="right">
+                <Typography variant="caption" color="text.secondary">Subsidy</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 500, color: theme.palette.warning.main }}>
+                  ₱{formatNumber(sublineItem.subsidy)}
+                </Typography>
+              </Grid>
+              <Grid item xs={4} textAlign="right">
+                <Typography variant="caption" color="text.secondary">Total</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
+                  ₱{formatNumber(total)}
+                </Typography>
+              </Grid>
+              <Grid item xs={2}></Grid>
+            </Grid>
+          </Grid>
+        </Grid>
       </Box>
 
       <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-        <Box sx={{ pl: 10, pr: 3, py: 2, bgcolor: "#fafafa" }}>
+        <Box sx={{ pl: { xs: 2, sm: 10 }, pr: 3, py: 2, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.2)' : "#fafafa" }}>
           {loadingDetails ? (
             <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
               <CircularProgress size={24} />
@@ -329,7 +342,7 @@ function SublineRow({
             </Typography>
           ) : (
             <>
-              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: "#666" }}>
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: theme.palette.text.secondary }}>
                 📋 Breakdown Details ({detailsList.length} items)
               </Typography>
               {detailsList.map((detail, index) => (
@@ -362,6 +375,7 @@ function MotherRow({
   canEdit,
   onEditDetail
 }) {
+  const theme = useTheme();
   const isExpanded = expandedMothers.has(title);
   
   // Calculate totals from all subline items
@@ -370,10 +384,7 @@ function MotherRow({
   const grandTotal = totalIncome + totalSubsidy;
   const itemCount = sublineItems.length;
 
-  const handleToggle = () => {
-    onToggleMother(title);
-  };
-
+  const handleToggle = () => onToggleMother(title);
   const handleSublineToggle = (sublineId) => {
     onToggleSubline(sublineId);
     fetchDetails(sublineId);
@@ -383,63 +394,65 @@ function MotherRow({
     <>
       <Box
         sx={{
-          display: "flex",
-          alignItems: "center",
           p: 2,
-          bgcolor: isExpanded ? "#e3f2fd" : "white",
-          borderBottom: "2px solid #1976d2",
+          bgcolor: isExpanded 
+            ? (theme.palette.mode === 'dark' ? 'rgba(25, 118, 210, 0.15)' : "#e3f2fd") 
+            : (theme.palette.mode === 'dark' ? theme.palette.background.paper : "white"),
+          borderBottom: `2px solid ${theme.palette.primary.main}`,
           cursor: "pointer",
           transition: "all 0.3s",
           "&:hover": {
-            bgcolor: isExpanded ? "#bbdefb" : "#f5f5f5",
-            transform: "translateX(4px)",
+            bgcolor: isExpanded 
+              ? (theme.palette.mode === 'dark' ? 'rgba(25, 118, 210, 0.25)' : "#bbdefb") 
+              : (theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : "#f5f5f5"),
           },
         }}
         onClick={handleToggle}
       >
-        <IconButton size="small" sx={{ mr: 2 }}>
-          {isExpanded ? <FolderOpen sx={{ color: "#1976d2" }} /> : <Folder sx={{ color: "#666" }} />}
-        </IconButton>
-        
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, color: "#1976d2" }}>
-            {title}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {itemCount} subline item{itemCount !== 1 ? 's' : ''}
-          </Typography>
-        </Box>
+        <Grid container alignItems="center" spacing={2}>
+          <Grid item xs={12} sm={6} md={5} display="flex" alignItems="center">
+            <IconButton size="small" sx={{ mr: 2 }}>
+              {isExpanded ? <FolderOpen sx={{ color: theme.palette.primary.main }} /> : <Folder sx={{ color: theme.palette.text.secondary }} />}
+            </IconButton>
+            
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
+                {title}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {itemCount} subline item{itemCount !== 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          </Grid>
 
-        <Box sx={{ display: "flex", gap: 3, mr: 2 }}>
-          <Box sx={{ textAlign: "right", minWidth: 120 }}>
-            <Typography variant="caption" color="text.secondary">
-              Total Income
-            </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: "#1976d2" }}>
-              ₱{formatNumber(totalIncome)}
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: "right", minWidth: 120 }}>
-            <Typography variant="caption" color="text.secondary">
-              Total Subsidy
-            </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: "#ed6c02" }}>
-              ₱{formatNumber(totalSubsidy)}
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: "right", minWidth: 120 }}>
-            <Typography variant="caption" color="text.secondary">
-              Grand Total
-            </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: "#2e7d32" }}>
-              ₱{formatNumber(grandTotal)}
-            </Typography>
-          </Box>
-        </Box>
+          <Grid item xs={12} sm={6} md={7}>
+            <Grid container alignItems="center" spacing={2}>
+              <Grid item xs={3} textAlign="right">
+                <Typography variant="caption" color="text.secondary">Total Income</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.info.main, fontSize: { xs: '1rem', md: '1.25rem' } }}>
+                  ₱{formatNumber(totalIncome)}
+                </Typography>
+              </Grid>
+              <Grid item xs={3} textAlign="right">
+                <Typography variant="caption" color="text.secondary">Total Subsidy</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.warning.main, fontSize: { xs: '1rem', md: '1.25rem' } }}>
+                  ₱{formatNumber(totalSubsidy)}
+                </Typography>
+              </Grid>
+              <Grid item xs={4} textAlign="right">
+                <Typography variant="caption" color="text.secondary">Grand Total</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.success.main, fontSize: { xs: '1rem', md: '1.25rem' } }}>
+                  ₱{formatNumber(grandTotal)}
+                </Typography>
+              </Grid>
+              <Grid item xs={2}></Grid>
+            </Grid>
+          </Grid>
+        </Grid>
       </Box>
 
       <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-        <Box sx={{ bgcolor: "#fafafa" }}>
+        <Box sx={{ bgcolor: theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.1)' : "#fafafa" }}>
           {sublineItems.map((sublineItem) => (
             <SublineRow
               key={sublineItem._id}
@@ -914,6 +927,7 @@ function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onS
 // Main Component
 const CapitalOutlayDataGrid = ({ fiscalYear: providedFiscalYear, onDataChange, disableIncomeInputs: _disableIncomeInputs = false, locked = false, proposalId = null, region = null }) => {  // ADDED: Accept region from parent
   // State
+  const [searchQuery, setSearchQuery] = useState("");
   const [capitalOutlays, setCapitalOutlays] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1038,6 +1052,40 @@ const CapitalOutlayDataGrid = ({ fiscalYear: providedFiscalYear, onDataChange, d
     });
   }, []);
 
+  // Expand / Collapse All
+  const handleExpandAll = useCallback(() => {
+    // Collect all titles
+    const allTitles = new Set();
+    const allSublines = new Set();
+    
+    capitalOutlays.forEach((item) => {
+      let categoryName = "-";
+      if (item.category?.categoryName) categoryName = item.category.categoryName;
+      else if (item.categoryName) categoryName = item.categoryName;
+      else if (item.category_name) categoryName = item.category_name;
+      else if (Array.isArray(categories) && categories.length > 0 && item.category?._id) {
+        const category = categories.find(cat => cat._id === item.category._id);
+        if (category?.categoryName) categoryName = category.categoryName;
+        else if (category?.name) categoryName = category.name;
+      }
+      allTitles.add(categoryName);
+      allSublines.add(item._id);
+      
+      // Attempt to load details if they haven't been loaded yet
+      if (!capitalOutlayDetails[item._id] && !loadingDetails[item._id]) {
+        fetchDetails(item._id);
+      }
+    });
+    
+    setExpandedMothers(allTitles);
+    setExpandedSublines(allSublines);
+  }, [capitalOutlays, categories, capitalOutlayDetails, loadingDetails, fetchDetails]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedMothers(new Set());
+    setExpandedSublines(new Set());
+  }, []);
+
   // Toggle subline row expansion
   const handleToggleSubline = useCallback((id) => {
     setExpandedSublines((prev) => {
@@ -1152,9 +1200,10 @@ const CapitalOutlayDataGrid = ({ fiscalYear: providedFiscalYear, onDataChange, d
     fetchCategories();
   }, [fetchCapitalOutlays, fetchCategories]);
 
-  // Group data by TITLE (category)
+  // Group data by TITLE (category) and apply search filter
   const groupedData = useMemo(() => {
     const groups = {};
+    const query = searchQuery.toLowerCase();
     
     capitalOutlays.forEach((item) => {
       // Get category name
@@ -1171,6 +1220,21 @@ const CapitalOutlayDataGrid = ({ fiscalYear: providedFiscalYear, onDataChange, d
         else if (category?.name) categoryName = category.name;
       }
 
+      // Check search match
+      const details = capitalOutlayDetails[item._id] || [];
+      const matchMother = categoryName.toLowerCase().includes(query);
+      const matchSubline = 
+        (item.sublineItem || '').toLowerCase().includes(query) ||
+        (item.accountingTitle || '').toLowerCase().includes(query) ||
+        (item.uacsCode || '').toLowerCase().includes(query) ||
+        (item.particulars || '').toLowerCase().includes(query);
+      
+      const matchDetails = details.some(d => (d.particulars || '').toLowerCase().includes(query));
+
+      if (query && !matchMother && !matchSubline && !matchDetails) {
+        return; // skip this item if it doesn't match the search
+      }
+
       if (!groups[categoryName]) {
         groups[categoryName] = [];
       }
@@ -1178,7 +1242,7 @@ const CapitalOutlayDataGrid = ({ fiscalYear: providedFiscalYear, onDataChange, d
     });
 
     return groups;
-  }, [capitalOutlays, categories]);
+  }, [capitalOutlays, categories, searchQuery, capitalOutlayDetails]);
 
   if (loading) {
     return (
@@ -1208,6 +1272,10 @@ const CapitalOutlayDataGrid = ({ fiscalYear: providedFiscalYear, onDataChange, d
           if (!ensureWorkflowRef()) return;
           setAddDialogOpen(true);
         }}
+        onExpandAll={handleExpandAll}
+        onCollapseAll={handleCollapseAll}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
         loading={loading}
         locked={!modificationsAllowed}
         lockedReason={modificationBlockedReason}

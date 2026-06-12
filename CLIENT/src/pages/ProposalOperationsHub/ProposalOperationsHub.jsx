@@ -158,6 +158,15 @@ const ProposalOperationsHub = () => {
   const [auditTrailData, setAuditTrailData] = useState([]);
   const [auditTrailLoading, setAuditTrailLoading] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+
+  const [expandedRows, setExpandedRows] = useState({});
+  const toggleRow = (id) => {
+    setExpandedRows((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+  const toggleConsolidated = toggleRow;
   const [actionType, setActionType] = useState("");
   const [actionComment, setActionComment] = useState("");
   const [actionP12File, setActionP12File] = useState(null);
@@ -1164,6 +1173,58 @@ const ProposalOperationsHub = () => {
     return matchesSearch && matchesFilter;
   });
 
+  const { topLevelProposals, childrenMap } = useMemo(() => {
+    const parentMap = {};
+    const childMap = {};
+
+    proposals.forEach((p) => {
+      if (p.mergedInto) {
+        parentMap[String(p._id)] = String(p.mergedInto);
+      }
+      if (p.mergedFrom && p.mergedFrom.length > 0) {
+        p.mergedFrom.forEach((childId) => {
+          parentMap[String(childId)] = String(p._id);
+        });
+      }
+    });
+
+    proposals.forEach((p) => {
+      const parentId = parentMap[String(p._id)];
+      if (parentId) {
+        if (!childMap[parentId]) childMap[parentId] = [];
+        childMap[parentId].push(p);
+      }
+    });
+
+    const topLevel = [];
+    const topLevelAdded = new Set();
+
+    filteredProposals.forEach((p) => {
+      const pId = String(p._id);
+      const parentId = parentMap[pId];
+
+      if (parentId) {
+        const parentObj = proposals.find(
+          (parent) => String(parent._id) === parentId
+        );
+        if (parentObj && !topLevelAdded.has(parentId)) {
+          topLevel.push(parentObj);
+          topLevelAdded.add(parentId);
+        } else if (!parentObj && !topLevelAdded.has(pId)) {
+          topLevel.push(p);
+          topLevelAdded.add(pId);
+        }
+      } else {
+        if (!topLevelAdded.has(pId)) {
+          topLevel.push(p);
+          topLevelAdded.add(pId);
+        }
+      }
+    });
+
+    return { topLevelProposals: topLevel, childrenMap: childMap };
+  }, [filteredProposals, proposals]);
+
   const MERGEABLE_STATUSES = new Set(["FORWARDED_TO_APPROVER", "RETURNED_TO_APPROVER"]);
 
   const isProposalMergeable = (proposal) =>
@@ -1632,31 +1693,47 @@ const ProposalOperationsHub = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {filteredProposals
+                  {topLevelProposals
                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((proposal, index) => (
-                      <TableRow
-                        key={proposal._id}
-                        sx={{
-                          bgcolor: "#f9f9f9",
-                          borderBottom: "1px solid #e8e8e8",
-                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                          "&:hover": { bgcolor: "#f0f7ed" },
-                        }}
-                      >
-                        <TableCell sx={{ p: 2, fontSize: "0.85rem", borderRight: "1px solid #e8e8e8" }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: "#333" }}>
-                            {proposal.responsibilityCenter || proposal.division || "N/A"}
-                          </Typography>
-                        </TableCell>
+                    .map((proposal, index) => {
+                      const isExpanded = expandedRows[String(proposal._id)];
+                      const isParent = proposal.isConsolidated;
+                      const children = childrenMap[String(proposal._id)] || [];
+
+                      const renderRow = (p, isChild = false) => (
+                        <TableRow
+                          key={p._id}
+                          sx={{
+                            bgcolor: isChild ? "#fdfdfd" : "#f9f9f9",
+                            borderBottom: "1px solid #e8e8e8",
+                            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                            "&:hover": { bgcolor: "#f0f7ed" },
+                            ...(isChild ? { "& > td": { borderBottom: "1px dashed #e8e8e8" } } : {})
+                          }}
+                        >
+                          <TableCell sx={{ p: 2, fontSize: "0.85rem", borderRight: "1px solid #e8e8e8" }}>
+                            <Box display="flex" alignItems="center" gap={1}>
+                              {!isChild && isParent && (
+                                <IconButton size="small" onClick={(e) => { e.stopPropagation(); toggleConsolidated(p._id); }}>
+                                  {isExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                                </IconButton>
+                              )}
+                              {isChild && (
+                                <span style={{ marginLeft: 24, color: "#888" }}>└</span>
+                              )}
+                              <Typography variant="body2" sx={{ fontWeight: isChild ? 400 : 600, color: isChild ? "#666" : "#333" }}>
+                                {p.responsibilityCenter || p.division || "N/A"}
+                              </Typography>
+                            </Box>
+                          </TableCell>
                         <TableCell sx={{ p: 2, fontSize: "0.85rem", borderRight: "1px solid #e8e8e8" }}>
                           <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {proposal.fiscalYear}
+                            {p.fiscalYear}
                           </Typography>
                         </TableCell>
                         <TableCell sx={{ p: 2, fontSize: "0.85rem", borderRight: "1px solid #e8e8e8" }}>
                           <Chip
-                            label={proposal.budgetType?.toUpperCase()}
+                            label={p.budgetType?.toUpperCase()}
                             size="small"
                             sx={{
                               bgcolor: "#012014ff",
@@ -1669,7 +1746,7 @@ const ProposalOperationsHub = () => {
                         </TableCell>
                         <TableCell sx={{ p: 2, fontSize: "0.85rem", borderRight: "1px solid #e8e8e8" }}>
                           <Typography variant="body2" sx={{ color: "#666" }}>
-                            {new Date(proposal.createdAt).toLocaleDateString("en-US", {
+                            {new Date(p.createdAt).toLocaleDateString("en-US", {
                               year: "numeric",
                               month: "short",
                               day: "numeric",
@@ -1682,7 +1759,7 @@ const ProposalOperationsHub = () => {
                         >
                           <Typography variant="body2" sx={{ fontWeight: 600, color: "#020b15" }}>
                             ₱
-                            {(proposal.projectedCorporateIncome || 0).toLocaleString("en-US", {
+                            {(p.projectedCorporateIncome || 0).toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
@@ -1694,7 +1771,7 @@ const ProposalOperationsHub = () => {
                         >
                           <Typography variant="body2" sx={{ fontWeight: 600, color: "#020b15" }}>
                             ₱
-                            {getDisplayAmounts(proposal).projectedSubsidy.toLocaleString(
+                            {getDisplayAmounts(p).projectedSubsidy.toLocaleString(
                               "en-US",
                               { minimumFractionDigits: 2, maximumFractionDigits: 2 }
                             )}
@@ -1709,7 +1786,7 @@ const ProposalOperationsHub = () => {
                             sx={{ fontWeight: "bold", color: "#020b15", fontSize: "0.95rem" }}
                           >
                             ₱
-                            {getDisplayAmounts(proposal).proposedBudget.toLocaleString("en-US", {
+                            {getDisplayAmounts(p).proposedBudget.toLocaleString("en-US", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
@@ -1717,8 +1794,8 @@ const ProposalOperationsHub = () => {
                         </TableCell>
                         <TableCell sx={{ p: 2, fontSize: "0.85rem", borderRight: "1px solid #e8e8e8" }}>
                           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                            {renderStatusChip(proposal.status)}
-                            {proposal.isConsolidated && (
+                            {renderStatusChip(p.status)}
+                            {p.isConsolidated && (
                               <Chip
                                 label="CONSOLIDATED"
                                 size="small"
@@ -1731,7 +1808,7 @@ const ProposalOperationsHub = () => {
                                 }}
                               />
                             )}
-                            {proposal.isMergedSource && (
+                            {p.isMergedSource && (
                               <Chip
                                 label="CONSOLIDATED (SOURCE)"
                                 size="small"
@@ -1744,10 +1821,10 @@ const ProposalOperationsHub = () => {
                                 }}
                               />
                             )}
-                            {/returned/i.test(String(proposal.status || "")) &&
-                              proposal.currentAssigneeRole && (
+                            {/returned/i.test(String(p.status || "")) &&
+                              p.currentAssigneeRole && (
                                 <Chip
-                                  label={`Returned to ${prettyRole(proposal.currentAssigneeRole)}`}
+                                  label={`Returned to ${prettyRole(p.currentAssigneeRole)}`}
                                   size="small"
                                   sx={{
                                     height: 22,
@@ -1761,7 +1838,7 @@ const ProposalOperationsHub = () => {
                         </TableCell>
                         <TableCell sx={{ p: 2, fontSize: "0.85rem" }}>
                           <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-                            {getAvailableActions(proposal).length > 0 && (
+                            {getAvailableActions(p).length > 0 && (
                               <>
                                 <Button
                                   size="small"
@@ -1785,8 +1862,8 @@ const ProposalOperationsHub = () => {
                                     },
                                   }}
                                   onClick={(e) => {
-                                    setSelectedProposal(proposal);
-                                    setAvailableActionsForMenu(getAvailableActions(proposal));
+                                    setSelectedProposal(p);
+                                    setAvailableActionsForMenu(getAvailableActions(p));
                                     setActionMenuAnchor(e.currentTarget);
                                   }}
                                 >
@@ -1798,12 +1875,12 @@ const ProposalOperationsHub = () => {
                         </TableCell>
                         {isBudgetApprover && (
                           <TableCell sx={{ p: 2, textAlign: "center" }}>
-                            {isProposalMergeable(proposal) ? (
+                            {isProposalMergeable(p) ? (
                               <input
                                 type="checkbox"
                                 style={{ cursor: "pointer", width: 16, height: 16, accentColor: titleColor }}
-                                checked={selectedForMerge.has(proposal._id)}
-                                onChange={() => handleToggleMergeSelect(proposal._id)}
+                                checked={selectedForMerge.has(p._id)}
+                                onChange={() => handleToggleMergeSelect(p._id)}
                                 onClick={(e) => e.stopPropagation()}
                               />
                             ) : (
@@ -1826,7 +1903,15 @@ const ProposalOperationsHub = () => {
                           </TableCell>
                         )}
                       </TableRow>
-                    ))}
+                    );
+
+                    return (
+                      <React.Fragment key={proposal._id}>
+                        {renderRow(proposal, false)}
+                        {isExpanded && children.map(child => renderRow(child, true))}
+                      </React.Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

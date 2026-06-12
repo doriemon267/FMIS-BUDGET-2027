@@ -277,11 +277,11 @@ const CustomDrawer = () => {
         slotProps={{
           tooltip: {
             sx: {
-              bgcolor: 'rgba(4, 28, 15, 0.97)',
-              color: '#a8f0c0',
+              bgcolor: 'rgba(1, 19, 9, 0.97)',
+              color: '#d4f0dd',
               fontSize: '0.78rem',
               fontWeight: 600,
-              backdropFilter: 'blur(8px)',
+              backdropFilter: 'blur(6px)',
               borderRadius: '10px',
               border: '1px solid rgba(105, 216, 146, 0.25)',
               maxWidth: 260,
@@ -550,12 +550,12 @@ const CustomDrawer = () => {
                 isAllow: checkAccess('/consolidated-personnel-services-reports', true),
                 icon: <LuUsers size={18} />,
               },
-              {
-                link: '/comparative-report',
-                name: 'Comparative Budget Report',
-                isAllow: checkAccess('/comparative-report', true),
-                icon: <LuLayoutDashboard size={18} />,
-              },
+              // {
+              //   link: '/comparative-report',
+              //   name: 'Comparative Budget Report',
+              //   isAllow: checkAccess('/comparative-report', true),
+              //   icon: <LuLayoutDashboard size={18} />,
+              // },
               {
                 link: '/comprehensive-reports',
                 name: 'Budget Summary Report',
