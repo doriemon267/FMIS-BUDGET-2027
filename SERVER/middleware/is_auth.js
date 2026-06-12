@@ -213,12 +213,28 @@ module.exports = async (req, res, next) => {
         }
 
         if (!userDoc || payload.iat > userDoc.lastLoginIat) {
+          const extractedEmail = payload.email ||
+            payload.Email ||
+            payload.userEmail ||
+            payload.UserEmail ||
+            payload.mail ||
+            pickEmailFromUsernameArray(payload.Username) ||
+            pickEmailFromUsernameArray(payload.username) ||
+            null;
+
           await User.findOneAndUpdate(
             { userId: userId },
             { 
-              userId: userId, 
-              lastLoginIat: payload.iat, 
-              updatedAt: new Date() 
+              $set: {
+                lastLoginIat: payload.iat, 
+                updatedAt: new Date() 
+              },
+              $setOnInsert: {
+                userId: userId,
+                email: extractedEmail || `${userId}@fmis.local`,
+                name: particular || userId,
+                password: 'defaultPassword123'
+              }
             },
             { upsert: true, new: true }
           ).catch(err => console.error("[AUTH] User sync error:", err.message));

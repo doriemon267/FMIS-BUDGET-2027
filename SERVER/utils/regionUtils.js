@@ -88,10 +88,69 @@ const getAllRegionInfo = async () => {
     regions: regions.map(r => r.Region)
   };
 };
+/**
+ * Clean up query: ensure 'region' field only contains valid ObjectIds or arrays of ObjectIds
+ * to prevent Mongoose CastError when searching models that store region as ObjectId (e.g. NewProposalWorkflow).
+ * @param {Object} q - MongoDB query object
+ * @returns {Promise<Object>} - Sanitized query object
+ */
+async function sanitizeWorkflowQuery(q) {
+  if (!q || typeof q !== 'object') return q;
+  
+  const sanitized = Array.isArray(q) ? [] : {};
+  for (const [key, value] of Object.entries(q)) {
+    if (key === 'region') {
+      if (typeof value === 'string' && value.length > 0) {
+        // If it's already a valid ObjectId string, Mongoose handles it. 
+        // If it's a region name (e.g. "REGION IV-A"), resolve it.
+        if (!/^[0-9a-fA-F]{24}$/.test(value)) {
+          const resolved = await resolveRegionToObjectId(value);
+          sanitized[key] = resolved || new mongoose.Types.ObjectId(); // Use dummy if not found to ensure empty results instead of CastError
+        } else {
+          sanitized[key] = value;
+        }
+      } else if (Array.isArray(value)) {
+        const resolvedIds = await Promise.all(
+          value.map(async (v) => {
+            if (typeof v === 'string' && v.length > 0 && !/^[0-9a-fA-F]{24}$/.test(v)) {
+              return await resolveRegionToObjectId(v);
+            }
+            return v;
+          })
+        );
+        const filteredIds = resolvedIds.filter(id => id != null);
+        if (filteredIds.length > 0) {
+           sanitized[key] = { $in: filteredIds };
+        } else {
+           sanitized[key] = new mongoose.Types.ObjectId(); // Dummy if none found
+        }
+      } else if (value && typeof value === 'object' && value.$in && Array.isArray(value.$in)) {
+        const resolvedIds = await Promise.all(
+          value.$in.map(async (v) => {
+            if (typeof v === 'string' && v.length > 0 && !/^[0-9a-fA-F]{24}$/.test(v)) {
+              return await resolveRegionToObjectId(v);
+            }
+            return v;
+          })
+        );
+        sanitized[key] = { $in: resolvedIds.filter(id => id != null) };
+      } else {
+        sanitized[key] = value;
+      }
+    } else if (key === '$or' || key === '$and' || key === '$nor') {
+      sanitized[key] = await Promise.all(value.map(item => sanitizeWorkflowQuery(item)));
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 module.exports = {
   regionsMatch,
   getAllRegionInfo,
   getAllRegions,
   normalizeRegionName,
   resolveRegionToObjectId,
+  sanitizeWorkflowQuery,
 };

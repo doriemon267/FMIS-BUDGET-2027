@@ -19,6 +19,7 @@ const bcrypt = require('bcrypt');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { verifyWorkflowDigitalSignature } = require('../utils/digitalSignatureService');
 const { encryptESignatureDataUrl } = require('../utils/eSignatureCrypto');
+const { sanitizeWorkflowQuery } = require('../utils/regionUtils');
 
 const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
   'submit-to-reviewer',
@@ -287,8 +288,14 @@ const getAnalystsEligibleForProposal = async (proposal) => {
       if (typeof proposal.region === 'object' && proposal.region.Region) {
         regionName = proposal.region.Region;
       } else {
-        const regionDoc = await Region.findById(proposal.region).select('Region').lean();
-        if (regionDoc) regionName = regionDoc.Region;
+        const { resolveRegionToObjectId } = require('../utils/regionUtils');
+        const regionId = await resolveRegionToObjectId(proposal.region);
+        if (regionId) {
+          const regionDoc = await Region.findById(regionId).select('Region').lean();
+          if (regionDoc) regionName = regionDoc.Region;
+        } else if (typeof proposal.region === 'string') {
+          regionName = proposal.region;
+        }
       }
     }
     const isCentralOffice = proposal.isCentralOffice === true ||
@@ -855,7 +862,14 @@ exports.getPreparerCreateProposalAccess = async (req, res) => {
           } else if ((assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'OFFICE') && assignedDepartment) {
             orgScopeFilter.department = assignedDepartment;
           } else if (assignmentLevel === 'REGION' && assignedRegionId) {
-            orgScopeFilter.region = assignedRegionId;
+            // Fix: ensure region is an ObjectId before querying NewProposalWorkflow to prevent CastError
+            if (typeof assignedRegionId === 'string' && !mongoose.Types.ObjectId.isValid(assignedRegionId)) {
+              const { resolveRegionToObjectId } = require('../utils/regionUtils');
+              const resolved = await resolveRegionToObjectId(assignedRegionId);
+              orgScopeFilter.region = resolved || new mongoose.Types.ObjectId(); // Dummy if not found
+            } else {
+              orgScopeFilter.region = assignedRegionId;
+            }
           }
         }
       } catch (scopeError) {
@@ -1312,7 +1326,13 @@ const findCarryForwardSource = async ({ fiscalYear, userId, userName, regionId, 
   };
 
   if (regionId) {
-    workflowQuery.region = regionId;
+    const { resolveRegionToObjectId } = require('../utils/regionUtils');
+    const resolved = await resolveRegionToObjectId(regionId);
+    if (resolved) {
+      workflowQuery.region = resolved;
+    } else if (mongoose.Types.ObjectId.isValid(regionId)) {
+      workflowQuery.region = regionId;
+    }
   }
 
   const workflowCandidates = await NewProposalWorkflow.find(workflowQuery)
@@ -2525,10 +2545,14 @@ exports.getProposals = async (req, res) => {
 
   // Silent mode: no verbose logging
 
+    // Clean up query: ensure 'region' field only contains valid ObjectIds or arrays of ObjectIds
+    // to prevent Mongoose CastError when searching NewProposalWorkflow model.
+    const sanitizedQuery = await sanitizeWorkflowQuery(query);
+
     // Query both NewProposalWorkflow and legacy Proposal models
-    try { console.log('GET PROPOSALS FINAL QUERY:', JSON.stringify(query)); } catch (_) { console.log('GET PROPOSALS FINAL QUERY: [unserializable]'); }
-    const newProposalsCount = await NewProposalWorkflow.countDocuments(query);
-    let newProposals = await NewProposalWorkflow.find(query)
+    try { console.log('GET PROPOSALS FINAL QUERY:', JSON.stringify(sanitizedQuery)); } catch (_) { console.log('GET PROPOSALS FINAL QUERY: [unserializable]'); }
+    const newProposalsCount = await NewProposalWorkflow.countDocuments(sanitizedQuery);
+    let newProposals = await NewProposalWorkflow.find(sanitizedQuery)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
@@ -2909,6 +2933,10 @@ exports.getProposals = async (req, res) => {
         projectedCorporateIncome: Number(legacy?.projectedCorporateIncome ?? p.projectedCorporateIncome ?? 0),
         projectedSubsidy: Number(legacy?.projectedSubsidy ?? p.projectedSubsidy ?? 0),
         workflowHistory: p.workflowHistory || [],
+        isConsolidated: p.isConsolidated,
+        mergedFrom: p.mergedFrom,
+        isMergedSource: p.isMergedSource,
+        mergedInto: p.mergedInto,
         fromNewWorkflow: true
       });
     });

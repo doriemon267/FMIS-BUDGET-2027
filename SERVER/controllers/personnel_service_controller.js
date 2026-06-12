@@ -1026,7 +1026,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
               department: employee.Department || "",
               division: employee.Division || "",
               region: employee.Region || "",
-              yearsOfService: eligibleYear,
+              yearsInService: eligibleYear,
               amount: calculatedLoyaltyAmount,
               processBy: req.body.processBy || "Unknown",
               processDate: new Date(),
@@ -1253,8 +1253,8 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
           employeeNumber: { $in: newLoyaltyPays.map(lp => lp.employeeNumber) }
         }).lean();
         
-        const existingLoyaltySet = new Set(existingLoyalty.map(lp => `${lp.employeeNumber}-${lp.yearsOfService}`));
-        const filteredNewLoyaltyPays = newLoyaltyPays.filter(lp => !existingLoyaltySet.has(`${lp.employeeNumber}-${lp.yearsOfService}`));
+        const existingLoyaltySet = new Set(existingLoyalty.map(lp => `${lp.employeeNumber}-${lp.yearsInService}`));
+        const filteredNewLoyaltyPays = newLoyaltyPays.filter(lp => !existingLoyaltySet.has(`${lp.employeeNumber}-${lp.yearsInService}`));
         
         if (filteredNewLoyaltyPays.length > 0) {
           addedLoyaltyPays = await LoyaltyPay.insertMany(filteredNewLoyaltyPays);

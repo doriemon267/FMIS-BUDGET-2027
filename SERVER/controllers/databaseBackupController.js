@@ -35,10 +35,21 @@ const createBackup = async (req, res) => {
     // Set backup as active
     activeBackups.set(backup._id.toString(), { status: 'in_progress', progress: 0 });
     // Get MongoDB connection details from environment or mongoose connection
-    const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
+    let mongoUri = process.env.MONGODB_BUDGET_URL || process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
     const dbName = mongoose.connection.db.databaseName;
+
+    // Ensure the URI includes the database name for mongodump if it's not already there
+    if (dbName && !mongoUri.includes(`/${dbName}`)) {
+      // Check if there are query parameters
+      if (mongoUri.includes('?')) {
+        const [base, query] = mongoUri.split('?');
+        mongoUri = `${base.endsWith('/') ? base : base + '/'}${dbName}?${query}`;
+      } else {
+        mongoUri = `${mongoUri.endsWith('/') ? mongoUri : mongoUri + '/'}${dbName}`;
+      }
+    }
     // Use --uri so mongodump handles authentication and URL encoding natively
-    const dumpCommand = `mongodump --uri="${mongoUri}" --archive=${backupPath} --gzip`;
+    const dumpCommand = `mongodump --uri="${mongoUri}" --archive="${backupPath}" --gzip`;
     // Execute backup
     const childProcess = exec(dumpCommand, async (error, stdout, stderr) => {
       try {
@@ -159,10 +170,21 @@ const createScheduledBackup = async (scheduledBackupId) => {
     });
     await backup.save();
     // Get MongoDB connection details from environment or mongoose connection
-    const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
+    let mongoUri = process.env.MONGODB_BUDGET_URL || process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
     const dbName = mongoose.connection.db.databaseName;
+
+    // Ensure the URI includes the database name for mongodump if it's not already there
+    if (dbName && !mongoUri.includes(`/${dbName}`)) {
+      // Check if there are query parameters
+      if (mongoUri.includes('?')) {
+        const [base, query] = mongoUri.split('?');
+        mongoUri = `${base.endsWith('/') ? base : base + '/'}${dbName}?${query}`;
+      } else {
+        mongoUri = `${mongoUri.endsWith('/') ? mongoUri : mongoUri + '/'}${dbName}`;
+      }
+    }
     // Use --uri so mongodump handles authentication and URL encoding natively
-    const dumpCommand = `mongodump --uri="${mongoUri}" --archive=${backupPath} --gzip`;
+    const dumpCommand = `mongodump --uri="${mongoUri}" --archive="${backupPath}" --gzip`;
     exec(dumpCommand, async (error, stdout, stderr) => {
       try {
         if (error) {
@@ -377,8 +399,20 @@ const restoreBackup = async (req, res) => {
       });
     }
     // Use --uri so mongorestore handles authentication and URL encoding natively
-    const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
-    const restoreCommand = `mongorestore --uri="${mongoUri}" --archive=${backup.filePath} --gzip --drop`;
+    let mongoUri = process.env.MONGODB_BUDGET_URL || process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://localhost:27017';
+    const dbName = mongoose.connection.db.databaseName;
+
+    // Ensure the URI includes the database name for mongodump if it's not already there
+    if (dbName && !mongoUri.includes(`/${dbName}`)) {
+      // Check if there are query parameters
+      if (mongoUri.includes('?')) {
+        const [base, query] = mongoUri.split('?');
+        mongoUri = `${base.endsWith('/') ? base : base + '/'}${dbName}?${query}`;
+      } else {
+        mongoUri = `${mongoUri.endsWith('/') ? mongoUri : mongoUri + '/'}${dbName}`;
+      }
+    }
+    const restoreCommand = `mongorestore --uri="${mongoUri}" --archive="${backup.filePath}" --gzip --drop`;
 
     // Create a real pre-restore backup of the current database state
     const preRestoreTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -396,7 +430,7 @@ const restoreBackup = async (req, res) => {
     });
     await preRestoreBackup.save();
 
-    const preRestoreDumpCommand = `mongodump --uri="${mongoUri}" --archive=${preRestorePath} --gzip`;
+    const preRestoreDumpCommand = `mongodump --uri="${mongoUri}" --archive="${preRestorePath}" --gzip`;
 
     // Step 1: dump current state before restore
     exec(preRestoreDumpCommand, async (dumpError) => {

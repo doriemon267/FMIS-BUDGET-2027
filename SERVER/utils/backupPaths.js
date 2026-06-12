@@ -12,7 +12,7 @@ const getBackupStoragePath = () => {
     return path.resolve(__dirname, '..', backupPath);
   }
   // If it's already an absolute path, use it as-is
-  return backupPath;
+  return path.normalize(backupPath);
 };
 /**
  * Ensure the backup directory exists

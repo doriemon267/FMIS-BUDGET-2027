@@ -1,6 +1,17 @@
 require("dotenv").config({ path: ".env.local", override: true }); // Load .env.local first (overrides .env)
 require("dotenv").config(); // Load .env for fallback variables
 
+// Load .env-production if it exists and we are in production
+const fs_env = require("fs");
+const path_env = require("path");
+if (
+  (process.env.NODE_ENV === "production" || process.env.PRODUCTION_MODE === "true") &&
+  fs_env.existsSync(path_env.join(__dirname, ".env-production"))
+) {
+  require("dotenv").config({ path: path_env.join(__dirname, ".env-production"), override: true });
+  console.log("[Server] Loaded production environment from .env-production");
+}
+
 // Decrypt any ENC(...) environment values using ENV_ENCRYPTION_KEY
 require("./utils/secretLoader");
 

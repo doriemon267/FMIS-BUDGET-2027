@@ -12,7 +12,7 @@ const RetireeSchema = mongoose.Schema(
       enum: ["Compulsory", "Optional"], 
       required: true 
     },
-    dateOfRetirement: { type: Date, required: true },
+    dateOfRetirement: { type: Date },
     leaveDays: { type: Number, default: 0 },       // Editable leave days used for terminal leave computation
     terminalLeave: { type: Number, default: 0 },
     retirementGratuity: { type: Number, default: 0 },

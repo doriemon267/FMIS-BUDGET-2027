@@ -90,12 +90,24 @@ const budgetRoleVisibilityControl = () => {
 
       // Resolve organizational scope from the populated assignment arrays
       const assignedRegionNames = (assignment.regions || []).map(r => r.regionName).filter(Boolean);
+      const assignedRegionIdsFromObj = (assignment.regions || []).map(r => r._id || r.id).filter(Boolean);
+      
+      const { resolveRegionToObjectId } = require('../utils/regionUtils');
+      const resolvedIdsFromName = await Promise.all(assignedRegionNames.map(name => resolveRegionToObjectId(name)));
+      
+      const assignedRegionIds = [...new Set([...assignedRegionIdsFromObj, ...resolvedIdsFromName.filter(Boolean)])];
       const assignedDeptNames = (assignment.departments || []).map(d => d.departmentName).filter(Boolean);
       const assignedDivisions = assignment.divisions || [];
       
       const orgScope = {};
-      if (assignedRegionNames.length > 0) {
-        orgScope.region = assignedRegionNames.length === 1 ? assignedRegionNames[0] : { $in: assignedRegionNames };
+      if (assignedRegionNames.length > 0 || assignedRegionIds.length > 0) {
+        // Combined filter to handle both models using region as String and models using region as ObjectId
+        const regionFilter = [];
+        if (assignedRegionNames.length > 0) regionFilter.push(...assignedRegionNames);
+        if (assignedRegionIds.length > 0) regionFilter.push(...assignedRegionIds);
+        
+        const uniqueRegions = [...new Set(regionFilter)];
+        orgScope.region = uniqueRegions.length === 1 ? uniqueRegions[0] : { $in: uniqueRegions };
       }
       
       // Handle Division/Department overlap: some models use 'department' for division-level names
@@ -532,6 +544,21 @@ const budgetRoleVisibilityControl = () => {
           // Apply organizational restriction (unless it's a high-level manager who should see all regions)
           // User requested Budget Officer and Budget Manager to have access to all regions
           visibilityFilter = managerBaseFilter;
+          break;
+
+        case 'BUDGET PREPARER':
+          const preparerOptions = [
+            { createdBy: userId },
+            { createdByUserId: userId },
+            { processBy: userId },
+            { 'workflowHistory.userId': userId }
+          ];
+          
+          if (Object.keys(orgScope).length > 0) {
+            preparerOptions.push(orgScope);
+          }
+          
+          visibilityFilter = { $or: preparerOptions };
           break;
 
         default:

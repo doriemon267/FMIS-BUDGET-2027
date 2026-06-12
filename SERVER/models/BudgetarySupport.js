@@ -35,13 +35,11 @@ const BudgetarySupportSchema = new mongoose.Schema({
     default: "Not Submitted"
   },
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: String,
     required: false
   },
   updatedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: String,
     required: false
   }
 }, { 

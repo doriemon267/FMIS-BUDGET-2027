@@ -6,7 +6,7 @@ const CapitalOutlay = require("../models/CapitalOutlay");
 const BudgetarySupport = require("../models/BudgetarySupport");
 const Settings = require("../models/Settings");
 const NewProposalWorkflow = require("../models/NewProposalWorkflow");
-const { resolveRegionToObjectId } = require('../utils/regionUtils');
+const { resolveRegionToObjectId, sanitizeWorkflowQuery } = require('../utils/regionUtils');
 
 // Get overview statistics for the dashboard
 exports.getOverviewStats = async (req, res) => {
@@ -19,33 +19,52 @@ exports.getOverviewStats = async (req, res) => {
     const baseFilter = { fiscalYear };
     
     // Apply hierarchical filters from middleware (division/department/region)
-    // Merge them into baseFilter so division users are scoped to their division
     if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
       Object.assign(baseFilter, req.hierarchicalFilters);
     }
     
-    // Allow explicit region query param to further narrow within user's scope (skip when "All Regions")
+    // Allow explicit region query param to further narrow within user's scope
     const regionParam = req.query.region;
     if (regionParam && String(regionParam).trim() && String(regionParam).toLowerCase() !== 'all regions') {
       baseFilter.region = regionParam;
     }
     
-    // Legacy models (PersonnelServices, MOOE, CapitalOutlay, BudgetarySupport) use region as string (name).
-    // NewProposalWorkflow uses region as ObjectId only. Never pass a string to avoid "Cast to ObjectId" error.
-    const regionObjectId = await resolveRegionToObjectId(baseFilter.region);
-    const workflowFilter = { ...baseFilter };
-    delete workflowFilter.region; // remove so we never pass string to NewProposalWorkflow
-    if (regionObjectId) {
-      workflowFilter.region = regionObjectId;
+    // Apply budget role visibility filter if exists
+    if (req.budgetRoleVisibilityFilter && Object.keys(req.budgetRoleVisibilityFilter).length > 0) {
+      baseFilter.$and = baseFilter.$and || [];
+      baseFilter.$and.push(req.budgetRoleVisibilityFilter);
     }
+
+    // Build a dedicated filter for NewProposalWorkflow queries.
+    // The baseFilter.region may be a plain string (e.g. "REGION IV-A") from hierarchicalFilters.
+    // NewProposalWorkflow.region is typed ObjectId — we must resolve strings before querying.
+    const workflowBaseFilter = { ...baseFilter };
+
+    // Step 1: Explicitly resolve the top-level region string to ObjectId.
+    if (typeof workflowBaseFilter.region === 'string' && workflowBaseFilter.region.length > 0) {
+      if (/^[0-9a-fA-F]{24}$/.test(workflowBaseFilter.region)) {
+        workflowBaseFilter.region = new mongoose.Types.ObjectId(workflowBaseFilter.region);
+      } else {
+        const resolvedId = await resolveRegionToObjectId(workflowBaseFilter.region);
+        if (resolvedId) {
+          workflowBaseFilter.region = resolvedId;
+        } else {
+          // Region not found — remove it to avoid CastError (shows all rather than none)
+          delete workflowBaseFilter.region;
+        }
+      }
+    }
+
+    // Step 2: Deep-sanitize the entire filter (resolves any region strings inside
+    //         nested $and/$or from budgetRoleVisibilityFilter).
+    const workflowFilter = await sanitizeWorkflowQuery(workflowBaseFilter);
     
     // Build status-specific filters for legacy models
     const pendingFilter = { ...baseFilter, status: { $nin: ["Approved", "Rejected"] } };
     const approvedFilter = { ...baseFilter, status: "Approved" };
     const rejectedFilter = { ...baseFilter, status: "Rejected" };
     
-    // Build workflow status filters for NewProposalWorkflow
-    // Pending = not FINALIZED and not in RETURNED states
+    // Build workflow status filters for NewProposalWorkflow (spread from sanitized workflowFilter)
     const workflowPendingFilter = {
       ...workflowFilter,
       status: {
@@ -58,7 +77,7 @@ exports.getOverviewStats = async (req, res) => {
       status: { $in: ["RETURNED_TO_PREPARER", "RETURNED_TO_REVIEWER", "RETURNED_TO_APPROVER", "RETURNED_TO_PLANNING_ANALYST", "RETURNED_TO_OFFICER"] }
     };
     
-    // Count documents per collection (Budgetary Support excluded from main totals)
+    // Count documents per collection
     const [
       personnelCount,
       mooeCount,
@@ -76,7 +95,6 @@ exports.getOverviewStats = async (req, res) => {
       rejectedMOOE,
       rejectedCapital,
       rejectedBudgetarySupport,
-      // NewProposalWorkflow counts
       newWorkflowTotal,
       newWorkflowPending,
       newWorkflowFinalized,
@@ -98,7 +116,6 @@ exports.getOverviewStats = async (req, res) => {
       MOOEProposal.countDocuments(rejectedFilter),
       CapitalOutlay.countDocuments(rejectedFilter),
       BudgetarySupport.countDocuments(rejectedFilter),
-      // NewProposalWorkflow counts (use workflowFilter so region is ObjectId)
       NewProposalWorkflow.countDocuments(workflowFilter),
       NewProposalWorkflow.countDocuments(workflowPendingFilter),
       NewProposalWorkflow.countDocuments(workflowFinalizedFilter),
@@ -122,7 +139,6 @@ exports.getOverviewStats = async (req, res) => {
         approved: approvedBudgetarySupport,
         rejected: rejectedBudgetarySupport,
       },
-      // Breakdown by system type
       breakdown: {
         legacy: {
           total: personnelCount + mooeCount + capitalCount,
@@ -144,5 +160,29 @@ exports.getOverviewStats = async (req, res) => {
   } catch (error) {
     console.error("Error fetching overview stats:", error);
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.cleanupCorruptedRegions = async (req, res) => {
+  try {
+    const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+    const { resolveRegionToObjectId } = require('../utils/regionUtils');
+    
+    const docs = await NewProposalWorkflow.find({ region: { $type: "string" } });
+    let fixed = 0;
+    
+    for (const doc of docs) {
+      if (typeof doc.region === 'string') {
+        const resolvedId = await resolveRegionToObjectId(doc.region);
+        if (resolvedId) {
+          await NewProposalWorkflow.updateOne({ _id: doc._id }, { $set: { region: resolvedId } });
+          fixed++;
+        }
+      }
+    }
+    
+    res.json({ success: true, fixed, total: docs.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
