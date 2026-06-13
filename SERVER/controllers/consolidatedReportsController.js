@@ -518,7 +518,15 @@ const consolidatedReportsController = {
         if (isMultiRegion) {
           rcName = item.region || 'Unknown Region';
         } else {
-          rcName = item.department || item.division || item.region || 'Unknown Responsibility Center';
+          let deptName = item.department;
+          if (deptName === 'IRRIGATION MANAGEMENT OFFICE') {
+            deptName = 'IMO';
+          }
+          if (deptName && item.division) {
+            rcName = `${deptName} / ${item.division}`;
+          } else {
+            rcName = deptName || item.division || item.region || 'Unknown Responsibility Center';
+          }
         }
         const categoryName = item.sublineItem || 'Uncategorized';
         const uacs = item.uacsCode || '';
@@ -613,15 +621,20 @@ const consolidatedReportsController = {
       // ============================================================
       const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
 
-      const wrapText = (text, maxWidth, fontSize) => {
-        const words = String(text || '').split(' ');
+      const wrapText = (text, maxWidth, fontSize, font) => {
+        const words = String(text || '').split(/\s+/);
         const lines = [];
         let currentLine = '';
         const getWidth = (t) => {
-          try { return pdfDoc.calculateTextDimensions(t, { fontSize }).width; }
+          try { 
+            const opts = { fontSize };
+            if (font) opts.font = font;
+            return pdfDoc.calculateTextDimensions(t, opts).width; 
+          }
           catch (e) { return t.length * (fontSize * 0.55); }
         };
         words.forEach(word => {
+          if (!word) return;
           let testLine = currentLine ? `${currentLine} ${word}` : word;
           if (getWidth(testLine) > maxWidth) {
             if (currentLine) {

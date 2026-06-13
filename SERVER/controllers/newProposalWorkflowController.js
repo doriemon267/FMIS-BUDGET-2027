@@ -19,7 +19,7 @@ const bcrypt = require('bcrypt');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { verifyWorkflowDigitalSignature } = require('../utils/digitalSignatureService');
 const { encryptESignatureDataUrl } = require('../utils/eSignatureCrypto');
-const { sanitizeWorkflowQuery } = require('../utils/regionUtils');
+const { sanitizeWorkflowQuery, resolveRegionToObjectId } = require('../utils/regionUtils');
 
 const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
   'submit-to-reviewer',
@@ -1854,19 +1854,7 @@ exports.createProposal = async (req, res) => {
     const calculatedAmount = (Number(projectedCorporateIncome) || 0) + (Number(projectedSubsidy) || 0);
 
     // Resolve region: accept ObjectId string/object or plain name and look up by Region model
-    let regionId = (region && typeof region === 'object') ? (region._id || region.id) : region;
-    if (region && typeof region === 'string' && !/^[0-9a-fA-F]{24}$/.test(region)) {
-      try {
-        const regionDoc = await Region.findOne({ $or: [
-          { Region: region },
-          { regionName: region },
-          { RegionName: region }
-        ] });
-        regionId = regionDoc ? regionDoc._id : undefined;
-      } catch (_e) {
-        regionId = undefined;
-      }
-    }
+    let regionId = await resolveRegionToObjectId(region);
     
     // Ensure only a valid ObjectId goes into NewProposalWorkflow.region
     const finalRegionId = (regionId && /^[0-9a-fA-F]{24}$/.test(String(regionId))) ? regionId : undefined;

@@ -138,6 +138,14 @@ exports.getMOOEData = async (req, res) => {
               ]
             };
           }
+        } else {
+          // Fallback for REGION level, FULL level, or users without hierarchical assignment
+          const userRegion = assignment?.regions?.[0]?.regionName || assignment?.regionName || req.user?.Region;
+          if (assignment?.assignmentLevel === 'FULL') {
+            if (region) filter.region = region;
+          } else if (userRegion || region) {
+            filter.region = userRegion || region;
+          }
         }
       } catch (error) {
         console.error('Error applying MOOE submission workflow:', error);
@@ -805,6 +813,8 @@ exports.getMOOEData = async (req, res) => {
     // 6. Assemble entries array, including each proposal's _id as `id`
     const entries = chartOfAccounts.map(row => {
       const proposal = mooeMap[row.uacsCode];
+      if (proposal) delete mooeMap[row.uacsCode];
+      
       let derivedSubline = row.sublineItem;
       if (!derivedSubline && row.uacsCode && row.uacsCode.startsWith("5-02-99-990")) {
         derivedSubline = "Other Maintenance and Operating Expenses";
@@ -817,10 +827,27 @@ exports.getMOOEData = async (req, res) => {
         uacsCode:         row.uacsCode,
         income:           proposal?.income?.toString() || "0",
         subsidy:          proposal?.subsidy?.toString() || "0",
-        amount:           row.uacsCode === "5-02-99-990"
-                          ? totalPersonnelAmount.toString()
-                          : (proposal?.amount?.toString() || "0")
+        amount:           proposal?.amount?.toString() || "0"
       };
+    });
+
+    // Append any proposals that didn't match a standard Chart of Accounts UACS
+    Object.values(mooeMap).forEach(proposal => {
+      if (proposal.uacsCode && proposal.amount > 0) {
+        let derivedSubline = proposal.sublineItem || "Other Expenses";
+        if (proposal.uacsCode.startsWith("5-02-99-990")) {
+          derivedSubline = "Other Maintenance and Operating Expenses";
+        }
+        entries.push({
+          id:               proposal._id.toString(),
+          sublineItem:      derivedSubline,
+          accountingTitle:  proposal.accountingTitle || proposal.uacsCode,
+          uacsCode:         proposal.uacsCode,
+          income:           proposal.income?.toString() || "0",
+          subsidy:          proposal.subsidy?.toString() || "0",
+          amount:           proposal.amount?.toString() || "0"
+        });
+      }
     });
 
     // 6.5. Sort entries by UACS code
@@ -971,9 +998,7 @@ exports.getMOOEEntries = async (req, res) => {
         uacsCode:         row.uacsCode,
         income:           proposal?.income?.toString() || "0",
         subsidy:          proposal?.subsidy?.toString() || "0",
-        amount:           row.uacsCode === "5-02-99-990"
-                          ? totalPersonnelAmount.toString()
-                          : (proposal?.amount?.toString() || "0")
+        amount:           proposal?.amount?.toString() || "0"
       };
     });
     return res.status(200).json(data);

@@ -1967,44 +1967,19 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                     <TableCell colSpan={viewMode === "consolidated" ? 1 : 2}></TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
                       {(() => {
-                        // Include hierarchical children (e.g. sub-items under 5-02-99-990); use effective income/subsidy (fallback to amount)
-                        const total = row.children.reduce((sum, child) => {
-                          const hierarchicalChildren = row.children.filter(c =>
-                            c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
-                          );
-                          if (hierarchicalChildren.length > 0) {
-                            return sum + hierarchicalChildren.reduce((s, c) => s + getEffectiveIncome(c), 0);
-                          }
-                          return sum + getEffectiveIncome(child);
-                        }, 0);
+                        const total = row.children.reduce((sum, child) => sum + getEffectiveIncome(child), 0);
                         return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
                       {(() => {
-                        const total = row.children.reduce((sum, child) => {
-                          const hierarchicalChildren = row.children.filter(c =>
-                            c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
-                          );
-                          if (hierarchicalChildren.length > 0) {
-                            return sum + hierarchicalChildren.reduce((s, c) => s + getEffectiveSubsidy(c), 0);
-                          }
-                          return sum + getEffectiveSubsidy(child);
-                        }, 0);
+                        const total = row.children.reduce((sum, child) => sum + getEffectiveSubsidy(child), 0);
                         return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
                       {(() => {
-                        const total = row.children.reduce((sum, child) => {
-                          const hierarchicalChildren = row.children.filter(c =>
-                            c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
-                          );
-                          if (hierarchicalChildren.length > 0) {
-                            return sum + hierarchicalChildren.reduce((s, c) => s + getEffectiveIncome(c) + getEffectiveSubsidy(c), 0);
-                          }
-                          return sum + getEffectiveIncome(child) + getEffectiveSubsidy(child);
-                        }, 0);
+                        const total = row.children.reduce((sum, child) => sum + getEffectiveIncome(child) + getEffectiveSubsidy(child), 0);
                         return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
@@ -2545,7 +2520,9 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
         tableType="mooe"
         onUploadSuccess={() => {
           setShowBulkUpload(false);
-          queryClient.invalidateQueries({ queryKey: ['mooe'] });
+          // Use refetchQueries to guarantee a network request is made immediately
+          queryClient.refetchQueries({ queryKey: ['mooeData'] });
+          queryClient.refetchQueries({ queryKey: ['consolidatedData'] });
         }}
       />
     </>

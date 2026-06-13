@@ -3,6 +3,7 @@ const IncomeCategory = require('../models/IncomeCategory');
 const IncomeSubcategory = require('../models/IncomeSubcategory');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const Settings = require('../models/Settings');
+const { regionsMatch } = require('../utils/regionUtils');
 const xlsx = require('xlsx');
 const fs = require('fs');
 const path = require('path');
@@ -109,20 +110,17 @@ exports.uploadCorporateIncome = async (req, res) => {
     if (proposalId) {
       const proposal = await NewProposalWorkflow.findById(proposalId).populate('region').lean();
       if (proposal) {
-        let regionName = '';
+        let regionName = 'CENTRAL OFFICE';
         if (proposal.region) {
           if (typeof proposal.region === 'string') {
             regionName = proposal.region;
           } else if (typeof proposal.region === 'object') {
-            regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || '';
-          } else {
-            const RegionModel = require('../models/Region');
-            const regionDoc = await RegionModel.findById(proposal.region).lean();
-            if (regionDoc) {
-              regionName = regionDoc.Region || '';
-            }
+            regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || 'CENTRAL OFFICE';
           }
+        } else if (proposal.isCentralOffice) {
+          regionName = 'CENTRAL OFFICE';
         }
+        
         strictScope = {
           region: regionName,
           department: proposal.department,
@@ -223,7 +221,7 @@ exports.uploadCorporateIncome = async (req, res) => {
           // 1. If linked to a proposal, it MUST match the proposal's scope
           if (strictScope) {
             // Check Region
-            if (strictScope.region && targetRegion && targetRegion.toUpperCase() !== strictScope.region.toUpperCase()) {
+            if (strictScope.region && targetRegion && !regionsMatch(targetRegion, strictScope.region)) {
               results.errors.push({
                 row: index + 2,
                 category: categoryName,
@@ -328,10 +326,11 @@ exports.uploadCorporateIncome = async (req, res) => {
         }
 
         // Prioritize region-specific category over global one
+        const sanitizedCatName = categoryName.trim().replace(/\s+/g, '\\s+');
         const categoryQuery = {
           $or: [
-            { incomeCategoryName: { $regex: new RegExp(`^${categoryName.trim()}$`, 'i') } },
-            { name: { $regex: new RegExp(`^${categoryName.trim()}$`, 'i') } }
+            { incomeCategoryName: { $regex: new RegExp(`^${sanitizedCatName}\\s*$`, 'i') } },
+            { name: { $regex: new RegExp(`^${sanitizedCatName}\\s*$`, 'i') } }
           ]
         };
 
@@ -380,6 +379,8 @@ exports.uploadCorporateIncome = async (req, res) => {
           normalizedWorkflowLevel = 'DIVISION';
         } else if (normalizedWorkflowLevel === 'OFFICE_LEVEL') {
           normalizedWorkflowLevel = 'DEPARTMENT';
+        } else if (normalizedWorkflowLevel === 'BUDGET_AND_REVENUE_DIVISION' || normalizedWorkflowLevel === 'FULL') {
+          normalizedWorkflowLevel = 'REGION';
         }
 
         const income = new Income({

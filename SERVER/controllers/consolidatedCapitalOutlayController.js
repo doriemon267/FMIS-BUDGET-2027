@@ -445,17 +445,42 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       detailsByParentId[pid].push(d);
     });
 
+    const DepartmentDivisionMapping = require('../models/OrganizationStructure');
+    let deptCodeMap = {};
+    let divCodeMap = {};
+    try {
+      const orgStruct = await DepartmentDivisionMapping.getCompleteOrganizationStructure();
+      orgStruct.departments.forEach(dept => {
+        if (dept.name) deptCodeMap[dept.name.toUpperCase()] = dept.code || dept.name;
+        if (dept.divisions) {
+          dept.divisions.forEach(div => {
+            if (div.name) divCodeMap[div.name.toUpperCase()] = div.code || div.name;
+          });
+        }
+      });
+    } catch (err) {
+      console.warn("Failed to load organization mapping for abbreviations", err);
+    }
+
     // GROUP BY categoryName (Excel layout: category header → RC rows)
     const catGroups = {};
     coData.forEach((parent) => {
       const catKey = (parent.category?.categoryName) || parent.accountingTitle || parent.sublineItem || 'Other';
       const isMultiRegion = !regionList || regionList.length > 1;
-      let rcName;
+      let rcAbbr = '';
+      
       if (isMultiRegion) {
-        rcName = parent.region || 'Unknown Region';
+        rcAbbr = parent.region || 'Unknown Region';
       } else {
-        rcName = parent.department || parent.division || parent.region || 'Unknown Responsibility Center';
+        if (parent.division) {
+           rcAbbr = divCodeMap[parent.division.toUpperCase()] || parent.division;
+        } else if (parent.department) {
+           rcAbbr = deptCodeMap[parent.department.toUpperCase()] || parent.department;
+        } else {
+           rcAbbr = parent.region || 'Unknown Responsibility Center';
+        }
       }
+      
       const details = detailsByParentId[parent._id.toString()];
 
       if (Array.isArray(details) && details.length > 0) {
@@ -464,11 +489,12 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
           if (amt > 0) {
             if (!catGroups[catKey]) catGroups[catKey] = {};
             const particulars = d.particulars || '';
-            const rowKey = `${rcName}_${particulars}`;
+            const rowKey = particulars.toUpperCase();
             
             if (!catGroups[catKey][rowKey]) {
-              catGroups[catKey][rowKey] = { rc: rcName, particulars: particulars, amount: 0 };
+              catGroups[catKey][rowKey] = { rcNames: new Set(), particulars: particulars, amount: 0 };
             }
+            if (rcAbbr) catGroups[catKey][rowKey].rcNames.add(rcAbbr);
             catGroups[catKey][rowKey].amount += amt;
           }
         });
@@ -477,19 +503,23 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
         if (amt > 0) {
           if (!catGroups[catKey]) catGroups[catKey] = {};
           const particulars = parent.sublineItem || parent.accountingTitle || '';
-          const rowKey = `${rcName}_${particulars}`;
+          const rowKey = particulars.toUpperCase();
           
           if (!catGroups[catKey][rowKey]) {
-            catGroups[catKey][rowKey] = { rc: rcName, particulars: particulars, amount: 0 };
+            catGroups[catKey][rowKey] = { rcNames: new Set(), particulars: particulars, amount: 0 };
           }
+          if (rcAbbr) catGroups[catKey][rowKey].rcNames.add(rcAbbr);
           catGroups[catKey][rowKey].amount += amt;
         }
       }
     });
 
-    // Convert to arrays
+    // Convert to arrays and join rcNames
     for (const catKey of Object.keys(catGroups)) {
-      catGroups[catKey] = Object.values(catGroups[catKey]);
+      catGroups[catKey] = Object.values(catGroups[catKey]).map(row => {
+        row.rc = Array.from(row.rcNames).join('/');
+        return row;
+      });
     }
 
     const tmpFilePath = path.join(os.tmpdir(), `co_report_${Date.now()}.pdf`);
@@ -527,17 +557,22 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     const textOpt = (o = {}) => ({ color: '#000000', ...o });
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
 
-    const wrapText = (text, maxWidth, fontSize) => {
-      const words = String(text || '').split(' ');
+    const wrapText = (text, maxWidth, fontSize, font) => {
+      const words = String(text || '').split(/\s+/);
       const lines = [];
       let currentLine = '';
       
       const getWidth = (t) => {
-        try { return pdfDoc.calculateTextDimensions(t, { fontSize }).width; }
+        try { 
+          const opts = { fontSize };
+          if (font) opts.font = font;
+          return pdfDoc.calculateTextDimensions(t, opts).width; 
+        }
         catch (e) { return t.length * (fontSize * 0.55); }
       };
 
       words.forEach(word => {
+        if (!word) return;
         let testLine = currentLine ? `${currentLine} ${word}` : word;
         if (getWidth(testLine) > maxWidth) {
           if (currentLine) {

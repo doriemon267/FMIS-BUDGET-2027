@@ -6,6 +6,7 @@ const Category = require("../models/Category");
 const ChartOfAccounts = require("../models/chartOfAccounts");
 const TitleMapping = require("../models/titleMapping");
 const Settings = require("../models/Settings");
+const { regionsMatch, normalizeRegionName } = require("../utils/regionUtils");
 
 const normalizeHeader = (value = "") => value.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
 
@@ -156,6 +157,13 @@ exports.uploadCapitalOutlay = async (req, res) => {
   } catch (err) {
     // Ignore if index doesn't exist or already dropped
   }
+  try {
+    const mongoose = require("mongoose");
+    await mongoose.model("CapitalOutlay").collection.dropIndex("proposalId_1_uacsCode_1_region_1_department_1_fiscalYear_1_sublineItem_1_category_1");
+    console.log("✅ Successfully dropped old CapitalOutlay unique index (with department but without division).");
+  } catch (err) {
+    // Ignore if index doesn't exist or already dropped
+  }
 
   try {
     const activeSettings = await Settings.findOne({ isActive: true });
@@ -222,20 +230,37 @@ exports.uploadCapitalOutlay = async (req, res) => {
     if (proposalId) {
       const proposal = await NewProposalWorkflow.findById(proposalId).populate('region').lean();
       if (proposal) {
-        let regionName = '';
+        let regionName = 'CENTRAL OFFICE';
         if (proposal.region) {
           if (typeof proposal.region === 'string') {
-            regionName = proposal.region;
+            // If it's an ObjectId string, find it in allRegions
+            const matched = allRegions.find(r => String(r._id) === proposal.region);
+            if (matched) {
+              regionName = matched.Region || matched.regionName || matched.name || proposal.region;
+            } else {
+              regionName = proposal.region;
+            }
           } else if (typeof proposal.region === 'object') {
-            regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || '';
-          } else {
-            const RegionModel = require('../models/Region');
-            const regionDoc = await RegionModel.findById(proposal.region).lean();
-            if (regionDoc) {
-              regionName = regionDoc.Region || '';
+            // Might be populated object, or just an ObjectId object
+            const rId = proposal.region._id ? String(proposal.region._id) : String(proposal.region);
+            const matched = allRegions.find(r => String(r._id) === rId);
+            if (matched) {
+              regionName = matched.Region || matched.regionName || matched.name || 'CENTRAL OFFICE';
+            } else {
+              regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || 'CENTRAL OFFICE';
             }
           }
+        } else {
+          // Fallback to legacy Proposal if NewProposalWorkflow has no region
+          const ProposalModelFallback = require('../models/Proposal');
+          const legacy = await ProposalModelFallback.findOne({ workflowRef: proposalId }).select('region').lean();
+          if (legacy && legacy.region) {
+            regionName = legacy.region;
+          } else if (proposal.isCentralOffice) {
+            regionName = 'CENTRAL OFFICE';
+          }
         }
+        
         strictScope = {
           region: regionName,
           department: proposal.department,
@@ -245,19 +270,14 @@ exports.uploadCapitalOutlay = async (req, res) => {
     }
     
     // Find matching proposal as fallback linkage only if no explicit proposalId provided
+    // We will resolve proposalId per-region dynamically inside the loop to support multi-region uploads
     const ProposalModel = require('../models/Proposal');
-    const targetProposal = !proposalId ? await ProposalModel.findOne({
-      fiscalYear: activeSettings.fiscalYear.toString(),
-      budgetType: activeSettings.budgetType,
-      region: org.region
-    }).select('_id').lean() : null;
-
+    const proposalCache = new Map();
+    
     if (proposalId) {
        console.log(`[LINKAGE] Using explicit proposalId: ${proposalId}`);
-    } else if (targetProposal) {
-      console.log(`[LINKAGE] Found matching proposal: ${targetProposal._id} for Region: ${org.region}`);
     } else {
-      console.warn(`[LINKAGE] No matching proposal found for Region: ${org.region}, FY: ${activeSettings.fiscalYear}. Records will be unlinked.`);
+       console.log(`[LINKAGE] No explicit proposalId provided. Will attempt to link per-region automatically.`);
     }
 
     let success = 0, failed = 0, errors = [];
@@ -282,9 +302,39 @@ exports.uploadCapitalOutlay = async (req, res) => {
       const cost = income + subsidy;
 
       // Fill-down logic for grouped formatting
-      if (rowRegionInput) currentRegion = rowRegionInput; else rowRegionInput = currentRegion;
-      if (rowDeptInput) currentDept = rowDeptInput; else rowDeptInput = currentDept;
-      if (rc) currentRC = rc; else rc = currentRC;
+      let regionChanged = false;
+      let deptChanged = false;
+
+      if (rowRegionInput) {
+        if (currentRegion && rowRegionInput !== currentRegion) regionChanged = true;
+        currentRegion = rowRegionInput;
+      } else {
+        rowRegionInput = currentRegion;
+      }
+
+      if (rowDeptInput) {
+        if ((currentDept && rowDeptInput !== currentDept) || regionChanged) {
+          deptChanged = true;
+          currentRC = ''; 
+        }
+        currentDept = rowDeptInput;
+      } else {
+        if (regionChanged) {
+           currentDept = '';
+           currentRC = '';
+        }
+        rowDeptInput = currentDept;
+      }
+
+      if (rc) {
+        currentRC = rc;
+      } else {
+        if (deptChanged) {
+          currentRC = '';
+        }
+        rc = currentRC;
+      }
+
       if (title) currentTitle = title; else title = currentTitle;
       if (sublineItem) currentSubline = sublineItem; else sublineItem = currentSubline;
       if (accountingTitle) currentAccountingTitle = accountingTitle; else accountingTitle = currentAccountingTitle;
@@ -356,7 +406,7 @@ exports.uploadCapitalOutlay = async (req, res) => {
           // 1. If linked to a proposal, it MUST match the proposal's scope
           if (strictScope) {
             // Check Region
-            if (strictScope.region && targetRegion && targetRegion.toUpperCase() !== strictScope.region.toUpperCase()) {
+            if (strictScope.region && targetRegion && !regionsMatch(targetRegion, strictScope.region)) {
               throw new Error(`Unauthorized: This proposal is for ${strictScope.region}. Row has ${targetRegion}.`);
             }
             // Check Department
@@ -395,7 +445,59 @@ exports.uploadCapitalOutlay = async (req, res) => {
           }
         }
 
-        console.log(`Row ${index + 2} Tagging: Region=${targetRegion}, Dept=${targetDepartment}, Div=${targetDivision}`);
+        // Dynamically resolve proposal linkage for this row's region, department, and division
+        let resolvedProposalId = proposalId;
+        let resolvedWorkflowRef = null;
+        if (!resolvedProposalId && targetRegion) {
+          const cacheKey = `${targetRegion}_${targetDepartment || 'none'}_${targetDivision || 'none'}`;
+          if (proposalCache.has(cacheKey)) {
+            const cachedIds = proposalCache.get(cacheKey);
+            resolvedProposalId = cachedIds.proposalId;
+            resolvedWorkflowRef = cachedIds.workflowRef;
+          } else {
+            const query = {
+              fiscalYear: activeSettings.fiscalYear.toString(),
+              budgetType: activeSettings.budgetType,
+              region: targetRegion
+            };
+            // Use regex for robust matching since Excel inputs might differ in case
+            if (targetDepartment) query.department = new RegExp(`^${targetDepartment}$`, 'i');
+            if (targetDivision) query.division = new RegExp(`^${targetDivision}$`, 'i');
+            
+            const matchingLegacy = await ProposalModel.findOne(query).select('_id').lean();
+            const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+            const RegionModel = require('../models/Region');
+            
+            // Region in NewProposalWorkflow is an ObjectId, so we must resolve it first
+            const regionDoc = await RegionModel.findOne({ Region: new RegExp(`^${targetRegion}$`, 'i') }).select('_id').lean();
+            let matchingWorkflow = null;
+            
+            if (regionDoc) {
+              const workflowQuery = { ...query, region: regionDoc._id };
+              matchingWorkflow = await NewProposalWorkflow.findOne(workflowQuery).select('_id').lean();
+            } else {
+              // Fallback just in case some legacy string entries exist
+              try {
+                matchingWorkflow = await NewProposalWorkflow.findOne(query).select('_id').lean();
+              } catch(e) {}
+            }
+            
+            const legacyId = matchingLegacy ? matchingLegacy._id : null;
+            const workflowId = matchingWorkflow ? matchingWorkflow._id : null;
+            
+            proposalCache.set(cacheKey, { proposalId: legacyId, workflowRef: workflowId });
+            resolvedProposalId = legacyId;
+            resolvedWorkflowRef = workflowId;
+          }
+        } else if (resolvedProposalId) {
+            resolvedWorkflowRef = resolvedProposalId;
+        }
+
+        // Normalize targetDivision and targetDepartment so they are consistently null instead of empty strings
+        if (!targetDivision || targetDivision.trim() === '') targetDivision = null;
+        if (!targetDepartment || targetDepartment.trim() === '') targetDepartment = null;
+
+        console.log(`Row ${index + 2} Tagging: Region=${targetRegion}, Dept=${targetDepartment}, Div=${targetDivision}, Proposal=${resolvedProposalId}, Workflow=${resolvedWorkflowRef}`);
 
         // 1. MASTER RECORD (CapitalOutlay): Find or Create
         // KEY: category._id is included so different titles (e.g. FURNITURE vs MACHINERY)
@@ -406,9 +508,11 @@ exports.uploadCapitalOutlay = async (req, res) => {
           sublineItem: finalSubline,
           region: targetRegion,
           department: targetDepartment,
+          division: targetDivision,
           fiscalYear: activeSettings.fiscalYear,
           budgetType: activeSettings.budgetType,
-          proposalId: proposalId || null
+          proposalId: resolvedProposalId || null,
+          workflowRef: resolvedWorkflowRef || null
         });
 
         if (!masterRecord) {
@@ -430,15 +534,15 @@ exports.uploadCapitalOutlay = async (req, res) => {
             processBy: req.user?.username || req.user?.name || req.user?.id || "System",
             processDate: new Date(),
             createdBy: req.user?.id || req.user?.userId || "system",
-            status: isSuperAdmin && !proposalId ? "System Upload" : "Draft",
-            isSystemGenerated: isSuperAdmin && !proposalId,
-            proposalId: proposalId || null,
-            workflowRef: proposalId || null
+            status: isSuperAdmin && !resolvedProposalId ? "System Upload" : "Draft",
+            isSystemGenerated: isSuperAdmin && !resolvedProposalId,
+            proposalId: resolvedProposalId || null,
+            workflowRef: resolvedWorkflowRef || null
           });
         } else {
           // Backfill workflowRef if it was missing
-          if (!masterRecord.workflowRef && proposalId) {
-            masterRecord.workflowRef = proposalId;
+          if (!masterRecord.workflowRef && resolvedWorkflowRef) {
+            masterRecord.workflowRef = resolvedWorkflowRef;
           }
         }
 

@@ -4,6 +4,7 @@ const NewProposalWorkflow = require("../models/NewProposalWorkflow");
 const ChartOfAccounts = require("../models/chartOfAccounts");
 const TitleMapping = require("../models/titleMapping");
 const Settings = require("../models/Settings");
+const { regionsMatch } = require("../utils/regionUtils");
 
 const normalizeHeader = (value = "") => value.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
 
@@ -75,14 +76,38 @@ const resolveMooeMapping = async ({ sublineItem, accountingTitle }) => {
   }
 
   if (exactSubline) {
-    const chartAccount = await ChartOfAccounts.findOne({
-      sublineItem: exactSubline,
-    }).sort({ accountingTitle: 1 }).lean();
+    // Before generating a custom UACS, see if the accounting title EXACTLY matches 
+    // ANY standard ChartOfAccounts entry (in case the user put the wrong subline in Excel)
+    if (exactAccountingTitle) {
+      const fallbackAccount = await ChartOfAccounts.findOne({
+        accountingTitle: exactAccountingTitle
+      }).lean();
+      
+      if (fallbackAccount?.uacsCode) {
+        return {
+          accountingTitle: fallbackAccount.accountingTitle,
+          uacsCode: fallbackAccount.uacsCode,
+        };
+      }
+    }
 
-    if (chartAccount?.uacsCode) {
+    // Attempt to find the parent category in ChartOfAccounts
+    const parentAccount = await ChartOfAccounts.findOne({
+      sublineItem: exactSubline,
+      accountingTitle: exactSubline
+    }).lean() || await ChartOfAccounts.findOne({
+      sublineItem: exactSubline
+    }).lean();
+
+    if (parentAccount?.uacsCode) {
+      // Create a dynamic sub-UACS by appending a sanitized version of the title
+      const baseUacs = parentAccount.uacsCode;
+      const suffix = accountingTitle 
+        ? accountingTitle.replace(/[^A-Za-z0-9]/g, '').substring(0, 10).toUpperCase() 
+        : 'CUSTOM';
       return {
-        accountingTitle: accountingTitle || chartAccount.accountingTitle,
-        uacsCode: chartAccount.uacsCode,
+        accountingTitle: accountingTitle || exactSubline.source,
+        uacsCode: `${baseUacs}-${suffix}`,
       };
     }
 
@@ -143,6 +168,14 @@ exports.uploadMooe = async (req, res) => {
       return res.status(400).json({ error: "Empty file", message: "The uploaded Excel file contains no data" });
     }
 
+    // Drop the old index if it exists to prevent duplicate key errors when uploading items with same UACS
+    try {
+      const mongoose = require("mongoose");
+      await mongoose.model("MooeProposal").collection.dropIndex("proposalId_1_uacsCode_1_fiscalYear_1_region_1_department_1_division_1");
+    } catch (idxErr) {
+      // Ignore if index doesn't exist
+    }
+
     const headers = Object.keys(sheetData[0]);
     const sublineCol = findColumn(headers, ["SUBLINE ITEM", "Subline Item", "CATEGORY"]);
     const accountingCol = findColumn(headers, ["ACCOUNTING TITLE", "Accounting Title"]);
@@ -182,20 +215,37 @@ exports.uploadMooe = async (req, res) => {
     if (proposalId) {
       const proposal = await NewProposalWorkflow.findById(proposalId).populate('region').lean();
       if (proposal) {
-        let regionName = '';
+        let regionName = 'CENTRAL OFFICE';
         if (proposal.region) {
           if (typeof proposal.region === 'string') {
-            regionName = proposal.region;
+            // If it's an ObjectId string, find it in allRegions
+            const matched = allRegions.find(r => String(r._id) === proposal.region);
+            if (matched) {
+              regionName = matched.Region || matched.regionName || matched.name || proposal.region;
+            } else {
+              regionName = proposal.region;
+            }
           } else if (typeof proposal.region === 'object') {
-            regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || '';
-          } else {
-            const RegionModel = require('../models/Region');
-            const regionDoc = await RegionModel.findById(proposal.region).lean();
-            if (regionDoc) {
-              regionName = regionDoc.Region || '';
+            // Might be populated object, or just an ObjectId object
+            const rId = proposal.region._id ? String(proposal.region._id) : String(proposal.region);
+            const matched = allRegions.find(r => String(r._id) === rId);
+            if (matched) {
+              regionName = matched.Region || matched.regionName || matched.name || 'CENTRAL OFFICE';
+            } else {
+              regionName = proposal.region.Region || proposal.region.regionName || proposal.region.name || 'CENTRAL OFFICE';
             }
           }
+        } else {
+          // Fallback to legacy Proposal if NewProposalWorkflow has no region
+          const ProposalModelFallback = require('../models/Proposal');
+          const legacy = await ProposalModelFallback.findOne({ workflowRef: proposalId }).select('region').lean();
+          if (legacy && legacy.region) {
+            regionName = legacy.region;
+          } else if (proposal.isCentralOffice) {
+            regionName = 'CENTRAL OFFICE';
+          }
         }
+        
         strictScope = {
           region: regionName,
           department: proposal.department,
@@ -222,9 +272,39 @@ exports.uploadMooe = async (req, res) => {
       const amount = income + subsidy;
 
       // Fill-down logic for grouped formatting
-      if (rowRegionInput) currentRegion = rowRegionInput; else rowRegionInput = currentRegion;
-      if (rowDeptInput) currentDept = rowDeptInput; else rowDeptInput = currentDept;
-      if (rc) currentRC = rc; else rc = currentRC;
+      let regionChanged = false;
+      let deptChanged = false;
+
+      if (rowRegionInput) {
+        if (currentRegion && rowRegionInput !== currentRegion) regionChanged = true;
+        currentRegion = rowRegionInput;
+      } else {
+        rowRegionInput = currentRegion;
+      }
+
+      if (rowDeptInput) {
+        if ((currentDept && rowDeptInput !== currentDept) || regionChanged) {
+          deptChanged = true;
+          currentRC = ''; 
+        }
+        currentDept = rowDeptInput;
+      } else {
+        if (regionChanged) {
+           currentDept = '';
+           currentRC = '';
+        }
+        rowDeptInput = currentDept;
+      }
+
+      if (rc) {
+        currentRC = rc;
+      } else {
+        if (deptChanged) {
+          currentRC = '';
+        }
+        rc = currentRC;
+      }
+
       if (sublineItem) currentSubline = sublineItem; else sublineItem = currentSubline;
       if (accountingTitle) currentAccountingTitle = accountingTitle; else accountingTitle = currentAccountingTitle;
 
@@ -266,7 +346,7 @@ exports.uploadMooe = async (req, res) => {
           // 1. If linked to a proposal, it MUST match the proposal's scope
           if (strictScope) {
             // Check Region
-            if (strictScope.region && targetRegion && targetRegion.toUpperCase() !== strictScope.region.toUpperCase()) {
+            if (strictScope.region && targetRegion && !regionsMatch(targetRegion, strictScope.region)) {
               throw new Error(`Unauthorized: This proposal is for ${strictScope.region}. Row has ${targetRegion}.`);
             }
             // Check Department

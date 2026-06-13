@@ -53,13 +53,13 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
         key.region === 1 &&
         key.fiscalYear === 1 &&
         key.sublineItem === 1 &&
-        !key.category
+        (!key.category || !key.department)
       );
     });
 
     try {
       await capitalOutlayCollection.createIndex(
-        { proposalId: 1, uacsCode: 1, region: 1, fiscalYear: 1, sublineItem: 1, category: 1 },
+        { proposalId: 1, uacsCode: 1, region: 1, department: 1, fiscalYear: 1, sublineItem: 1, category: 1 },
         {
           unique: true,
           background: true,
@@ -67,6 +67,7 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
             proposalId: { $exists: true },
             uacsCode: { $exists: true },
             region: { $exists: true },
+            department: { $exists: true },
             fiscalYear: { $exists: true },
             sublineItem: { $exists: true },
             category: { $exists: true },
