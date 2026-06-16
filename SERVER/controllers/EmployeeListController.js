@@ -727,16 +727,11 @@ exports.getEmployeeStats = async (req, res) => {
     }
 
     // Add processBy condition for additional access control
-    let accessConditions = [];
-    if (Object.keys(hierarchicalFilters).length > 0) {
+    // ONLY IF there are hierarchical filters restricting access
+    if (Object.keys(hierarchicalFilters).length > 0 && processBy) {
+      let accessConditions = [];
       accessConditions.push(hierarchicalFilters);
-    }
-    if (processBy) {
       accessConditions.push({ processBy: processBy });
-    }
-
-    // If we have access conditions, use OR logic
-    if (accessConditions.length > 0) {
       baseFilters = { $or: accessConditions };
     }
 
@@ -749,8 +744,10 @@ exports.getEmployeeStats = async (req, res) => {
     // DIRECT APPROACH: Use the raw MongoDB driver to ensure we're using the correct collection
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
+    
     // Normalize for case-insensitive exact matching and omit empty Division
-    const norm = (v) => (typeof v === 'string' && v.trim()) ? { $regex: new RegExp(`^${v.trim()}$`, 'i') } : v;
+    // Use string and $options for raw MongoDB driver compatibility
+    const norm = (v) => (typeof v === 'string' && v.trim()) ? { $regex: `^${v.trim()}$`, $options: 'i' } : v;
     const filtersCi = {};
 
     // Handle OR-based filters for processBy access control

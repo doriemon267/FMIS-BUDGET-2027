@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import api from '../config/api';
 import { toast } from 'react-toastify';
 import { useUser } from './UserContext';
@@ -147,7 +147,7 @@ export const RegionProvider = ({ children }) => {
   }, [currentUser]); // Re-run when currentUser changes (including when regions are added)
 
   // Function to switch between assigned regions (if user has multiple)
-  const changeActiveRegion = (region) => {
+  const changeActiveRegion = useCallback((region) => {
     if (!region) {
       // Prevent clearing region for normal users but allow FULL-scope, Budget Manager, or Super Admin
       const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
@@ -187,10 +187,10 @@ export const RegionProvider = ({ children }) => {
     localStorage.setItem('activeRegion', JSON.stringify(region));
     const regionName = region.name || region.regionName || region.Region;
     toast.success(`Switched to ${regionName} region`);
-  };
+  }, [currentUser, availableRegions]);
 
   // Clear the active region explicitly
-  const clearActiveRegion = () => {
+  const clearActiveRegion = useCallback(() => {
     const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
     const isBM = (currentUser?.Roles || []).some((r) => { 
       const n = String(r).toUpperCase().replace(/\s+/g, '_'); 
@@ -204,10 +204,10 @@ export const RegionProvider = ({ children }) => {
       return;
     }
     toast.warning('You cannot clear the region for your access level.');
-  };
+  }, [currentUser]);
 
   // Function to get a region by its name or ID
-  const getRegionByNameOrId = (identifier) => {
+  const getRegionByNameOrId = useCallback((identifier) => {
     return availableRegions.find(region => 
       region.name === identifier || 
       region.regionName === identifier || 
@@ -215,10 +215,10 @@ export const RegionProvider = ({ children }) => {
       region._id === identifier ||
       region.id === identifier
     );
-  };
+  }, [availableRegions]);
 
   // Function to check if user has access to a specific region
-  const hasRegionAccess = (regionId) => {
+  const hasRegionAccess = useCallback((regionId) => {
     if (!availableRegions || availableRegions.length === 0) return false; // No access if no assignments
     return availableRegions.some(region => 
       region._id === regionId || 
@@ -226,14 +226,14 @@ export const RegionProvider = ({ children }) => {
       region.name === regionId ||
       region.Region === regionId
     );
-  };
+  }, [availableRegions]);
 
   // Function to check if user has multiple regions (for UI display)
-  const hasMultipleRegions = () => {
+  const hasMultipleRegions = useCallback(() => {
     return availableRegions && availableRegions.length > 1;
-  };
+  }, [availableRegions]);
 
-  const value = {
+  const value = useMemo(() => ({
     activeRegion,
     availableRegions,
     loading,
@@ -248,7 +248,17 @@ export const RegionProvider = ({ children }) => {
     selectedRegion: activeRegion,
     setSelectedRegion: changeActiveRegion,
     regions: availableRegions
-  };
+  }), [
+    activeRegion,
+    availableRegions,
+    loading,
+    error,
+    changeActiveRegion,
+    clearActiveRegion,
+    getRegionByNameOrId,
+    hasRegionAccess,
+    hasMultipleRegions
+  ]);
 
   return (
     <RegionContext.Provider value={value}>

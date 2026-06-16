@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo } from "react";
 import { useUser } from "../../../context/UserContext";
 import { useRegion } from "../../../context/RegionContext";
 import {
@@ -15,7 +15,7 @@ export const useProposalPermissions = () => {
   const { activeRegion } = useRegion();
 
   // Check if user is BRD (Budget Revenue Division) level or SUPER ADMIN
-  const isBRDUser = currentUser?.Roles?.some((role) =>
+  const isBRDUser = useMemo(() => currentUser?.Roles?.some((role) =>
     [
       "BUDGET_REVIEWER",
       "BUDGET REVIEWER",
@@ -30,10 +30,10 @@ export const useProposalPermissions = () => {
       "SUPER_ADMIN",
       "SUPER ADMIN",
     ].includes(role)
-  );
+  ), [currentUser]);
 
   // Check if user is actual BRD staff (Planning Analyst, Officer, Manager)
-  const isBRDStaff = currentUser?.Roles?.some((role) =>
+  const isBRDStaff = useMemo(() => currentUser?.Roles?.some((role) =>
     [
       "BUDGET_PLANNING_ANALYST",
       "BUDGET PLANNING ANALYST",
@@ -44,43 +44,43 @@ export const useProposalPermissions = () => {
       "SUPER_ADMIN",
       "SUPER ADMIN",
     ].includes(role)
-  );
+  ), [currentUser]);
 
-  const isBudgetManager = (currentUser?.Roles || []).some((r) => {
+  const isBudgetManager = useMemo(() => (currentUser?.Roles || []).some((r) => {
     const norm = String(r || "").toUpperCase().replace(/[^A-Z]/g, "");
     return norm === "BUDGETMANAGER";
-  });
+  }), [currentUser]);
 
-  const isSuperAdmin = (currentUser?.Roles || []).some((role) =>
+  const isSuperAdmin = useMemo(() => (currentUser?.Roles || []).some((role) =>
     ["SUPER_ADMIN", "SUPER ADMIN"].includes(role)
-  );
+  ), [currentUser]);
 
-  const isBudgetPreparer = (currentUser?.Roles || []).some((role) =>
+  const isBudgetPreparer = useMemo(() => (currentUser?.Roles || []).some((role) =>
     ["BUDGET PREPARER", "BUDGET_PREPARER"].includes(String(role || "").toUpperCase())
-  );
+  ), [currentUser]);
 
-  const isBudgetApprover = (currentUser?.Roles || []).some((role) =>
+  const isBudgetApprover = useMemo(() => (currentUser?.Roles || []).some((role) =>
     ["BUDGET APPROVER", "BUDGET_APPROVER"].includes(String(role || "").toUpperCase())
-  );
+  ), [currentUser]);
 
-  const isBudgetReviewer = (currentUser?.Roles || []).some((role) =>
+  const isBudgetReviewer = useMemo(() => (currentUser?.Roles || []).some((role) =>
     ["BUDGET REVIEWER", "BUDGET_REVIEWER"].includes(String(role || "").toUpperCase())
-  );
+  ), [currentUser]);
 
-  const canViewVersionHistory = (currentUser?.Roles || []).some((r) =>
+  const canViewVersionHistory = useMemo(() => (currentUser?.Roles || []).some((r) =>
     /BUDGET_OFFICER|BUDGET OFFICER|BUDGET_MANAGER|BUDGET MANAGER|OVERALL_BUDGET_APPROVER|SUPER_ADMIN|SUPER ADMIN/i.test(
       String(r || "")
     )
-  );
+  ), [currentUser]);
 
-  const userWorkflowRole =
+  const userWorkflowRole = useMemo(() =>
     currentUser?.hierarchicalAssignment?.userRole ||
-    (currentUser?.Roles?.includes("BUDGET_PREPARER") ? "BUDGET PREPARER" : null);
+    (currentUser?.Roles?.includes("BUDGET_PREPARER") ? "BUDGET PREPARER" : null), [currentUser]);
 
-  const canCreate = userWorkflowRole === "BUDGET PREPARER";
+  const canCreate = useMemo(() => userWorkflowRole === "BUDGET PREPARER", [userWorkflowRole]);
 
   // Check if user can edit the current proposal based on their role and proposal status
-  const canUserEdit = (selectedProposal, lockStatus, hasLock) => {
+  const canUserEdit = useCallback((selectedProposal, lockStatus, hasLock) => {
     if (!selectedProposal) return false;
 
     // Concurrency Control: Prevent edits if locked by someone else
@@ -195,10 +195,10 @@ export const useProposalPermissions = () => {
     }
 
     return false;
-  };
+  }, [currentUser, isSuperAdmin, isBudgetPreparer, isBudgetReviewer, isBudgetApprover]);
 
   // Pure function variant for context menus where lock status is not required
-  const canUserEditProposal = (proposal) => {
+  const canUserEditProposal = useCallback((proposal) => {
     if (!proposal || !currentUser) return false;
 
     const userRoles = currentUser?.Roles || [];
@@ -239,10 +239,10 @@ export const useProposalPermissions = () => {
     const userHasRole = userRoles.some((role) => allowedRoles.includes(role));
 
     return userHasRole;
-  };
+  }, [currentUser]);
 
   // Get available actions based on user role and proposal status
-  const getAvailableActions = (proposal, analystsForMenu = [], headerBg = "#2d5016") => {
+  const getAvailableActions = useCallback((proposal, analystsForMenu = [], headerBg = "#2d5016") => {
     if (!proposal || !currentUser) return [];
 
     const userRoles = currentUser?.Roles || [];
@@ -566,7 +566,7 @@ export const useProposalPermissions = () => {
 
     // BUDGET PLANNING ANALYST
     if (
-      userRoles.some((role) =>
+      currentUser?.Roles?.some((role) =>
         ["BUDGET PLANNING ANALYST", "BUDGET_PLANNING_ANALYST"].includes(role)
       ) &&
       (currentStatus === "Forwarded to Budget/Planning Analyst" ||
@@ -593,7 +593,7 @@ export const useProposalPermissions = () => {
 
     // BUDGET OFFICER
     if (
-      userRoles.some((role) => ["BUDGET OFFICER", "BUDGET_OFFICER"].includes(role)) &&
+      currentUser?.Roles?.some((role) => ["BUDGET OFFICER", "BUDGET_OFFICER"].includes(role)) &&
       (currentStatus === "Forwarded to Budget Officer" ||
         currentStatus === "Returned to Budget Officer" ||
         currentStatus === "Returned" ||
@@ -618,10 +618,10 @@ export const useProposalPermissions = () => {
 
     // BUDGET MANAGER
     if (
-      (userRoles.includes("BUDGET MANAGER") ||
-        userRoles.includes("BUDGET_MANAGER") ||
-        userRoles.includes("OVERALL_BUDGET_APPROVER") ||
-        userRoles.includes("OVERALL BUDGET APPROVER")) &&
+      (currentUser?.Roles?.includes("BUDGET MANAGER") ||
+        currentUser?.Roles?.includes("BUDGET_MANAGER") ||
+        currentUser?.Roles?.includes("OVERALL_BUDGET_APPROVER") ||
+        currentUser?.Roles?.includes("OVERALL BUDGET APPROVER")) &&
       ([
         "Forwarded to Overall Budget Approver",
         "Forwarded to Manager",
@@ -649,7 +649,7 @@ export const useProposalPermissions = () => {
     }
 
     return actions;
-  };
+  }, [currentUser, isSuperAdmin, isBudgetPreparer, isBudgetReviewer, isBudgetApprover]);
 
   return {
     isBRDUser,

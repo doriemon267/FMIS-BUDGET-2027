@@ -666,8 +666,6 @@ const HierarchicalUserAssignmentPage = () => {
     }
 
     // Build payload with conditional fields based on assignment level
-    // For BPA always use BUDGET_AND_REVENUE_DIVISION (Department/Division optional)
-    const effectiveLevel = formData.userRole === 'BUDGET_PLANNING_ANALYST' ? 'BUDGET_AND_REVENUE_DIVISION' : normalizedLevel;
     const payload = {
       userId: formData.userId,
       userName: formData.userName,
@@ -675,8 +673,8 @@ const HierarchicalUserAssignmentPage = () => {
       // NEW: Include multiple roles from FMIS main system
       userRoles: formData.userRoles || [],
       userRole: formData.userRole,
-      assignmentLevel: effectiveLevel,
-      accessScope: effectiveLevel,
+      assignmentLevel: normalizedLevel,
+      accessScope: normalizedLevel,
       rolePermissions: formData.rolePermissions
     };
 
@@ -2073,7 +2071,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   } else {
                                     return 'Budget Preparer'; // Default budget preparer at division/responsibility center level
                                   }
-                                } else if (level === 'OFFICE' || level === 'DEPARTMENT' || level === 'DEPARTMENT_REGIONAL_LEVEL') {
+                                } else if (level === 'OFFICE' || level === 'DEPARTMENT' || level === 'DEPARTMENT_REGIONAL_LEVEL' || level === 'REGION') {
                                   if (perms.ApproveProposals) {
                                     return 'Budget Approver'; // New role for approvers at office level
                                   } else {
@@ -2241,7 +2239,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     inferredRole = assignment.userRole || (assignment.userRoles && assignment.userRoles[0]) || 'BUDGET_PLANNING_ANALYST';
                                   } else if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
                                     inferredRole = assignment.userRole || 'BUDGET PLANNING ANALYST';
-                                  } else if (level === 'OFFICE' || level === 'DEPARTMENT') {
+                                  } else if (level === 'OFFICE' || level === 'DEPARTMENT' || level === 'REGION') {
                                     if (perms.ApproveProposals) {
                                       inferredRole = 'BUDGET OFFICER';
                                     } else {

@@ -523,6 +523,10 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       regionId: assignmentData.regions?.[0] || null,
       departmentId: assignmentData.departments?.[0] || null,
       divisionName: assignmentData.divisions?.[0] || null,
+      regions: assignmentData.regions || [],
+      departments: assignmentData.departments || [],
+      divisions: assignmentData.divisions || [],
+      hierarchicalStructure: assignmentData.hierarchicalStructure,
       // NEW: Budget Planning Analyst region configuration
       isNIAWide: req.body.isNIAWide === true,
       assignedRegions: (userRole === 'BUDGET_PLANNING_ANALYST' && Array.isArray(req.body.assignedRegions)) 

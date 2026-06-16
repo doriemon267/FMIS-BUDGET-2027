@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef } from "react";
+import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { authApi, setDevUser, setAuthToken } from "../config/api";
 import Loading from "../global/components/Loading";
@@ -31,7 +31,7 @@ const UserProvider = ({ children }) => {
   const nav = useNavigate();
 
   // --- HELPER: Enrichment Logic ---
-  const enrichUserWithRoles = async (user) => {
+  const enrichUserWithRoles = useCallback(async (user) => {
     try {
       if (!user) return null;
 
@@ -121,10 +121,10 @@ const UserProvider = ({ children }) => {
       console.warn("Error enriching user roles:", error);
       return user;
     }
-  };
+  }, []);
 
   // --- REDIRECT LOGIC HELPER ---
-  const redirectToLogin = () => {
+  const redirectToLogin = useCallback(() => {
     // Return URL: after login, come back to budget (dashboard)
     const clientOrigin = IS_PRODUCTION
       ? (env("BUDGET_CLIENT_URL_PROD") || window.location.origin)
@@ -134,10 +134,10 @@ const UserProvider = ({ children }) => {
       ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(returnUrl)}`
       : `${env("AUTH_CLIENT_URL_DEV") || env("CLIENT_URL_DEV")}/login?redirect=${encodeURIComponent(returnUrl)}`;
     window.location.href = loginUrl;
-  };
+  }, []);
 
   // --- LOGIN HANDLER ---
-  const handleSetUserInitialization = async () => {
+  const handleSetUserInitialization = useCallback(async () => {
     setUnauthorizedSuperAdmin(false);
     const res = await api.get("/api/get-user");
     // Token is delivered via X-Auth-Token header (not body) to avoid exposure in Network preview
@@ -157,9 +157,9 @@ const UserProvider = ({ children }) => {
         throw enrichErr;
       }
     }
-  };
+  }, [enrichUserWithRoles]);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     // 1. Clear API sessions
     try {
       await api.get("/api/logout");
@@ -199,7 +199,7 @@ const UserProvider = ({ children }) => {
 
       window.location.href = logoffUrl;
     }
-  };
+  }, [currentUser]);
 
   // Allow api interceptor to send Super Admin unauthorized -> show AccessGuard page
   useEffect(() => {
@@ -303,10 +303,10 @@ const UserProvider = ({ children }) => {
   const normalizedRoles = (currentUser?.Roles || []).map((role) => String(role || '').toUpperCase().replace(/\s+/g, '_'));
   const isSuperAdmin = normalizedRoles.includes('SUPER_ADMIN') || normalizedRoles.includes('SUPERADMIN');
 
-  const hasWorkflowRole = (role) => {
+  const hasWorkflowRole = useCallback((role) => {
     if (isSuperAdmin) return true;
     return workflowRoles.includes(role);
-  };
+  }, [isSuperAdmin, workflowRoles]);
 
   // Close warning modal when hook resets due to activity
   closeWarningRef.current = () => setShowInactivityWarning(false);
@@ -328,7 +328,7 @@ const UserProvider = ({ children }) => {
     setShowInactivityWarning(false);
   };
 
-  const value = {
+  const value = useMemo(() => ({
     currentUser,
     unauthorizedSuperAdmin,
     setCurrentUser: handleSetUserInitialization,
@@ -337,7 +337,15 @@ const UserProvider = ({ children }) => {
     isLoading,
     workflowRoles,
     hasWorkflowRole,
-  };
+  }), [
+    currentUser,
+    unauthorizedSuperAdmin,
+    handleSetUserInitialization,
+    handleLogout,
+    isLoading,
+    workflowRoles,
+    hasWorkflowRole
+  ]);
 
   if (isLoading) return <Loading />;
 

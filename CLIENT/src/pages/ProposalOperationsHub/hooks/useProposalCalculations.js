@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 // Sum Other Compensation from personnel row (for PS tab display)
 export const getOtherCompensation = (p) =>
@@ -157,7 +157,7 @@ export const useProposalCalculations = () => {
     };
   }, []);
 
-  return {
+  return useMemo(() => ({
     calculateProjectedSubsidy,
     calculateProjectedIncome,
     getAuthoritativeProjectedIncome,
@@ -167,5 +167,14 @@ export const useProposalCalculations = () => {
     getDisplayAmounts,
     getOtherCompensation,
     getGovernmentShare,
-  };
+  }), [
+    calculateProjectedSubsidy,
+    calculateProjectedIncome,
+    getAuthoritativeProjectedIncome,
+    getAuthoritativeProjectedSubsidy,
+    getAuthoritativeProposedBudget,
+    calculateTotalBudget,
+    getDisplayAmounts
+  ]);
 };
+

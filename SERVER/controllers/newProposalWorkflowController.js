@@ -230,6 +230,54 @@ const getUserRole = (req) => {
   return null;
 };
 
+// Get all user's budget roles in priority order
+const getUserRolesList = (req) => {
+  const userRoles = Array.isArray(req.user?.Roles) ? req.user.Roles : [];
+  const roleMapping = {
+    'BUDGET_PREPARER': 'BUDGET PREPARER',
+    'BUDGET PREPARER': 'BUDGET PREPARER',
+    'BUDGET_REVIEWER': 'BUDGET REVIEWER',
+    'BUDGET REVIEWER': 'BUDGET REVIEWER',
+    'BUDGET_APPROVER': 'BUDGET APPROVER',
+    'BUDGET APPROVER': 'BUDGET APPROVER',
+    'BUDGET_PLANNING_ANALYST': 'BUDGET PLANNING ANALYST',
+    'BUDGET PLANNING ANALYST': 'BUDGET PLANNING ANALYST',
+    'BUDGET_OFFICER': 'BUDGET OFFICER',
+    'BUDGET OFFICER': 'BUDGET OFFICER',
+    'BUDGET_MANAGER': 'BUDGET MANAGER',
+    'BUDGET MANAGER': 'BUDGET MANAGER',
+    'OVERALL_BUDGET_APPROVER': 'BUDGET MANAGER',
+    'OVERALL BUDGET APPROVER': 'BUDGET MANAGER',
+    'OVERALLBUDGETAPPROVER': 'BUDGET MANAGER',
+    'SUPER_ADMIN': 'SUPER ADMIN',
+    'SUPER ADMIN': 'SUPER ADMIN'
+  };
+
+  const normalizedRoles = userRoles
+    .map((role) => String(role || '').trim())
+    .filter(Boolean)
+    .map((role) => role.replace(/\s+/g, '_').toUpperCase());
+
+  const rolePriority = [
+    'SUPER_ADMIN',
+    'OVERALL_BUDGET_APPROVER',
+    'BUDGET_MANAGER',
+    'BUDGET_OFFICER',
+    'BUDGET_PLANNING_ANALYST',
+    'BUDGET_APPROVER',
+    'BUDGET_REVIEWER',
+    'BUDGET_PREPARER',
+  ];
+
+  const matchedRoles = [];
+  for (const normalizedRole of rolePriority) {
+    if (normalizedRoles.includes(normalizedRole) && roleMapping[normalizedRole]) {
+      matchedRoles.push(roleMapping[normalizedRole]);
+    }
+  }
+  return matchedRoles;
+};
+
 // Check if user can perform action on proposal
 const canPerformAction = (userRole, proposal, action) => {
   if (userRole === 'SUPER ADMIN') return true;
@@ -3214,12 +3262,13 @@ exports.performAction = async (req, res) => {
     let { action } = req.body;
     const { comment } = req.body;
     const eSignature = req.body?.eSignature || null;
-    const userRole = getUserRole(req);
+    let userRole = getUserRole(req); // Fallback to primary role if no specific role can perform
+    const allUserRoles = getUserRolesList(req);
     const userId = req.user.id;
     const userIdString = String(userId);
     const userName = await resolveUserDisplayName(req, userIdString);
 
-    console.log('[PERFORM_ACTION] User:', { userRole, userId, userName });
+    console.log('[PERFORM_ACTION] User:', { allUserRoles, primaryRole: userRole, userId, userName });
     console.log('[PERFORM_ACTION] Request:', { proposalId: id, action, comment });
 
     let userAssignment = null;
@@ -3236,7 +3285,6 @@ exports.performAction = async (req, res) => {
     console.log('[PERFORM_ACTION] Proposal ID:', id);
     console.log('[PERFORM_ACTION] Proposal Title:', proposal.title);
     console.log('[PERFORM_ACTION] Proposal Status:', proposal.status);
-    console.log('[PERFORM_ACTION] User Role:', userRole);
     console.log('[PERFORM_ACTION] Action Requested:', action);
     console.log('[PERFORM_ACTION] =========================================');
 
@@ -3259,9 +3307,24 @@ exports.performAction = async (req, res) => {
     const workflowStatus = statusMapping[proposal.status] || proposal.status;
     console.log('[PERFORM_ACTION] Mapped Workflow Status:', workflowStatus);
 
-    // Check if user can perform this action
-    const canPerform = canPerformAction(userRole, proposal, action);
-    console.log('[PERFORM_ACTION] canPerformAction result:', canPerform);
+    // Check if user can perform this action using ANY of their assigned roles
+    let canPerform = false;
+    let effectiveRole = null;
+    
+    for (const role of allUserRoles) {
+      if (canPerformAction(role, proposal, action)) {
+        canPerform = true;
+        effectiveRole = role;
+        break;
+      }
+    }
+    
+    // Use the effective role that allowed the action, or fallback to primary if none
+    if (effectiveRole) {
+      userRole = effectiveRole;
+    }
+
+    console.log('[PERFORM_ACTION] canPerformAction result:', canPerform, 'Effective Role:', userRole);
     
     if (!canPerform) {
       console.log('[PERFORM_ACTION] 403 - User cannot perform action. User role:', userRole, 'Action:', action, 'Status:', proposal.status);

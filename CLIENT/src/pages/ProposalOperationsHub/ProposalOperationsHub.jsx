@@ -193,9 +193,10 @@ const ProposalOperationsHub = () => {
   const [analystsForMenuProposal, setAnalystsForMenuProposal] = useState([]);
 
   // Proposal Lock Management
+  const lockOptions = useMemo(() => ({ autoRenew: true, showNotifications: true }), []);
   const { lockStatus, acquireLock, releaseLock, hasLock } = useProposalLock(
     selectedProposal?._id,
-    { autoRenew: true, showNotifications: true }
+    lockOptions
   );
 
   // SUPER ADMIN defaults to show all regions
@@ -383,24 +384,6 @@ const ProposalOperationsHub = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const debouncedSearch = useDebouncedCallback((query) => {
-    if (query !== searchQuery) {
-      fetchProposals({ forceAllRegions: showAllRegions });
-    }
-  }, 300);
-
-  useKeyboardShortcuts({
-    "ctrl+k": (e) => {
-      e.preventDefault();
-      const searchInput = document.querySelector('input[placeholder*="Search"]');
-      if (searchInput) searchInput.focus();
-    },
-    "ctrl+r": (e) => {
-      e.preventDefault();
-      fetchProposals({ forceAllRegions: showAllRegions });
-    },
-  });
-
   const resolvedRegion =
     activeRegion && typeof activeRegion === "object"
       ? activeRegion._id ||
@@ -441,6 +424,26 @@ const ProposalOperationsHub = () => {
     },
     [refetchProposals]
   );
+
+  const debouncedSearch = useDebouncedCallback((query) => {
+    if (query !== searchQuery) {
+      fetchProposals({ forceAllRegions: showAllRegions });
+    }
+  }, 300);
+
+  const keyboardShortcuts = useMemo(() => ({
+    "ctrl+k": (e) => {
+      e.preventDefault();
+      const searchInput = document.querySelector('input[placeholder*="Search"]');
+      if (searchInput) searchInput.focus();
+    },
+    "ctrl+r": (e) => {
+      e.preventDefault();
+      fetchProposals({ forceAllRegions: showAllRegions });
+    },
+  }), [fetchProposals, showAllRegions]);
+
+  useKeyboardShortcuts(keyboardShortcuts);
 
   // Sync notifications and cache
   useEffect(() => {

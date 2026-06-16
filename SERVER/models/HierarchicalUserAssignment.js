@@ -225,7 +225,7 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
       'DIVISION': 'DIVISION_LEVEL',
       'OFFICE': 'DEPARTMENT_REGIONAL_LEVEL',
       'DEPARTMENT': 'DEPARTMENT_REGIONAL_LEVEL',
-      'REGION': 'BUDGET_AND_REVENUE_DIVISION'
+      'REGION': 'DEPARTMENT_REGIONAL_LEVEL'
     };
     if (doc && doc.assignmentLevel && mapping[doc.assignmentLevel]) {
       const normalized = mapping[doc.assignmentLevel];

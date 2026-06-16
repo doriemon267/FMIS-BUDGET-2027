@@ -107,13 +107,14 @@ const CustomDrawer = () => {
   const [canAccessCreateProposal, setCanAccessCreateProposal] = useState(false);
 
   const roles = (currentUser?.Roles || []).map(String);
-  const workflowRoles = (currentUser?.workflowRoles || []).map(String);
+  const workflowRoles = (currentUser?.workflowRoles || currentUser?.hierarchicalAccess?.workflowRoles || []).map(String);
 
   const isOverallApprover = roles.some(r => String(r) === JOB_ROLES.BUDGET_MANAGER);
   const isBudgetAdmin = roles.some(r => String(r) === JOB_ROLES.BUDGET_ADMIN);
   const isBudgetOfficer = roles.some(r => String(r) === JOB_ROLES.BUDGET_OFFICER);
   const isApprover = checkHasApproverRole(roles, workflowRoles);
   const isReviewer = roles.some(r => String(r) === JOB_ROLES.BUDGET_REVIEWER);
+  const isPreparer = roles.some(r => String(r) === JOB_ROLES.BUDGET_PREPARER);
   const isBudgetPlanningAnalyst = roles.some(r => String(r) === JOB_ROLES.BUDGET_PLANNING_ANALYST);
   const isBRDLevel = isBRDLevelUser(currentUser);
 
@@ -174,7 +175,7 @@ const CustomDrawer = () => {
     
     const required = perm.requiredWorkflowRoles.map(r => r.toUpperCase());
     const userRoles = (currentUser?.Roles || []).map(r => String(r).toUpperCase().trim());
-    const userWfRoles = (currentUser?.workflowRoles || []).map(r => String(r).toUpperCase().trim());
+    const userWfRoles = (currentUser?.workflowRoles || currentUser?.hierarchicalAccess?.workflowRoles || []).map(r => String(r).toUpperCase().trim());
     
     const isSuper = userRoles.some(r => r === 'SUPER_ADMIN' || r === 'SUPERADMIN');
     if (isSuper) return true; 
@@ -213,13 +214,14 @@ const CustomDrawer = () => {
           return;
         }
         const isCreateProposalCandidate =
-          (hasPermission(currentUser, 'CreateProposals') ||
+          isPreparer ||
+          ((hasPermission(currentUser, 'CreateProposals') ||
             hasPermission(currentUser, 'EditOwnProposals')) &&
           !isOverallApprover &&
           !isBudgetOfficer &&
           !isApprover &&
           !isReviewer &&
-          !isBudgetPlanningAnalyst;
+          !isBudgetPlanningAnalyst);
 
         if (!isCreateProposalCandidate) {
           if (isMounted) setCanAccessCreateProposal(false);
@@ -241,6 +243,7 @@ const CustomDrawer = () => {
     isBudgetOfficer,
     isApprover,
     isReviewer,
+    isPreparer,
     isBudgetPlanningAnalyst,
   ]);
 
