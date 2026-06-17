@@ -757,5 +757,65 @@ exports.deleteRoute = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/route-permissions/save-defaults
+ * Saves the current requiredWorkflowRoles as customDefaultRoles for all routes.
+ */
+exports.saveDefaults = async (req, res) => {
+  try {
+    const routes = await RoutePermission.find();
+    let updatedCount = 0;
+    
+    for (const route of routes) {
+      route.customDefaultRoles = [...route.requiredWorkflowRoles];
+      await route.save();
+      updatedCount++;
+    }
+
+    routePermissionCache.invalidate();
+    logActivity(req, "SAVE_ROUTE_DEFAULTS", { updatedCount });
+    return res.json({ message: `Successfully saved current configuration as defaults for ${updatedCount} routes.` });
+  } catch (e) {
+    console.error("[routePermissionController.saveDefaults]", e);
+    return res.status(500).json({ error: "Something went wrong saving defaults." });
+  }
+};
+
+/**
+ * POST /api/route-permissions/restore-defaults
+ * Restores requiredWorkflowRoles from customDefaultRoles for all routes.
+ * If customDefaultRoles is null, falls back to the hardcoded system defaults.
+ */
+exports.restoreDefaults = async (req, res) => {
+  try {
+    const routes = await RoutePermission.find();
+    let updatedCount = 0;
+
+    for (const route of routes) {
+      if (route.customDefaultRoles !== null) {
+        // Restore from custom default
+        route.requiredWorkflowRoles = [...route.customDefaultRoles];
+        await route.save();
+        updatedCount++;
+      } else {
+        // Fallback to system default if no custom default was ever saved
+        const defaultEntry = DEFAULT_ROUTE_PERMISSIONS.find((d) => d.path === route.path);
+        if (defaultEntry) {
+          route.requiredWorkflowRoles = [...defaultEntry.requiredWorkflowRoles];
+          await route.save();
+          updatedCount++;
+        }
+      }
+    }
+
+    routePermissionCache.invalidate();
+    logActivity(req, "RESTORE_ROUTE_DEFAULTS", { updatedCount });
+    return res.json({ message: `Successfully restored defaults for ${updatedCount} routes.` });
+  } catch (e) {
+    console.error("[routePermissionController.restoreDefaults]", e);
+    return res.status(500).json({ error: "Something went wrong restoring defaults." });
+  }
+};
+
 // Export defaults so the frontend seed endpoint can be called
 exports.DEFAULT_ROUTE_PERMISSIONS = DEFAULT_ROUTE_PERMISSIONS;

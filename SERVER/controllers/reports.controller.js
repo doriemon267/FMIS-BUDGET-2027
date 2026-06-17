@@ -8,6 +8,7 @@ const Region = require("../models/Region");
 const IncomeCategory = require("../models/IncomeCategory");
 const IncomeSubCategory = require("../models/IncomeSubcategory");
 const IAsOMCost = require("../models/IAsOMCost");
+const DiscountSettings = require("../models/DiscountSettings");
 const getConsolidatedSummary = async (req, res) => {
   try {
     let fiscalYear;
@@ -419,8 +420,154 @@ const getConsolidatedCorporateIncome = async (req, res) => {
       // Sort subcategories by name
       categoryItem.subcategories.sort((a, b) => a.name.localeCompare(b.name));
     });
-    // Sort categories by name
-    result.hierarchicalData.sort((a, b) => a.name.localeCompare(b.name));
+    // NOTE: Final category order is applied AFTER discount rows are injected below.
+
+    // --- ISF Discount Logic ---
+    // Mirrors the frontend IncomeTable.jsx behaviour:
+    // The discount base is the "Current Account" SUBCATEGORY of ISF (not the full ISF total).
+    // Net ISF = isfTotal - discountAmount   (IncomeTable.jsx line 685)
+    try {
+      const isfCategoryKey = result.hierarchicalData.find(cat =>
+        cat.name && cat.name.toLowerCase().includes('irrigation service fees') &&
+        !cat.name.toLowerCase().includes('net')
+      );
+
+      if (isfCategoryKey) {
+        const discountQuery = { fiscalYear, budgetType };
+        if (regionFilter) discountQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
+
+        const discountSettingsDoc = await DiscountSettings.findOne(discountQuery);
+        const applyDiscount = discountSettingsDoc ? discountSettingsDoc.applyDiscount : true;
+        const discountType = discountSettingsDoc ? discountSettingsDoc.discountType : 'percentage';
+        const discountValue = discountSettingsDoc ? discountSettingsDoc.discountValue : 10;
+
+        if (applyDiscount) {
+          const isfCatId = isfCategoryKey.id;
+          const isfGrandTotal = result.categoryTotals[isfCatId] || 0;
+
+          // ── Compute "Current Account" subtotal PER REGION ───────────────────
+          // This matches IncomeTable.jsx which uses currentAccountTotal (subcategory === "Current Account")
+          // as the base for the discount, NOT the full ISF total.
+          const currentAccountByRegion = {};
+          regions.forEach(r => { currentAccountByRegion[r.Region] = 0; });
+          let currentAccountGrandTotal = 0;
+
+          incomeEntries.forEach(entry => {
+            const entryCategory = entry.incomecategory;
+            if (!entryCategory) return;
+            const catName = typeof entryCategory === 'object'
+              ? (entryCategory.incomeCategoryName || entryCategory.name || '')
+              : '';
+            const isIsf = catName.toLowerCase().includes('irrigation service fees') &&
+                          !catName.toLowerCase().includes('net');
+            if (!isIsf) return;
+            if (entry.subcategory !== 'Current Account') return;
+
+            const regionName = (entry.region || '').trim();
+            const amount = Number(entry.amount) || 0;
+            if (currentAccountByRegion[regionName] !== undefined) {
+              currentAccountByRegion[regionName] += amount;
+            }
+            currentAccountGrandTotal += amount;
+          });
+          // ────────────────────────────────────────────────────────────────────
+
+          const discountRegionAmounts = {};
+          const netIsfRegionAmounts = {};
+          let discountGrandTotal = 0;
+
+          regions.forEach(region => {
+            const regionName = region.Region;
+            const isfRegionAmount = result.regionData[regionName]?.categoryAmounts[isfCatId] || 0;
+            const currentAcct = currentAccountByRegion[regionName] || 0;
+            const discountAmount = discountType === 'percentage'
+              ? currentAcct * (discountValue / 100)
+              : Math.min(discountValue, currentAcct);
+            discountRegionAmounts[regionName] = discountAmount;
+            // Net ISF = full ISF region total - discount (same as IncomeTable.jsx line 685)
+            netIsfRegionAmounts[regionName] = isfRegionAmount - discountAmount;
+            discountGrandTotal += discountAmount;
+          });
+
+          const netIsfGrandTotal = isfGrandTotal - discountGrandTotal;
+
+          // Label matches IncomeTable.jsx: "Less: X% Discount on Current Account"
+          const discountLabel = discountType === 'percentage'
+            ? `Less: ${discountValue}% Discount on Current Account`
+            : `Less: Discount on Current Account (Fixed)`;
+
+          // Synthetic discount category
+          const discountCatId = '__discount_isf__';
+          result.categoryTotals[discountCatId] = discountGrandTotal;
+          result.categorySubcategoryMap[discountCatId] = [];
+          regions.forEach(region => {
+            result.regionData[region.Region].categoryAmounts[discountCatId] = discountRegionAmounts[region.Region];
+          });
+          result.hierarchicalData.push({
+            id: discountCatId,
+            name: discountLabel,
+            type: 'category',
+            isDiscount: true,
+            subcategories: [],
+            order: 9998
+          });
+
+          // Synthetic Net ISF category
+          const netIsfCatId = '__net_isf__';
+          result.categoryTotals[netIsfCatId] = netIsfGrandTotal;
+          result.categorySubcategoryMap[netIsfCatId] = [];
+          regions.forEach(region => {
+            result.regionData[region.Region].categoryAmounts[netIsfCatId] = netIsfRegionAmounts[region.Region];
+          });
+          result.hierarchicalData.push({
+            id: netIsfCatId,
+            name: 'Net Irrigation Service Fees',
+            type: 'category',
+            isNetIsf: true,
+            subcategories: [],
+            order: 9999
+          });
+
+          // Adjust grand total: ISF is already counted in full; subtract the discount
+          result.grandTotal = result.grandTotal - discountGrandTotal;
+
+          result.isfDiscount = { applyDiscount, discountType, discountValue, discountGrandTotal, netIsfGrandTotal, currentAccountGrandTotal };
+        }
+      }
+    } catch (discountErr) {
+      console.warn('ISF discount computation failed (non-fatal):', discountErr.message);
+    }
+    // --- End ISF Discount Logic ---
+
+    // --- Final Category Ordering (mirrors IncomeTable.jsx categoryOrder) ---
+    // Explicit priority order; unlisted categories are sorted alphabetically and appended.
+    {
+      const CATEGORY_ORDER = [
+        'irrigation service fees',
+        'less:',                        // prefix match for discount row
+        'net irrigation service fees',
+        'rent income',
+        'water service fee',
+        'miscellaneous income',
+      ];
+
+      const getPriority = (name) => {
+        const lower = (name || '').toLowerCase();
+        for (let i = 0; i < CATEGORY_ORDER.length; i++) {
+          if (lower.startsWith(CATEGORY_ORDER[i]) || lower === CATEGORY_ORDER[i]) return i;
+        }
+        return CATEGORY_ORDER.length; // unlisted → goes to end
+      };
+
+      result.hierarchicalData.sort((a, b) => {
+        const pa = getPriority(a.name);
+        const pb = getPriority(b.name);
+        if (pa !== pb) return pa - pb;
+        return (a.name || '').localeCompare(b.name || ''); // alphabetical within same priority
+      });
+    }
+    // --- End Final Category Ordering ---
+
     // If there's no data, still return the structure but with a message
     if (incomeEntries.length === 0) {
       result.message = "No income data found for the selected fiscal year and budget type.";

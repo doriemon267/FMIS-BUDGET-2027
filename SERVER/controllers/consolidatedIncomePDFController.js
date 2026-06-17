@@ -24,6 +24,7 @@ const Region = require('../models/Region');
 const Income = require('../models/Income');
 const IncomeCategory = require('../models/IncomeCategory');
 const IncomeSubCategory = require('../models/IncomeSubcategory');
+const DiscountSettings = require('../models/DiscountSettings');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
@@ -896,7 +897,128 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       });
       catItem.subcategories.sort((a, b) => a.name.localeCompare(b.name));
     });
-    reportData.hierarchicalData.sort((a, b) => a.name.localeCompare(b.name));
+    // NOTE: Final category order (matching IncomeTable.jsx) is applied AFTER discount rows are injected below.
+
+    // Discount base = "Current Account" SUBCATEGORY of ISF (not the full ISF total).
+    // Net ISF = isfTotal - discountAmount.
+    try {
+      const isfCategoryKey = reportData.hierarchicalData.find(cat =>
+        cat.name && cat.name.toLowerCase().includes('irrigation service fees') &&
+        !cat.name.toLowerCase().includes('net')
+      );
+      if (isfCategoryKey) {
+        const discountQuery = { fiscalYear, budgetType: queryBudgetType };
+        if (regionFilter && !Array.isArray(regionFilter)) {
+          discountQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
+        }
+        const discountSettingsDoc = await DiscountSettings.findOne(discountQuery);
+        const applyDiscount = discountSettingsDoc ? discountSettingsDoc.applyDiscount : true;
+        const discountType   = discountSettingsDoc ? discountSettingsDoc.discountType   : 'percentage';
+        const discountValue  = discountSettingsDoc ? discountSettingsDoc.discountValue  : 10;
+
+        if (applyDiscount) {
+          const isfCatId = isfCategoryKey.id;
+          const isfGrandTotal = reportData.categoryTotals[isfCatId] || 0;
+
+          // Compute "Current Account" subtotal per region
+          const currentAccountByRegion = {};
+          regions.forEach(r => { currentAccountByRegion[r.Region] = 0; });
+
+          incomeEntries.forEach(entry => {
+            const entryCategory = entry.incomecategory;
+            if (!entryCategory) return;
+            const catName = typeof entryCategory === 'object'
+              ? (entryCategory.incomeCategoryName || entryCategory.name || '')
+              : '';
+            const isIsf = catName.toLowerCase().includes('irrigation service fees') &&
+                          !catName.toLowerCase().includes('net');
+            if (!isIsf) return;
+            if (entry.subcategory !== 'Current Account') return;
+            const rName = Object.keys(currentAccountByRegion).find(
+              k => k.toLowerCase() === (entry.region || '').trim().toLowerCase()
+            );
+            if (rName) currentAccountByRegion[rName] += Number(entry.amount) || 0;
+          });
+
+          const discountRegionAmounts = {};
+          const netIsfRegionAmounts = {};
+          let discountGrandTotal = 0;
+
+          regions.forEach(region => {
+            const regionName = region.Region;
+            const isfRegionAmount = reportData.regionData[regionName]?.categoryAmounts[isfCatId] || 0;
+            const currentAcct = currentAccountByRegion[regionName] || 0;
+            const discountAmount = discountType === 'percentage'
+              ? currentAcct * (discountValue / 100)
+              : Math.min(discountValue, currentAcct);
+            discountRegionAmounts[regionName] = discountAmount;
+            netIsfRegionAmounts[regionName] = isfRegionAmount - discountAmount;
+            discountGrandTotal += discountAmount;
+          });
+
+          const netIsfGrandTotal = isfGrandTotal - discountGrandTotal;
+          const discountLabel = discountType === 'percentage'
+            ? `Less: ${discountValue}% Discount on Current Account`
+            : `Less: Discount on Current Account (Fixed)`;
+
+          const discountCatId = '__discount_isf__';
+          reportData.categoryTotals[discountCatId] = discountGrandTotal;
+          reportData.categorySubcategoryMap[discountCatId] = [];
+          regions.forEach(region => {
+            if (!reportData.regionData[region.Region]) return;
+            reportData.regionData[region.Region].categoryAmounts[discountCatId] = discountRegionAmounts[region.Region];
+          });
+          reportData.hierarchicalData.push({
+            id: discountCatId, name: discountLabel, type: 'category',
+            isDiscount: true, subcategories: [], order: 9998
+          });
+
+          const netIsfCatId = '__net_isf__';
+          reportData.categoryTotals[netIsfCatId] = netIsfGrandTotal;
+          reportData.categorySubcategoryMap[netIsfCatId] = [];
+          regions.forEach(region => {
+            if (!reportData.regionData[region.Region]) return;
+            reportData.regionData[region.Region].categoryAmounts[netIsfCatId] = netIsfRegionAmounts[region.Region];
+          });
+          reportData.hierarchicalData.push({
+            id: netIsfCatId, name: 'Net Irrigation Service Fees', type: 'category',
+            isNetIsf: true, subcategories: [], order: 9999
+          });
+
+          reportData.grandTotal -= discountGrandTotal;
+          reportData.isfDiscount = { applyDiscount, discountType, discountValue, discountGrandTotal, netIsfGrandTotal };
+        }
+      }
+    } catch (discountErr) {
+      console.warn('[PDF] ISF discount computation failed (non-fatal):', discountErr.message);
+    }
+    // --- End ISF Discount Logic ---
+
+    // --- Final Category Ordering (mirrors IncomeTable.jsx categoryOrder) ---
+    {
+      const CATEGORY_ORDER = [
+        'irrigation service fees',
+        'less:',
+        'net irrigation service fees',
+        'rent income',
+        'water service fee',
+        'miscellaneous income',
+      ];
+      const getPriority = (name) => {
+        const lower = (name || '').toLowerCase();
+        for (let i = 0; i < CATEGORY_ORDER.length; i++) {
+          if (lower.startsWith(CATEGORY_ORDER[i]) || lower === CATEGORY_ORDER[i]) return i;
+        }
+        return CATEGORY_ORDER.length;
+      };
+      reportData.hierarchicalData.sort((a, b) => {
+        const pa = getPriority(a.name);
+        const pb = getPriority(b.name);
+        if (pa !== pb) return pa - pb;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+    }
+    // --- End Final Category Ordering ---
     
     const filename = `Consolidated_Income_${fiscalYear}_${queryBudgetType}.pdf`;
     const tmpFilePath = path.join(os.tmpdir(), `cons_income_${Date.now()}.pdf`);

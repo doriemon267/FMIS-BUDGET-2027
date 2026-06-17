@@ -53,21 +53,39 @@ if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
   });
 }
 
+let isShuttingDown = false;
+
 // Global error handlers to prevent crashes from unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exitCode = 1;
+  const fs = require('fs');
+  fs.appendFileSync('crash.log', `[${new Date().toISOString()}] Unhandled Rejection: ${reason?.message || reason}\n${reason?.stack || ''}\n`);
+  
+  console.error('❌ Unhandled Rejection thrown:');
+  console.error('   Promise:', promise);
+  console.error('   Message:', reason?.message || '(no message)');
+  console.error('   Stack:', reason?.stack || '(no stack trace)');
+  try {
+    if (reason && typeof reason === 'object') {
+      console.error('   Error details:', JSON.stringify(reason, null, 2));
+    }
+  } catch (e) {}
+  gracefulShutdown('unhandledRejection', reason, 1);
 });
 
 process.on('uncaughtException', (err) => {
+  const fs = require('fs');
+  fs.appendFileSync('crash.log', `[${new Date().toISOString()}] Uncaught Exception: ${err?.message || err}\n${err?.stack || ''}\n`);
+  
   console.error('❌ Uncaught Exception thrown:');
   console.error('   Message:', err?.message || '(no message)');
   console.error('   Stack:', err?.stack || '(no stack trace)');
   console.error('   Error object:', err);
-  if (err && typeof err === 'object') {
-    console.error('   Error keys:', Object.keys(err));
-    console.error('   Error details:', JSON.stringify(err, null, 2));
-  }
+  try {
+    if (err && typeof err === 'object') {
+      console.error('   Error keys:', Object.keys(err));
+      console.error('   Error details:', JSON.stringify(err, null, 2));
+    }
+  } catch (e) {}
   gracefulShutdown('uncaughtException', err, 1);
 });
 
@@ -104,13 +122,13 @@ connectMongo();
 require("./models/UserOrganizationalAssignment");
 
 mongoose.connection.once("open", async () => {
-  await ensureDatabaseIndexes(mongoose, logger);
   try {
+    await ensureDatabaseIndexes(mongoose, logger);
     await initAgenda({ mongoConnection: mongoose.connection });
     initializeCleanupScheduler();
     await initializeScheduledJobs();
   } catch (e) {
-    console.error("Failed to initialize schedulers:", e.stack || e);
+    console.error("Failed during database initialization tasks:", e.stack || e);
   }
 });
 
@@ -193,8 +211,8 @@ app.use(
 );
 
 // Express Standard Parsers & Security Middlewares
-app.use(express.json({ limit: "5mb" }));
-app.use(express.urlencoded({ limit: "5mb", extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
 
 const mongoSanitize = require('express-mongo-sanitize');
@@ -253,25 +271,35 @@ app.use((req, res, next) => {
 });
 
 // CSRF Handling Layer
-const csurf = require('csurf');
+const { doubleCsrf } = require("csrf-csrf");
+
 const csrfCookieOptions = {
   httpOnly: false,
   secure: process.env.NODE_ENV === 'production',
   sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
 };
 if (process.env.COOKIE_DOMAIN) csrfCookieOptions.domain = process.env.COOKIE_DOMAIN;
-const _csrfProtection = csurf({ cookie: csrfCookieOptions });
+
+const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
+  getSecret: () => process.env.CSRF_SECRET || "default_fallback_secret",
+  getSessionIdentifier: (req) => req.cookies?.token || req.headers['authorization'] || "stateless-session",
+  cookieName: "x-csrf-token",
+  cookieOptions: csrfCookieOptions,
+  size: 64,
+  ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+  getTokenFromRequest: (req) => req.headers["x-csrf-token"] || req.headers["x-xsrf-token"],
+});
 
 app.use((req, res, next) => {
   if (req.path.startsWith(apiPrefix)) return next();
   const exemptPaths = ["/login", "/webhook", "/health"];
   if (exemptPaths.includes(req.path)) return next();
-  return _csrfProtection(req, res, next);
+  return doubleCsrfProtection(req, res, next);
 });
 
-app.get(`${apiPrefix}/csrf-token`, (_req, res) => {
+app.get(`${apiPrefix}/csrf-token`, (req, res) => {
   try {
-    const token = crypto.randomBytes(32).toString('hex');
+    const token = generateCsrfToken(req, res);
     res.json({ csrfToken: token });
   } catch (err) {
     console.warn('[csrf-token]', err?.message || err);
@@ -316,8 +344,6 @@ app.use("/uploads", isAuth, express.static(path.join(__dirname, "uploads")));
 // ENDPOINT / ROUTER MOUNTING
 const masterRouter = require("./routers");
 app.use(apiPrefix, masterRouter);
-
-let isShuttingDown = false;
 
 async function gracefulShutdown(signal = 'unknown', error = null, exitCode = 0) {
   if (isShuttingDown) return;

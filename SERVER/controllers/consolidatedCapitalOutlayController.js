@@ -694,7 +694,11 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     };
 
     const ensureSpace = (lines = 1) => {
-      if (curY + lines * LINE_H > PAGE_HEIGHT - MARGIN - 22) startNewPage();
+      if (curY + lines * LINE_H > PAGE_HEIGHT - MARGIN - 22) {
+        startNewPage();
+        return true;
+      }
+      return false;
     };
 
     // ── Column layout: 3 columns matching Excel ─────────────────────────
@@ -741,13 +745,32 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       curY += ROW_H;
 
       // ── Data rows ─────────────────────────────────────────────────────────
+      // Sort rows by RC first, then particulars
+      rows.sort((a, b) => {
+        const rcCompare = safeStr(a.rc).localeCompare(safeStr(b.rc));
+        if (rcCompare !== 0) return rcCompare;
+        return safeStr(a.particulars).localeCompare(safeStr(b.particulars));
+      });
+
       let catTotal = 0;
+      let lastRc = null;
       rows.forEach((row) => {
+        const currentRc = safeStr(row.rc);
+        let displayRc = currentRc === lastRc ? '' : currentRc;
+
         const parLines = wrapText(safeStr(row.particulars), COL_PAR - 10, 8);
-        const rcLines  = wrapText(safeStr(row.rc),          COL_RC  - 8,  8);
-        const rowLines = Math.max(parLines.length, rcLines.length, 1);
+        let rcLines  = wrapText(displayRc,          COL_RC  - 8,  8);
+        
+        // Recalculate row height based on full RC length to maintain correct spacing even if hidden
+        const fullRcLines = wrapText(currentRc, COL_RC - 8, 8);
+        const rowLines = Math.max(parLines.length, fullRcLines.length, 1);
         const rowH     = rowLines * LINE_H + PAD_V * 2;
-        ensureSpace(rowLines + 1);
+        
+        const isNewPage = ensureSpace(rowLines + 1);
+        if (isNewPage && currentRc === lastRc) {
+          displayRc = currentRc;
+          rcLines = wrapText(displayRc, COL_RC - 8, 8);
+        }
 
         pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, rowH, { stroke: '#aaaaaa', lineWidth: 0.3 });
         pdfDoc.rectangle(xPar, curY, 0.3, rowH, { fill: '#aaaaaa', stroke: '#aaaaaa', lineWidth: 0 });
@@ -759,6 +782,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
         curY += rowH;
         catTotal += row.amount;
+        lastRc = currentRc;
       });
 
       // ── Category TOTAL row ────────────────────────────────────────────────

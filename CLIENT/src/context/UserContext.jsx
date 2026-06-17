@@ -171,6 +171,9 @@ const UserProvider = ({ children }) => {
     // 2. Clear browser storage (Ito ang fix para ma-logout sa main FMIS at tuluyang burahin ang session)
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("activeWorkflowRef");
+    localStorage.removeItem("activeRegion");
+    localStorage.removeItem("incomeGrandTotal");
     sessionStorage.clear();
 
     // 3. Clear local states

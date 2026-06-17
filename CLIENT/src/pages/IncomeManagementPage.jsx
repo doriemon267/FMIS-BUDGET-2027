@@ -1109,7 +1109,7 @@ const IncomeManagementPage = () => {
                 // When creating new, show Autocomplete to select from existing categories
                 <Autocomplete
                   options={incomeCategories}
-                  getOptionLabel={option => option.name || option.incomeCategoryName || ""}
+                  getOptionLabel={option => typeof option === 'string' ? option : (option?.name || option?.incomeCategoryName || "")}
                   value={selectedCategory}
                   onChange={(_, value) => {
                     setSelectedCategory(value);
@@ -1166,49 +1166,69 @@ const IncomeManagementPage = () => {
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
                 Income Subcategories
               </Typography>
-              {/* Multi-select dropdown for subcategories */}
+              {/* Multi-select dropdown and manual input for subcategories */}
               {(() => {
-                // When editing, use the editing category ID, otherwise use selected category ID
                 const categoryId = editingCategory?._id?.toString() || selectedCategory?._id?.toString();
                 const filteredSubcategories = getFilteredSubcategories(categoryId, editingCategory);
                 
-                if (filteredSubcategories.length === 0) {
-                  return (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        No existing subcategories found for this category.
-                      </Typography>
-                    </Box>
-                  );
-                }
-                
                 return (
                   <Box>
-                    <FormControl fullWidth sx={{ mb: 2 }}>
-                      <InputLabel id="subcategory-select-label">Select Subcategories</InputLabel>
-                      <Select
-                        labelId="subcategory-select-label"
-                        multiple
-                        value={categoryForm.incomeSubcategories}
-                        onChange={e => {
-                          setCategoryForm(prev => ({
-                            ...prev,
-                            incomeSubcategories: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
-                          }));
-                        }}
-                        renderValue={selected => selected.join(', ')}
-                        label="Select Subcategories"
-                      >
-                        {filteredSubcategories.map(sub => (
-                          <MenuItem key={sub._id} value={sub.name}>
-                            <Checkbox checked={categoryForm.incomeSubcategories.includes(sub.name)} />
-                            <ListItemText primary={sub.name} />
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    {filteredSubcategories.length > 0 ? (
+                      <FormControl fullWidth sx={{ mb: 2 }}>
+                        <InputLabel id="subcategory-select-label">Select Existing Subcategories</InputLabel>
+                        <Select
+                          labelId="subcategory-select-label"
+                          multiple
+                          value={categoryForm.incomeSubcategories.filter(sub => filteredSubcategories.some(fs => fs.name === sub))}
+                          onChange={e => {
+                            const selectedExisting = typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value;
+                            const customSubs = categoryForm.incomeSubcategories.filter(sub => !filteredSubcategories.some(fs => fs.name === sub));
+                            setCategoryForm(prev => ({
+                              ...prev,
+                              incomeSubcategories: [...new Set([...customSubs, ...selectedExisting])]
+                            }));
+                          }}
+                          renderValue={selected => selected.join(', ')}
+                          label="Select Existing Subcategories"
+                        >
+                          {filteredSubcategories.map(sub => (
+                            <MenuItem key={sub._id} value={sub.name}>
+                              <Checkbox checked={categoryForm.incomeSubcategories.includes(sub.name)} />
+                              <ListItemText primary={sub.name} />
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        No existing subcategories found for this category. You can add new ones below.
+                      </Typography>
+                    )}
                     
-
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Add New Subcategory"
+                        placeholder="Type subcategory name and press Enter or click Add"
+                        value={manualInput}
+                        onChange={(e) => setManualInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addManualSubcategory();
+                          }
+                        }}
+                      />
+                      <Button 
+                        variant="contained" 
+                        onClick={addManualSubcategory}
+                        disabled={!manualInput.trim()}
+                        sx={{ px: 3 }}
+                      >
+                        Add
+                      </Button>
+                    </Box>
                   </Box>
                 );
               })()}

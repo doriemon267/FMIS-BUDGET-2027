@@ -40,6 +40,8 @@ import {
   MdAdd,
   MdDeleteOutline,
   MdSync,
+  MdSave,
+  MdRestore,
 } from "react-icons/md";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../config/api";
@@ -67,6 +69,14 @@ const RoutePermissionManagementPage = () => {
 
   const [activeTab, setActiveTab] = useState(0);
   const [selectedRoleForView, setSelectedRoleForView] = useState(roleOptions[0].id);
+
+  // States for Confirmation Dialog
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: "",
+    message: "",
+    onConfirm: null,
+  });
 
   // 1. Fetch all routes from backend
   const { data, isLoading, error } = useQuery({
@@ -155,6 +165,43 @@ const RoutePermissionManagementPage = () => {
     },
   });
 
+  // 4.1 Mutation to save current configuration as defaults
+  const saveDefaultsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post("/route-permissions/save-defaults");
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setSnackbar({ open: true, message: data.message || "Defaults saved successfully!", severity: "success" });
+    },
+    onError: (err) => {
+      setSnackbar({
+        open: true,
+        message: "Failed to save defaults: " + (err.response?.data?.error || err.message),
+        severity: "error",
+      });
+    },
+  });
+
+  // 4.2 Mutation to restore defaults
+  const restoreDefaultsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post("/route-permissions/restore-defaults");
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries(["route-permissions-all"]);
+      setSnackbar({ open: true, message: data.message || "Defaults restored successfully!", severity: "success" });
+    },
+    onError: (err) => {
+      setSnackbar({
+        open: true,
+        message: "Failed to restore defaults: " + (err.response?.data?.error || err.message),
+        severity: "error",
+      });
+    },
+  });
+
   // 5. Mutation to delete a custom route
   const deleteRouteMutation = useMutation({
     mutationFn: async (id) => {
@@ -233,31 +280,57 @@ const RoutePermissionManagementPage = () => {
   };
 
   const handleDeleteRoute = (id) => {
-    if (window.confirm("Are you sure you want to delete this route?")) {
-      deleteRouteMutation.mutate(id);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "Confirm Deletion",
+      message: "Are you sure you want to delete this route? This action cannot be undone.",
+      onConfirm: () => deleteRouteMutation.mutate(id),
+    });
   };
 
   const handleSyncRoutes = () => {
-    if (window.confirm("Sync all system routes? This will automatically add any missing routes to the list.")) {
-      const routesToSync = Object.entries(PAGE_TITLES).map(([path, label]) => {
-        let group = "General";
-        if (path === '/dashboard') group = "Dashboard";
-        else if (['/proposal', '/allproposal', '/brd-consolidation', '/nep-ceiling', '/tier', '/tier-comparison'].includes(path)) group = "Proposal Management";
-        else if (['/consolidated-corporate-income', '/consolidated-reports', '/consolidated-capital-outlay-reports', '/consolidated-personnel-services-reports', '/comparative-report', '/comprehensive-reports'].includes(path)) group = "Reports & Analytics";
-        else if (['/employee'].includes(path)) group = "Employees";
-        else if (['/employeeBenefits', '/courtAppearance', '/overTime', '/subsistenceAllowanceMDS', '/subsistenceAllowanceST', '/subsistenceAllowance', '/loyaltyPay', '/mealallowance', '/medicalAllowance', '/childrenAllowance', '/retirees'].includes(path)) group = "Benefits";
-        else if (['/fysettings', '/compensation-management', '/rata', '/categories', '/income-management', '/salary-table', '/cos-salary-table', '/employee-salary-table', '/salary-management', '/setup/organization', '/hierarchical-user-assignments', '/user-activity-logs', '/bulk-upload-management', '/route-permissions', '/settings', '/fiscalYear', '/audit-logs'].includes(path)) group = "Settings";
-        else if (['/subsidy-monitoring', '/corporate-income-upload', '/mooe-upload', '/database-backup', '/grouped-income-categories', '/region-selection'].includes(path)) group = "System / Utility";
-        else if (path.includes("report")) group = "Reports & Analytics";
-        else if (path.includes("proposal")) group = "Proposal Management";
-        else if (path.includes("tier") || path.includes("ceiling") || path.includes("brd")) group = "Proposal Management";
-        else if (path.includes("setting") || path.includes("salary") || path.includes("setup") || path.includes("upload") || path.includes("permission") || path.includes("log")) group = "Settings";
-        else if (path.includes("allowance") || path.includes("pay") || path.includes("employee") || path.includes("retiree") || path.includes("court")) group = "Benefits";
-        return { path, label, group };
-      });
-      syncRoutesMutation.mutate(routesToSync);
-    }
+    setConfirmDialog({
+      open: true,
+      title: "Sync System Routes",
+      message: "Are you sure you want to sync all system routes? This will automatically add any missing routes to the list.",
+      onConfirm: () => {
+        const routesToSync = Object.entries(PAGE_TITLES).map(([path, label]) => {
+          let group = "General";
+          if (path === '/dashboard') group = "Dashboard";
+          else if (['/proposal', '/allproposal', '/brd-consolidation', '/nep-ceiling', '/tier', '/tier-comparison'].includes(path)) group = "Proposal Management";
+          else if (['/consolidated-corporate-income', '/consolidated-reports', '/consolidated-capital-outlay-reports', '/consolidated-personnel-services-reports', '/comparative-report', '/comprehensive-reports'].includes(path)) group = "Reports & Analytics";
+          else if (['/employee'].includes(path)) group = "Employees";
+          else if (['/employeeBenefits', '/courtAppearance', '/overTime', '/subsistenceAllowanceMDS', '/subsistenceAllowanceST', '/subsistenceAllowance', '/loyaltyPay', '/mealallowance', '/medicalAllowance', '/childrenAllowance', '/retirees'].includes(path)) group = "Benefits";
+          else if (['/fysettings', '/compensation-management', '/rata', '/categories', '/income-management', '/salary-table', '/cos-salary-table', '/employee-salary-table', '/salary-management', '/setup/organization', '/hierarchical-user-assignments', '/user-activity-logs', '/bulk-upload-management', '/route-permissions', '/settings', '/fiscalYear', '/audit-logs'].includes(path)) group = "Settings";
+          else if (['/subsidy-monitoring', '/corporate-income-upload', '/mooe-upload', '/database-backup', '/grouped-income-categories', '/region-selection'].includes(path)) group = "System / Utility";
+          else if (path.includes("report")) group = "Reports & Analytics";
+          else if (path.includes("proposal")) group = "Proposal Management";
+          else if (path.includes("tier") || path.includes("ceiling") || path.includes("brd")) group = "Proposal Management";
+          else if (path.includes("setting") || path.includes("salary") || path.includes("setup") || path.includes("upload") || path.includes("permission") || path.includes("log")) group = "Settings";
+          else if (path.includes("allowance") || path.includes("pay") || path.includes("employee") || path.includes("retiree") || path.includes("court")) group = "Benefits";
+          return { path, label, group };
+        });
+        syncRoutesMutation.mutate(routesToSync);
+      }
+    });
+  };
+
+  const handleSaveDefaults = () => {
+    setConfirmDialog({
+      open: true,
+      title: "Save as Default",
+      message: "Are you sure you want to save the current configuration as the new default? This will overwrite any previously saved defaults.",
+      onConfirm: () => saveDefaultsMutation.mutate(),
+    });
+  };
+
+  const handleRestoreDefaults = () => {
+    setConfirmDialog({
+      open: true,
+      title: "Restore Default Configuration",
+      message: "Are you sure you want to restore to the default configuration? This will undo any unsaved changes.",
+      onConfirm: () => restoreDefaultsMutation.mutate(),
+    });
   };
 
   // Filter routes based on search and group selection
@@ -304,7 +377,7 @@ const RoutePermissionManagementPage = () => {
             </Box>
             
             <Box display="flex" alignItems="center" gap={2}>
-              {(updateMutation.isPending || addRouteMutation.isPending || deleteRouteMutation.isPending || syncRoutesMutation.isPending) && (
+              {(updateMutation.isPending || addRouteMutation.isPending || deleteRouteMutation.isPending || syncRoutesMutation.isPending || saveDefaultsMutation.isPending || restoreDefaultsMutation.isPending) && (
                 <Chip
                   icon={<CircularProgress size={14} color="inherit" />}
                   label="Saving..."
@@ -312,6 +385,26 @@ const RoutePermissionManagementPage = () => {
                   variant="outlined"
                 />
               )}
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<MdSave />}
+                onClick={handleSaveDefaults}
+                disabled={saveDefaultsMutation.isPending}
+                sx={{ borderRadius: "8px", textTransform: "none", fontWeight: "600" }}
+              >
+                Save as Default
+              </Button>
+              <Button
+                variant="outlined"
+                color="warning"
+                startIcon={<MdRestore />}
+                onClick={handleRestoreDefaults}
+                disabled={restoreDefaultsMutation.isPending}
+                sx={{ borderRadius: "8px", textTransform: "none", fontWeight: "600" }}
+              >
+                Restore Default
+              </Button>
               <Button
                 variant="outlined"
                 startIcon={<MdSync />}
@@ -634,6 +727,50 @@ const RoutePermissionManagementPage = () => {
             sx={{ textTransform: "none", borderRadius: "6px" }}
           >
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog({ ...confirmDialog, open: false })}
+        PaperProps={{ sx: { borderRadius: "12px", minWidth: "320px" } }}
+      >
+        <DialogTitle sx={{ fontWeight: "700", display: "flex", alignItems: "center", gap: 1 }}>
+          <MdSave size={24} color="#1976d2" style={{ display: confirmDialog.title.includes("Save") ? "block" : "none" }} />
+          <MdRestore size={24} color="#ed6c02" style={{ display: confirmDialog.title.includes("Restore") ? "block" : "none" }} />
+          <MdDeleteOutline size={24} color="#d32f2f" style={{ display: confirmDialog.title.includes("Delete") ? "block" : "none" }} />
+          <MdSync size={24} color="#0288d1" style={{ display: confirmDialog.title.includes("Sync") ? "block" : "none" }} />
+          {confirmDialog.title}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body1" color="text.secondary">
+            {confirmDialog.message}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setConfirmDialog({ ...confirmDialog, open: false })}
+            sx={{ textTransform: "none", fontWeight: "600" }}
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (confirmDialog.onConfirm) confirmDialog.onConfirm();
+              setConfirmDialog({ ...confirmDialog, open: false });
+            }}
+            variant="contained"
+            color={
+              confirmDialog.title.includes("Delete") ? "error" :
+              confirmDialog.title.includes("Restore") ? "warning" :
+              "primary"
+            }
+            sx={{ textTransform: "none", borderRadius: "6px", fontWeight: "600" }}
+          >
+            Confirm
           </Button>
         </DialogActions>
       </Dialog>

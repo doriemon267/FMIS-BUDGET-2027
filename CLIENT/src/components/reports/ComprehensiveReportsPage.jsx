@@ -911,7 +911,8 @@ const ComprehensiveReportsPage = () => {
             </Paper>
           )}
 
-          {Array.isArray(reportData?.summary?.signatories) && reportData.summary.signatories.length > 0 && (
+          {/* TEMPORARILY HIDDEN AS PER REQUEST */}
+          {false && Array.isArray(reportData?.summary?.signatories) && reportData.summary.signatories.length > 0 && (
             <Paper elevation={2} sx={{ p: 3, mt: 3, borderRadius: '16px' }}>
               <Typography variant="h6" fontWeight="bold" sx={{ mb: 2 }}>
                 Workflow Signatories

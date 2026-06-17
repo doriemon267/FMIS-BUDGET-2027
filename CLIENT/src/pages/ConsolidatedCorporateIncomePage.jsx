@@ -925,11 +925,25 @@ const ConsolidatedCorporateIncomePage = () => {
                               <TableRow 
                                 key={`category-${category.id}`} 
                                 sx={{ 
-                                  backgroundColor: '#ffffff',
-                                  '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.04)' }
+                                  backgroundColor: category.isNetIsf 
+                                    ? '#e8f5e9' 
+                                    : category.isDiscount 
+                                      ? '#ffebee' 
+                                      : '#ffffff',
+                                  '&:hover': { 
+                                    backgroundColor: category.isNetIsf 
+                                      ? '#e0f2f1' 
+                                      : category.isDiscount 
+                                        ? '#ffcdd2' 
+                                        : 'rgba(55, 94, 56, 0.04)' 
+                                  }
                                 }}
                               >
-                                <TableCell sx={{ fontWeight: 600, color: '#1e293b' }}>
+                                <TableCell sx={{ 
+                                  fontWeight: 600, 
+                                  color: category.isDiscount ? '#d32f2f' : category.isNetIsf ? '#2e7d32' : '#1e293b',
+                                  fontStyle: category.isDiscount ? 'italic' : 'normal'
+                                }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                     {category.subcategories && category.subcategories.length > 0 && (
                                       <IconButton 
@@ -946,17 +960,24 @@ const ConsolidatedCorporateIncomePage = () => {
                                 {reportData.regions
                                   .filter(region => consolidationType === 'all' || selectedRegions === region)
                                   .map((region) => (
-                                    <TableCell key={`${region}-${category.id}`} align="right">
-                                      ₱{(reportData.regionData[region]?.categoryAmounts[category.id] || 0)
-                                        .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    <TableCell key={`${region}-${category.id}`} align="right" sx={{
+                                      color: category.isDiscount ? '#d32f2f' : category.isNetIsf ? '#2e7d32' : 'inherit',
+                                      fontStyle: category.isDiscount ? 'italic' : 'normal'
+                                    }}>
+                                      {category.isDiscount ? '(' : ''}₱{(reportData.regionData[region]?.categoryAmounts[category.id] || 0)
+                                        .toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{category.isDiscount ? ')' : ''}
                                     </TableCell>
                                   ))}
-                                <TableCell align="right" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
-                                  ₱{categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                <TableCell align="right" sx={{ 
+                                  fontWeight: 'bold', 
+                                  color: category.isDiscount ? '#d32f2f' : '#2e7d32',
+                                  fontStyle: category.isDiscount ? 'italic' : 'normal'
+                                }}>
+                                  {category.isDiscount ? '(' : ''}₱{categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{category.isDiscount ? ')' : ''}
                                 </TableCell>
                                 {showPercentages && (
                                   <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                                    {categoryPercentage.toFixed(1)}%
+                                    {category.isDiscount ? '' : categoryPercentage.toFixed(1) + '%'}
                                   </TableCell>
                                 )}
                               </TableRow>

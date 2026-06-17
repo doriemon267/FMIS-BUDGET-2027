@@ -42,6 +42,11 @@ const routePermissionSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    /** Stores the user-defined default roles to restore to */
+    customDefaultRoles: {
+      type: [String],
+      default: null,
+    },
     /** Whether this route config is active. Inactive = falls back to hardcoded defaults */
     isActive: {
       type: Boolean,

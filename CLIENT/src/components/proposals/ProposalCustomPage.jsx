@@ -130,6 +130,7 @@ const ProposalCustomPage = ({
   const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const hoverBg = theme.palette.mode === 'dark' ? 'rgba(46, 125, 50, 0.15)' : 'rgba(46, 125, 50, 0.06)';
   const hoverBorder = theme.palette.mode === 'dark' ? '#4e7d4f' : '#2d5016';
+  const showUploadButton = String(import.meta.env.VITE_SHOW_UPLOAD_BUTTON || "true").toLowerCase() === "true";
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const activeRegionKey =
     activeRegion?.name ||
@@ -2167,7 +2168,7 @@ const ProposalCustomPage = ({
           >
             <LocationOnIcon sx={{ fontSize: "1.1rem", color: "#34d399" }} />
             <Typography variant="body2" sx={{ fontWeight: 800, fontSize: "0.78rem", letterSpacing: "0.05em", color: "rgba(255,255,255,0.9)" }}>
-              REGION: {String(activeRegionName || "Central Office").toUpperCase()}
+              REGION: {String(activeRegionName || "ALL REGIONS").toUpperCase()}
             </Typography>
           </Box>
  
@@ -2626,7 +2627,7 @@ const ProposalCustomPage = ({
               </Tooltip>
             )}
 
-            {currentProposalId && (
+            {currentProposalId && showUploadButton && (
               <Button
                 variant="contained"
                 size="small"

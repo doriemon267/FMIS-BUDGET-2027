@@ -11,6 +11,8 @@ const {
   sync,
   resetToDefault,
   bulkUpdateRole,
+  saveDefaults,
+  restoreDefaults,
 } = require("../controllers/routePermissionController");
 
 const routePermissionRouter = Router();
@@ -30,6 +32,12 @@ routePermissionRouter.post("/route-permissions/seed", isAuth, requireDynamicPerm
 
 // POST /api/route-permissions/sync     – sync dynamic frontend routes
 routePermissionRouter.post("/route-permissions/sync", isAuth, requireDynamicPermission('/route-permissions'), sync);
+
+// POST /api/route-permissions/save-defaults - Save current config as default
+routePermissionRouter.post("/route-permissions/save-defaults", isAuth, requireDynamicPermission('/route-permissions'), saveDefaults);
+
+// POST /api/route-permissions/restore-defaults - Restore config from default
+routePermissionRouter.post("/route-permissions/restore-defaults", isAuth, requireDynamicPermission('/route-permissions'), restoreDefaults);
 
 // POST /api/route-permissions/bulk-update - Bulk assign or remove a role from multiple routes
 routePermissionRouter.post("/route-permissions/bulk-update", isAuth, requireDynamicPermission('/route-permissions'), bulkUpdateRole);

@@ -57,7 +57,8 @@ const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle, p
   const searchStr = `${title} ${particulars}`.toUpperCase();
   const keywords = [
     { key: "FURNITURE", match: /FURNITURE|FIXTURE|BOOK/i, defaultUacs: "5060407001", defaultSubline: "Furniture and Fixtures", defaultAcc: "Furniture and Fixtures" },
-    { key: "MACHINERY", match: /MACHINERY|EQUIPMENT|IT|COMPUTER|SOFTWARE/i, defaultUacs: "5060405003", defaultSubline: "IT Equipment", defaultAcc: "Information and Communication Technology Equipment" },
+    { key: "INTANGIBLE", match: /INTANGIBLE|SOFTWARE|LICENSE|APP/i, defaultUacs: "5060601000", defaultSubline: "Computer Software", defaultAcc: "Computer Software" },
+    { key: "MACHINERY", match: /MACHINERY|EQUIPMENT|IT|COMPUTER/i, defaultUacs: "5060405003", defaultSubline: "IT Equipment", defaultAcc: "Information and Communication Technology Equipment" },
     { key: "TRANSPORTATION", match: /TRANSPORTATION|VEHICLE|CAR|MOTOR|TRUCK/i, defaultUacs: "5060406001", defaultSubline: "Motor Vehicles", defaultAcc: "Motor Vehicles" },
     { key: "LAND", match: /LAND|LOT|TITLING/i, defaultUacs: "5060101000", defaultSubline: "Land", defaultAcc: "Land" },
     { key: "CONSTRUCTION", match: /CONSTRUCTION|BUILDING|STRUCTURE|FACILITIES|REHABILITATION/i, defaultUacs: "5060404001", defaultSubline: "Buildings", defaultAcc: "Buildings" }
@@ -548,16 +549,16 @@ exports.uploadCapitalOutlay = async (req, res) => {
 
         // 2. DETAIL RECORD (CapitalOutlayDetails) - Check for duplicates first
         // Link duplicate check to the masterRecord which contains the fiscalYear, budgetType, region, and proposalId context
-        const existingDetail = await CapitalOutlayDetails.findOne({
-          capital_outlay_id: masterRecord._id,
-          particulars: particulars || "Bulk Upload Item",
-          income_amount: income,
-          subsidy_amount: subsidy
-        });
+        // const existingDetail = await CapitalOutlayDetails.findOne({
+        //   capital_outlay_id: masterRecord._id,
+        //   particulars: particulars || "Bulk Upload Item",
+        //   income_amount: income,
+        //   subsidy_amount: subsidy
+        // });
 
-        if (existingDetail) {
-          throw new Error('Duplicate entry: This item has already been uploaded.');
-        }
+        // if (existingDetail) {
+        //   throw new Error('Duplicate entry: This item has already been uploaded.');
+        // }
 
         const detailRecord = await CapitalOutlayDetails.create({
           capital_outlay_id: masterRecord._id,

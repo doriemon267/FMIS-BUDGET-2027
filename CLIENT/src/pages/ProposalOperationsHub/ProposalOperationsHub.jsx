@@ -112,6 +112,8 @@ const ProposalOperationsHub = () => {
   const queryClient = useQueryClient();
   const signerMode =
     String(import.meta.env.VITE_PNPKI_SIGNER_MODE || "").toLowerCase() || "disabled";
+  const showSignatureColumn = 
+    String(import.meta.env.VITE_SHOW_SIGNATURE_COLUMN || "true").toLowerCase() === "true";
 
   // Init calculations & permissions hooks
   const {
@@ -1725,7 +1727,7 @@ const ProposalOperationsHub = () => {
                                 <span style={{ marginLeft: 24, color: "#888" }}>└</span>
                               )}
                               <Typography variant="body2" sx={{ fontWeight: isChild ? 400 : 600, color: isChild ? "#666" : "#333" }}>
-                                {p.responsibilityCenter || p.division || "N/A"}
+                                {p.assignmentLevel === "REGION" || currentUser?.hierarchicalAccess?.scope === "REGION" || p.responsibilityCenter === "REGIONAL OFFICE" || p.division === "REGIONAL OFFICE" ? ((typeof p.region === "object" ? p.region?.Region || p.region?.name || p.region?.regionName : p.region) || p.responsibilityCenter || p.division || "N/A") : (p.responsibilityCenter || p.division || "N/A")}
                               </Typography>
                             </Box>
                           </TableCell>
@@ -2227,11 +2229,13 @@ const ProposalOperationsHub = () => {
                       <TableCell sx={{ fontWeight: "bold", color: "#333", fontSize: "0.85rem" }}>
                         TIER VERSION
                       </TableCell>
-                      <TableCell
-                        sx={{ fontWeight: "bold", color: "#333", fontSize: "0.85rem", minWidth: 260 }}
-                      >
-                        SIGNATURE
-                      </TableCell>
+                      {showSignatureColumn && (
+                        <TableCell
+                          sx={{ fontWeight: "bold", color: "#333", fontSize: "0.85rem", minWidth: 260 }}
+                        >
+                          SIGNATURE
+                        </TableCell>
+                      )}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -2286,91 +2290,93 @@ const ProposalOperationsHub = () => {
                               ? `v${entry.tierVersion}`
                               : "—"}
                           </TableCell>
-                          <TableCell sx={{ py: 1.5, fontSize: "0.8rem", color: "#333" }}>
-                            {entry.digitalSignature ? (
-                              <Box>
-                                {(() => {
-                                  const verification = getSignatureVerificationState(entry);
-                                  return (
-                                    <Tooltip title={verification.reason}>
-                                      <Chip
-                                        size="small"
-                                        color={verification.color}
-                                        label={verification.label}
-                                        sx={{ mb: 0.75, mr: 0.75, fontWeight: 600 }}
-                                      />
-                                    </Tooltip>
-                                  );
-                                })()}
-                                <Chip
-                                  size="small"
-                                  color="success"
-                                  label={entry.digitalSignature.signatureAlgorithm || "Signed"}
-                                  sx={{ mb: 0.75, fontWeight: 600 }}
-                                />
-                                <Typography variant="caption" display="block" sx={{ color: "#555" }}>
-                                  {entry.digitalSignature.signedAt
-                                    ? `Signed: ${new Date(
-                                        entry.digitalSignature.signedAt
-                                      ).toLocaleString("en-US")}`
-                                    : "Signed"}
-                                </Typography>
-                                {entry.digitalSignature.certificateFingerprint256 && (
-                                  <Tooltip title={entry.digitalSignature.certificateFingerprint256}>
-                                    <Typography
-                                      variant="caption"
-                                      display="block"
-                                      sx={{ color: "#777" }}
-                                    >
-                                      FP:{" "}
-                                      {String(
-                                        entry.digitalSignature.certificateFingerprint256
-                                      ).slice(0, 20)}
-                                      ...
-                                    </Typography>
-                                  </Tooltip>
-                                )}
-                              </Box>
-                            ) : entry.eSignature ? (
-                              <Box>
-                                {(() => {
-                                  const verification = getSignatureVerificationState(entry);
-                                  return (
-                                    <Tooltip title={verification.reason}>
-                                      <Chip
-                                        size="small"
-                                        color={verification.color}
-                                        label={verification.label}
-                                        sx={{ mb: 0.75, mr: 0.75, fontWeight: 600 }}
-                                      />
-                                    </Tooltip>
-                                  );
-                                })()}
-                                <Chip
-                                  size="small"
-                                  color="primary"
-                                  label="E-signature"
-                                  sx={{ mb: 0.75, fontWeight: 600 }}
-                                />
-                                <Typography variant="caption" display="block" sx={{ color: "#555" }}>
-                                  {entry.eSignature.signedAt
-                                    ? `Signed: ${new Date(entry.eSignature.signedAt).toLocaleString(
-                                        "en-US"
-                                      )}`
-                                    : "Signed"}
-                                </Typography>
-                                {entry.eSignature.signerName && (
-                                  <Typography variant="caption" display="block" sx={{ color: "#777" }}>
-                                    By: {entry.eSignature.signerName}
+                          {showSignatureColumn && (
+                            <TableCell sx={{ py: 1.5, fontSize: "0.8rem", color: "#333" }}>
+                              {entry.digitalSignature ? (
+                                <Box>
+                                  {(() => {
+                                    const verification = getSignatureVerificationState(entry);
+                                    return (
+                                      <Tooltip title={verification.reason}>
+                                        <Chip
+                                          size="small"
+                                          color={verification.color}
+                                          label={verification.label}
+                                          sx={{ mb: 0.75, mr: 0.75, fontWeight: 600 }}
+                                        />
+                                      </Tooltip>
+                                    );
+                                  })()}
+                                  <Chip
+                                    size="small"
+                                    color="success"
+                                    label={entry.digitalSignature.signatureAlgorithm || "Signed"}
+                                    sx={{ mb: 0.75, fontWeight: 600 }}
+                                  />
+                                  <Typography variant="caption" display="block" sx={{ color: "#555" }}>
+                                    {entry.digitalSignature.signedAt
+                                      ? `Signed: ${new Date(
+                                          entry.digitalSignature.signedAt
+                                        ).toLocaleString("en-US")}`
+                                      : "Signed"}
                                   </Typography>
-                                )}
-                              </Box>
-                            ) : (
-                              <Tooltip title={getSignatureVerificationState(entry).reason}>
-                                <Chip size="small" variant="outlined" label="Not signed" />
-                              </Tooltip>
-                            )}
-                          </TableCell>
+                                  {entry.digitalSignature.certificateFingerprint256 && (
+                                    <Tooltip title={entry.digitalSignature.certificateFingerprint256}>
+                                      <Typography
+                                        variant="caption"
+                                        display="block"
+                                        sx={{ color: "#777" }}
+                                      >
+                                        FP:{" "}
+                                        {String(
+                                          entry.digitalSignature.certificateFingerprint256
+                                        ).slice(0, 20)}
+                                        ...
+                                      </Typography>
+                                    </Tooltip>
+                                  )}
+                                </Box>
+                              ) : entry.eSignature ? (
+                                <Box>
+                                  {(() => {
+                                    const verification = getSignatureVerificationState(entry);
+                                    return (
+                                      <Tooltip title={verification.reason}>
+                                        <Chip
+                                          size="small"
+                                          color={verification.color}
+                                          label={verification.label}
+                                          sx={{ mb: 0.75, mr: 0.75, fontWeight: 600 }}
+                                        />
+                                      </Tooltip>
+                                    );
+                                  })()}
+                                  <Chip
+                                    size="small"
+                                    color="primary"
+                                    label="E-signature"
+                                    sx={{ mb: 0.75, fontWeight: 600 }}
+                                  />
+                                  <Typography variant="caption" display="block" sx={{ color: "#555" }}>
+                                    {entry.eSignature.signedAt
+                                      ? `Signed: ${new Date(entry.eSignature.signedAt).toLocaleString(
+                                          "en-US"
+                                        )}`
+                                      : "Signed"}
+                                  </Typography>
+                                  {entry.eSignature.signerName && (
+                                    <Typography variant="caption" display="block" sx={{ color: "#777" }}>
+                                      By: {entry.eSignature.signerName}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              ) : (
+                                <Tooltip title={getSignatureVerificationState(entry).reason}>
+                                  <Chip size="small" variant="outlined" label="Not signed" />
+                                </Tooltip>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                   </TableBody>
