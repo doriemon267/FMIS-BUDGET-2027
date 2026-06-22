@@ -91,7 +91,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const [useCPCSForEmployeeAdd, setUseCPCSForEmployeeAdd] = useState(false);
   const [cpcs1Types, setCpcs1Types] = useState(["CASUAL"]);
   const [cpcs2Types, setCpcs2Types] = useState(["PERMANENT"]);
-
+  // Entitled to Medical/Meal toggle state (auto-derived + manually overridable)
+  const [entitledToMedicalMeal, setEntitledToMedicalMeal] = useState(false);
+  const [noOfDependent, setNoOfDependent] = useState(0);
 
 
   // Fetch CPCS salary setting when add dialog opens (for rate lookup)
@@ -146,6 +148,16 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
   // Watch all form values for the review step
   const watchedValues = watch();
+
+  // Auto-derive entitledToMedicalMeal from DateOfAppointment (hired before 1989)
+  const watchedDOA = watch("DateOfAppointment");
+  useEffect(() => {
+    if (watchedDOA) {
+      const doa = new Date(watchedDOA);
+      const cutoff = new Date("1989-01-01");
+      setEntitledToMedicalMeal(doa < cutoff);
+    }
+  }, [watchedDOA]);
 
   // Dynamic options for Division and Section based on Department
   const [divisionOptions, setDivisionOptions] = useState([]);
@@ -884,6 +896,10 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     
     data.processBy = processBy;
 
+    // Add entitlement fields to the payload
+    data.entitledToMedicalMeal = entitledToMedicalMeal;
+    data.noOfDependent = noOfDependent;
+
     setLoading(true);
     setShowConfirmDialog(false);
     
@@ -1406,6 +1422,65 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         onChange={(value) => {
                           setStatus(value);
                           setValue("Status", value);
+                        }}
+                      />
+                    </Grid>
+                    {/* Entitled to Medical/Meal Allowance toggle */}
+                    <Grid item xs={12}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 2,
+                          p: 2,
+                          borderRadius: "8px",
+                          border: `1px solid ${theme.palette.divider}`,
+                          background: entitledToMedicalMeal
+                            ? (theme.palette.mode === "dark" ? "rgba(76,175,80,0.12)" : "#f0faf0")
+                            : "transparent",
+                          transition: "background 0.3s",
+                        }}
+                      >
+                        <Switch
+                          id="entitledToMedicalMeal-switch"
+                          checked={entitledToMedicalMeal}
+                          onChange={(e) => setEntitledToMedicalMeal(e.target.checked)}
+                          color="success"
+                        />
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>
+                            Entitled to Medical / Meal Allowance
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Auto-enabled for employees hired before January 1, 1989. You may override manually.
+                          </Typography>
+                        </Box>
+                        {entitledToMedicalMeal && (
+                          <Chip
+                            label="Entitled"
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            sx={{ ml: "auto", fontWeight: 700 }}
+                          />
+                        )}
+                      </Box>
+                    </Grid>
+                    {/* Number of Dependents (used for Children Allowance & Medical Allowance) */}
+                    <Grid item xs={12} sm={6}>
+                      <CustomTextField
+                        fieldName="noOfDependent"
+                        control={control}
+                        label="Number of Dependents (0–4)"
+                        type="number"
+                        rules={{
+                          min: { value: 0, message: "Cannot be negative" },
+                          max: { value: 4, message: "Maximum 4 dependents" },
+                        }}
+                        onChange={(e) => {
+                          const val = Math.min(4, Math.max(0, parseInt(e.target.value, 10) || 0));
+                          setNoOfDependent(val);
+                          setValue("noOfDependent", val);
                         }}
                       />
                     </Grid>

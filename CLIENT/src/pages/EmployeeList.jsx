@@ -501,6 +501,37 @@ const EmployeeList = () => {
         );
       },
     },
+    entitledToMedicalMeal: {
+      type: "boolean",
+      label: "Medical/Meal",
+      searchable: false,
+      show: true,
+      customRender: (row) => (
+        <Box sx={{ display: "flex", justifyContent: "center" }}>
+          {row.entitledToMedicalMeal ? (
+            <Tooltip title="Entitled to Medical and Meal Allowance">
+              <Chip
+                label="Yes"
+                size="small"
+                color="success"
+                variant="outlined"
+                sx={{ minWidth: "60px", fontWeight: "bold" }}
+              />
+            </Tooltip>
+          ) : (
+            <Tooltip title="Not Entitled to Medical and Meal Allowance">
+              <Chip
+                label="No"
+                size="small"
+                color="default"
+                variant="outlined"
+                sx={{ minWidth: "60px" }}
+              />
+            </Tooltip>
+          )}
+        </Box>
+      ),
+    },
     employeeStatus: {
       type: "text",
       label: "Status",

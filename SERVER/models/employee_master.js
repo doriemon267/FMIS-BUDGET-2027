@@ -95,7 +95,18 @@ const EmployeeMasterSchema = mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  // Flag: employee is entitled to Medical and Meal allowances (hired before 1989)
+  // Auto-derived from DateOfAppointment < 1989-01-01, but can be manually overridden
+  entitledToMedicalMeal: {
+    type: Boolean,
+    default: false,
+  },
+  // Number of dependents (0–4) used for Children's Allowance and Medical Allowance computation
+  noOfDependent: {
+    type: Number,
+    default: 0,
+  },
 });
 // Update the updatedAt field on save
 EmployeeMasterSchema.pre('save', function(next) {

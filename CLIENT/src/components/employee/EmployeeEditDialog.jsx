@@ -24,7 +24,9 @@ import {
   InputAdornment,
   useTheme,
   useMediaQuery,
+  Switch,
 } from "@mui/material";
+
 import {
   FormProvider,
   useForm,
@@ -72,6 +74,19 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   const [positionOptions, setPositionOptions] = useState([]);
   const [organizationStructure, setOrganizationStructure] = useState(null);
   const [useCPCSForEmployeeAdd, setUseCPCSForEmployeeAdd] = useState(false);
+  // Entitled to Medical/Meal toggle (auto-derived from DateOfAppointment, manually overridable)
+  const [entitledToMedicalMeal, setEntitledToMedicalMeal] = useState(
+    () => {
+      if (row?.entitledToMedicalMeal !== undefined && row?.entitledToMedicalMeal !== null) {
+        return Boolean(row.entitledToMedicalMeal);
+      }
+      if (row?.DateOfAppointment) {
+        return new Date(row.DateOfAppointment) < new Date("1989-01-01");
+      }
+      return false;
+    }
+  );
+  const [noOfDependent, setNoOfDependent] = useState(Number(row?.noOfDependent) || 0);
 
   // Fetch CPCS setting for employee add/edit (use CPCSSalaryTable vs salary-grades)
   useEffect(() => {
@@ -142,6 +157,19 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
 
   // Watch all form values for the review step
   const watchedValues = watch();
+
+  // Auto-derive entitledToMedicalMeal when DateOfAppointment changes (unless manually set)
+  const watchedDOA = watch("DateOfAppointment");
+  useEffect(() => {
+    if (watchedDOA) {
+      const doa = new Date(watchedDOA);
+      const cutoff = new Date("1989-01-01");
+      // Only auto-update if no explicit override is stored on the employee record
+      if (row?.entitledToMedicalMeal === undefined || row?.entitledToMedicalMeal === null) {
+        setEntitledToMedicalMeal(doa < cutoff);
+      }
+    }
+  }, [watchedDOA]);
 
   // Debug watchedValues.StatusOfAppointment
   useEffect(() => {
@@ -666,6 +694,10 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
       data.fiscalYear = activeSettings.fiscalYear;
     }
 
+    // Add entitlement fields to the payload
+    data.entitledToMedicalMeal = entitledToMedicalMeal;
+    data.noOfDependent = noOfDependent;
+
     setLoading(true);
     setShowConfirmDialog(false);
     
@@ -1101,6 +1133,66 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         getOptionLabel={(option) => option}
                         required
                         rules={{ required: "Status is required" }}
+                      />
+                    </Grid>
+                    {/* Entitled to Medical/Meal Allowance toggle */}
+                    <Grid item xs={12}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 2,
+                          p: 2,
+                          borderRadius: "8px",
+                          border: `1px solid ${theme.palette.divider}`,
+                          background: entitledToMedicalMeal
+                            ? (theme.palette.mode === "dark" ? "rgba(76,175,80,0.12)" : "#f0faf0")
+                            : "transparent",
+                          transition: "background 0.3s",
+                        }}
+                      >
+                        <Switch
+                          id="edit-entitledToMedicalMeal-switch"
+                          checked={entitledToMedicalMeal}
+                          onChange={(e) => setEntitledToMedicalMeal(e.target.checked)}
+                          color="success"
+                        />
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>
+                            Entitled to Medical / Meal Allowance
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Auto-enabled for employees hired before January 1, 1989. You may override manually.
+                          </Typography>
+                        </Box>
+                        {entitledToMedicalMeal && (
+                          <Chip
+                            label="Entitled"
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            sx={{ ml: "auto", fontWeight: 700 }}
+                          />
+                        )}
+                      </Box>
+                    </Grid>
+                    {/* Number of Dependents (used for Children Allowance & Medical Allowance) */}
+                    <Grid item xs={12} sm={6}>
+                      <CustomTextField
+                        fieldName="noOfDependent"
+                        control={control}
+                        label="Number of Dependents (0–4)"
+                        type="number"
+                        defaultValue={noOfDependent}
+                        rules={{
+                          min: { value: 0, message: "Cannot be negative" },
+                          max: { value: 4, message: "Maximum 4 dependents" },
+                        }}
+                        onChange={(e) => {
+                          const val = Math.min(4, Math.max(0, parseInt(e.target.value, 10) || 0));
+                          setNoOfDependent(val);
+                          setValue("noOfDependent", val);
+                        }}
                       />
                     </Grid>
                   </Grid>

@@ -613,11 +613,24 @@ router.get(
         const regionsCollection = mongoose.connection.db.collection('regions');
         const departmentsCollection = mongoose.connection.db.collection('departments');
 
-        const [mappings, regions, departments] = await Promise.all([
+        const [rawMappings, regions, departments] = await Promise.all([
           mappingsCollection.find({}).toArray(),
           regionsCollection.find({}).toArray(),
           departmentsCollection.find({}).toArray()
         ]);
+
+        // Flatten mappings so that each regionId inside regionIds array gets its own mapping object
+        // This makes the rest of the existing logic work seamlessly without nested region mapping logic
+        const mappings = [];
+        rawMappings.forEach(m => {
+          if (m.regionIds && Array.isArray(m.regionIds) && m.regionIds.length > 0) {
+            m.regionIds.forEach(rId => {
+              mappings.push({ ...m, regionId: rId });
+            });
+          } else {
+            mappings.push(m);
+          }
+        });
 
         const officesMap = new Map();
         const responsibilityCentersMap = new Map();
@@ -655,10 +668,10 @@ router.get(
                 const region = regions.find(r => r._id.toString() === mapping.regionId.toString());
                 if (region) {
                   const regionName = region.Region || region.name || region.regionName;
-                  const officeId = `${dept._id}_${mapping.regionId}`; // Create unique ID for each regional office
+                  const specificOfficeId = `${dept._id}_${mapping.regionId}`; // Create unique ID for each regional office
 
-                  officesMap.set(officeId, {
-                    id: officeId,
+                  officesMap.set(specificOfficeId, {
+                    id: specificOfficeId,
                     name: `${dept.Department} - ${regionName}`,
                     code: dept.DepartmentCode || `${dept.Department.substring(0, 2)}${mappingIndex + 1}`,
                     region: regionName,

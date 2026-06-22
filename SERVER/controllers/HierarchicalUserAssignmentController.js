@@ -1450,10 +1450,10 @@ const buildHierarchicalAssignment = async ({
           const deptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
           if (deptMappings.length > 0) {
             const firstMapping = deptMappings[0];
-            if (firstMapping.regionId) {
-              const region = await Region.findById(firstMapping.regionId);
+            if (firstMapping.regionIds && firstMapping.regionIds.length > 0) {
+              const region = await Region.findById(firstMapping.regionIds[0]);
               if (region) {
-                rcRegionId = firstMapping.regionId;
+                rcRegionId = firstMapping.regionIds[0];
               }
             }
           }
@@ -1501,10 +1501,10 @@ const buildHierarchicalAssignment = async ({
           const officeDeptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
           if (officeDeptMappings.length > 0) {
             const firstMapping = officeDeptMappings[0];
-            if (firstMapping.regionId) {
-              const region = await Region.findById(firstMapping.regionId);
+            if (firstMapping.regionIds && firstMapping.regionIds.length > 0) {
+              const region = await Region.findById(firstMapping.regionIds[0]);
               if (region) {
-                officeRegionId = firstMapping.regionId;
+                officeRegionId = firstMapping.regionIds[0];
               }
             }
           }

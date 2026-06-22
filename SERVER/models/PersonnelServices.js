@@ -112,6 +112,12 @@ const personnelServicesSchema = new mongoose.Schema(
       // TODO: Make this required after data migration
     },
     employeeStatus: { type: String, enum: ["Active", "Inactive"], required: true },
+    // Flag: employee is entitled to Medical and Meal allowances (hired before 1989).
+    // Mirrors the Employee.entitledToMedicalMeal field; copied at bulk-add time.
+    entitledToMedicalMeal: {
+      type: Boolean,
+      default: false,
+    },
     employeeNumber: {
       type: String,
     },

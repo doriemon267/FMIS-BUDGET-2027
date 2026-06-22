@@ -52,7 +52,7 @@ exports.getAllDepartment = async (req, res) => {
                 ]
               });
               if (coRegion) {
-                const coMappings = await mappingsCol.find({ regionId: coRegion._id }).toArray();
+                const coMappings = await mappingsCol.find({ regionIds: coRegion._id }).toArray();
                 const seen = new Set();
                 const exclude = ['REGIONAL OFFICE', 'IRRIGATION MANAGEMENT OFFICE'];
                 const fromMappings = coMappings
@@ -74,10 +74,7 @@ exports.getAllDepartment = async (req, res) => {
       } else {
         const OrganizationStructure = require('../models/OrganizationStructure');
         const mappings = await OrganizationStructure.find({
-          $or: [
-            { regionId: regionDoc._id },
-            { regionId: regionDoc._id.toString() }
-          ]
+          regionIds: { $in: [regionDoc._id, regionDoc._id.toString()] }
         });
         const departmentIds = [...new Set(mappings.map(m => m.departmentId && m.departmentId.toString()).filter(Boolean))];
         if (departmentIds.length > 0) {

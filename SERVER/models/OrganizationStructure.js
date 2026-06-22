@@ -34,6 +34,10 @@ const departmentDivisionMappingSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'region'
   },
+  regionIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'region'
+  }],
   createdAt: {
     type: Date,
     default: Date.now
@@ -58,7 +62,7 @@ departmentDivisionMappingSchema.statics.getCompleteOrganizationStructure = async
     // Get all departments
     const departments = await Department.find({ isActive: true }).sort({ Department: 1 });
     // Get all department-division mappings
-    const mappings = await this.find({}).populate('departmentId').populate('regionId');
+    const mappings = await this.find({}).populate('departmentId').populate('regionIds').populate('regionId');
     // Build complete structure
     const structure = {
       regions: regions.map(region => ({
@@ -78,13 +82,19 @@ departmentDivisionMappingSchema.statics.getCompleteOrganizationStructure = async
           isActive: dept.isActive
         };
       }),
-      mappings: mappings.map(mapping => ({
-        departmentId: mapping.departmentId?._id,
-        departmentName: mapping.departmentName,
-        divisions: mapping.divisions.filter(div => div.isActive),
-        hasSubDivisions: mapping.hasSubDivisions,
-        regionId: mapping.regionId?._id
-      }))
+      mappings: mappings.map(mapping => {
+        let rIds = mapping.regionIds ? mapping.regionIds.map(r => r._id) : [];
+        if (rIds.length === 0 && mapping.regionId) {
+          rIds = [mapping.regionId._id];
+        }
+        return {
+          departmentId: mapping.departmentId?._id,
+          departmentName: mapping.departmentName,
+          divisions: mapping.divisions.filter(div => div.isActive),
+          hasSubDivisions: mapping.hasSubDivisions,
+          regionIds: rIds
+        };
+      })
     };
     return structure;
   } catch (error) {
@@ -97,13 +107,20 @@ departmentDivisionMappingSchema.statics.getDepartmentsWithDivisions = async func
   try {
     const mappings = await this.find({ hasSubDivisions: true })
       .populate('departmentId')
+      .populate('regionIds')
       .populate('regionId');
-    return mappings.map(mapping => ({
-      departmentId: mapping.departmentId._id,
-      departmentName: mapping.departmentName,
-      divisions: mapping.divisions.filter(div => div.isActive),
-      regionId: mapping.regionId?._id
-    }));
+    return mappings.map(mapping => {
+      let rIds = mapping.regionIds ? mapping.regionIds.map(r => r._id) : [];
+      if (rIds.length === 0 && mapping.regionId) {
+        rIds = [mapping.regionId._id];
+      }
+      return {
+        departmentId: mapping.departmentId._id,
+        departmentName: mapping.departmentName,
+        divisions: mapping.divisions.filter(div => div.isActive),
+        regionIds: rIds
+      };
+    });
   } catch (error) {
     // Error getting departments with divisions
     throw error;

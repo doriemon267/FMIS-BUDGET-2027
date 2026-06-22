@@ -29,7 +29,9 @@ import {
   AccordionDetails,
   Chip,
   TablePagination,
-  InputAdornment
+  InputAdornment,
+  Checkbox,
+  ListItemText
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -136,14 +138,14 @@ const OrganizationSetupPage = () => {
     const searchLower = mappingSearch.toLowerCase();
     const filtered = mappings.filter(m => {
       const deptMatch = (m.departmentName || m.departmentId?.Department || '').toLowerCase().includes(searchLower);
-      const regionMatch = (m.regionId?.Region || '').toLowerCase().includes(searchLower);
+      const regionMatch = m.regionIds ? m.regionIds.some(r => r.Region?.toLowerCase().includes(searchLower)) : false;
       return deptMatch || regionMatch;
     });
 
     // Sort by Region then Department
     return filtered.sort((a, b) => {
-      const regA = a.regionId?.Region || 'Central Office';
-      const regB = b.regionId?.Region || 'Central Office';
+      const regA = a.regionIds && a.regionIds.length > 0 ? a.regionIds[0].Region : 'Central Office';
+      const regB = b.regionIds && b.regionIds.length > 0 ? b.regionIds[0].Region : 'Central Office';
       if (regA !== regB) return regA.localeCompare(regB);
       
       const deptA = a.departmentName || a.departmentId?.Department || '';
@@ -258,7 +260,7 @@ const OrganizationSetupPage = () => {
     } else if (tabValue === 2) { // Structure Mappings
       exportData = [];
       filteredMappings.forEach(m => {
-        const region = m.regionId?.Region || 'Central Office';
+        const region = m.regionIds && m.regionIds.length > 0 ? m.regionIds.map(r => r.Region).join(', ') : 'Central Office';
         const dept = m.departmentName || m.departmentId?.Department || '';
         
         if (!m.divisions || m.divisions.length === 0) {
@@ -372,17 +374,21 @@ const OrganizationSetupPage = () => {
 
   // Mapping Dialog Component
   const MappingDialog = () => {
-    const [formData, setFormData] = useState(mappingDialog.data || {
-      regionId: '',
+    const initData = mappingDialog.data ? { 
+      ...mappingDialog.data, 
+      regionIds: mappingDialog.data.regionIds ? mappingDialog.data.regionIds.map(r => r._id || r) : [] 
+    } : {
+      regionIds: [],
       departmentId: '',
       departmentName: '',
       divisions: []
-    });
+    };
+    const [formData, setFormData] = useState(initData);
 
     const addDivision = () => {
       setFormData({
         ...formData,
-        divisions: [...formData.divisions, { name: '', code: '', isActive: true, sections: [] }]
+        divisions: [{ _tempId: Math.random().toString(36).substr(2, 9), name: '', code: '', isActive: true, sections: [] }, ...formData.divisions]
       });
     };
 
@@ -400,7 +406,7 @@ const OrganizationSetupPage = () => {
 
     const addSection = (divIndex) => {
       const newDivisions = [...formData.divisions];
-      newDivisions[divIndex].sections.push({ name: '', code: '', isActive: true });
+      newDivisions[divIndex].sections = [{ _tempId: Math.random().toString(36).substr(2, 9), name: '', code: '', isActive: true }, ...(newDivisions[divIndex].sections || [])];
       setFormData({ ...formData, divisions: newDivisions });
     };
 
@@ -432,15 +438,30 @@ const OrganizationSetupPage = () => {
         <DialogContent>
           <Box sx={{ display: 'flex', gap: 2, mb: 3, mt: 1 }}>
             <FormControl fullWidth>
-              <InputLabel>Region (Optional)</InputLabel>
+              <InputLabel>Regions (Optional)</InputLabel>
               <Select
-                value={formData.regionId || ''}
-                label="Region (Optional)"
-                onChange={(e) => setFormData({ ...formData, regionId: e.target.value })}
+                multiple
+                value={formData.regionIds || []}
+                label="Regions (Optional)"
+                onChange={(e) => {
+                  const {
+                    target: { value },
+                  } = e;
+                  setFormData({
+                    ...formData,
+                    regionIds: typeof value === 'string' ? value.split(',') : value,
+                  });
+                }}
+                renderValue={(selected) => {
+                  if (!selected || selected.length === 0) return <em>None (Central Office typically)</em>;
+                  return selected.map(id => regions.find(r => r._id === id)?.Region).filter(Boolean).join(', ');
+                }}
               >
-                <MenuItem value=""><em>None (Central Office typically)</em></MenuItem>
                 {regions.map((reg) => (
-                  <MenuItem key={reg._id} value={reg._id}>{reg.Region}</MenuItem>
+                  <MenuItem key={reg._id} value={reg._id}>
+                    <Checkbox checked={(formData.regionIds || []).indexOf(reg._id) > -1} />
+                    <ListItemText primary={reg.Region} />
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -459,43 +480,50 @@ const OrganizationSetupPage = () => {
           </Box>
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">Divisions & Units</Typography>
-            <Button startIcon={<AddIcon />} variant="outlined" onClick={addDivision} size="small">Add Division</Button>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>Divisions & Units</Typography>
+            <Button startIcon={<AddIcon />} variant="contained" color="primary" onClick={addDivision} size="small" sx={{ borderRadius: 2 }}>Add Division</Button>
           </Box>
 
           {formData.divisions.map((div, divIndex) => (
-            <Paper key={divIndex} sx={{ p: 2, mb: 2, border: '1px solid #e0e0e0' }} elevation={0}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+            <Paper key={div._id || div._tempId || divIndex} sx={{ p: 2.5, mb: 3, border: '1px solid #eaeaea', borderTop: '4px solid', borderTopColor: 'primary.main', borderRadius: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.03)', transition: 'all 0.3s ease', '&:hover': { boxShadow: '0 6px 25px rgba(0,0,0,0.06)' } }}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 2 }}>
                 <TextField
+                  autoFocus={!!div._tempId}
                   label="Division Name"
                   size="small"
                   fullWidth
+                  variant="outlined"
                   value={div.name}
                   onChange={(e) => updateDivision(divIndex, 'name', e.target.value)}
+                  sx={{ backgroundColor: '#fff' }}
                 />
                 <TextField
                   label="Code (Optional)"
                   size="small"
-                  sx={{ width: '150px' }}
+                  variant="outlined"
+                  sx={{ width: '180px', backgroundColor: '#fff' }}
                   value={div.code || ''}
                   onChange={(e) => updateDivision(divIndex, 'code', e.target.value)}
                 />
-                <IconButton color="error" onClick={() => removeDivision(divIndex)}>
+                <IconButton color="error" onClick={() => removeDivision(divIndex)} sx={{ mt: 0.5, bgcolor: '#fff5f5', '&:hover': { bgcolor: '#ffebeb' } }}>
                   <DeleteIcon />
                 </IconButton>
               </Box>
               
-              <Box sx={{ pl: 4, borderLeft: '2px solid #primary.main' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="subtitle2" color="textSecondary">Units / Sections</Typography>
-                  <Button size="small" onClick={() => addSection(divIndex)}>Add Unit</Button>
+              <Box sx={{ pl: 4, py: 1.5, pr: 2, ml: 1, borderLeft: '2px solid #e0e0e0', backgroundColor: '#fafafa', borderRadius: '0 8px 8px 0' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="subtitle2" color="textSecondary" sx={{ fontWeight: 600, letterSpacing: 0.5 }}>UNITS / SECTIONS</Typography>
+                  <Button size="small" startIcon={<AddIcon />} variant="outlined" sx={{ borderRadius: 2 }} onClick={() => addSection(divIndex)}>Add Unit</Button>
                 </Box>
                 {div.sections && div.sections.map((sec, secIndex) => (
-                  <Box key={secIndex} sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 1 }}>
+                  <Box key={sec._id || sec._tempId || secIndex} sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 1.5, p: 1, backgroundColor: '#fff', border: '1px solid #eee', borderRadius: 1 }}>
                     <TextField
+                      autoFocus={!!sec._tempId}
                       label="Unit/Section Name"
                       size="small"
                       fullWidth
+                      variant="standard"
+                      InputProps={{ disableUnderline: true, sx: { px: 1 } }}
                       value={sec.name}
                       onChange={(e) => updateSection(divIndex, secIndex, 'name', e.target.value)}
                     />
@@ -504,6 +532,11 @@ const OrganizationSetupPage = () => {
                     </IconButton>
                   </Box>
                 ))}
+                {(!div.sections || div.sections.length === 0) && (
+                  <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 1 }}>
+                    No units/sections added yet.
+                  </Typography>
+                )}
               </Box>
             </Paper>
           ))}
@@ -726,9 +759,11 @@ const OrganizationSetupPage = () => {
                 <Accordion key={mapping._id} sx={{ mb: 1, border: '1px solid #e0e0e0', boxShadow: 'none' }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ backgroundColor: '#fafafa' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
-                      <Box sx={{ minWidth: '180px' }}>
-                        {mapping.regionId ? (
-                          <Chip label={mapping.regionId.Region} size="small" color="primary" sx={{ fontWeight: 'bold' }} />
+                      <Box sx={{ minWidth: '180px', display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {mapping.regionIds && mapping.regionIds.length > 0 ? (
+                          mapping.regionIds.map(reg => (
+                            <Chip key={reg._id} label={reg.Region} size="small" color="primary" sx={{ fontWeight: 'bold' }} />
+                          ))
                         ) : (
                           <Chip label="CENTRAL OFFICE" size="small" variant="outlined" />
                         )}

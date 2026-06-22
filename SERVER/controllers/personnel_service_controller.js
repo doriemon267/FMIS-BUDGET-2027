@@ -2,7 +2,9 @@ const mongoose = require("mongoose");
 const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
 const MealAllowance = require("../models/mealAllowance");
+const MedicalAllowance = require("../models/MedicalAllowance");
 const Settings = require("../models/Settings");
+
 const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -27,6 +29,13 @@ const {
   searchFilter,
 } = require("../utils/controller_get_process");
 const { roundTo2Decimals } = require("../utils/roundCurrency");
+const {
+  calculateMedicalAllowance,
+  calculateMealAllowance,
+  getAllowanceRates,
+  isEligibleForMedicalAllowance,
+} = require("../utils/allowanceUtils");
+
 
 // Statuses that prevent Budget Preparer from editing
 // Once forwarded to Reviewer or beyond, only return to Draft/Returned to Preparer allows editing
@@ -1095,6 +1104,35 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         }
       }
 
+      // ============================================================
+      // Compute Medical, Meal, and Children Allowance entitlement
+      // ============================================================
+      // An employee is entitled if:
+      //   (a) The Employee record has entitledToMedicalMeal = true (manually set), OR
+      //   (b) DateOfAppointment < 1989-01-01 (auto-derived rule)
+      const isEntitledByDate = isEligibleForMedicalAllowance(employee.DateOfAppointment);
+      // employee.entitledToMedicalMeal: explicit flag from Employee doc (may be undefined for old records)
+      // We treat explicit true/false as override; undefined falls back to date rule.
+      const isEntitled = employee.entitledToMedicalMeal !== undefined && employee.entitledToMedicalMeal !== null
+        ? Boolean(employee.entitledToMedicalMeal)
+        : isEntitledByDate;
+
+      const allowanceRates = getAllowanceRates(activeSettings);
+      const noOfDep = Math.min(4, Math.max(0, Number(req.body.noOfDependent || employee.noOfDependent || 0)));
+
+      // Medical: entitled employees get noOfDependents × medicalRate × 12
+      const computedMedical = isEntitled
+        ? calculateMedicalAllowance(noOfDep, allowanceRates.medicalAllowance)
+        : 0;
+      // Meal: entitled employees get 22 working days × mealRate × 12
+      const computedMeal = isEntitled
+        ? calculateMealAllowance(22, allowanceRates.mealAllowance)
+        : 0;
+      // Children Allowance: for ALL employees with dependents (not tied to 1988 rule)
+      const computedChildrenAllowance = noOfDep > 0
+        ? noOfDep * (allowanceRates.childrenAllowance || 0) * 12
+        : 0;
+
       let personnelService = {
         processBy: req.body.processBy || "Unknown",
         processDate: new Date(),
@@ -1119,19 +1157,23 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         region: employee.Region || "",
         statusOfAppointment: statusAppointment,
         employeeStatus: employee.employeeStatus,
+        // Mirror entitlement flag from Employee document
+        entitledToMedicalMeal: isEntitled,
         monthlySalary: monthlySalary,
-        noOfDependent: req.body.noOfDependent || 0,
+        noOfDependent: noOfDep,
         hazardPay: req.body.hazardPay || 0,
         subsistenceAllowance: req.body.subsistenceAllowance || 0,
         honoraria: req.body.honoraria || 0,
-        childrenAllowance: req.body.childrenAllowance || 0,
+        // Auto-computed from entitlement flag and noOfDependent
+        childrenAllowance: computedChildrenAllowance,
         annualSalary: annualSalary,
         RATA: rataAmount * 12,
         PERA: (req.body.PERA || activeSettings.PERA || 0) * 12,
         uniformALLOWANCE: (activeSettings.uniformAllowance || 0),
         productivityIncentive: (activeSettings.productivityIncentive || 0),
-        medical: 0, // Only set via /medicalAllowance page for personnel who qualify
-        meal: 0,
+        // Auto-computed: populated for entitled employees (hired before 1989)
+        medical: computedMedical,
+        meal: computedMeal,
         cashGift: (activeSettings.cashGift || 0),
         // Additional Medical: default to 0 if not configured in active settings
         additionalMedical: (activeSettings.additionalMedical || 0),
@@ -1284,6 +1326,126 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         }
       }
 
+      // ==============================================================
+      // Auto-insert MedicalAllowance records for entitled employees
+      // ==============================================================
+      const entitledPSItems = personnelServicesData
+        .map((item, idx) => ({ ps: item.ps, inserted: addedPersonnelServices[idx] }))
+        .filter(({ ps }) => ps.entitledToMedicalMeal);
+
+      let addedMedicalAllowances = [];
+      let addedMealAllowances = [];
+      let addedChildrenAllowances = [];
+
+      if (entitledPSItems.length > 0) {
+        const entitledEmpNums = entitledPSItems.map(({ ps }) => ps.employeeNumber);
+
+        // Duplicate check for Medical
+        const existingMedical = await MedicalAllowance.find({
+          fiscalYear: String(fiscalYear),
+          budgetType: budgetType,
+          employeeNumber: { $in: entitledEmpNums }
+        }).lean();
+        const existingMedicalSet = new Set(existingMedical.map(m => m.employeeNumber));
+
+        // Duplicate check for Meal
+        const existingMeal = await MealAllowance.find({
+          fiscalYear: String(fiscalYear),
+          budgetType: budgetType,
+          employeeNumber: { $in: entitledEmpNums }
+        }).lean();
+        const existingMealSet = new Set(existingMeal.map(m => m.employeeNumber));
+
+        const newMedicalRecords = [];
+        const newMealRecords = [];
+
+        for (const { ps } of entitledPSItems) {
+          const processBy = ps.processBy;
+          const processDate = ps.processDate;
+          const common = {
+            employeeNumber: ps.employeeNumber,
+            employeeFullName: ps.employeeFullName,
+            positionTitle: ps.positionTitle,
+            department: ps.department,
+            division: ps.division,
+            region: ps.region,
+            fiscalYear: String(fiscalYear),
+            budgetType: budgetType,
+            processBy,
+            processDate,
+            originalLevel: ps.originalLevel,
+            status: 'Not Submitted',
+          };
+
+          if (!existingMedicalSet.has(ps.employeeNumber)) {
+            newMedicalRecords.push({
+              ...common,
+              noOfDependents: ps.noOfDependent,
+              amount: ps.medical,
+            });
+          }
+          if (!existingMealSet.has(ps.employeeNumber)) {
+            newMealRecords.push({
+              ...common,
+              actualDays: 22,
+              amount: ps.meal,
+            });
+          }
+        }
+
+        if (newMedicalRecords.length > 0) {
+          addedMedicalAllowances = await MedicalAllowance.insertMany(newMedicalRecords);
+          console.log(`✅ [BULK ADD] Inserted ${addedMedicalAllowances.length} Medical Allowance records.`);
+        }
+        if (newMealRecords.length > 0) {
+          addedMealAllowances = await MealAllowance.insertMany(newMealRecords);
+          console.log(`✅ [BULK ADD] Inserted ${addedMealAllowances.length} Meal Allowance records.`);
+        }
+      }
+
+      // ==============================================================
+      // Auto-insert ChildrenAllowance records for employees with dependents
+      // (Not gated by entitledToMedicalMeal — all employees with noOfDependent > 0)
+      // ==============================================================
+      const psItemsWithDeps = personnelServicesData
+        .map((item, idx) => ({ ps: item.ps, inserted: addedPersonnelServices[idx] }))
+        .filter(({ ps }) => ps.noOfDependent > 0);
+
+      if (psItemsWithDeps.length > 0) {
+        const depsEmpNums = psItemsWithDeps.map(({ ps }) => ps.employeeNumber);
+
+        const existingChildren = await ChildrenAllowance.find({
+          fiscalYear: String(fiscalYear),
+          budgetType: budgetType,
+          employeeNumber: { $in: depsEmpNums }
+        }).lean();
+        const existingChildrenSet = new Set(existingChildren.map(c => c.employeeNumber));
+
+        const newChildrenRecords = psItemsWithDeps
+          .filter(({ ps }) => !existingChildrenSet.has(ps.employeeNumber))
+          .map(({ ps }) => ({
+            employeeNumber: ps.employeeNumber,
+            employeeFullName: ps.employeeFullName,
+            positionTitle: ps.positionTitle,
+            department: ps.department,
+            division: ps.division,
+            region: ps.region,
+            noOfDependents: ps.noOfDependent,
+            amount: ps.childrenAllowance,
+            processBy: ps.processBy,
+            processDate: ps.processDate,
+            fiscalYear: String(fiscalYear),
+            budgetType: budgetType,
+            originalLevel: ps.originalLevel,
+            status: 'Not Submitted',
+          }));
+
+        if (newChildrenRecords.length > 0) {
+          addedChildrenAllowances = await ChildrenAllowance.insertMany(newChildrenRecords);
+          console.log(`✅ [BULK ADD] Inserted ${addedChildrenAllowances.length} Children Allowance records.`);
+        }
+      }
+
         // Direct recompute for linked legacy proposal
         if (legacyProposalPS?._id) {
           try {
@@ -1326,8 +1488,11 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         added: addedPersonnelServices,
         addedLoyaltyPays: addedLoyaltyPays.length,
         addedRetirees: addedRetirees.length,
+        addedMedicalAllowances: addedMedicalAllowances.length,
+        addedMealAllowances: addedMealAllowances.length,
+        addedChildrenAllowances: addedChildrenAllowances.length,
         duplicates: duplicates,
-        message: `Successfully added ${addedPersonnelServices.length} personnel services, ${addedLoyaltyPays.length} loyalty pay records, and ${addedRetirees.length} retiree records. ${duplicates.length} duplicates were skipped.`
+        message: `Successfully added ${addedPersonnelServices.length} personnel services, ${addedLoyaltyPays.length} loyalty pay, ${addedRetirees.length} retiree, ${addedMedicalAllowances.length} medical, ${addedMealAllowances.length} meal, and ${addedChildrenAllowances.length} children allowance records. ${duplicates.length} duplicates were skipped.`
       });
     } else {
       res.status(200).json({ 

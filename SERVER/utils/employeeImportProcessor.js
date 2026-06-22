@@ -466,6 +466,28 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
   record.processBy = processBy || "ADMIN";
   record.employeeStatus = record.Status || 'Active';
 
+  // Auto-compute entitledToMedicalMeal:
+  //   - If the Excel row has an explicit ENTITLED_MEDICAL_MEAL column (true/false/"YES"/"NO"), use it.
+  //   - Otherwise, auto-derive from DateOfAppointment < 1989-01-01.
+  const explicitEntitled = record.ENTITLED_MEDICAL_MEAL ?? record.entitledToMedicalMeal;
+  if (explicitEntitled !== undefined && explicitEntitled !== null && explicitEntitled !== '') {
+    const val = String(explicitEntitled).trim().toUpperCase();
+    record.entitledToMedicalMeal = (val === 'TRUE' || val === 'YES' || val === '1');
+  } else if (record.DateOfAppointment instanceof Date && !isNaN(record.DateOfAppointment)) {
+    record.entitledToMedicalMeal = record.DateOfAppointment < new Date('1989-01-01');
+  } else {
+    record.entitledToMedicalMeal = false;
+  }
+  delete record.ENTITLED_MEDICAL_MEAL; // remove alias column if present
+
+  // Normalize noOfDependent (0–4)
+  if (record.noOfDependent != null && record.noOfDependent !== '') {
+    const depVal = Math.min(4, Math.max(0, parseInt(String(record.noOfDependent).trim(), 10) || 0));
+    record.noOfDependent = depVal;
+  } else {
+    record.noOfDependent = 0;
+  }
+
   return {
     record,
     errors,
