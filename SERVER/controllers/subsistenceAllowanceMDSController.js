@@ -4,6 +4,7 @@ const Settings = require("../models/Settings");
 const PersonnelServices = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const { applyTableFilters } = require('../utils/controller_get_process');
 
 /**
  * Helper function: Calculate PersonnelServices Total correctly
@@ -139,15 +140,15 @@ exports.getAllSubsistenceAllowances = async (req, res) => {
     const { fiscalYear, page = 1, limit = 10, search, orderBy, order = "asc" } =
       req.query;
     let query = {};
-    if (search) {
-      query.$or = [
-        { employeeFullName: { $regex: search, $options: "i" } },
-        { positionTitle:    { $regex: search, $options: "i" } },
-        { department:       { $regex: search, $options: "i" } },
-        { division:         { $regex: search, $options: "i" } },
-        { region:           { $regex: search, $options: "i" } },
-      ];
-    }
+    // Apply dynamic table filters
+    applyTableFilters(
+      query, 
+      req.query, 
+      ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'], 
+      ['Amount'], 
+      ['processDate', 'createdAt', 'updatedAt'], 
+      ['employeeFullName', 'positionTitle', 'department', 'division', 'region']
+    );
     // Determine fiscalYear
     let fy = fiscalYear;
     if (!fy) {

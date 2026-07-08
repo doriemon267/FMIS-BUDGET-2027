@@ -27,7 +27,7 @@ const IncomeSubCategory = require('../models/IncomeSubcategory');
 const DiscountSettings = require('../models/DiscountSettings');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 
 // Constants for PDF styling
 const COLORS = {
@@ -1245,7 +1245,9 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     // Signature block (workflow-based)
     if (currentPage > 0) {
       const sigY = PAGE_HEIGHT - MARGIN_BOTTOM - 80;
-      drawWorkflowSignatureBlock(pdfDoc, reportData.signatoriesInfo || extractSignatoriesFromWorkflow(null, req.user), sigY, CONTENT_LEFT, TABLE_WIDTH, tempSignatureImagePaths);
+      const sigContext = (reportData.regionList && reportData.regionList.length === 1) ? { region: reportData.regionList[0] } : null;
+      reportData.signatoriesInfo = await enrichSignatoriesWithPositionTitle(reportData.signatoriesInfo || extractSignatoriesFromWorkflow(null, req.user), sigContext);
+      drawWorkflowSignatureBlock(pdfDoc, reportData.signatoriesInfo, sigY, CONTENT_LEFT, TABLE_WIDTH, tempSignatureImagePaths);
     }
 
     // Log audit trail

@@ -5,7 +5,7 @@ const PersonnelServices = require('../models/PersonnelServices');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const Region = require('../models/Region');
-const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 
 let MuhammaraRecipe;
 try {
@@ -823,6 +823,8 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     ensureSpace(8);
     curY += LINE_H * 2;
+    const sigContext = (regionList && regionList.length === 1) ? { region: regionList[0] } : null;
+    signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo, sigContext);
     curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, PAGE_WIDTH - (MARGIN * 2), tempSignatureImagePaths);
 
     pdfDoc.endPage().endPDF((err) => {

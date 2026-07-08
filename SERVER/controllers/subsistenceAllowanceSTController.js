@@ -4,6 +4,7 @@ const Settings               = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');  // :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const { applyTableFilters } = require('../utils/controller_get_process');
 const PersonnelServices = PersonnelService;
 
 /**
@@ -163,15 +164,15 @@ exports.getAllSubsistenceST = async (req, res) => {
   try {
     const { fiscalYear, page = 1, limit = 10, search, orderBy, order = "asc" } = req.query;
     let query = {};
-    if (search) {
-      query.$or = [
-        { employeeFullName: { $regex: search, $options: "i" } },
-        { positionTitle:    { $regex: search, $options: "i" } },
-        { department:       { $regex: search, $options: "i" } },
-        { division:         { $regex: search, $options: "i" } },
-        { region:           { $regex: search, $options: "i" } },
-      ];
-    }
+    // Apply dynamic table filters
+    applyTableFilters(
+      query, 
+      req.query, 
+      ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'], 
+      ['monthlySalary', 'actualExposureDays', 'amount'], 
+      ['processDate', 'createdAt', 'updatedAt'], 
+      ['employeeFullName', 'positionTitle', 'department', 'division', 'region', 'riskLevel']
+    );
     let fy = fiscalYear;
     if (!fy) {
       const activeSettings = await Settings.findOne({ isActive: true }).lean();

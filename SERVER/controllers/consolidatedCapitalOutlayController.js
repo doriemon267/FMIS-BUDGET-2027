@@ -6,7 +6,7 @@ const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const Region = require('../models/Region');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 
 let MuhammaraRecipe;
 try {
@@ -807,6 +807,8 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
     // Drawing signature block — keep on same page if possible
     ensureSpace(4);
     curY += LINE_H;
+    const sigContext = (regionList && regionList.length === 1) ? { region: regionList[0] } : null;
+    signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo, sigContext);
     curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, PAGE_WIDTH - (MARGIN * 2), tempSignatureImagePaths);
 
     pdfDoc.endPage().endPDF((err) => {

@@ -1092,6 +1092,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
               retirementType: eligibleType,
               dateOfRetirement: null,
               leaveDays: 0,
+              monthlySalary: monthlySalary,
               terminalLeave: 0,
               retirementGratuity: 0,
               total: 0,

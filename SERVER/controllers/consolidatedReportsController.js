@@ -5,7 +5,7 @@ const MooeProposal = require('../models/mooeProposals');
 const Region = require('../models/Region');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 
 let MuhammaraRecipe;
 try {
@@ -1014,6 +1014,7 @@ const consolidatedReportsController = {
       // Plain lines — no boxes, no fills
       // ============================================================
       ensureSpace(10);
+      signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo);
       curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, CONTENT_WIDTH, tempSignatureImagePaths);
       curY += ROW_H * 2.5 + ROW_H + 20;
 

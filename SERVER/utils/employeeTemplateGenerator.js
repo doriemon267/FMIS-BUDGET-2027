@@ -63,7 +63,8 @@ const generateFilteredSampleData = (region, scope, accessibleDepartments, access
           'SG': 12,
           'JG': 'JG-12',
           'Step': 5,
-          'Rate': ''
+          'Rate': '',
+          'noOfDependent': 0
         }
       );
       break;
@@ -168,7 +169,8 @@ const generateFilteredSampleData = (region, scope, accessibleDepartments, access
           'SG': 10,
           'JG': '',
           'Step': 1,
-          'Rate': ''
+          'Rate': '',
+          'noOfDependent': 0
         }
       );
   }
@@ -189,7 +191,8 @@ const generateFilteredSampleData = (region, scope, accessibleDepartments, access
       'SG': 10,
       'JG': 'JG-10',
       'Step': 1,
-      'Rate': ''
+      'Rate': '',
+      'noOfDependent': 0
     });
   }
 
@@ -309,6 +312,7 @@ const generateEmployeeTemplate = (options = {}) => {
       'JG': 'JG-10',
       'Step': 1,
       'Rate': '',
+      'noOfDependent': 0,
     },
     {
       'EmployeeFullName*': 'Maria Santos',
@@ -327,6 +331,7 @@ const generateEmployeeTemplate = (options = {}) => {
       'JG': '',
       'Step': 1,
       'Rate': '',
+      'noOfDependent': 0,
     },
     {
       'EmployeeFullName*': 'VACANT',
@@ -345,6 +350,7 @@ const generateEmployeeTemplate = (options = {}) => {
       'JG': '',
       'Step': '',
       'Rate': '',
+      'noOfDependent': '',
     },
     // Add filtered sample data based on access level
     ...generateFilteredSampleData(region, scope, accessibleDepartments, accessibleDivisions, accessibleSections)
@@ -371,7 +377,8 @@ const generateEmployeeTemplate = (options = {}) => {
     { wch: 8 },  // SG
     { wch: 10 }, // JG
     { wch: 8 },  // Step
-    { wch: 12 }  // Rate
+    { wch: 12 }, // Rate
+    { wch: 15 }  // noOfDependent
   ];
   ws['!cols'] = colWidths;
 
@@ -408,6 +415,7 @@ const generateEmployeeTemplate = (options = {}) => {
     { 'Instructions': '- PG: PG (bases from salary tables)' },
     { 'Instructions': '- SG, JG, Step: Optional; bases from /employee-salary-table or /cos-salary-table' },
     { 'Instructions': '- Rate: Auto-computed from SG+Step (leave empty when SG+Step provided)' },
+    { 'Instructions': '- noOfDependent: Number of dependents from 0 to 4 (optional)' },
     { 'Instructions': '' },
     { 'Instructions': 'SALARY FIELDS (SG, JG, PG not required):' },
     { 'Instructions': '- Permanent/Casual: Use data from /employee-salary-table' },
@@ -465,7 +473,8 @@ const getEmployeeFields = () => {
       'SG',
       'JG',
       'Step',
-      'Rate'
+      'Rate',
+      'noOfDependent'
     ],
     computed: [],
     descriptions: {
@@ -484,7 +493,8 @@ const getEmployeeFields = () => {
       SG: 'Salary Grade (optional)',
       JG: 'Job Grade (optional)',
       Step: 'Salary step (optional)',
-      Rate: 'Monthly salary rate'
+      Rate: 'Monthly salary rate',
+      noOfDependent: 'Number of dependents (0-4) (optional)'
     }
   };
 };

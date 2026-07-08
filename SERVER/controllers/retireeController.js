@@ -7,18 +7,83 @@ const Settings = require("../models/Settings");
  */
 exports.getAllRetirees = async (req, res) => {
   try {
-    const { page = 1, limit = 20, fiscalYear } = req.query;
+    const { 
+      page = 1, 
+      limit = 20, 
+      fiscalYear,
+      search,
+      orderBy = "createdAt",
+      order = "desc",
+      operator = "=",
+      employeeNumber,
+      employeeFullName,
+      positionTitle,
+      department,
+      division,
+      region,
+      retirementType,
+      dateOfRetirement,
+      leaveDays,
+      terminalLeave,
+      retirementGratuity,
+      total
+    } = req.query;
+    
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.max(1, Number(limit));
     const skip = (pageNum - 1) * limitNum;
+
+    // Import utility functions
+    const {
+      searchFilter,
+      textFilter,
+      numberFilter,
+      dateFilter,
+    } = require("../utils/controller_get_process");
 
     // Build query with hierarchical filters
     const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     
+    // Global search
+    if (search) {
+      searchFilter(query, search, [
+        "employeeFullName",
+        "employeeNumber",
+        "department",
+        "positionTitle"
+      ]);
+    }
+
+    // Text filters
+    textFilter(query, {
+      employeeNumber,
+      employeeFullName,
+      positionTitle,
+      department,
+      division,
+      region,
+      retirementType
+    });
+
+    // Date filters
+    dateFilter(query, { dateOfRetirement });
+
+    // Number filters
+    numberFilter(query, {
+      leaveDays,
+      terminalLeave,
+      retirementGratuity,
+      total
+    }, operator);
+
+    // Sorting
+    const sortOrder = order.toLowerCase() === "asc" ? 1 : -1;
+    const sortQuery = { [orderBy]: sortOrder };
+
     // Initial fetch to apply manual case-insensitive filtering if needed
     // or just use regex in the query for better performance if model is consistent
-    const retirees = await Retiree.find(query).sort({ createdAt: -1 }).lean();
+    const retirees = await Retiree.find(query).sort(sortQuery).lean();
     
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
     const userId = req.user?.id || req.user?._id;

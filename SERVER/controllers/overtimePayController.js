@@ -4,6 +4,7 @@ const Settings          = require("../models/Settings");
 const CompensationSettings = require("../models/CompensationSettings");
 const PersonnelServices = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { applyTableFilters } = require('../utils/controller_get_process');
 /**
  * Helper: compute total overtime for an employee in a fiscal year
  */
@@ -396,22 +397,15 @@ exports.getAllOvertimePays = async (req, res) => {
       region,
     } = req.query;
     let query = {};
-    // Search filter
-    if (search) {
-      query.$or = [
-        { employeeFullName: { $regex: search, $options: "i" } },
-        { positionTitle:    { $regex: search, $options: "i" } },
-        { processBy:        { $regex: search, $options: "i" } },
-        { fiscalYear:       { $regex: search, $options: "i" } },
-      ];
-      const n = !isNaN(Number(search)) ? Number(search) : null;
-      if (n !== null) {
-        query.$or.push(
-          { weekdayHours: n },
-          { weekendHours: n }
-        );
-      }
-    }
+    // Apply dynamic table filters
+    applyTableFilters(
+      query, 
+      req.query, 
+      ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region', 'processBy'], 
+      ['weekdayHours', 'weekendHours', 'monthlySalary', 'amount'], 
+      ['processDate', 'createdAt', 'updatedAt'], 
+      ['employeeFullName', 'positionTitle', 'processBy', 'fiscalYear', 'employeeNumber', 'department']
+    );
     // Fiscal year filter
     if (!fiscalYear) {
       const active = await Settings.findOne({ isActive: true }).lean();

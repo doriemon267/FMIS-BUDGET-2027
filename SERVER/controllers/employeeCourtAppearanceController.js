@@ -6,6 +6,7 @@ const {
   numberFilter,
   dateFilter,
   textFilter,
+  applyTableFilters
 } = require("../utils/controller_get_process");
 // GET all court appearances
 exports.getAllAppearances = async (req, res) => {
@@ -47,7 +48,26 @@ exports.getAllAppearances = async (req, res) => {
         { Department: { $regex: /^LEGAL SERVICES$/i } }
       ]
     };
-    let personnelList = await PersonnelServices.find(legalServicesQuery);
+    
+    // Apply dynamic table filters
+    applyTableFilters(
+      legalServicesQuery, 
+      req.query, 
+      ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'], 
+      [], 
+      [], 
+      ['employeeFullName', 'positionTitle', 'department', 'division', 'region']
+    );
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const totalRecords = await PersonnelServices.countDocuments(legalServicesQuery);
+    let personnelList = await PersonnelServices.find(legalServicesQuery)
+      .skip(skip)
+      .limit(limit);
+      
     // Kumuha ng existing court appearances with region filter if provided
     const appearanceQuery = { fiscalYear };
     if (regionFilter && regionFilter !== 'All') {
@@ -80,9 +100,9 @@ exports.getAllAppearances = async (req, res) => {
     });
     return res.json({
       data: merged,
-      totalRecords: merged.length,
-      currentPage: 1,
-      totalPages: 1,
+      totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit),
       region: regionFilter || 'All'
     });
   } catch (err) {

@@ -14,7 +14,7 @@ const COSPersonnel = require('../models/COSPersonnel');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
-const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 // Export Budget Summary as PDF
 const exportBudgetSummaryPDF = async (req, res) => {
   try {
@@ -255,7 +255,8 @@ const exportBudgetSummaryPDF = async (req, res) => {
     drawStatusSummary('Income Summary', incomeData);
 
     // Fetch workflow data to get signatories
-    let signatoriesInfo = extractSignatoriesFromWorkflow(null);
+    // Fetch workflow data to get signatories
+    let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
     const workflowRefId = (mooeData.find(m => m.workflowRef)?.workflowRef) || 
                           (capitalOutlayData.find(c => c.workflowRef)?.workflowRef) || 
                           (personnelData.find(p => p.workflowRef)?.workflowRef);
@@ -263,13 +264,15 @@ const exportBudgetSummaryPDF = async (req, res) => {
       const NewProposalWorkflow = require('../models/NewProposalWorkflow');
       const workflow = await NewProposalWorkflow.findById(workflowRefId).lean();
       if (workflow) {
-        signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
+        signatoriesInfo = extractSignatoriesFromWorkflow(workflow, req.user);
       }
     }
 
     ensureSpace(4);
     currentY += 10;
     
+    const sigContext = region ? { region } : null;
+    signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo, sigContext);
     currentY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, currentY, MARGIN, PAGE_WIDTH - (MARGIN * 2), tempSignatureImagePaths);
 
     drawFooter();

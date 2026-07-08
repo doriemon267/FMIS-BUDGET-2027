@@ -181,6 +181,7 @@ const normalizeRecordKeys = (rec) => {
     'PG*': 'PG', 'pg': 'PG',
     'DateOfBirth': 'DateOfBirth', 'Date of Birth': 'DateOfBirth',
     'Division': 'Division',
+    'noOfDependent': 'noOfDependent', 'Number of Dependents': 'noOfDependent', 'Number Of Dependents': 'noOfDependent', 'No Of Dependents': 'noOfDependent', 'No. of Dependents': 'noOfDependent', 'no of dependent': 'noOfDependent', 'Number of Dependent': 'noOfDependent', 'no. of dependents': 'noOfDependent',
   };
   const out = {};
   for (const [k, v] of Object.entries(rec || {})) {

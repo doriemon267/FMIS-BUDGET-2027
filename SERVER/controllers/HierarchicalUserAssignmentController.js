@@ -100,6 +100,7 @@ const lookupUserFromMainDB = async (req, res) => {
 
     // Query the assigned_roles collection from fmis_main database
     const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
+    // const UserData = mainConnection.model('user_datas',new mongoose.Schema({},{strict:false}),'user_datas');
     const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
 
     const userData = await AssignedRole.findOne({
@@ -162,8 +163,51 @@ const lookupUserFromMainDB = async (req, res) => {
       roles: roleNames, // Return actual role names, not just IDs
       department: userData.department || userData.departmentName,
       division: userData.division || userData.divisionName,
-      region: userData.region || userData.regionName
+      region: userData.region || userData.regionName,
+      positionTitle: null
     };
+    
+    // 🔍 Try to enrich with positionTitle from user_datas collection (fmis_main DB)
+    try {
+      const UserData = mainConnection.models['user_datas'] || mainConnection.model('user_datas', new mongoose.Schema({}, { strict: false }), 'user_datas');
+      
+      const identifiers = [];
+      if (userData.user) identifiers.push(userData.user);
+      if (userId) identifiers.push(userId);
+      
+      if (identifiers.length > 0) {
+        // user_datas typically uses string ids or numbers for 'user', 'code', 'id'
+        const stringIds = Array.from(new Set(identifiers.map((v) => String(v).trim())));
+        const numericIds = Array.from(
+          new Set(
+            stringIds
+              .map((v) => {
+                const n = Number(v);
+                return Number.isNaN(n) ? null : n;
+              })
+              .filter((v) => v !== null)
+          )
+        );
+        const allIds = [...stringIds, ...numericIds];
+        
+        const userDatasDoc = await UserData.findOne({
+          $or: [
+            { user: { $in: allIds } },
+            { id: { $in: allIds } },
+            { code: { $in: allIds } },
+            { particularID: { $in: allIds } }
+          ]
+        }).lean();
+
+        if (userDatasDoc && userDatasDoc.positionTitle) {
+          userInfo.positionTitle = userDatasDoc.positionTitle;
+        }
+      }
+    } catch (userDataErr) {
+      if (DEBUG) {
+        console.debug('ℹ️ Failed to enrich user positionTitle from user_datas collection:', userDataErr?.message);
+      }
+    }
 
     // 🔍 Try to enrich with the canonical email from the User collection (budget DB)
     try {
@@ -350,7 +394,8 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       departmentId,
       divisionName,
       officeId, // NEW: Office ID from new structure
-      responsibilityCenterName // NEW: Responsibility center name from new structure
+      responsibilityCenterName, // NEW: Responsibility center name from new structure
+      positionTitle // Support saving position title
     } = req.body;
 
     // Handle backward compatibility: map new field names to old ones
@@ -515,6 +560,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       userId,
       userName,
       email: resolvedEmail,
+      positionTitle: positionTitle || null,
       // NEW: Support multiple roles from FMIS main system
       userRoles: req.body.userRoles || [], // Array of roles from FMIS main
       // Keep backward compatibility - primary role (highest in hierarchy)

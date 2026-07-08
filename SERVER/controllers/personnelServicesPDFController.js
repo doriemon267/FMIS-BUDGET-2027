@@ -4,7 +4,7 @@ const os = require('os');
 const PersonnelServices = require('../models/PersonnelServices');
 const COSPersonnel = require('../models/COSPersonnel');
 const { Recipe: MuhammaraRecipe } = require('muhammara');
-const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages } = require('../utils/pdfSignatureHelper');
+const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 
 const globalTempImagePaths = [];
 
@@ -30,6 +30,7 @@ const addSignatoriesToPage = async (pdfDoc, currentPage, currentY, data, pageWid
   }
 
   const contentWidth = pageWidth - (margin * 2);
+  signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo);
   currentY = drawWorkflowSignatureBlock(currentPage, signatoriesInfo, currentY, margin, contentWidth, globalTempImagePaths);
 
   return { currentPage, pageNumber, currentY };

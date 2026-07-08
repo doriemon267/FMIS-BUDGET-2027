@@ -18,6 +18,10 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  positionTitle: {
+    type: String,
+    default: null
+  },
   // NEW: Support for multiple roles (November 2025)
   // Allow users to have multiple legitimate roles (e.g., Preparer + Reviewer)
   userRoles: [{

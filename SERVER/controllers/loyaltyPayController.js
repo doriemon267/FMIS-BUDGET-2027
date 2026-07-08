@@ -10,6 +10,8 @@ const {
   getEligibleLoyaltyPayYear,
   calculateLoyaltyPayAmount
 } = require("../utils/loyaltyPayUtils");
+const { applyTableFilters } = require('../utils/controller_get_process');
+
 /**
  * Helper: compute total loyalty pay for an employee in a fiscal year
  */
@@ -174,6 +176,10 @@ exports.getAllLoyaltyPays = async (req, res) => {
       }
     }
     
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     if (fiscalYear) {
       if (query.$and) {
         query.$and.push({ fiscalYear: fiscalYear });
@@ -190,8 +196,28 @@ exports.getAllLoyaltyPays = async (req, res) => {
         }
       }
     }
-    const records = await LoyaltyPay.find(query).lean().sort({ createdAt: -1 });
-    return res.status(200).json({ data: records });
+
+    // Apply dynamic table filters
+    applyTableFilters(
+      query, 
+      req.query, 
+      ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'], 
+      ['yearsInService', 'amount'], 
+      ['appointmentDate', 'processDate', 'createdAt', 'updatedAt'], 
+      ['employeeFullName', 'positionTitle', 'department', 'division', 'region', 'processBy']
+    );
+
+    const [records, total] = await Promise.all([
+      LoyaltyPay.find(query).lean().skip(skip).limit(limit).sort({ createdAt: -1 }),
+      LoyaltyPay.countDocuments(query),
+    ]);
+
+    return res.status(200).json({ 
+      data: records,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      totalRecords: total,
+    });
   } catch (err) {
     console.error("❌ Error in getAllLoyaltyPays:", err);
     return res.status(500).json({ message: "Server error", error: err.message });

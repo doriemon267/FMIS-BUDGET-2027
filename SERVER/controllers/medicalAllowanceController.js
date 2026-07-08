@@ -5,6 +5,7 @@ const { calculateMedicalAllowance, getAllowanceRates } = require("../utils/allow
 const PersonnelService = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const { applyTableFilters } = require('../utils/controller_get_process');
 const PersonnelServices = PersonnelService;
 
 // Function to sync medical allowance with personnel services
@@ -98,16 +99,15 @@ const getAllMedicalAllowances = async (req, res) => {
     const skip = (page - 1) * limit;
     // Build query
     let query = {};
-    if (search) {
-      query.$or = [
-        { employeeFullName: { $regex: search, $options: "i" } },
-        { employeeNumber: { $regex: search, $options: "i" } },
-        { positionTitle: { $regex: search, $options: "i" } },
-        { department: { $regex: search, $options: "i" } },
-        { division: { $regex: search, $options: "i" } },
-        { region: { $regex: search, $options: "i" } },
-      ];
-    }
+    // Apply dynamic table filters
+    applyTableFilters(
+      query, 
+      req.query, 
+      ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'], 
+      ['amount', 'noOfDependents'], 
+      ['processDate', 'createdAt', 'updatedAt'], 
+      ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
+    );
     // Add fiscalYear to query if provided
     if (fiscalYear) {
       query.fiscalYear = fiscalYear;

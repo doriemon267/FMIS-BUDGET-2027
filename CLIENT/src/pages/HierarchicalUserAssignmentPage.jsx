@@ -148,6 +148,7 @@ const HierarchicalUserAssignmentPage = () => {
     userId: '',
     userName: '',
     email: '',
+    positionTitle: '',
     // NEW: Support for multiple roles from FMIS main system
     userRoles: [], // Array of roles from FMIS main
     userRole: '', // Primary role for backward compatibility
@@ -415,6 +416,7 @@ const HierarchicalUserAssignmentPage = () => {
       handleFormChange('userId', userLookupData.userId || '');
       handleFormChange('userName', userLookupData.userName || '');
       handleFormChange('email', userLookupData.email || '');
+      handleFormChange('positionTitle', userLookupData.positionTitle || '');
       const budgetRole = userLookupData.budgetRole || fmisRoles[0] || 'BUDGET_PREPARER';
 
       // Auto-set assignment level and permissions based on the budget role
@@ -572,6 +574,7 @@ const HierarchicalUserAssignmentPage = () => {
       userId: '',
       userName: '',
       email: '',
+      positionTitle: '',
       // NEW: Reset multiple roles array
       userRoles: [],
       userRole: '',
@@ -670,6 +673,7 @@ const HierarchicalUserAssignmentPage = () => {
       userId: formData.userId,
       userName: formData.userName,
       email: formData.email,
+      positionTitle: formData.positionTitle,
       // NEW: Include multiple roles from FMIS main system
       userRoles: formData.userRoles || [],
       userRole: formData.userRole,
@@ -1042,6 +1046,10 @@ const HierarchicalUserAssignmentPage = () => {
                             handleFormChange('email', data.email);
                           }
                           
+                          if (data.positionTitle) {
+                            handleFormChange('positionTitle', data.positionTitle);
+                          }
+                          
                           // NEW: Set userRoles from FMIS lookup
                           handleFormChange('userRoles', data.budgetRoles || []);
                           
@@ -1137,6 +1145,16 @@ const HierarchicalUserAssignmentPage = () => {
                       : 'Valid email is required'
                   }
                   inputProps={{ 'aria-label': 'Email' }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Position Title"
+                  value={formData.positionTitle || ''}
+                  onChange={(e) => handleFormChange('positionTitle', e.target.value)}
+                  helperText="Position title used for reports and signatories"
+                  inputProps={{ 'aria-label': 'Position Title' }}
                 />
               </Grid>
 
@@ -1311,6 +1329,7 @@ const HierarchicalUserAssignmentPage = () => {
                         if (fmisData) {
                           if (fmisData.userName) handleFormChange('userName', fmisData.userName);
                           if (fmisData.email) handleFormChange('email', fmisData.email);
+                          if (fmisData.positionTitle) handleFormChange('positionTitle', fmisData.positionTitle);
                           if (fmisData.budgetRoles && fmisData.budgetRoles.length > 0) {
                             handleFormChange('userRoles', fmisData.budgetRoles);
                             handleFormChange('userRole', fmisData.budgetRole || fmisData.budgetRoles[0]);

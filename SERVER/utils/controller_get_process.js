@@ -129,3 +129,40 @@ exports.objectFilter = async (
     return { success: false, message: "Server error", error: error.message };
   }
 };
+
+exports.applyTableFilters = (query, reqQuery, textFields = [], numberFields = [], dateFields = [], searchFields = []) => {
+  const { search, operator = "=" } = reqQuery;
+
+  if (search && searchFields.length > 0) {
+    if (!query.$or) query.$or = [];
+    searchFields.forEach(field => {
+      query.$or.push({ [field]: { $regex: search, $options: "i" } });
+    });
+  }
+
+  const textFiltersObj = {};
+  textFields.forEach(field => {
+    if (reqQuery[field]) textFiltersObj[field] = reqQuery[field];
+  });
+  if (Object.keys(textFiltersObj).length > 0) {
+    exports.textFilter(query, textFiltersObj);
+  }
+
+  const dateFiltersObj = {};
+  dateFields.forEach(field => {
+    if (reqQuery[field]) dateFiltersObj[field] = reqQuery[field];
+  });
+  if (Object.keys(dateFiltersObj).length > 0) {
+    exports.dateFilter(query, dateFiltersObj);
+  }
+
+  const numberFiltersObj = {};
+  numberFields.forEach(field => {
+    if (reqQuery[field]) numberFiltersObj[field] = reqQuery[field];
+  });
+  if (Object.keys(numberFiltersObj).length > 0) {
+    exports.numberFilter(query, numberFiltersObj, operator);
+  }
+
+  return query;
+};
