@@ -60,7 +60,7 @@ exports.getMOOEData = async (req, res) => {
         // SUPER ADMIN can see their own records only (filtered by userId)
         const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
         if (isSuperAdmin) {
-          // SUPER ADMIN sees only their own MOOE records
+          // SUPER ADMIN sees only their own MOOE records, but MUST be filtered by region if requested
           const userId = String(req.user.id);
           filter = {
             ...filter,
@@ -71,6 +71,9 @@ exports.getMOOEData = async (req, res) => {
               { userId: req.user.id }
             ]
           };
+          if (region) {
+            filter.region = region;
+          }
         } else if (assignment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(assignment.assignmentLevel)) {
           // Get department name from assignment
           const userDept = assignment.departments?.[0]?.departmentName || assignment.departmentName || req.user.department;
@@ -803,9 +806,20 @@ exports.getMOOEData = async (req, res) => {
     const totalPersonnelAmount = cosPersonnels
       .reduce((sum, p) => sum + (p.Total || 0), 0);
     // 4. Build lookup for MOOE amounts
-    const mooeMap = Object.fromEntries(
-      mooeProposals.map(row => [row.uacsCode, row])
-    );
+    // 4. Build lookup for MOOE amounts and aggregate if there are multiple proposals with same uacsCode
+    const mooeMap = {};
+    for (const row of mooeProposals) {
+      if (!mooeMap[row.uacsCode]) {
+        mooeMap[row.uacsCode] = { ...row, _recordCount: 1 };
+      } else {
+        mooeMap[row.uacsCode].income = (mooeMap[row.uacsCode].income || 0) + (row.income || 0);
+        mooeMap[row.uacsCode].subsidy = (mooeMap[row.uacsCode].subsidy || 0) + (row.subsidy || 0);
+        mooeMap[row.uacsCode].amount = (mooeMap[row.uacsCode].amount || 0) + (row.amount || 0);
+        if (row.nis) mooeMap[row.uacsCode].nis = (mooeMap[row.uacsCode].nis || 0) + (row.nis || 0);
+        if (row.cis) mooeMap[row.uacsCode].cis = (mooeMap[row.uacsCode].cis || 0) + (row.cis || 0);
+        mooeMap[row.uacsCode]._recordCount += 1;
+      }
+    }
     // 5. Determine submission status
     const status = mooeProposals.length > 0
       ? mooeProposals[0].status || "Draft"
@@ -821,13 +835,14 @@ exports.getMOOEData = async (req, res) => {
       }
 
       return {
-        id:               proposal?._id?.toString() || null,
+        id:               proposal?._recordCount > 1 ? null : (proposal?._id?.toString() || null),
         sublineItem:      derivedSubline,
         accountingTitle:  row.accountingTitle,
         uacsCode:         row.uacsCode,
         income:           proposal?.income?.toString() || "0",
         subsidy:          proposal?.subsidy?.toString() || "0",
-        amount:           proposal?.amount?.toString() || "0"
+        amount:           proposal?.amount?.toString() || "0",
+        isAggregated:     proposal?._recordCount > 1
       };
     });
 
@@ -839,13 +854,14 @@ exports.getMOOEData = async (req, res) => {
           derivedSubline = "Other Maintenance and Operating Expenses";
         }
         entries.push({
-          id:               proposal._id.toString(),
+          id:               proposal._recordCount > 1 ? null : proposal._id.toString(),
           sublineItem:      derivedSubline,
           accountingTitle:  proposal.accountingTitle || proposal.uacsCode,
           uacsCode:         proposal.uacsCode,
           income:           proposal.income?.toString() || "0",
           subsidy:          proposal.subsidy?.toString() || "0",
-          amount:           proposal.amount?.toString() || "0"
+          amount:           proposal.amount?.toString() || "0",
+          isAggregated:     proposal._recordCount > 1
         });
       }
     });
@@ -980,9 +996,20 @@ exports.getMOOEEntries = async (req, res) => {
     const totalPersonnelAmount = cosPersonnels
       .reduce((sum, p) => sum + (p.Total || 0), 0);
     // 4. Build a lookup for MOOE proposals
-    const mooeMap = Object.fromEntries(
-      mooeProposals.map(row => [row.uacsCode, row])
-    );
+    // 4. Build a lookup for MOOE proposals and aggregate if there are multiple proposals with same uacsCode
+    const mooeMap = {};
+    for (const row of mooeProposals) {
+      if (!mooeMap[row.uacsCode]) {
+        mooeMap[row.uacsCode] = { ...row, _recordCount: 1 };
+      } else {
+        mooeMap[row.uacsCode].income = (mooeMap[row.uacsCode].income || 0) + (row.income || 0);
+        mooeMap[row.uacsCode].subsidy = (mooeMap[row.uacsCode].subsidy || 0) + (row.subsidy || 0);
+        mooeMap[row.uacsCode].amount = (mooeMap[row.uacsCode].amount || 0) + (row.amount || 0);
+        if (row.nis) mooeMap[row.uacsCode].nis = (mooeMap[row.uacsCode].nis || 0) + (row.nis || 0);
+        if (row.cis) mooeMap[row.uacsCode].cis = (mooeMap[row.uacsCode].cis || 0) + (row.cis || 0);
+        mooeMap[row.uacsCode]._recordCount += 1;
+      }
+    }
     // 5. Assemble the final array with `id`
     const data = chartOfAccounts.map(row => {
       const proposal = mooeMap[row.uacsCode];
@@ -992,13 +1019,14 @@ exports.getMOOEEntries = async (req, res) => {
       }
 
       return {
-        id:               proposal?._id?.toString() || null,
+        id:               proposal?._recordCount > 1 ? null : (proposal?._id?.toString() || null),
         sublineItem:      derivedSubline,
         accountingTitle:  row.accountingTitle,
         uacsCode:         row.uacsCode,
         income:           proposal?.income?.toString() || "0",
         subsidy:          proposal?.subsidy?.toString() || "0",
-        amount:           proposal?.amount?.toString() || "0"
+        amount:           proposal?.amount?.toString() || "0",
+        isAggregated:     proposal?._recordCount > 1
       };
     });
     return res.status(200).json(data);
@@ -1180,145 +1208,170 @@ exports.bulkSaveMOOE = async (req, res) => {
     const allowedFields = Object.keys(mooeProposalSchema);
     console.log('   Schema fields:', allowedFields.slice(0, 10), '...');
     
-    const bulkOps = processedEntries
-      // Only save entries that have actual values, are system entries, or are existing entries (with id)
-      .filter(item => {
-        const incomeAmount = Number(item.income) || 0;
-        const subsidyAmount = Number(item.subsidy) || 0;
-        const nisAmount = Number(item.nis) || 0;
-        const cisAmount = Number(item.cis) || 0;
-        
-        // Check if ANY field has meaningful value (> 0)
-        const hasAnyValue = incomeAmount > 0 || subsidyAmount > 0 || nisAmount > 0 || cisAmount > 0;
-        const isSystemEntry = item.isSystemEntry;
-        const hasExistingId = item.id && item.id !== "undefined" && item.id !== "";
-        
-        // Only keep entries with actual values > 0, system entries, or existing entries
-        return hasAnyValue || isSystemEntry || hasExistingId;
-      })
-      .map(item => {
-        // Create a filtered update object with only the fields that exist in the schema
-        const updateObj = {};
-        
-        // Parse amounts and ensure they're numbers
-        const incomeVal = Number(item.income) || 0;
-        const subsidyVal = Number(item.subsidy) || 0;
-        const nisVal = Number(item.nis) || 0;
-        const cisVal = Number(item.cis) || 0;
-        
-        // Only set fields if they have meaningful values
-        updateObj.income = incomeVal;
-        updateObj.subsidy = subsidyVal;
-        updateObj.amount = Number(item.amount) || (incomeVal + subsidyVal);
-        updateObj.nis = nisVal;
-        updateObj.cis = cisVal;
-        updateObj.uacsCode = item.uacsCode;
-        updateObj.sublineItem = item.sublineItem;
-        updateObj.accountingTitle = item.accountingTitle;
-        
-        // Add metadata fields - ensure required fields are present
-        updateObj.processBy = meta?.processBy || item.processBy || 'System';
-        updateObj.processDate = meta?.processDate || item.processDate || new Date();
-        updateObj.fiscalYear = meta?.fiscalYear || item.fiscalYear;
-        updateObj.budgetType = meta?.budgetType || item.budgetType;
-        updateObj.region = ownerRegion || meta?.region || item.region;
-        
-        // Add createdBy field to track who created this MOOE record
-        if (!item.createdBy && req.user?.id) {
-          updateObj.createdBy = String(req.user.id);
-        }
-        
-        // Validate required fields for bulkWrite filter
-        if (!updateObj.fiscalYear) {
-          console.warn('⚠️  Missing fiscalYear for item:', item.uacsCode);
-          updateObj.fiscalYear = 'UNKNOWN'; // Fallback to prevent undefined filter
-        }
-        if (!updateObj.region) {
-          console.warn('⚠️  Missing region for item:', item.uacsCode);
-          updateObj.region = 'UNKNOWN'; // Fallback to prevent undefined filter
-        }
+    const validEntries = processedEntries.filter(item => {
+      const incomeAmount = Number(item.income) || 0;
+      const subsidyAmount = Number(item.subsidy) || 0;
+      const nisAmount = Number(item.nis) || 0;
+      const cisAmount = Number(item.cis) || 0;
+      const hasAnyValue = incomeAmount > 0 || subsidyAmount > 0 || nisAmount > 0 || cisAmount > 0;
+      const isSystemEntry = item.isSystemEntry;
+      const hasExistingId = item.id && item.id !== "undefined" && item.id !== "";
+      const isAggregated = item.isAggregated === true || item.isAggregated === "true";
+      return hasAnyValue || isSystemEntry || hasExistingId || isAggregated;
+    });
 
-        const hasExistingId = Boolean(item.id && item.id !== 'undefined' && item.id !== '');
-        // Preserve stored department/division unless explicitly supplied or changed when updating
-        if (!hasExistingId) {
-          updateObj.department = ownerDepartment || meta?.department || item.department;
-          updateObj.division = ownerDivision || meta?.division || item.division;
-        } else {
-          if (meta?.department || item.department) {
-            updateObj.department = ownerDepartment || meta?.department || item.department;
-          }
-          if (meta?.division || item.division) {
-            updateObj.division = ownerDivision || meta?.division || item.division;
-          }
-        }
+    const hasAggregated = validEntries.some(item => item.isAggregated === true || item.isAggregated === "true");
+    const recordsByUacs = {};
+    
+    if (hasAggregated) {
+      const isSuperAdmin = (req.user?.Roles || req.user?.roles || []).some(r => String(r).toUpperCase() === 'SUPER_ADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
+      const regionRecordsFilter = {
+        fiscalYear: meta?.fiscalYear || activeSettings?.fiscalYear,
+        region: ownerRegion || meta?.region || (validEntries[0] && validEntries[0].region) || 'UNKNOWN',
+        status: { $nin: ["Approved", "Rejected"] }
+      };
+      
+      if (!isSuperAdmin && legacyProposalForMOOE?._id) {
+        regionRecordsFilter.proposalId = legacyProposalForMOOE._id;
+      }
+      
+      const allRegionRecords = await MooeProposal.find(regionRecordsFilter);
+      for (const r of allRegionRecords) {
+        if (!recordsByUacs[r.uacsCode]) recordsByUacs[r.uacsCode] = [];
+        recordsByUacs[r.uacsCode].push(r);
+      }
+    }
 
-        // Tag records with origin/workflow levels for consistent visibility rules
-        if (!hasExistingId) {
-          if (recordOriginalLevel) {
-            updateObj.originalLevel = recordOriginalLevel;
-          }
-          if (recordWorkflowLevel) {
-            updateObj.workflowLevel = recordWorkflowLevel;
+    const bulkOps = [];
+    
+    for (const item of validEntries) {
+      const isAggregated = item.isAggregated === true || item.isAggregated === "true";
+      const updateObj = {};
+      
+      const incomeVal = Number(item.income) || 0;
+      const subsidyVal = Number(item.subsidy) || 0;
+      const nisVal = Number(item.nis) || 0;
+      const cisVal = Number(item.cis) || 0;
+      
+      updateObj.income = incomeVal;
+      updateObj.subsidy = subsidyVal;
+      updateObj.amount = Number(item.amount) || (incomeVal + subsidyVal);
+      updateObj.nis = nisVal;
+      updateObj.cis = cisVal;
+      updateObj.uacsCode = item.uacsCode;
+      updateObj.sublineItem = item.sublineItem;
+      updateObj.accountingTitle = item.accountingTitle;
+      
+      updateObj.processBy = meta?.processBy || item.processBy || 'System';
+      updateObj.processDate = meta?.processDate || item.processDate || new Date();
+      updateObj.fiscalYear = meta?.fiscalYear || item.fiscalYear;
+      updateObj.budgetType = meta?.budgetType || item.budgetType;
+      updateObj.region = ownerRegion || meta?.region || item.region;
+      
+      if (!item.createdBy && req.user?.id) {
+        updateObj.createdBy = String(req.user.id);
+      }
+      
+      if (!updateObj.fiscalYear) updateObj.fiscalYear = 'UNKNOWN';
+      if (!updateObj.region) updateObj.region = 'UNKNOWN';
+      
+      const hasExistingId = Boolean(item.id && item.id !== 'undefined' && item.id !== '');
+      
+      if (!hasExistingId) {
+        updateObj.department = ownerDepartment || meta?.department || item.department;
+        updateObj.division = ownerDivision || meta?.division || item.division;
+        if (recordOriginalLevel) updateObj.originalLevel = recordOriginalLevel;
+        if (recordWorkflowLevel) updateObj.workflowLevel = recordWorkflowLevel;
+      } else {
+        if (meta?.department || item.department) updateObj.department = ownerDepartment || meta?.department || item.department;
+        if (meta?.division || item.division) updateObj.division = ownerDivision || meta?.division || item.division;
+        if (item.originalLevel) updateObj.originalLevel = item.originalLevel;
+        if (item.workflowLevel) updateObj.workflowLevel = item.workflowLevel;
+      }
+      
+      updateObj.status = meta?.status || item.status || "Draft";
+      if (legacyProposalForMOOE?._id) updateObj.proposalId = legacyProposalForMOOE._id;
+      if (ownerWorkflowId) updateObj.workflowRef = ownerWorkflowId;
+      
+      if (!updateObj.department && ownerDepartment) updateObj.department = ownerDepartment;
+      if (!updateObj.division && ownerDivision !== undefined) updateObj.division = ownerDivision;
+      
+      if (isAggregated) {
+        const existingRecords = recordsByUacs[item.uacsCode] || [];
+        if (existingRecords.length > 0) {
+          const oldTotalAmount = existingRecords.reduce((sum, r) => sum + (Number(r.income) || 0) + (Number(r.subsidy) || 0), 0);
+          
+          for (const record of existingRecords) {
+            const oldAmount = (Number(record.income) || 0) + (Number(record.subsidy) || 0);
+            const amountShare = oldTotalAmount > 0 ? (oldAmount / oldTotalAmount) : (1 / existingRecords.length);
+            
+            const newIncome = updateObj.income * amountShare;
+            const newSubsidy = updateObj.subsidy * amountShare;
+            const newAmount = newIncome + newSubsidy;
+            const newNis = updateObj.nis * amountShare;
+            const newCis = updateObj.cis * amountShare;
+            
+            if (item.uacsCode === '5-02-99-990-3') {
+              console.log(`[DEBUG 5-02-99-990-3] Record _id: ${record._id}`);
+              console.log(`  oldAmount: ${oldAmount}, oldTotalAmount: ${oldTotalAmount}, share: ${amountShare}`);
+              console.log(`  updateObj.income: ${updateObj.income}, updateObj.subsidy: ${updateObj.subsidy}`);
+              console.log(`  newIncome: ${newIncome}, newSubsidy: ${newSubsidy}`);
+            }
+            
+            bulkOps.push({
+              updateOne: {
+                filter: { _id: record._id },
+                update: { $set: {
+                  ...updateObj,
+                  department: record.department,
+                  division: record.division,
+                  income: newIncome,
+                  subsidy: newSubsidy,
+                  amount: newAmount,
+                  nis: newNis,
+                  cis: newCis,
+                  originalLevel: record.originalLevel,
+                  workflowLevel: record.workflowLevel,
+                  createdBy: record.createdBy
+                } }
+              }
+            });
           }
         } else {
-          if (item.originalLevel) {
-            updateObj.originalLevel = item.originalLevel;
-          }
-          if (item.workflowLevel) {
-            updateObj.workflowLevel = item.workflowLevel;
-          }
+          bulkOps.push({
+            updateOne: {
+              filter: { 
+                proposalId: updateObj.proposalId,
+                uacsCode: item.uacsCode,
+                fiscalYear: updateObj.fiscalYear,
+                region: updateObj.region,
+                department: updateObj.department || null,
+                division: updateObj.division || null
+              },
+              update: { $set: updateObj },
+              upsert: true
+            }
+          });
         }
-        updateObj.status = meta?.status || item.status || "Draft";
-        // Link to specific proposal if available to prevent cross-proposal mixing
-        if (legacyProposalForMOOE?._id) {
-          updateObj.proposalId = legacyProposalForMOOE._id; // Link to legacy Proposal for aggregation
-        }
-        if (ownerWorkflowId) {
-          updateObj.workflowRef = ownerWorkflowId; // Track originating workflow
-        }
-        
-        // ENSURE department and division are always set so entries are visible after save
-        if (!updateObj.department && ownerDepartment) {
-          updateObj.department = ownerDepartment;
-        }
-        if (!updateObj.division && ownerDivision !== undefined) {
-          updateObj.division = ownerDivision;  // Can be null/empty for dept-level entries
-        }
-        
-        console.log('   Entry to save:', {
-          uacsCode: item.uacsCode,
-          income: updateObj.income,
-          department: updateObj.department,
-          division: updateObj.division,
-          proposalId: updateObj.proposalId,
-          filterUsed: {
-            proposalId: updateObj.proposalId,
-            uacsCode: item.uacsCode,
-            fiscalYear: updateObj.fiscalYear,
-            region: updateObj.region,
-            department: updateObj.department,
-            division: updateObj.division
+      } else {
+        bulkOps.push({
+          updateOne: {
+            filter: hasExistingId && mongoose.Types.ObjectId.isValid(item.id) ? 
+              { _id: new mongoose.Types.ObjectId(item.id) } : 
+              { 
+                proposalId: updateObj.proposalId,
+                uacsCode: item.uacsCode,
+                fiscalYear: updateObj.fiscalYear,
+                region: updateObj.region,
+                department: updateObj.department || null,
+                division: updateObj.division || null
+              },
+            update: { $set: updateObj },
+            upsert: true
           }
         });
-        return {
-        updateOne: {
-          filter: hasExistingId && mongoose.Types.ObjectId.isValid(item.id) ? 
-            { _id: new mongoose.Types.ObjectId(item.id) } : // Match by _id for existing records
-            // For new entries: use unique combination that includes department/division
-            // This ensures entries from different divisions stay separate
-            { 
-              proposalId: updateObj.proposalId,
-              uacsCode: item.uacsCode,
-              fiscalYear: updateObj.fiscalYear,
-              region: updateObj.region,
-              department: updateObj.department || null,  // Use null for missing values
-              division: updateObj.division || null       // Use null for missing values
-            },
-          update: { $set: updateObj },
-          upsert: true  // Creates new entry if this exact combination doesn't exist
-        }
-      };
-    });
+      }
+    }
     // Check if any Financial Expenses entries are being saved
     const financialExpensesEntries = processedEntries.filter(item => 
       item.sublineItem === 'Financial Expenses'

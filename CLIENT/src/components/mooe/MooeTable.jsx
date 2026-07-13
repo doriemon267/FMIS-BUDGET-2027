@@ -216,11 +216,12 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
   // Fetch data using React Query
   const { data, isLoading, error } = useQuery({
-    queryKey: ["mooeData", activeRegion?.name], // Add region ID to query key to refetch when region changes
+    queryKey: ["mooeData", activeRegion?.name || activeRegion?.regionName], // Add region ID to query key to refetch when region changes
     queryFn: async () => {
       try {
         // Add region parameter to the API request
-        const params = activeRegion?.id ? { region: activeRegion.name } : {};
+        const actualRegionName = activeRegion?.name || activeRegion?.regionName;
+        const params = actualRegionName && actualRegionName !== "ALL" ? { region: actualRegionName } : {};
         const response = await api.get("/mooe-data", {
           params,
           withCredentials: true
@@ -277,17 +278,19 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
   // Fetch consolidated data for consolidated view mode
   const { data: consolidatedData, isLoading: consolidatedLoading } = useQuery({
-    queryKey: ["consolidatedData", activeRegion?.name],
+    queryKey: ["consolidatedData", activeRegion?.name || activeRegion?.regionName],
     queryFn: async () => {
       try {
+        const actualRegionName = activeRegion?.name || activeRegion?.regionName;
+        const params = actualRegionName && actualRegionName !== "ALL" ? { region: actualRegionName } : {};
         // Fetch both MOOE and Corporate Income data
         const [mooeResponse, incomeResponse] = await Promise.all([
           api.get("/mooe-data", {
-            params: activeRegion?.id ? { region: activeRegion.name } : {},
+            params,
             withCredentials: true
           }),
           api.get("/income", {
-            params: activeRegion?.id ? { region: activeRegion.name } : {},
+            params,
             withCredentials: true
           })
         ]);
@@ -588,26 +591,44 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
     const subsidyString = cosGrandTotal.toFixed(2);
 
+    const targetKeys = [
+      ["mooeData", activeRegion?.name || activeRegion?.regionName],
+      ["mooeData"]
+    ];
+
     const adjustData = (original) => {
-      if (!original?.formattedData) return { next: null, childIds: [] };
+      if (!original?.formattedData) return { next: null, childIds: [], newOverrides: {} };
 
       let changed = false;
       const childIds = [];
+      const newOverrides = {};
 
       const updatedFormattedData = original.formattedData.map(row => {
         let rowChanged = false;
 
         const updatedChildren = row.children.map(child => {
           if (child.uacsCode === '5-02-99-990-3') {
+            const currentSubsidy = parseCurrency(child.subsidy);
+            const currentIncome = parseCurrency(child.income);
+            
+            // Auto-detect if DB already has a manual override (i.e. it doesn't match cosGrandTotal)
+            // and it has actual values saved.
+            const hasExistingSavedValue = currentIncome > 0 || currentSubsidy > 0;
+            const diffFromGrandTotal = Math.abs(currentSubsidy - cosGrandTotal) > 0.009;
+            
+            // If it's the initial load of a saved record with different values, auto-lock it
+            if (hasExistingSavedValue && diffFromGrandTotal && manualOverrideSubsidy[child.id] === undefined) {
+               newOverrides[child.id] = true;
+               return child; // Keep the DB values
+            }
+
             // Only auto-calculate if manual override is NOT enabled for this child
-            if (!manualOverrideSubsidy[child.id]) {
-              const currentSubsidy = parseCurrency(child.subsidy);
-              if (Math.abs(currentSubsidy - cosGrandTotal) > 0.009) {
+            if (!manualOverrideSubsidy[child.id] && newOverrides[child.id] !== true) {
+              if (diffFromGrandTotal) {
                 rowChanged = true;
                 changed = true;
                 childIds.push(child.id);
-                const incomeValue = parseCurrency(child.income);
-                const amountValue = incomeValue + cosGrandTotal;
+                const amountValue = currentIncome + cosGrandTotal;
 
                 return {
                   ...child,
@@ -623,35 +644,43 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
         return rowChanged ? { ...row, children: updatedChildren } : row;
       });
 
-      if (!changed) {
-        return { next: null, childIds: [] };
+      if (!changed && Object.keys(newOverrides).length === 0) {
+        return { next: null, childIds: [], newOverrides };
       }
 
       return {
-        next: { ...original, formattedData: updatedFormattedData },
-        childIds
+        next: changed ? { ...original, formattedData: updatedFormattedData } : null,
+        childIds,
+        newOverrides
       };
     };
 
-    const targetKeys = [
-      ["mooeData", activeRegion?.name],
-      ["mooeData"]
-    ];
-
     let updateOccurred = false;
+    let hasNewOverrides = false;
+    let combinedOverrides = {};
     const touchedChildIds = new Set();
 
     targetKeys.forEach((key) => {
       const cached = queryClient.getQueryData(key);
       if (!cached) return;
 
-      const { next, childIds } = adjustData(cached);
+      const { next, childIds, newOverrides } = adjustData(cached);
+      
+      if (newOverrides && Object.keys(newOverrides).length > 0) {
+        hasNewOverrides = true;
+        combinedOverrides = { ...combinedOverrides, ...newOverrides };
+      }
+
       if (next) {
         queryClient.setQueryData(key, next);
         childIds.forEach((id) => touchedChildIds.add(id));
         updateOccurred = true;
       }
     });
+
+    if (hasNewOverrides) {
+      setManualOverrideSubsidy(prev => ({ ...prev, ...combinedOverrides }));
+    }
 
     if (updateOccurred) {
       if (touchedChildIds.size > 0) {
@@ -739,7 +768,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     }
 
     // Find row that contains this child (row.id is sublineItem; childId can be "Subline Item-5-02-99-990" or MongoDB _id)
-    const queryKey = ["mooeData", activeRegion?.name];
+    const actualRegionKey = activeRegion?.name || activeRegion?.regionName;
+    const queryKey = isSuperAdmin && (!activeRegion || actualRegionKey === "ALL") 
+      ? ["consolidatedData"] 
+      : ["mooeData", actualRegionKey];
     const currentData = queryClient.getQueryData(queryKey);
     let rowId = null;
     if (currentData?.formattedData) {
@@ -831,12 +863,15 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
     trackChanges();
     setHasUnsavedChanges(true);
-  }, 300), [disableIncomeInputs, queryClient, trackChanges, activeRegion?.name]);
+  }, 300), [disableIncomeInputs, queryClient, trackChanges, activeRegion?.name, activeRegion?.regionName, isSuperAdmin]);
 
   const handleSubsidyChange = useCallback(debounce((childId, value) => {
 
     // Find row that contains this child (same as handleIncomeChange)
-    const queryKey = ["mooeData", activeRegion?.name];
+    const actualRegionKey = activeRegion?.name || activeRegion?.regionName;
+    const queryKey = isSuperAdmin && (!activeRegion || actualRegionKey === "ALL") 
+      ? ["consolidatedData"] 
+      : ["mooeData", actualRegionKey];
     const currentData = queryClient.getQueryData(queryKey);
     let rowId = null;
     if (currentData?.formattedData) {
@@ -923,7 +958,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
   const handleTransferSubsidyToIncome = useCallback((childId, currentSubsidy, currentIncome) => {
     // Find row that contains this child
-    const queryKey = ["mooeData", activeRegion?.name];
+    const actualRegionKey = activeRegion?.name || activeRegion?.regionName;
+    const queryKey = isSuperAdmin && (!activeRegion || actualRegionKey === "ALL") 
+      ? ["consolidatedData"] 
+      : ["mooeData", actualRegionKey];
     const currentData = queryClient.getQueryData(queryKey);
     let rowId = null;
     if (currentData?.formattedData) {
