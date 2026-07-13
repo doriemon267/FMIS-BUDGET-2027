@@ -123,7 +123,7 @@ const ProposalCustomPage = ({
   description = "",
 }) => {
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
+  const { activeRegion, loading: isRegionLoading } = useRegion();
   const { readOnly, canCreate } = useUserRestrictions();
   const queryClient = useQueryClient();
   const theme = useTheme();
@@ -716,88 +716,103 @@ const ProposalCustomPage = ({
   const [saveStatus, setSaveStatus] = useState("saved"); // 'saved', 'saving', 'error'
   const [validationErrors, setValidationErrors] = useState({});
 
-  // ADDED: Restore activeWorkflowRef from storage on mount to preserve proposal ID across page refreshes
-  // Also verify that the stored proposal still exists in the database
+  // Single source of truth for active proposal loading and region context switching
   useEffect(() => {
-    const storedWorkflowRef =
-      sessionStorage.getItem("activeWorkflowRef") ||
-      localStorage.getItem("activeWorkflowRef");
-    if (storedWorkflowRef && !currentProposalId) {
-      // Verify the proposal still exists before setting it
-      const verifyProposal = async () => {
-        try {
-          const response = await api.get(
-            `/api/allproposal/proposals/${storedWorkflowRef}`
-          );
-          // Backend returns { success: true, data: proposal } - check for data property
-          if (response.data?.success && response.data?.data) {
-            setCurrentProposalId(storedWorkflowRef);
-          } else {
-            // Proposal not found - clear storage
-            // Removed console.log - use logger.debug() if needed
-              // "[ProposalCustomPage] Stored proposal not found, clearing reference"
-            // );
-            sessionStorage.removeItem("activeWorkflowRef");
-            localStorage.removeItem("activeWorkflowRef");
-            setCurrentProposalId(null);
+    if (typeof window === "undefined" || isRegionLoading) return;
+    
+    // If the region has finished loading but activeRegionName is null/empty,
+    // it means the user has selected "ALL REGIONS" or has no region assigned.
+    // In this case, we MUST NOT tie the user to an active draft, because drafts belong to specific regions.
+    if (!activeRegionName) {
+      console.log("[loadProposalContext] activeRegionName is empty (ALL REGIONS). Clearing active proposal.");
+      setCurrentProposalId(null);
+      try {
+        sessionStorage.removeItem("activeWorkflowRef");
+        localStorage.removeItem("activeWorkflowRef");
+      } catch (_) {}
+      setIsResumingDraft(false);
+      return;
+    }
+    
+    const loadProposalContext = async () => {
+      console.log("[loadProposalContext] activeRegionName:", activeRegionName);
+      try {
+        const storedWorkflowRef =
+          sessionStorage.getItem("activeWorkflowRef") ||
+          localStorage.getItem("activeWorkflowRef");
+        
+        console.log("[loadProposalContext] storedWorkflowRef:", storedWorkflowRef);
+
+        // If we have a stored proposal, let's verify if it matches the current active region
+        if (storedWorkflowRef) {
+          try {
+            const verifyRes = await api.get(`/api/allproposal/proposals/${storedWorkflowRef}`);
+            if (verifyRes.data?.success && verifyRes.data?.data) {
+              const proposal = verifyRes.data.data;
+              const proposalRegion = proposal.regionName || proposal.region || proposal.Region || proposal.RegionName || "CENTRAL OFFICE";
+              console.log("[loadProposalContext] proposalRegion:", proposalRegion);
+              
+              // If region matches (or if activeRegionName is not fully loaded yet), we keep it
+              if (!activeRegionName || String(proposalRegion).toUpperCase() === String(activeRegionName).toUpperCase()) {
+                console.log("[loadProposalContext] Region MATCHES or activeRegionName is null. Keeping stored ref.");
+                setCurrentProposalId(storedWorkflowRef);
+                setIsResumingDraft(false);
+                return; // Everything is consistent!
+              } else {
+                console.log("[loadProposalContext] Region MISMATCH! Clearing stored ref.");
+              }
+            }
+          } catch (err) {
+            console.error("[loadProposalContext] Error verifying stored proposal:", err);
           }
-        } catch (error) {
-          // Error fetching proposal (likely 404) - clear storage
-          // console.log(
-            // "[ProposalCustomPage] Error verifying stored proposal, clearing reference:",
-            // error.message
-          // );
+        }
+
+        console.log("[loadProposalContext] Fetching latest draft for region:", activeRegionName);
+        // If we get here, either we had no stored proposal, or it didn't match the current region, or it failed to verify.
+        // We must fetch the latest draft for the current region!
+        const fetchRes = await api.get("/api/allproposal/proposals", {
+          params: { view: "my-proposals", limit: 1, region: activeRegionName || undefined },
+        });
+        
+        console.log("[loadProposalContext] Fetch result:", fetchRes.data);
+        if (fetchRes.data?.success && Array.isArray(fetchRes.data?.proposals) && fetchRes.data.proposals.length > 0) {
+          const latest = fetchRes.data.proposals[0];
+          const status = String(latest.status || "").toUpperCase();
+          if (latest._id && (status === "DRAFT" || status === "RETURNED_TO_PREPARER" || status.includes("RETURNED"))) {
+            console.log("[loadProposalContext] Found draft for region, saving to localStorage:", latest._id);
+            setCurrentProposalId(latest._id);
+            try {
+              sessionStorage.setItem("activeWorkflowRef", latest._id);
+              localStorage.setItem("activeWorkflowRef", latest._id);
+            } catch (_) {}
+            setIsResumingDraft(false);
+            return; // Found a valid draft for this region!
+          }
+        }
+
+        console.log("[loadProposalContext] No draft found. Clearing states and storage.");
+        // If we get here, no draft exists for this region!
+        setCurrentProposalId(null);
+        try {
           sessionStorage.removeItem("activeWorkflowRef");
           localStorage.removeItem("activeWorkflowRef");
-          setCurrentProposalId(null);
-        }
-      };
-      verifyProposal();
-    }
-  }, []);
-
-  // When there is no stored activeWorkflowRef (e.g. user closed browser or opened in another browser),
-  // fetch the user's latest draft so they can continue instead of seeing "Create Proposal" again.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const storedWorkflowRef =
-      sessionStorage.getItem("activeWorkflowRef") ||
-      localStorage.getItem("activeWorkflowRef");
-    if (storedWorkflowRef) {
-      setIsResumingDraft(false);
-      return; // Let the restore effect above handle it.
-    }
-
-    const resumeLatestDraft = async () => {
-      try {
-        const response = await api.get("/api/allproposal/proposals", {
-          params: { view: "my-proposals", limit: 1 },
-        });
-        if (!response.data?.success || !Array.isArray(response.data?.proposals)) return;
-        const list = response.data.proposals;
-        const latest = list[0];
-        if (!latest?._id) return;
-        // Only resume if still editable (Draft or Returned to Preparer)
-        const status = String(latest.status || "");
-        const statusUpper = status.toUpperCase();
-        const isDraft = statusUpper === "DRAFT";
-        const isReturnedToPreparer =
-          statusUpper === "RETURNED_TO_PREPARER" ||
-          (status.toLowerCase().includes("returned") && status.toLowerCase().includes("preparer"));
-        if (!isDraft && !isReturnedToPreparer) return;
-        setCurrentProposalId(latest._id);
-        try {
-          sessionStorage.setItem("activeWorkflowRef", latest._id);
-          localStorage.setItem("activeWorkflowRef", latest._id);
         } catch (_) {}
+        
       } catch (err) {
-        logger.warn("Resume latest draft check failed", err);
+        console.error("[loadProposalContext] Fatal error:", err);
+        // Fallback: clear everything if a fatal error occurs
+        setCurrentProposalId(null);
+        try {
+          sessionStorage.removeItem("activeWorkflowRef");
+          localStorage.removeItem("activeWorkflowRef");
+        } catch (_) {}
       } finally {
         setIsResumingDraft(false);
       }
     };
-    resumeLatestDraft();
-  }, []);
+
+    loadProposalContext();
+  }, [activeRegionName, isRegionLoading]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

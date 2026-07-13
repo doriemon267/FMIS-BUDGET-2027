@@ -2199,7 +2199,7 @@ exports.getProposals = async (req, res) => {
     const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
     const usernameField = Array.isArray(req.user?.Username) ? req.user.Username[0] : req.user?.Username;
     const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
-    const { status, modelType, fiscalYear, view } = req.query;
+    const { status, modelType, fiscalYear, view, region: reqRegion } = req.query;
     const page = req.query.page || 1;
     const limit = req.query.limit || 10;
     // Normalize userId to string to avoid mismatches
@@ -2265,6 +2265,30 @@ exports.getProposals = async (req, res) => {
     if (fiscalYear) {
       const fy = parseInt(fiscalYear);
       if (!isNaN(fy)) query.fiscalYear = fy;
+    }
+    
+    // Explicit requested region filter (especially important for Super Admin switching regions)
+    if (reqRegion) {
+      const mongoose = require('mongoose');
+      if (mongoose.Types.ObjectId.isValid(reqRegion)) {
+        query.region = reqRegion;
+      } else {
+        // If passed as string, we need to match the ObjectId of that Region
+        try {
+          const matchingRegions = await require('../models/Region').find({
+            $or: [{ Region: reqRegion }, { regionName: reqRegion }, { RegionName: reqRegion }]
+          }).select('_id').lean();
+          
+          if (matchingRegions.length > 0) {
+            query.region = { $in: matchingRegions.map(r => r._id) };
+          } else {
+            // If no match found in DB, just match the string name (legacy proposals)
+            query.region = reqRegion;
+          }
+        } catch (err) {
+          query.region = reqRegion;
+        }
+      }
     }
 
     // Apply view-based and role-based filtering

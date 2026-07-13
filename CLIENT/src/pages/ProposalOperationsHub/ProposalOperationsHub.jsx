@@ -481,6 +481,11 @@ const ProposalOperationsHub = () => {
     }
   }, [searchParams, tabs]);
 
+  // Clear selected proposal if region context changes
+  useEffect(() => {
+    setSelectedProposal(null);
+  }, [resolvedRegion]);
+
   useEffect(() => {
     if (hasInitializedDefaultTabRef.current) return;
     const tabParam = searchParams.get("tab");

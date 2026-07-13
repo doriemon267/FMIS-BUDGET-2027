@@ -499,18 +499,16 @@ exports.getIncomeByParams = async (req, res) => {
     // Base query from parameters
     const baseQuery = {};
     
-    // ✅ Primary filter: if proposalId is provided, use it
     const isProposalContext = Boolean(proposalId);
     
+    let workflowId = proposalId;
+    if (proposalId && typeof proposalId === 'string' && mongoose.Types.ObjectId.isValid(proposalId)) {
+      try {
+        workflowId = new mongoose.Types.ObjectId(proposalId);
+      } catch (_) {}
+    }
+    
     if (proposalId) {
-      // Accept either legacy Proposal _id or NewProposalWorkflow _id
-      // Normalize to ObjectId so query matches workflowRef field type
-      let workflowId = proposalId;
-      if (typeof proposalId === 'string' && mongoose.Types.ObjectId.isValid(proposalId)) {
-        try {
-          workflowId = new mongoose.Types.ObjectId(proposalId);
-        } catch (_) {}
-      }
       try {
         // ALWAYS check both workflowRef and proposalId for the provided ID
         // (New workflow records might use either field for the workflow ID)
@@ -586,17 +584,21 @@ exports.getIncomeByParams = async (req, res) => {
       let proposalCreatedBy = null;
       let proposalFiscalYear = req.query.fiscalYear;
       let proposalBudgetType = req.query.budgetType;
+      let proposalDepartment = req.query.department;
+      let proposalDivision = req.query.division;
       
       let resolvedRegionName = await resolveRegionName(proposalRegion);
       if (!resolvedRegionName) {
         try {
           // Check legacy Proposal first
-          const legacyProp = await Proposal.findById(proposalId).select('region createdByUserId processBy fiscalYear budgetType').lean();
+          const legacyProp = await Proposal.findById(proposalId).select('region createdByUserId processBy fiscalYear budgetType department division').lean();
           if (legacyProp) {
             resolvedRegionName = legacyProp.region;
             proposalCreatorId = legacyProp.createdByUserId || legacyProp.processBy;
             proposalFiscalYear = proposalFiscalYear || String(legacyProp.fiscalYear || '');
             proposalBudgetType = proposalBudgetType || legacyProp.budgetType;
+            proposalDepartment = proposalDepartment || legacyProp.department;
+            proposalDivision = proposalDivision || legacyProp.division;
           } else {
             // Check NewProposalWorkflow if legacy not found
             const workflow = await NewProposalWorkflow.findById(proposalId)
@@ -608,6 +610,8 @@ exports.getIncomeByParams = async (req, res) => {
               proposalCreatedBy = workflow.createdBy;
               proposalFiscalYear = proposalFiscalYear || String(workflow.fiscalYear || '');
               proposalBudgetType = proposalBudgetType || workflow.budgetType || workflow.modelType;
+              proposalDepartment = proposalDepartment || workflow.department;
+              proposalDivision = proposalDivision || workflow.division;
             }
           }
         } catch (err) {
@@ -629,27 +633,32 @@ exports.getIncomeByParams = async (req, res) => {
 
       // Resilient Division/Department matching: Match if either field matches either provided value
       const orgClauses = [];
-      if (req.query.division) {
-        const div = String(req.query.division).trim();
+      if (proposalDivision) {
+        const div = String(proposalDivision).trim();
         orgClauses.push({ division: div });
         orgClauses.push({ department: div });
       }
-      if (req.query.department) {
-        const dept = String(req.query.department).trim();
+      if (proposalDepartment) {
+        const dept = String(proposalDepartment).trim();
         orgClauses.push({ department: dept });
         orgClauses.push({ division: dept });
       }
-      // Also include records that have NO division/department (Central/Region level income)
-      orgClauses.push({ $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] });
-
+      
       const unlinkedQuery = {
         $and: [
           { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] },
           { $or: [{ proposalId: null }, { proposalId: { $exists: false } }] },
-          { $or: orgClauses },
           { region: { $in: searchRegions } }
         ]
       };
+      
+      // If the proposal has a specific department or division, restrict unlinked records to that org.
+      // Otherwise (Region-level proposal), fetch ALL unlinked records for the region (no org restriction).
+      if (orgClauses.length > 0) {
+        // Also include records that have NO division/department (Central/Region level income) as a fallback
+        orgClauses.push({ $and: [{ division: { $in: [null, ""] } }, { department: { $in: [null, ""] } }] });
+        unlinkedQuery.$and.push({ $or: orgClauses });
+      }
 
       if (req.query.fiscalYear) {
         const fyNum = Number(req.query.fiscalYear);
@@ -667,15 +676,55 @@ exports.getIncomeByParams = async (req, res) => {
 
       const unlinkedIncome = await Income.find(unlinkedQuery).populate('incomecategory').lean();
       
-      if (unlinkedIncome.length > 0) {
-        // Merge and deduplicate by _id to avoid showing the same record twice 
-        // (though unlinked records by definition shouldn't be in the first 'income' array)
-        const existingIds = new Set(income.map(inc => String(inc._id)));
-        const uniqueUnlinked = unlinkedIncome.filter(inc => !existingIds.has(String(inc._id)));
-        
-        if (uniqueUnlinked.length > 0) {
-          income = [...income, ...uniqueUnlinked];
+      // Fetch consolidated records from submitted lower-level proposals
+      const consolidatedQuery = {
+        region: { $in: searchRegions },
+        $and: [
+          { $or: [{ workflowRef: { $ne: workflowId } }, { workflowRef: null }, { workflowRef: { $exists: false } }] },
+          { $or: [{ proposalId: { $ne: workflowId } }, { proposalId: null }, { proposalId: { $exists: false } }] }
+        ]
+      };
+      
+      if (req.query.fiscalYear) {
+        const fyNum = Number(req.query.fiscalYear);
+        const fyOr = [{ fiscalYear: String(req.query.fiscalYear) }];
+        if (!Number.isNaN(fyNum)) {
+          fyOr.push({ fiscalYear: fyNum });
         }
+        consolidatedQuery.$and.push({ $or: fyOr });
+      }
+      
+      if (finalBudgetType) {
+        consolidatedQuery.$and.push({ budgetType: new RegExp(`^${finalBudgetType}$`, 'i') });
+      }
+
+      // Apply submission filters to ensure we only get SUBMITTED lower-level records
+      if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+        if (submissionFilters.$and) {
+          consolidatedQuery.$and.push(...submissionFilters.$and);
+        } else {
+          Object.assign(consolidatedQuery, submissionFilters);
+        }
+      } else if (hierarchicalFilters && Object.keys(hierarchicalFilters).length > 0) {
+        if (hierarchicalFilters.$and) {
+          consolidatedQuery.$and.push(...hierarchicalFilters.$and);
+        } else {
+          Object.assign(consolidatedQuery, hierarchicalFilters);
+        }
+      }
+
+      const consolidatedIncomeData = await Income.find(consolidatedQuery).populate('incomecategory').lean();
+
+      if (unlinkedIncome.length > 0 || consolidatedIncomeData.length > 0) {
+        // Merge and deduplicate by _id to avoid showing the same record twice 
+        const existingIds = new Set(income.map(inc => String(inc._id)));
+        
+        const uniqueUnlinked = unlinkedIncome.filter(inc => !existingIds.has(String(inc._id)));
+        uniqueUnlinked.forEach(inc => existingIds.add(String(inc._id)));
+        
+        const uniqueConsolidated = consolidatedIncomeData.filter(inc => !existingIds.has(String(inc._id)));
+        
+        income = [...income, ...uniqueUnlinked, ...uniqueConsolidated];
       }
 
       // ✅ CREATOR-BASED FALLBACK: When viewing a specific proposal and still no records found,
