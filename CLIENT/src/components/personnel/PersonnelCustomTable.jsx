@@ -53,6 +53,7 @@ const CustomTable = ({
     label: "",
     operator: "=", // for number type
   });
+  const [hoveredColumn, setHoveredColumn] = useState(null);
   const [totals, setTotals] = useState({});
 
   const { data, isLoading, refetch } = useQuery({
@@ -114,19 +115,26 @@ const CustomTable = ({
 
   // Update the totals calculation to include totalExpenses and totalIncome
   const calculateTotals = useCallback(() => {
-    const newTotals = {};
+    if (data && data.grandTotals) {
+      setTotals(data.grandTotals);
+      return;
+    }
     
-    data.forEach((row) => {
-      columns.forEach((column) => {
-        if (column.type === 'number') {
-          const value = parseFloat(row[column.field]) || 0;
-          newTotals[column.field] = (newTotals[column.field] || 0) + value;
-        }
+    // Fallback to current page calculation if backend doesn't provide grand totals
+    const newTotals = {};
+    if (data && Array.isArray(data[dataListName])) {
+      data[dataListName].forEach((row) => {
+        columns.forEach((column) => {
+          if (column.type === 'number') {
+            const value = parseFloat(row[column.field]) || 0;
+            newTotals[column.field] = (newTotals[column.field] || 0) + value;
+          }
+        });
       });
-    });
+    }
     
     setTotals(newTotals);
-  }, [data, columns]);
+  }, [data, columns, dataListName]);
 
   // Make sure this runs when data or columns change
   useEffect(() => {
@@ -178,168 +186,96 @@ const CustomTable = ({
     return `${year}-${month}-${day}`;
   };
 
-  // Function to render filters based on column type
-  const renderFilter = () => {
-    const column = columns.find((col) => col.field === fieldAndValue.field);
+  // Function to render inline filter
+  const renderFilterInline = (column) => {
+    const isEditingThisColumn = fieldAndValue.field === column.field;
+    const value = isEditingThisColumn ? fieldAndValue.value : "";
+    const operator = isEditingThisColumn ? (fieldAndValue.operator || "=") : "=";
 
-    if (column) {
-      if (column.type === "date") {
-        return (
-          <>
-            <TextField
-              size="small"
-              type="date"
-              value={getFormattedValue()}
-              onChange={handleDateChange}
-              fullWidth
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "8px",
-                },
-              }}
-            />
-            {fieldAndValue.value && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
-      } else if (column.type === "number") {
-        return (
-          <>
-            <Select
-              size="small"
-              value={fieldAndValue.operator || "="}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({
-                  ...prev,
-                  operator: e.target.value,
-                }))
-              }
-              fullWidth
-            >
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value="="
-              >
-                Equal to <b>=</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value="<"
-              >
-                Less than <b>&lt;</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value=">"
-              >
-                Greater than <b>&gt;</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value="<="
-              >
-                Less than or Equal <b>&le;</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value=">="
-              >
-                Greater than or Equal <b>&ge;</b>
-              </MenuItem>
-            </Select>
+    const handleValueChange = (e) => {
+      setFieldAndValue(prev => ({ 
+        ...prev, 
+        field: column.field, 
+        value: e.target.value, 
+        label: column.label, 
+        operator 
+      }));
+      setPage(0);
+    };
 
-            <TextField
-              size="small"
-              type="number"
-              placeholder={`Enter ${fieldAndValue.label}`}
-              value={fieldAndValue.value || ""}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({ ...prev, value: e.target.value }))
-              }
-              fullWidth
-            />
-            {fieldAndValue.value && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
-      } else if (column.type === "boolean") {
-        return (
-          <>
-            <Select
-              size="small"
-              value={
-                fieldAndValue.value !== undefined ? fieldAndValue.value : ""
-              }
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({
-                  ...prev,
-                  value: e.target.value === "true",
-                }))
-              }
-              fullWidth
-            >
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="true">Yes</MenuItem>
-              <MenuItem value="false">No</MenuItem>
-            </Select>
-            {fieldAndValue.value !== undefined &&
-              fieldAndValue.value !== "" && (
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="error"
-                  onClick={handleFilterClearValue}
-                  sx={{ my: 1 }}
-                >
-                  Clear
-                </Button>
-              )}
-          </>
-        );
-      }
+    const handleOperatorChange = (e) => {
+      setFieldAndValue(prev => ({ 
+        ...prev, 
+        field: column.field, 
+        value, 
+        label: column.label, 
+        operator: e.target.value 
+      }));
+      setPage(0);
+    };
+
+    if (column.type === "date") {
+      return (
+        <TextField
+          size="small"
+          type="date"
+          value={isEditingThisColumn ? getFormattedValue() : ""}
+          onChange={handleDateChange}
+          fullWidth
+          sx={{ mt: 1, backgroundColor: "white", borderRadius: 1 }}
+        />
+      );
+    } else if (column.type === "number") {
+      return (
+        <Box sx={{ mt: 1, display: 'flex', gap: 0.5 }}>
+          <Select
+            size="small"
+            value={operator}
+            onChange={handleOperatorChange}
+            sx={{ backgroundColor: "white", borderRadius: 1, minWidth: 50 }}
+          >
+            <MenuItem value="=">=</MenuItem>
+            <MenuItem value="<">&lt;</MenuItem>
+            <MenuItem value=">">&gt;</MenuItem>
+            <MenuItem value="<=">&le;</MenuItem>
+            <MenuItem value=">=">&ge;</MenuItem>
+          </Select>
+          <TextField
+            size="small"
+            type="number"
+            placeholder="Search..."
+            value={value || ""}
+            onChange={handleValueChange}
+            sx={{ backgroundColor: "white", borderRadius: 1 }}
+            fullWidth
+          />
+        </Box>
+      );
+    } else if (column.type === "boolean") {
+      return (
+        <Select
+          size="small"
+          value={value !== undefined ? value : ""}
+          onChange={(e) => setFieldAndValue({ field: column.field, value: e.target.value === "true" ? "true" : (e.target.value === "false" ? "false" : ""), label: column.label })}
+          fullWidth
+          sx={{ mt: 1, backgroundColor: "white", borderRadius: 1 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          <MenuItem value="true">Yes</MenuItem>
+          <MenuItem value="false">No</MenuItem>
+        </Select>
+      );
     }
 
     return (
-      <>
-        <TextField
-          size="small"
-          placeholder={`Search by ${fieldAndValue.label}`}
-          value={fieldAndValue.value}
-          onChange={(e) =>
-            setFieldAndValue((prev) => ({ ...prev, value: e.target.value }))
-          }
-          fullWidth
-        />
-        {fieldAndValue.value && (
-          <Button
-            size="small"
-            variant="contained"
-            color="error"
-            onClick={handleFilterClearValue}
-            sx={{ my: 1 }}
-          >
-            Clear
-          </Button>
-        )}
-      </>
+      <TextField
+        size="small"
+        placeholder="Search..."
+        value={value}
+        onChange={handleValueChange}
+        fullWidth
+        sx={{ mt: 1, backgroundColor: "white", borderRadius: 1 }}
+      />
     );
   };
 
@@ -360,47 +296,53 @@ const CustomTable = ({
                     <TableCell
                       size="small"
                       key={column.type === "action" ? "action" : column.field}
+                      onMouseEnter={() => setHoveredColumn(column.field)}
+                      onMouseLeave={() => setHoveredColumn(null)}
                       sx={{
                         position: "sticky",
                         top: 0,
                         backgroundColor: "#375e38",
                         zIndex: 1,
                         borderRight: "1px solid",
-                        borderColor: grey[500], // Add border to each cell
-                        textAlign: column.type === "number" ? "right" : "left", // Align to right if column type is number
+                        borderColor: grey[500],
+                        verticalAlign: "top", // Align top so filter inputs don't shift title
+                        paddingTop: 1.5,
+                        paddingBottom: 1.5,
                       }}
                     >
                       <div
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "space-between",
+                          justifyContent: column.type === "number" ? "flex-end" : "flex-start",
+                          minHeight: "24px", // keep height stable
+                          color: "white"
                         }}
                       >
                         <TableSortLabel
                           active={orderBy === column.field}
                           direction={orderBy === column.field ? order : "asc"}
                           onClick={() => handleRequestSort(column.field)}
-                          sx={{ flex: 1 }}
+                          sx={{ color: "white !important", "& .MuiTableSortLabel-icon": { color: "white !important" } }}
                         >
                           {column.label}
                         </TableSortLabel>
-
-                        <Tooltip title={`Filter ${column.label}`}>
+                        {(fieldAndValue.field === column.field && fieldAndValue.value !== "") && (
                           <IconButton
                             size="small"
-                            onClick={(event) =>
-                              handleFilterClick(
-                                event,
-                                column.field,
-                                column.label
-                              )
-                            }
+                            onClick={handleFilterClearValue}
+                            sx={{ color: "white", ml: 1, padding: 0 }}
                           >
-                            <TiFilter color="lightgray" />
+                            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>✕</span>
                           </IconButton>
-                        </Tooltip>
+                        )}
                       </div>
+                      
+                      {(hoveredColumn === column.field || (fieldAndValue.field === column.field && fieldAndValue.value !== "")) && (
+                        <div onClick={(e) => e.stopPropagation()}>
+                          {renderFilterInline(column)}
+                        </div>
+                      )}
                     </TableCell>
                   )
                 )}
@@ -555,20 +497,6 @@ const CustomTable = ({
           />
         ) : undefined}
 
-        {/* Popover for Filtering */}
-        <Popover
-          open={Boolean(filterAnchorEl)}
-          anchorEl={filterAnchorEl}
-          onClose={handleFilterClose}
-          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-        >
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 1 }}>
-            <Box sx={{ fontSize: 14, fontWeight: 600, color: "#333" }}>
-              Filter by {fieldAndValue.label}
-            </Box>
-            {renderFilter()} {/* Render filter based on column type */}
-          </Box>
-        </Popover>
       </Paper>
     </Box>
   );

@@ -341,6 +341,8 @@ exports.getAllCOSPersonnel = async (req, res) => {
       employeeFullName,
       statusOfAppointment,
       region, // Add region parameter
+      operator = "=",
+      ...dynamicFilters
     } = req.query;
 
     // Prefer submission workflow filters; fallback to hierarchical
@@ -434,13 +436,37 @@ exports.getAllCOSPersonnel = async (req, res) => {
     if (statusOfAppointment) {
       query.statusOfAppointment = { $regex: new RegExp(`^${statusOfAppointment}$`, 'i') };
     }
+
+    // Apply dynamic column filters
+    if (dynamicFilters && typeof dynamicFilters === 'object') {
+      Object.keys(dynamicFilters).forEach(key => {
+        const val = dynamicFilters[key];
+        if (val !== undefined && val !== "") {
+          if (!isNaN(Number(val))) {
+            const numericValue = Number(val);
+            switch (operator) {
+              case "<": query[key] = { $lt: numericValue }; break;
+              case ">": query[key] = { $gt: numericValue }; break;
+              case ">=": query[key] = { $gte: numericValue }; break;
+              case "<=": query[key] = { $lte: numericValue }; break;
+              default: query[key] = numericValue;
+            }
+          } else if (val === "true" || val === "false") {
+            query[key] = val === "true";
+          } else {
+            query[key] = { $regex: val, $options: "i" };
+          }
+        }
+      });
+    }
+
     const sortByField = orderBy || "createdAt";
     const sortOrder = order.toLowerCase() === "desc" ? -1 : 1;
     const sortQuery = { [sortByField]: sortOrder };
-    const cosPersonnels = await COSPersonnel.find(query)
-      .skip(skip)
-      .limit(limitNum)
-      .sort(sortQuery);
+    
+    let cosPersonnels = await COSPersonnel.find(query)
+      .sort(sortQuery)
+      .lean();
     // Double-check that all returned personnel belong to the specified region
     const verifiedPersonnel = cosPersonnels.filter(person => {
       const psRegion = String(person.region || person.Region || '').toUpperCase().trim();
@@ -466,15 +492,29 @@ exports.getAllCOSPersonnel = async (req, res) => {
       // Only set if not already provided
       obj.workflowLevel = obj.workflowLevel || derivedLevel;
       obj.originalLevel = obj.originalLevel || derivedLevel;
+      
+      // Enforce Total = annualSalary for COS
+      obj.Total = obj.annualSalary;
+      
       return obj;
     });
 
+    const grandTotals = {};
+    enrichedPersonnel.forEach(ps => {
+      ['monthlySalary', 'annualSalary', 'Total'].forEach(field => {
+        grandTotals[field] = (grandTotals[field] || 0) + (Number(ps[field]) || 0);
+      });
+    });
+
+    const paginatedPersonnel = enrichedPersonnel.slice(skip, skip + limitNum);
+
     return res.json({
-      cosPersonnels: enrichedPersonnel,
+      cosPersonnels: paginatedPersonnel,
       totalPages: Math.ceil(totalRecords / limitNum),
       currentPage: pageNum,
       totalRecords,
       region,
+      grandTotals
     });
   } catch (error) {
     console.error("Error in getAllCOSPersonnel:", error);
@@ -504,6 +544,11 @@ exports.updateCOSPersonnel = async (req, res) => {
         obj[key] = updateFields[key];
         return obj;
       }, {});
+
+    // Enforce Total = annualSalary if annualSalary is updated
+    if (filteredUpdateFields.annualSalary !== undefined) {
+      filteredUpdateFields.Total = filteredUpdateFields.annualSalary;
+    }
 
     const updatedCOSPersonnel = await COSPersonnel.findOneAndUpdate(
       { _id: id, ...sanitizedFilters },

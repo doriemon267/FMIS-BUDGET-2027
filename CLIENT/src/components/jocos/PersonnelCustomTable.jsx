@@ -63,6 +63,7 @@ const COSCustomTable = ({
     label: "",
     operator: "=",
   });
+  const [hoveredColumn, setHoveredColumn] = useState(null);
   const [totals, setTotals] = useState({});
  const [grandTotal, setGrandTotal] = useState(0);
 
@@ -145,6 +146,13 @@ const COSCustomTable = ({
   }, [fieldAndValue.value]);
 
   useEffect(() => {
+    if (data && data.grandTotals) {
+      setTotals(data.grandTotals);
+      if (onDataChange) {
+        onDataChange(data[dataListName]);
+      }
+      return;
+    }
     if (data && data[dataListName]) {
       const newTotals = columns.reduce((acc, column) => {
         if (column.type === "number") {
@@ -243,139 +251,96 @@ const COSCustomTable = ({
     return `${year}-${month}-${day}`;
   };
 
- const renderFilter = () => {
-    const column = columns.find((col) => col.field === fieldAndValue.field);
-    if (!column) return null;
+  const renderFilterInline = (column) => {
+    const isEditingThisColumn = fieldAndValue.field === column.field;
+    const value = isEditingThisColumn ? fieldAndValue.value : "";
+    const operator = isEditingThisColumn ? (fieldAndValue.operator || "=") : "=";
 
-    const commonProps = {
-      size: "small",
-      fullWidth: true,
+    const handleValueChange = (e) => {
+      setFieldAndValue(prev => ({ 
+        ...prev, 
+        field: column.field, 
+        value: e.target.value, 
+        label: column.label, 
+        operator 
+      }));
+      setPage(0);
     };
 
-    switch (column.type) {
-      case "date":
-        return (
-          <>
-            <TextField
-              {...commonProps}
-              type="date"
-              value={getFormattedValue()}
-              onChange={handleDateChange}
-              sx={{ "& .MuiOutlinedInput-root": { borderRadius: "8px" } }}
-            />
-            {fieldAndValue.value && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
-      case "number":
-        return (
-          <>
-            <Select
-              {...commonProps}
-              value={fieldAndValue.operator || "="}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({
-                  ...prev,
-                  operator: e.target.value,
-                }))
-              }
-            >
-              {["=", "<", ">", "<=", ">="].map((op) => (
-                <MenuItem
-                  key={op}
-                  sx={{ display: "flex", justifyContent: "space-between" }}
-                  value={op}
-                >
-                  {op === "=" ? "Equal to" : op === "<" ? "Less than" : op === ">" ? "Greater than" : op === "<=" ? "Less than or Equal" : "Greater than or Equal"} <b>{op}</b>
-                </MenuItem>
-              ))}
-            </Select>
-            <TextField
-              {...commonProps}
-              type="number"
-              placeholder={`Enter ${fieldAndValue.label}`}
-              value={fieldAndValue.value || ""}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({ ...prev, value: e.target.value }))
-              }
-            />
-            {fieldAndValue.value && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
-      case "boolean":
-        return (
-          <>
-            <Select
-              {...commonProps}
-              value={fieldAndValue.value !== undefined ? fieldAndValue.value : ""}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({
-                  ...prev,
-                  value: e.target.value === "true",
-                }))
-              }
-            >
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="true">Yes</MenuItem>
-              <MenuItem value="false">No</MenuItem>
-            </Select>
-            {fieldAndValue.value !== undefined && fieldAndValue.value !== "" && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
-      default:
-        return (
-          <>
-            <TextField
-              {...commonProps}
-              placeholder={`Search by ${fieldAndValue.label}`}
-              value={fieldAndValue.value}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({ ...prev, value: e.target.value }))
-              }
-            />
-            {fieldAndValue.value && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
+    const handleOperatorChange = (e) => {
+      setFieldAndValue(prev => ({ 
+        ...prev, 
+        field: column.field, 
+        value, 
+        label: column.label, 
+        operator: e.target.value 
+      }));
+      setPage(0);
+    };
+
+    if (column.type === "date") {
+      return (
+        <TextField
+          size="small"
+          type="date"
+          value={isEditingThisColumn ? getFormattedValue() : ""}
+          onChange={handleDateChange}
+          fullWidth
+          sx={{ mt: 1, backgroundColor: "white", borderRadius: 1 }}
+        />
+      );
+    } else if (column.type === "number") {
+      return (
+        <Box sx={{ mt: 1, display: 'flex', gap: 0.5 }}>
+          <Select
+            size="small"
+            value={operator}
+            onChange={handleOperatorChange}
+            sx={{ backgroundColor: "white", borderRadius: 1, minWidth: 50 }}
+          >
+            <MenuItem value="=">=</MenuItem>
+            <MenuItem value="<">&lt;</MenuItem>
+            <MenuItem value=">">&gt;</MenuItem>
+            <MenuItem value="<=">&le;</MenuItem>
+            <MenuItem value=">=">&ge;</MenuItem>
+          </Select>
+          <TextField
+            size="small"
+            type="number"
+            placeholder="Search..."
+            value={value || ""}
+            onChange={handleValueChange}
+            sx={{ backgroundColor: "white", borderRadius: 1 }}
+            fullWidth
+          />
+        </Box>
+      );
+    } else if (column.type === "boolean") {
+      return (
+        <Select
+          size="small"
+          value={value !== undefined ? value : ""}
+          onChange={(e) => setFieldAndValue({ field: column.field, value: e.target.value === "true" ? "true" : (e.target.value === "false" ? "false" : ""), label: column.label })}
+          fullWidth
+          sx={{ mt: 1, backgroundColor: "white", borderRadius: 1 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          <MenuItem value="true">Yes</MenuItem>
+          <MenuItem value="false">No</MenuItem>
+        </Select>
+      );
     }
+
+    return (
+      <TextField
+        size="small"
+        placeholder="Search..."
+        value={value}
+        onChange={handleValueChange}
+        fullWidth
+        sx={{ mt: 1, backgroundColor: "white", borderRadius: 1 }}
+      />
+    );
   };
 
   const tableData = data && data[dataListName] ? data[dataListName] : [];
@@ -415,6 +380,8 @@ const COSCustomTable = ({
                   {columns.map((column) => (
                     <TableCell
                       key={column.field}
+                      onMouseEnter={() => setHoveredColumn(column.field)}
+                      onMouseLeave={() => setHoveredColumn(null)}
                       sx={{
                         position: "sticky",
                         top: 0,
@@ -422,35 +389,48 @@ const COSCustomTable = ({
                         zIndex: 1,
                         borderRight: "1px solid",
                         borderColor: grey[500],
-                        textAlign: column.type === "number" ? "right" : "left",
+                        verticalAlign: 'top',
+                        paddingTop: 1.5,
+                        paddingBottom: 1.5,
                       }}
                     >
                       <div
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "space-between",
+                          justifyContent: column.type === 'number' ? 'flex-end' : 'flex-start',
+                          minHeight: '24px',
+                          color: 'white',
                         }}
                       >
                         <TableSortLabel
                           active={orderBy === column.field}
-                          direction={orderBy === column.field ? order : "asc"}
-                          onClick={() => handleRequestSort(column.field)}
-                          sx={{ flex: 1 }}
+                          direction={
+                            orderBy === column.field ? order : "asc"
+                          }
+                          onClick={() =>
+                            handleRequestSort(column.field)
+                          }
+                          sx={{ color: 'white !important', '& .MuiTableSortLabel-icon': { color: 'white !important' } }}
                         >
                           {column.label}
                         </TableSortLabel>
-                        <Tooltip title={`Filter ${column.label}`}>
+                        {(fieldAndValue.field === column.field && fieldAndValue.value !== '') && (
                           <IconButton
                             size="small"
-                            onClick={(event) =>
-                              handleFilterClick(event, column.field, column.label)
-                            }
+                            onClick={handleFilterClearValue}
+                            sx={{ color: 'white', ml: 1, padding: 0 }}
                           >
-                            <TiFilter color="lightgray" />
+                            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>✕</span>
                           </IconButton>
-                        </Tooltip>
+                        )}
                       </div>
+                      
+                      {(hoveredColumn === column.field || (fieldAndValue.field === column.field && fieldAndValue.value !== '')) && (
+                        <div onClick={e => e.stopPropagation()}>
+                          {renderFilterInline(column)}
+                        </div>
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -578,6 +558,41 @@ const COSCustomTable = ({
                       );
                     })
                   )}
+                  {/* Totals row */}
+                  {tableData.length > 0 && (
+                    <TableRow>
+                      {columns.map((column, index) => (
+                        <TableCell
+                          key={column.field}
+                          sx={{
+                            backgroundColor: headerBg,
+                            color: "#fff",
+                            fontWeight: "bold",
+                            textAlign:
+                              column.type === "number"
+                                ? "right"
+                                : index === 0
+                                ? "left"
+                                : "center",
+                          }}
+                        >
+                          {index === 0 ? (
+                            "TOTAL:"
+                          ) : column.type === "number" ? (
+                            totals[column.field]
+                              ? totals[column.field].toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                })
+                              : "0.00"
+                          ) : column.field === "action" ? (
+                            `${tableData.length} records`
+                          ) : (
+                            ""
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  )}
                 </TableBody>
               )}
             </Table>
@@ -585,7 +600,7 @@ const COSCustomTable = ({
         </Paper>
         {!isLoading && (
           <TablePagination
-            rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
+            rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50, 100, 200])]}
             component="div"
             count={data ? data.totalRecords : 0}
             rowsPerPage={rowsPerPage}
@@ -612,58 +627,6 @@ const COSCustomTable = ({
             }}
           />
         )}
-        <Popover
-          open={Boolean(filterAnchorEl)}
-          anchorEl={filterAnchorEl}
-          onClose={handleFilterClose}
-          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-        >
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1, p: 1 }}>
-            <Box sx={{ fontSize: 14, fontWeight: 600, color: "#333" }}>
-              Filter by {fieldAndValue.label}
-            </Box>
-            {renderFilter()}
-          </Box>
-        </Popover>
-        </Box>
-      </>
-
-      {/* Grand Total Footer with Fade Animation */}
-      <>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            mt: 0,
-            gap: 1,
-            justifyContent: "flex-end",
-            backgroundColor: headerBg,
-            padding: "8px 16px",
-            borderRadius: "0 0 4px 4px",
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-            transition: 'all 0.3s ease'
-          }}
-        >
-          <Typography
-            sx={{
-              color: "#fff",
-              fontWeight: "bold",
-              textAlign: "right",
-            }}
-          >
-            TOTAL :
-          </Typography>
-          <Typography
-            sx={{
-              color: "#fff",
-              fontWeight: "bold",
-              textAlign: "right",
-            }}
-          >
-            {grandTotal.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-            })}
-          </Typography>
         </Box>
       </>
     </>

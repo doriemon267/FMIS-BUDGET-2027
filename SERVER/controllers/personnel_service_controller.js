@@ -247,6 +247,8 @@ exports.getAllPersonnelServices = async (req, res) => {
       subsidyEligible,
       chargedToIncomeEligible,
       proposalId,
+      operator = "=",
+      ...dynamicFilters
     } = req.query;
 
     console.log("DEBUG: getAllPersonnelServices called with params:", {
@@ -336,6 +338,29 @@ exports.getAllPersonnelServices = async (req, res) => {
         query.statusOfAppointment = { $regex: new RegExp(`^${statusOfAppointment}$`, 'i') };
       }
     }
+
+    // Apply dynamic column filters
+    if (dynamicFilters && typeof dynamicFilters === 'object') {
+      Object.keys(dynamicFilters).forEach(key => {
+        const val = dynamicFilters[key];
+        if (val !== undefined && val !== "") {
+          if (!isNaN(Number(val))) {
+            const numericValue = Number(val);
+            switch (operator) {
+              case "<": query[key] = { $lt: numericValue }; break;
+              case ">": query[key] = { $gt: numericValue }; break;
+              case ">=": query[key] = { $gte: numericValue }; break;
+              case "<=": query[key] = { $lte: numericValue }; break;
+              default: query[key] = numericValue;
+            }
+          } else if (val === "true" || val === "false") {
+            query[key] = val === "true";
+          } else {
+            query[key] = { $regex: val, $options: "i" };
+          }
+        }
+      });
+    }
     // Note: Submission workflow filters are now included in activeFilters above
 
     // Add region filter if provided (and not already constrained by hierarchy)
@@ -407,13 +432,11 @@ exports.getAllPersonnelServices = async (req, res) => {
         );
       }
     }
-    let personnelServices = await PersonnelServices.find(query)
-      .skip(skip)
-      .limit(limitNum)
-      .sort(sortQuery);
-    let totalRecords = await PersonnelServices.countDocuments(query);
+    let allPersonnelServices = await PersonnelServices.find(query)
+      .sort(sortQuery)
+      .lean();
     
-    console.log("DEBUG: Query results - found", personnelServices.length, "records out of", totalRecords, "total");
+    console.log("DEBUG: Query results - found", allPersonnelServices.length, "matching DB records");
     if (chargedToIncomeFilter !== null) {
       console.log("DEBUG: Charged to income filter was applied, looking for chargedToIncomeEligible =", chargedToIncomeFilter);
     }
@@ -431,9 +454,7 @@ exports.getAllPersonnelServices = async (req, res) => {
     // Other users are filtered by their organizational assignment
     if (!proposalId && isSuperAdmin && region) {
       // SUPER_ADMIN: Filter by the region parameter (selected on employee page)
-      const filteredPersonnel = personnelServices.filter(ps => ps.region === region);
-      personnelServices = filteredPersonnel;
-      totalRecords = filteredPersonnel.length;
+      allPersonnelServices = allPersonnelServices.filter(ps => ps.region === region);
     } else if (!proposalId && !isSuperAdmin && !isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -451,7 +472,7 @@ exports.getAllPersonnelServices = async (req, res) => {
                                 userAssignment.regionId?.region;
           const assignedDivision = userAssignment.divisionName;
           
-          const filteredPersonnel = personnelServices.filter(ps => {
+          const filteredPersonnel = allPersonnelServices.filter(ps => {
             const psDivision = String(ps.division || ps.Division || '').toUpperCase().trim();
             const psDepartment = String(ps.department || ps.Department || '').toUpperCase().trim();
             const psRegion = String(ps.region || ps.Region || '').toUpperCase().trim();
@@ -476,8 +497,7 @@ exports.getAllPersonnelServices = async (req, res) => {
           });
           
           if (filteredPersonnel.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
-            personnelServices = filteredPersonnel;
-            totalRecords = filteredPersonnel.length;
+            allPersonnelServices = filteredPersonnel;
           }
         }
       } catch (err) {
@@ -486,7 +506,7 @@ exports.getAllPersonnelServices = async (req, res) => {
     }
     
     // Recalculate fields: use stored values when present, else fallback to activeSettings (annual = monthly * 12 where applicable)
-    personnelServices = personnelServices.map((personnel) => {
+    allPersonnelServices = allPersonnelServices.map((personnel) => {
       const recalculatedSubsistenceAllowance = personnel.subsistenceAllowance ?? 0;
       const recalculatedSubsistenceAllowanceMDS =
         personnel.subsistenceAllowanceMDS || 0;
@@ -574,7 +594,7 @@ exports.getAllPersonnelServices = async (req, res) => {
         recalculatedTerminalLeave +
         recalculatedEmpComp;
       return {
-        ...personnel.toObject(),
+        ...personnel,
         annualSalary: recalculatedAnnualSalary,
         subsistenceAllowance: recalculatedSubsistenceAllowance,
         subsistenceAllowanceMDS: recalculatedSubsistenceAllowanceMDS,
@@ -603,11 +623,23 @@ exports.getAllPersonnelServices = async (req, res) => {
         Total: roundTo2Decimals(recalculatedTotal),
       };
     });
+
+    const grandTotals = {};
+    allPersonnelServices.forEach(ps => {
+      ['monthlySalary', 'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive', 'honoraria', 'medical', 'noOfDependent', 'childrenAllowance', 'meal', 'additionalMedical', 'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST', 'cashGift', 'midyearBonus', 'yearEndBonus', 'loyaltyAward', 'overtimePay', 'gsisPremium', 'providentFund', 'pagibigPremium', 'philhealthPremium', 'employeeCompensation', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'hazardPay', 'courtAppearance', 'subsidyAmount', 'Total'].forEach(field => {
+        grandTotals[field] = (grandTotals[field] || 0) + (Number(ps[field]) || 0);
+      });
+    });
+
+    const totalRecords = allPersonnelServices.length;
+    const personnelServices = allPersonnelServices.slice(skip, skip + limitNum);
+
     return res.json({
       personnelServices,
       totalPages: Math.ceil(totalRecords / limitNum),
       currentPage: pageNum,
       totalRecords,
+      grandTotals
     });
   } catch (error) {
     console.error("Error in getAllPersonnelServices:", error.stack);

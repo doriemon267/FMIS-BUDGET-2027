@@ -119,7 +119,7 @@ const MooeRow = ({
           <TableCell></TableCell>
           <TableCell></TableCell>
           <TableCell sx={{ pl: getIndentLevelFromSubline(child.sublineItem || child.accountingTitle || row.sublineItem, child.uacsCode) ? 3 : 0 }}>
-            {child.custom ? (
+            {child.custom || hasOtherMOOE ? (
               <TextField
                 fullWidth
                 size="small"

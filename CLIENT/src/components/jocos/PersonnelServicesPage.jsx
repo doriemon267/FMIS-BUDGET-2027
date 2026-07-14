@@ -65,14 +65,14 @@ const COSPersonnelServicesPage = () => {
       label: "MONTHLY SALARY",
       show: true,
       alignRight: true,
-      customRender: (row) => row.monthlySalary ? `₱${row.monthlySalary.toLocaleString()}` : "₱0",
+      customRender: (row) => row.monthlySalary ? `₱${row.monthlySalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "₱0.00",
     },
     annualSalary: {
       type: "number",
       label: "ANNUAL SALARY",
       show: true,
       alignRight: true,
-      customRender: (row) => row.annualSalary ? `₱${row.annualSalary.toLocaleString()}` : "₱0",
+      customRender: (row) => row.annualSalary ? `₱${row.annualSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "₱0.00",
     },
     subsidyEligible: {
       type: "text",
@@ -98,7 +98,7 @@ const COSPersonnelServicesPage = () => {
       label: "TOTAL",
       show: true,
       alignRight: true,
-      customRender: (row) => row.Total ? `₱${row.Total.toLocaleString()}` : "₱0",
+      customRender: (row) => row.Total ? `₱${row.Total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "₱0.00",
     },
     // Hidden fields for filtering/processing
     budgetType: {

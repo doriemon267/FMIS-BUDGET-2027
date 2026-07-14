@@ -1912,7 +1912,7 @@ exports.createProposal = async (req, res) => {
     let derivedDivision = division !== undefined ? division : '';
     let derivedAssignmentLevel = undefined;
     try {
-      if (department === undefined || division === undefined || true) {
+      if (!isSuperAdmin && (department === undefined || division === undefined || true)) {
         const hua = await HierarchicalUserAssignment.findOne({ userId, isActive: true })
           .populate('departmentId', 'Department departmentName DepartmentName')
           .populate('regionId', 'Region regionName RegionName');
@@ -1923,6 +1923,9 @@ exports.createProposal = async (req, res) => {
             derivedDepartment = hua.departmentId.Department || hua.departmentId.departmentName || hua.departmentId.DepartmentName || '';
           }
         }
+      } else if (isSuperAdmin) {
+        // Super Admins create top-level regional proposals, do not inherit personal assignment
+        derivedAssignmentLevel = "REGION";
       }
     } catch (_e) { /* non-fatal */ }
 
@@ -2702,24 +2705,38 @@ exports.getProposals = async (req, res) => {
       // Note: Exclude region from spread since region field is ObjectId, not String
       const { region, ...orgScopeWithoutRegion } = orgScope;
       const fallbackQuery = { createdBy: userIdString, ...orgScopeWithoutRegion };
-  const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
+      if (sanitizedQuery.region) fallbackQuery.region = sanitizedQuery.region;
+      
+      const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
       newProposals = fallbackAll.filter(p => p.status === 'DRAFT' || p.status === 'RETURNED_TO_PREPARER');
+      
       // Second fallback: try createdByName if still empty
       if (newProposals.length === 0) {
         const { region: _r, ...orgScopeWithoutRegion } = orgScope;
-  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
+        const nameFallbackQuery = { createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion };
+        if (sanitizedQuery.region) nameFallbackQuery.region = sanitizedQuery.region;
+        
+        const nameFallback = await NewProposalWorkflow.find(nameFallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
         newProposals = nameFallback;
       }
+      
       // Final fallback: only return user-specific drafts. Do NOT return ALL drafts to avoid exposure.
       if (newProposals.length === 0) {
         const { region: _r2, ...orgScopeWithoutRegion } = orgScope;
-        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName').lean();
+        const fallback3 = { createdBy: userIdString, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion };
+        if (sanitizedQuery.region) fallback3.region = sanitizedQuery.region;
+        
+        const allUserDrafts = await NewProposalWorkflow.find(fallback3).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName').lean();
+        
         // Also try createdByName fallback, but do not broaden to all drafts
         if (allUserDrafts.length > 0) {
           newProposals = allUserDrafts;
         } else {
           const { region: _r3, ...orgScopeWithoutRegion } = orgScope;
-          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
+          const fallback4 = { createdByName: userName, status: { $in: ['DRAFT', 'RETURNED_TO_PREPARER'] }, ...orgScopeWithoutRegion };
+          if (sanitizedQuery.region) fallback4.region = sanitizedQuery.region;
+          
+          const nameFallback = await NewProposalWorkflow.find(fallback4).sort({ createdAt: -1 }).populate('region','Region regionName RegionName').lean();
           newProposals = nameFallback;
         }
       }
@@ -2966,9 +2983,11 @@ exports.getProposals = async (req, res) => {
         title: p.title,
         description: p.description,
         fiscalYear: p.fiscalYear,
-        region: p.region,
+        region: p.region || regionName || undefined,
         division: divisionName || undefined,
         department: departmentName || undefined,
+        assignmentLevel: p.assignmentLevel,
+        isCentralOffice: p.isCentralOffice,
         // Who created/owns the draft on UI (used by actions menu for PREPARER)
         processBy: legacy?.processBy || p.createdByName,
         // Responsibility Center: CO → Division/Department; Regional → Region (consolidated)
