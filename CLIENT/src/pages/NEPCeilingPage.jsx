@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -8,6 +8,9 @@ import {
   Chip,
   ToggleButton,
   ToggleButtonGroup,
+  FormControl,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Home as HomeIcon,
@@ -20,6 +23,8 @@ import { useRegion } from '../context/RegionContext';
 import { isSuperAdmin } from '../utils/checkRole';
 import CeilingManagement from '../components/workflow/CeilingManagement';
 import BudgetComparisonView from '../components/workflow/BudgetComparisonView';
+import { useQuery } from '@tanstack/react-query';
+import api from '../config/api';
 
 // Brand colors
 const BRAND_COLORS = {
@@ -43,6 +48,8 @@ const NEPCeilingPage = () => {
   const { currentUser } = useUser();
   const { activeRegion, availableRegions, changeActiveRegion } = useRegion();
   const [activeView, setActiveView] = useState('ceiling'); // 'ceiling' | 'comparison'
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState(new Date().getFullYear());
+  const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
 
   // Resolve region
   const resolvedRegion = activeRegion && typeof activeRegion === 'object'
@@ -53,8 +60,48 @@ const NEPCeilingPage = () => {
     ? (activeRegion.regionName || activeRegion.Region || activeRegion.name || activeRegion._id)
     : (activeRegion || 'No region');
 
-  // Current fiscal year (could be made dynamic)
-  const currentFiscalYear = new Date().getFullYear();
+  // Fetch active fiscal year
+  const { data: activeSettings, isSuccess: isActiveSettingsLoaded } = useQuery({
+    queryKey: ['activeSettings'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/settings/active');
+        return res.data;
+      } catch (error) {
+        console.error('Error fetching active settings:', error);
+        return null;
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (isActiveSettingsLoaded && activeSettings?.fiscalYear) {
+      setSelectedFiscalYear(activeSettings.fiscalYear);
+    }
+  }, [isActiveSettingsLoaded, activeSettings]);
+
+  useEffect(() => {
+    const initializeFiscalYears = async () => {
+      try {
+        const summaryRes = await api.get('/api/allproposal/consolidation/summary');
+        const data = summaryRes.data?.data;
+        if (data?.byFiscalYear && typeof data.byFiscalYear === 'object') {
+          const years = Object.keys(data.byFiscalYear)
+            .map(Number)
+            .filter((n) => !Number.isNaN(n))
+            .sort((a, b) => b - a);
+          setAvailableFiscalYears(years);
+        }
+      } catch (err) {
+        console.error('Error fetching available fiscal years:', err);
+      }
+    };
+    initializeFiscalYears();
+  }, []);
+
+  const currentYear = new Date().getFullYear();
+  const fallbackYears = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2];
+  const fiscalYearOptions = Array.from(new Set([...availableFiscalYears, ...fallbackYears])).sort((a, b) => b - a);
 
   // Check if user is BRD staff (includes Super Admin so they can see finalized proposals on NEP Ceiling)
   const isBRDStaff =
@@ -159,24 +206,113 @@ const NEPCeilingPage = () => {
 
         {/* Info chips */}
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-          <Chip
-            label={`FY ${currentFiscalYear}`}
-            sx={{
-              bgcolor: 'rgba(255,255,255,0.2)',
-              color: 'white',
-              fontWeight: 600,
-              '& .MuiChip-label': { px: 2 },
-            }}
-          />
-          <Chip
-            label={resolvedRegionString}
-            sx={{
-              bgcolor: 'rgba(255,255,255,0.2)',
-              color: 'white',
-              fontWeight: 600,
-              '& .MuiChip-label': { px: 2 },
-            }}
-          />
+          <FormControl size="small" variant="outlined" sx={{ minWidth: 120 }}>
+            <Select
+              value={selectedFiscalYear}
+              onChange={(e) => setSelectedFiscalYear(Number(e.target.value))}
+              displayEmpty
+              sx={{
+                bgcolor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                fontWeight: 600,
+                borderRadius: 8,
+                height: 32,
+                '.MuiOutlinedInput-notchedOutline': { border: 'none' },
+                '&:hover .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                '.MuiSelect-icon': { color: 'white' },
+                '.MuiSelect-select': { py: 0.5, px: 2, display: 'flex', alignItems: 'center' },
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: BRAND_COLORS.deepGreen,
+                    color: 'white',
+                    mt: 1,
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        bgcolor: 'rgba(255,255,255,0.1)'
+                      },
+                      '&.Mui-selected': {
+                        bgcolor: 'rgba(255,255,255,0.2)'
+                      }
+                    }
+                  }
+                }
+              }}
+            >
+              {fiscalYearOptions.map((year, idx) => (
+                <MenuItem key={idx} value={year}>
+                  {`FY ${year}`}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {availableRegions && availableRegions.length > 1 ? (
+            <FormControl size="small" variant="outlined" sx={{ minWidth: 150 }}>
+              <Select
+                value={resolvedRegionString}
+                onChange={(e) => {
+                  const region = availableRegions.find(
+                    (r) =>
+                      r.name === e.target.value ||
+                      r.Region === e.target.value ||
+                      r.regionName === e.target.value
+                  );
+                  if (region) changeActiveRegion(region);
+                }}
+                displayEmpty
+                sx={{
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  fontWeight: 600,
+                  borderRadius: 8,
+                  height: 32,
+                  '.MuiOutlinedInput-notchedOutline': { border: 'none' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                  '.MuiSelect-icon': { color: 'white' },
+                  '.MuiSelect-select': { py: 0.5, px: 2, display: 'flex', alignItems: 'center' },
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      bgcolor: BRAND_COLORS.deepGreen,
+                      color: 'white',
+                      mt: 1,
+                      '& .MuiMenuItem-root': {
+                        '&:hover': {
+                          bgcolor: 'rgba(255,255,255,0.1)'
+                        },
+                        '&.Mui-selected': {
+                          bgcolor: 'rgba(255,255,255,0.2)'
+                        }
+                      }
+                    }
+                  }
+                }}
+              >
+                {availableRegions.map((r, idx) => {
+                  const name = r.name || r.Region || r.regionName;
+                  return (
+                    <MenuItem key={idx} value={name}>
+                      {name}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          ) : (
+            <Chip
+              label={resolvedRegionString}
+              sx={{
+                bgcolor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                fontWeight: 600,
+                '& .MuiChip-label': { px: 2 },
+              }}
+            />
+          )}
           <Chip
             label={isBRDStaff ? '✓ BRD Access' : '⚠ Limited Access'}
             sx={{
@@ -236,14 +372,14 @@ const NEPCeilingPage = () => {
       <Box>
         {activeView === 'ceiling' ? (
           <CeilingManagement
-            fiscalYear={currentFiscalYear}
+            fiscalYear={selectedFiscalYear}
             region={resolvedRegion}
             regionName={resolvedRegionString}
             onRefresh={() => {}}
           />
         ) : (
           <BudgetComparisonView
-            fiscalYear={currentFiscalYear}
+            fiscalYear={selectedFiscalYear}
             region={resolvedRegion}
             regionName={resolvedRegionString}
           />

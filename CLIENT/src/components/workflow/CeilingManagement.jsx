@@ -46,6 +46,34 @@ import {
 import { toast } from 'react-toastify';
 import api from '../../config/api';
 import BudgetComparisonView from './BudgetComparisonView';
+import { NumericFormat } from 'react-number-format';
+
+// NumericFormat custom component for TextFields
+const NumericFormatCustom = React.forwardRef(function NumericFormatCustom(
+  props,
+  ref,
+) {
+  const { onChange, ...other } = props;
+
+  return (
+    <NumericFormat
+      {...other}
+      getInputRef={ref}
+      onValueChange={(values) => {
+        onChange({
+          target: {
+            name: props.name,
+            value: values.value,
+          },
+        });
+      }}
+      thousandSeparator
+      valueIsNumericString
+      decimalScale={2}
+      fixedDecimalScale
+    />
+  );
+});
 
 // Brand colors matching the main theme
 const BRAND_COLORS = {
@@ -150,12 +178,13 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
   };
 
   // Start editing an allocation
-  const handleStartEdit = (allocation) => {
+  const handleEditAllocation = (allocation) => {
     setEditingAllocation(allocation.division);
     setEditValues({
       ceilingAmount: allocation.ceilingAmount || 0,
-      ceilingSubsidy: allocation.ceilingSubsidy || 0,
-      ceilingIncome: allocation.ceilingIncome || 0,
+      ps: allocation.ceilingBreakdown?.personnelServices || 0,
+      mooe: allocation.ceilingBreakdown?.mooe || 0,
+      co: allocation.ceilingBreakdown?.capitalOutlay || 0,
       priority: allocation.priority || 'Medium',
       remarks: allocation.remarks || ''
     });
@@ -169,7 +198,14 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
     try {
       const res = await api.put(`/api/budget-ceiling/${ceiling._id}/allocation`, {
         division: editingAllocation,
-        ...editValues
+        ceilingAmount: editValues.ceilingAmount,
+        ceilingBreakdown: {
+          personnelServices: editValues.ps || 0,
+          mooe: editValues.mooe || 0,
+          capitalOutlay: editValues.co || 0
+        },
+        priority: editValues.priority,
+        remarks: editValues.remarks
       });
       
       if (res.data.success) {
@@ -745,30 +781,118 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
                     }}
                   >
                     <TableCell>
-                      <Typography sx={{ fontWeight: 500 }}>{allocation.division || allocation.department || 'N/A'}</Typography>
+                      <Typography sx={{ fontWeight: 500 }}>{allocation.division || allocation.department || `${regionName || region} (Consolidated)`}</Typography>
                       {allocation.remarks && (
                         <Typography sx={{ fontSize: '0.75rem', color: '#888' }}>{allocation.remarks}</Typography>
                       )}
                     </TableCell>
                     <TableCell sx={{ textAlign: 'right' }}>
-                      {formatCurrency(allocation.initialRequestAmount)}
+                      <Box sx={{ 
+                        bgcolor: '#f8f9fa', 
+                        p: 1, 
+                        borderRadius: 1, 
+                        border: '1px solid #e0e0e0',
+                        mb: 1
+                      }}>
+                        <Box display="flex" justifyContent="space-between" mb={0.5}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.initialBreakdown?.personnelServices)}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={0.5}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.initialBreakdown?.mooe)}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={allocation.initialIncome > 0 ? 0.5 : 0}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.initialBreakdown?.capitalOutlay)}</Typography>
+                        </Box>
+                        {allocation.initialIncome > 0 && (
+                          <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(allocation.initialIncome)}</Typography>
+                          </Box>
+                        )}
+                      </Box>
+                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#333' }}>{formatCurrency(allocation.initialRequestAmount)}</Typography>
                     </TableCell>
                     <TableCell sx={{ textAlign: 'right' }}>
                       {isEditing ? (
-                        <TextField
-                          size="small"
-                          type="number"
-                          value={editValues.ceilingAmount}
-                          onChange={(e) => setEditValues(prev => ({ ...prev, ceilingAmount: parseFloat(e.target.value) || 0 }))}
-                          InputProps={{
-                            startAdornment: <InputAdornment position="start">₱</InputAdornment>
-                          }}
-                          sx={{ width: 150 }}
-                        />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 250, ml: 'auto' }}>
+                          <TextField
+                            size="small"
+                            label="Personnel Services (PS)"
+                            value={editValues.ps}
+                            onChange={(e) => setEditValues(prev => ({ ...prev, ps: parseFloat(e.target.value) || 0 }))}
+                            InputProps={{ 
+                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                              inputComponent: NumericFormatCustom 
+                            }}
+                            inputProps={{ style: { textAlign: 'right' } }}
+                            fullWidth
+                          />
+                          <TextField
+                            size="small"
+                            label="MOOE"
+                            value={editValues.mooe}
+                            onChange={(e) => setEditValues(prev => ({ ...prev, mooe: parseFloat(e.target.value) || 0 }))}
+                            InputProps={{ 
+                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                              inputComponent: NumericFormatCustom 
+                            }}
+                            inputProps={{ style: { textAlign: 'right' } }}
+                            fullWidth
+                          />
+                          <TextField
+                            size="small"
+                            label="Capital Outlay (CO)"
+                            value={editValues.co}
+                            onChange={(e) => setEditValues(prev => ({ ...prev, co: parseFloat(e.target.value) || 0 }))}
+                            InputProps={{ 
+                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                              inputComponent: NumericFormatCustom 
+                            }}
+                            inputProps={{ style: { textAlign: 'right' } }}
+                            fullWidth
+                          />
+                          <Box sx={{ bgcolor: '#e8f5e9', p: 1, borderRadius: 1, border: '1px solid #c8e6c9', mt: 0.5 }}>
+                            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: BRAND_COLORS.deepGreen, display: 'flex', justifyContent: 'space-between' }}>
+                              <span>Grand Total:</span>
+                              <span>{formatCurrency((editValues.ps || 0) + (editValues.mooe || 0) + (editValues.co || 0))}</span>
+                            </Typography>
+                          </Box>
+                        </Box>
                       ) : (
-                        <Typography sx={{ fontWeight: 600, color: BRAND_COLORS.deepGreen }}>
-                          {formatCurrency(allocation.ceilingAmount)}
-                        </Typography>
+                        <>
+                          <Box sx={{ 
+                            bgcolor: '#f8f9fa', 
+                            p: 1, 
+                            borderRadius: 1, 
+                            border: '1px solid #e0e0e0',
+                            mb: 1
+                          }}>
+                            <Box display="flex" justifyContent="space-between" mb={0.5}>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
+                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.ceilingBreakdown?.personnelServices)}</Typography>
+                            </Box>
+                            <Box display="flex" justifyContent="space-between" mb={0.5}>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
+                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.ceilingBreakdown?.mooe)}</Typography>
+                            </Box>
+                            <Box display="flex" justifyContent="space-between" mb={allocation.ceilingIncome > 0 ? 0.5 : 0}>
+                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
+                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.ceilingBreakdown?.capitalOutlay)}</Typography>
+                            </Box>
+                            {allocation.ceilingIncome > 0 && (
+                              <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
+                                <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
+                                <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(allocation.ceilingIncome)}</Typography>
+                              </Box>
+                            )}
+                          </Box>
+                          <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: BRAND_COLORS.deepGreen }}>
+                            {formatCurrency(allocation.ceilingAmount)}
+                          </Typography>
+                        </>
                       )}
                     </TableCell>
                     <TableCell sx={{ textAlign: 'right' }}>
@@ -842,7 +966,7 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
                           </Box>
                         ) : (
                           <Tooltip title="Edit Ceiling">
-                            <IconButton size="small" onClick={() => handleStartEdit(allocation)}>
+                            <IconButton size="small" onClick={() => handleEditAllocation(allocation)}>
                               <EditIcon sx={{ color: BRAND_COLORS.deepGreen }} />
                             </IconButton>
                           </Tooltip>
@@ -888,12 +1012,13 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
           <TextField
             fullWidth
             label="Total Budget Pool"
-            type="number"
             value={newBudgetPool}
             onChange={(e) => setNewBudgetPool(parseFloat(e.target.value) || 0)}
             InputProps={{
-              startAdornment: <InputAdornment position="start">₱</InputAdornment>
+              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+              inputComponent: NumericFormatCustom
             }}
+            inputProps={{ style: { textAlign: 'right' } }}
           />
         </DialogContent>
         <DialogActions>

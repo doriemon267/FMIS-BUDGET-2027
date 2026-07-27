@@ -808,6 +808,7 @@ exports.updateRegionDueDateExtension = async (req, res) => {
       extensions[idx].label = label || null;
     }
     settings.regionDueDateExtensions = extensions;
+    settings.markModified('regionDueDateExtensions');
     await settings.save();
     const updated = await Settings.findById(id).populate("compensationSettingsId");
     res.status(200).json({

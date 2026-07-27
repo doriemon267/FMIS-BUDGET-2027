@@ -188,13 +188,65 @@ const BudgetComparisonView = ({ fiscalYear, region, regionName }) => {
                     sx={{ '&:hover': { bgcolor: '#fafafa' } }}
                   >
                     <TableCell>
-                      <Typography sx={{ fontWeight: 500 }}>{row.division || row.department || 'N/A'}</Typography>
+                      <Typography sx={{ fontWeight: 500 }}>{row.division || row.department || `${regionName || region} (Consolidated)`}</Typography>
                     </TableCell>
                     <TableCell sx={{ textAlign: 'right' }}>
-                      {formatCurrency(row.initial.amount)}
+                      <Box sx={{ 
+                        bgcolor: '#f8f9fa', 
+                        p: 1, 
+                        borderRadius: 1, 
+                        border: '1px solid #e0e0e0',
+                        mb: 1
+                      }}>
+                        <Box display="flex" justifyContent="space-between" mb={0.5}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.initial.breakdown?.personnelServices)}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={0.5}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.initial.breakdown?.mooe)}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={row.initial.income > 0 ? 0.5 : 0}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.initial.breakdown?.capitalOutlay)}</Typography>
+                        </Box>
+                        {row.initial.income > 0 && (
+                          <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(row.initial.income)}</Typography>
+                          </Box>
+                        )}
+                      </Box>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.95rem' }}>{formatCurrency(row.initial.amount)}</Typography>
                     </TableCell>
                     <TableCell sx={{ textAlign: 'right', color: BRAND_COLORS.warning, fontWeight: 500 }}>
-                      {formatCurrency(row.ceiling.amount)}
+                      <Box sx={{ 
+                        bgcolor: '#f8f9fa', 
+                        p: 1, 
+                        borderRadius: 1, 
+                        border: '1px solid #e0e0e0',
+                        mb: 1
+                      }}>
+                        <Box display="flex" justifyContent="space-between" mb={0.5}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.ceiling.breakdown?.personnelServices)}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={0.5}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.ceiling.breakdown?.mooe)}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between" mb={row.ceiling.income > 0 ? 0.5 : 0}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.ceiling.breakdown?.capitalOutlay)}</Typography>
+                        </Box>
+                        {row.ceiling.income > 0 && (
+                          <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(row.ceiling.income)}</Typography>
+                          </Box>
+                        )}
+                      </Box>
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: BRAND_COLORS.warning }}>{formatCurrency(row.ceiling.amount)}</Typography>
                     </TableCell>
                     <TableCell sx={{ textAlign: 'right', color: BRAND_COLORS.success, fontWeight: 500 }}>
                       {row.nep ? formatCurrency(row.nep.amount) : '-'}

@@ -229,24 +229,86 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       });
     }
 
+    const proposalIds = proposals.map(p => p._id);
+    
+    // Fetch breakdown data using both proposalId (legacy) and workflowRef (new)
+    const [personnelData, mooeData, capitalData] = await Promise.all([
+      PersonnelService.find({ $or: [{ proposalId: { $in: proposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean(),
+      MooeProposal.find({ $or: [{ proposalId: { $in: proposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean(),
+      CapitalOutlay.find({ $or: [{ proposalId: { $in: proposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean()
+    ]);
+
     // Group proposals by division
     const divisionMap = {};
     proposals.forEach(p => {
       const key = p.division || p.department || 'Unassigned';
       if (!divisionMap[key]) {
+        let defaultDivision = p.division;
+        if (key === 'Unassigned') {
+          const rName = typeof regionDoc !== 'undefined' && regionDoc ? regionDoc.regionName : region;
+          defaultDivision = `${rName} (Consolidated)`;
+        }
         divisionMap[key] = {
-          division: p.division,
+          division: defaultDivision,
           department: p.department,
           proposals: [],
           totalAmount: 0,
           totalSubsidy: 0,
-          totalIncome: 0
+          totalIncome: 0,
+          totalPS: 0,
+          totalMOOE: 0,
+          totalCO: 0
         };
       }
       divisionMap[key].proposals.push(p);
       divisionMap[key].totalAmount += p.amount || p.proposedBudget || 0;
       divisionMap[key].totalSubsidy += p.projectedSubsidy || 0;
       divisionMap[key].totalIncome += p.projectedCorporateIncome || 0;
+
+      // Add from embedded arrays (for consolidated proposals)
+      if (p.personnelData && Array.isArray(p.personnelData)) {
+        divisionMap[key].totalPS += p.personnelData.reduce((sum, item) => sum + (Number(item.Total) || 0), 0);
+      }
+      if (p.mooeData && Array.isArray(p.mooeData)) {
+        divisionMap[key].totalMOOE += p.mooeData.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      }
+      if (p.capitalData && Array.isArray(p.capitalData)) {
+        divisionMap[key].totalCO += p.capitalData.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
+      }
+    });
+
+    // Aggregate expense class breakdowns from linked collections
+    personnelData.forEach(item => {
+      const pId = item.workflowRef || item.proposalId;
+      if (pId) {
+        const p = proposals.find(prop => prop._id.toString() === pId.toString());
+        if (p) {
+          const key = p.division || p.department || 'Unassigned';
+          divisionMap[key].totalPS += Number(item.Total) || 0;
+        }
+      }
+    });
+
+    mooeData.forEach(item => {
+      const pId = item.workflowRef || item.proposalId;
+      if (pId) {
+        const p = proposals.find(prop => prop._id.toString() === pId.toString());
+        if (p) {
+          const key = p.division || p.department || 'Unassigned';
+          divisionMap[key].totalMOOE += Number(item.amount) || 0;
+        }
+      }
+    });
+
+    capitalData.forEach(item => {
+      const pId = item.workflowRef || item.proposalId;
+      if (pId) {
+        const p = proposals.find(prop => prop._id.toString() === pId.toString());
+        if (p) {
+          const key = p.division || p.department || 'Unassigned';
+          divisionMap[key].totalCO += Number(item.cost) || 0;
+        }
+      }
     });
 
     // Create allocations from divisions
@@ -257,10 +319,20 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       initialRequestAmount: div.totalAmount,
       initialSubsidy: div.totalSubsidy,
       initialIncome: div.totalIncome,
+      initialBreakdown: {
+        personnelServices: div.totalPS,
+        mooe: div.totalMOOE,
+        capitalOutlay: div.totalCO
+      },
       // Default ceiling to initial request (BRD will adjust)
       ceilingAmount: div.totalAmount,
       ceilingSubsidy: div.totalSubsidy,
       ceilingIncome: div.totalIncome,
+      ceilingBreakdown: {
+        personnelServices: div.totalPS,
+        mooe: div.totalMOOE,
+        capitalOutlay: div.totalCO
+      },
       allocationStatus: 'Pending'
     }));
 
@@ -321,7 +393,7 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
 router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep-ceiling'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { division, ceilingAmount, ceilingSubsidy, ceilingIncome, priority, remarks } = req.body;
+    const { division, ceilingAmount, ceilingBreakdown, ceilingSubsidy, ceilingIncome, priority, remarks } = req.body;
     const user = req.user;
 
     const ceiling = await BudgetCeiling.findById(id);
@@ -352,6 +424,13 @@ router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep
     
     // Update allocation
     if (ceilingAmount !== undefined) allocation.ceilingAmount = ceilingAmount;
+    if (ceilingBreakdown !== undefined) {
+      allocation.ceilingBreakdown = {
+        personnelServices: Number(ceilingBreakdown.personnelServices) || 0,
+        mooe: Number(ceilingBreakdown.mooe) || 0,
+        capitalOutlay: Number(ceilingBreakdown.capitalOutlay) || 0
+      };
+    }
     if (ceilingSubsidy !== undefined) allocation.ceilingSubsidy = ceilingSubsidy;
     if (ceilingIncome !== undefined) allocation.ceilingIncome = ceilingIncome;
     if (priority) allocation.priority = priority;
@@ -539,12 +618,66 @@ router.post('/:id/generate-nep', isAuth, isBRDStaff, requireDynamicPermission('/
       }
 
       // Find the original Initial proposal(s) for this division
-      const initialProposals = await NewProposalWorkflow.find({
-        modelType: 'Initial',
-        status: { $in: ['FINALIZED', 'Finalized'] },
-        fiscalYear: ceiling.fiscalYear,
-        division: allocation.division
-      }).lean();
+      let initialProposals = [];
+
+      // 1. Try finding by direct initialProposalId reference if present
+      if (allocation.initialProposalId) {
+        const found = await NewProposalWorkflow.findOne({
+          _id: allocation.initialProposalId,
+          modelType: 'Initial',
+          status: { $in: ['FINALIZED', 'Finalized'] }
+        }).lean();
+        if (found) {
+          initialProposals.push(found);
+        }
+      }
+
+      // 2. Fallback to querying by division or region if initialProposalId not found
+      if (initialProposals.length === 0) {
+        const baseQuery = {
+          modelType: 'Initial',
+          status: { $in: ['FINALIZED', 'Finalized'] },
+          fiscalYear: ceiling.fiscalYear
+        };
+
+        if (allocation.division && !allocation.division.includes('(Consolidated)')) {
+          initialProposals = await NewProposalWorkflow.find({
+            ...baseQuery,
+            division: allocation.division
+          }).lean();
+        }
+
+        if (initialProposals.length === 0) {
+          const Region = require('../models/Region');
+          let regionFilter = ceiling.region;
+          if (mongoose.Types.ObjectId.isValid(ceiling.region)) {
+            regionFilter = new mongoose.Types.ObjectId(ceiling.region);
+          } else {
+            const rDoc = await Region.findOne({
+              $or: [
+                { regionName: ceiling.region },
+                { Region: ceiling.region },
+                { name: ceiling.region }
+              ]
+            });
+            if (rDoc) regionFilter = rDoc._id;
+          }
+
+          const query = {
+            ...baseQuery,
+            $or: [
+              { division: allocation.division },
+              { division: { $in: [null, '', 'Unassigned'] } },
+              { division: { $exists: false } }
+            ]
+          };
+          if (regionFilter) {
+            query.region = regionFilter;
+          }
+
+          initialProposals = await NewProposalWorkflow.find(query).lean();
+        }
+      }
 
       if (initialProposals.length === 0) {
         errors.push(`No finalized Initial proposal found for ${allocation.division}`);
@@ -696,12 +829,14 @@ router.get('/comparison/:fiscalYear/:region', isAuth, async (req, res) => {
           amount: alloc.initialRequestAmount,
           subsidy: alloc.initialSubsidy,
           income: alloc.initialIncome,
+          breakdown: alloc.initialBreakdown,
           status: initial?.status || 'N/A'
         },
         ceiling: {
           amount: alloc.ceilingAmount,
           subsidy: alloc.ceilingSubsidy,
-          income: alloc.ceilingIncome
+          income: alloc.ceilingIncome,
+          breakdown: alloc.ceilingBreakdown
         },
         nep: nep ? {
           id: nep._id,

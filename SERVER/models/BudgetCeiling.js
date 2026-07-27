@@ -72,6 +72,13 @@ const budgetCeilingSchema = new mongoose.Schema({
       default: 0
     },
     
+    // Breakdown by expense type for initial request
+    initialBreakdown: {
+      personnelServices: { type: Number, default: 0 },
+      mooe: { type: Number, default: 0 },
+      capitalOutlay: { type: Number, default: 0 }
+    },
+    
     // BRD-set ceiling amounts
     ceilingAmount: {
       type: Number,
@@ -239,20 +246,31 @@ budgetCeilingSchema.virtual('calculatedRemaining').get(function() {
 
 // Pre-save middleware to update totals
 budgetCeilingSchema.pre('save', function(next) {
+  // First update individual allocations
+  this.allocations.forEach(alloc => {
+    // If breakdown is used, ensure the total amount reflects it
+    if (alloc.ceilingBreakdown && (alloc.ceilingBreakdown.personnelServices > 0 || alloc.ceilingBreakdown.mooe > 0 || alloc.ceilingBreakdown.capitalOutlay > 0)) {
+      alloc.ceilingAmount = (alloc.ceilingBreakdown.personnelServices || 0) + (alloc.ceilingBreakdown.mooe || 0) + (alloc.ceilingBreakdown.capitalOutlay || 0);
+    }
+    
+    if (alloc.initialBreakdown && (alloc.initialBreakdown.personnelServices > 0 || alloc.initialBreakdown.mooe > 0 || alloc.initialBreakdown.capitalOutlay > 0)) {
+      alloc.initialRequestAmount = (alloc.initialBreakdown.personnelServices || 0) + (alloc.initialBreakdown.mooe || 0) + (alloc.initialBreakdown.capitalOutlay || 0);
+    }
+
+    alloc.variance = (alloc.ceilingAmount || 0) - (alloc.initialRequestAmount || 0);
+    if (alloc.initialRequestAmount > 0) {
+      alloc.variancePercent = ((alloc.variance / alloc.initialRequestAmount) * 100).toFixed(2);
+    } else {
+      alloc.variancePercent = 0;
+    }
+  });
+
   // Calculate total allocated from allocations
   this.totalAllocated = this.allocations.reduce((sum, alloc) => sum + (alloc.ceilingAmount || 0), 0);
   this.remainingToAllocate = this.totalBudgetPool - this.totalAllocated;
   
   // Calculate total initial requested
   this.totalInitialRequested = this.allocations.reduce((sum, alloc) => sum + (alloc.initialRequestAmount || 0), 0);
-  
-  // Update variance for each allocation
-  this.allocations.forEach(alloc => {
-    alloc.variance = (alloc.ceilingAmount || 0) - (alloc.initialRequestAmount || 0);
-    if (alloc.initialRequestAmount > 0) {
-      alloc.variancePercent = ((alloc.variance / alloc.initialRequestAmount) * 100).toFixed(2);
-    }
-  });
   
   next();
 });
