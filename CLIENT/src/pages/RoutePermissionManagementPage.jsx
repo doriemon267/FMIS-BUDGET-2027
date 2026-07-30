@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Card,
@@ -42,10 +42,14 @@ import {
   MdSync,
   MdSave,
   MdRestore,
+  MdEngineering,
+  MdWarning,
+  MdCheckCircle,
 } from "react-icons/md";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../config/api";
 import { PAGE_TITLES } from "../layout/Dashboard";
+import { useRoutePermissions } from "../context/RoutePermissionContext";
 
 const roleOptions = [
   { id: "SUPER_ADMIN", label: "Admin", color: "error" },
@@ -77,6 +81,71 @@ const RoutePermissionManagementPage = () => {
     message: "",
     onConfirm: null,
   });
+
+  // ─── Maintenance Mode ──────────────────────────────────────────────────────
+  const {
+    isMaintenanceMode,
+    maintenanceMessage,
+    maintenanceUpdatedAt,
+    maintenanceUpdatedBy,
+    updateMaintenanceStatus,
+    refetchMaintenanceStatus,
+  } = useRoutePermissions();
+
+  const [maintModeActive, setMaintModeActive] = useState(isMaintenanceMode);
+  const [maintMessageInput, setMaintMessageInput] = useState(maintenanceMessage || "");
+  const [isSubmittingMaint, setIsSubmittingMaint] = useState(false);
+
+  // Sync local state with context when context changes
+  useEffect(() => {
+    setMaintModeActive(isMaintenanceMode);
+    setMaintMessageInput(maintenanceMessage || "");
+  }, [isMaintenanceMode, maintenanceMessage]);
+
+  const handleToggleMaintenanceClick = (newChecked) => {
+    setConfirmDialog({
+      open: true,
+      title: newChecked ? "Enable Maintenance Mode" : "Disable Maintenance Mode",
+      message: newChecked
+        ? "Are you sure you want to enable maintenance mode? All non-Super Admin users will be immediately locked out of the system."
+        : "Are you sure you want to disable maintenance mode? All users will regain normal access.",
+      onConfirm: async () => {
+        setIsSubmittingMaint(true);
+        try {
+          await updateMaintenanceStatus(newChecked, maintMessageInput);
+          setSnackbar({
+            open: true,
+            message: newChecked ? "✅ Maintenance Mode enabled. All users are now locked out." : "✅ Maintenance Mode disabled. Normal access restored.",
+            severity: newChecked ? "warning" : "success",
+          });
+        } catch (err) {
+          setSnackbar({
+            open: true,
+            message: "Failed to update maintenance mode: " + (err?.response?.data?.error || err.message),
+            severity: "error",
+          });
+        } finally {
+          setIsSubmittingMaint(false);
+        }
+      },
+    });
+  };
+
+  const handleSaveMaintenanceMessage = async () => {
+    setIsSubmittingMaint(true);
+    try {
+      await updateMaintenanceStatus(maintModeActive, maintMessageInput);
+      setSnackbar({ open: true, message: "Maintenance message updated.", severity: "success" });
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: "Failed to save message: " + (err?.response?.data?.error || err.message),
+        severity: "error",
+      });
+    } finally {
+      setIsSubmittingMaint(false);
+    }
+  };
 
   // 1. Fetch all routes from backend
   const { data, isLoading, error } = useQuery({
@@ -364,6 +433,119 @@ const RoutePermissionManagementPage = () => {
 
   return (
     <Box p={3}>
+      {/* ─── MAINTENANCE MODE CARD ─────────────────────────────────────────── */}
+      <Card
+        sx={{
+          borderRadius: "12px",
+          mb: 3,
+          border: maintModeActive ? "1.5px solid #eab308" : "1.5px solid transparent",
+          boxShadow: maintModeActive
+            ? "0 0 0 3px rgba(234,179,8,0.12), 0 4px 20px rgba(0,0,0,0.08)"
+            : "0 4px 20px rgba(0,0,0,0.08)",
+          transition: "all 0.3s ease",
+        }}
+      >
+        <CardContent>
+          <Box display="flex" alignItems="flex-start" gap={2} flexWrap="wrap">
+            {/* Icon */}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 52,
+                height: 52,
+                borderRadius: 2,
+                background: maintModeActive
+                  ? "linear-gradient(135deg, #fef08a, #fde047)"
+                  : "rgba(0,0,0,0.05)",
+                flexShrink: 0,
+                transition: "all 0.3s ease",
+              }}
+            >
+              <MdEngineering size={28} color={maintModeActive ? "#854d0e" : "#64748b"} />
+            </Box>
+
+            {/* Main Content */}
+            <Box flex={1} minWidth={240}>
+              <Box display="flex" alignItems="center" gap={1.5} mb={0.5} flexWrap="wrap">
+                <Typography variant="h6" fontWeight={700}>
+                  🔧 System Maintenance Mode
+                </Typography>
+                <Chip
+                  icon={
+                    maintModeActive ? (
+                      <MdWarning size={14} />
+                    ) : (
+                      <MdCheckCircle size={14} />
+                    )
+                  }
+                  label={maintModeActive ? "MAINTENANCE ACTIVE" : "SYSTEM OPERATIONAL"}
+                  color={maintModeActive ? "warning" : "success"}
+                  size="small"
+                  sx={{ fontWeight: 700, fontSize: "0.7rem", letterSpacing: "0.06em" }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                When enabled, all non-Super Admin users are immediately locked out of the system and shown a maintenance page. Super Admin retains full access.
+              </Typography>
+
+              {/* Announcement message input */}
+              <TextField
+                label="Maintenance Announcement Message"
+                placeholder="e.g. We are performing scheduled maintenance. Back online shortly."
+                value={maintMessageInput}
+                onChange={(e) => setMaintMessageInput(e.target.value)}
+                fullWidth
+                multiline
+                minRows={2}
+                maxRows={4}
+                variant="outlined"
+                size="small"
+                sx={{ mb: 1.5 }}
+                disabled={isSubmittingMaint}
+              />
+
+              {/* Meta info */}
+              {maintenanceUpdatedAt && (
+                <Typography variant="caption" color="text.disabled" display="block" mb={1.5}>
+                  Last updated: {new Date(maintenanceUpdatedAt).toLocaleString()} by{" "}
+                  <strong>{maintenanceUpdatedBy || "System"}</strong>
+                </Typography>
+              )}
+
+              {/* Actions row */}
+              <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Switch
+                    checked={maintModeActive}
+                    onChange={(e) => handleToggleMaintenanceClick(e.target.checked)}
+                    disabled={isSubmittingMaint}
+                    color="warning"
+                    id="maintenance-mode-switch"
+                  />
+                  <Typography variant="body2" fontWeight={600}>
+                    {maintModeActive ? "Maintenance ON" : "Maintenance OFF"}
+                  </Typography>
+                </Box>
+
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleSaveMaintenanceMessage}
+                  disabled={isSubmittingMaint || maintMessageInput === (maintenanceMessage || "")}
+                  startIcon={isSubmittingMaint ? <CircularProgress size={14} color="inherit" /> : <MdSave />}
+                  sx={{ borderRadius: "8px", textTransform: "none", fontWeight: 600 }}
+                >
+                  Save Message
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* ─── ROUTE PERMISSION MATRIX ────────────────────────────────────────── */}
       <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", mb: 4 }}>
         <CardContent>
           <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2} mb={3}>

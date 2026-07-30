@@ -1,5 +1,6 @@
 import React from 'react';
 import { useUser } from '../../context/UserContext';
+import { useRoutePermissions } from '../../context/RoutePermissionContext';
 import {
   Box,
   CircularProgress,
@@ -15,6 +16,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import HomeIcon from '@mui/icons-material/Home';
 import LogoutIcon from '@mui/icons-material/Logout';
 import IS_PRODUCTION from '../../utils/IS_PRODUCTION';
+import SystemMaintenancePage from '../../pages/SystemMaintenancePage';
 
 /** Main FMIS dashboard URL - for users who accidentally land on Budget without a budget role */
 const mainFmisDashboardUrl = IS_PRODUCTION
@@ -170,6 +172,14 @@ const NoBudgetRolePage = ({ onLogout, message }) => {
 
 const AccessGuard = ({ children }) => {
   const { currentUser, loading, logout, unauthorizedSuperAdmin } = useUser();
+  const { isMaintenanceMode } = useRoutePermissions();
+
+  // Determine if user is Super Admin
+  const normalizedRoles = (currentUser?.Roles || []).map((r) =>
+    String(r || '').replace(/\s+/g, '_').toUpperCase()
+  );
+  const isSuperAdmin =
+    normalizedRoles.includes('SUPER_ADMIN') || normalizedRoles.includes('SUPERADMIN');
 
   if (loading || (!currentUser && !unauthorizedSuperAdmin)) {
     return (
@@ -203,6 +213,11 @@ const AccessGuard = ({ children }) => {
         message="Your USER ID is not authorized for this environment. Return to the main FMIS dashboard or sign out."
       />
     );
+  }
+
+  // Maintenance Mode gate: Non-Super Admin users are locked out during maintenance
+  if (isMaintenanceMode && !isSuperAdmin) {
+    return <SystemMaintenancePage />;
   }
 
   // Budget role gate: Only SUPER ADMIN or users with at least one budget role can proceed

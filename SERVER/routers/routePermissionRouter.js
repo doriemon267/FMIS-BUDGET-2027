@@ -13,10 +13,27 @@ const {
   bulkUpdateRole,
   saveDefaults,
   restoreDefaults,
+  getMaintenanceStatus,
+  updateMaintenanceStatus,
 } = require("../controllers/routePermissionController");
 
 const routePermissionRouter = Router();
 const requireDynamicPermission = require("../middleware/requireDynamicPermission");
+
+// ─── MAINTENANCE MODE ROUTES (before generic routes) ──────────────────────────
+
+// GET  /api/route-permissions/maintenance-status – current maintenance status (all authenticated users)
+routePermissionRouter.get("/route-permissions/maintenance-status", isAuth, getMaintenanceStatus);
+
+// PUT  /api/route-permissions/maintenance-status – toggle maintenance mode (Super Admin only)
+routePermissionRouter.put(
+  "/route-permissions/maintenance-status",
+  isAuth,
+  requireDynamicPermission("/route-permissions"),
+  updateMaintenanceStatus
+);
+
+// ─── ROUTE PERMISSION ROUTES ───────────────────────────────────────────────────
 
 // GET  /api/route-permissions          – active routes only (used by frontend context)
 routePermissionRouter.get("/route-permissions", isAuth, getAll);

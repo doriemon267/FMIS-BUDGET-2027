@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
 import {
@@ -40,9 +40,12 @@ import {
   Refresh as RefreshIcon,
   Business as BusinessIcon,
   Visibility as VisibilityIcon,
+  FileDownload as FileDownloadIcon,
+  PictureAsPdf as PictureAsPdfIcon
 } from '@mui/icons-material';
 import api from '../config/api';
 import OrganizationalInfoEditor from '../components/OrganizationalInfoEditor';
+import GenericPdfPreviewDialog from '../components/GenericPdfPreviewDialog';
 
 /** Format date for display */
 function formatDate(value) {
@@ -101,6 +104,10 @@ export default function BRDConsolidationPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedConsolidationId, setSelectedConsolidationId] = useState(null);
 
+  // PDF Preview State
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+
   const handleViewProposal = (proposalId) => (e) => {
     e?.stopPropagation?.();
     if (proposalId) navigate(`/allproposal?tab=all-proposals&proposalId=${proposalId}`);
@@ -116,6 +123,38 @@ export default function BRDConsolidationPage() {
   const handleEditorClose = () => {
     setEditorOpen(false);
     setSelectedConsolidationId(null);
+  };
+
+  const handleExport = async (format) => {
+    try {
+      // Ensure we have a fiscal year selected
+      const url = `/api/allproposal/consolidation/export/${format}?fiscalYear=${fiscalYear || ''}`;
+      
+      const response = await api.get(url, { responseType: 'blob' });
+      const blob = new Blob([response.data], { 
+        type: format === 'excel' 
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+          : 'application/pdf' 
+      });
+      
+      const downloadUrl = window.URL.createObjectURL(blob);
+
+      if (format === 'pdf') {
+        setPdfUrl(downloadUrl);
+        setPdfPreviewOpen(true);
+      } else {
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.setAttribute('download', `CONSO_PROPOSAL_${fiscalYear || 'ALL'}.xlsx`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      }
+    } catch (err) {
+      console.error(`Error exporting ${format}:`, err);
+      setError(`Failed to export ${format.toUpperCase()} report`);
+    }
   };
 
   // Handle when organizational info is saved - refresh data
@@ -152,7 +191,10 @@ export default function BRDConsolidationPage() {
     fetchConsolidationData();
   }, [fiscalYear]);
 
+  const fetchRef = useRef(0);
+
   const fetchConsolidationData = async () => {
+    const currentFetchId = ++fetchRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -161,12 +203,14 @@ export default function BRDConsolidationPage() {
       const summaryRes = await api.get('/api/allproposal/consolidation/summary', {
         params: { fiscalYear }
       });
+      if (currentFetchId !== fetchRef.current) return;
       setSummary(summaryRes.data?.data ?? null);
 
       // Fetch regional structure (only non–Central Office regions)
       const regionalRes = await api.get('/api/allproposal/consolidation/regions', {
         params: { fiscalYear }
       });
+      if (currentFetchId !== fetchRef.current) return;
       const regionalData = Array.isArray(regionalRes.data?.data) ? regionalRes.data.data : [];
       setRegionalStructure(regionalData.filter((r) => (r.region || '').trim() !== 'Central Office'));
 
@@ -174,12 +218,16 @@ export default function BRDConsolidationPage() {
       const coRes = await api.get('/api/allproposal/consolidation/central-office', {
         params: { fiscalYear }
       });
+      if (currentFetchId !== fetchRef.current) return;
       setCentralOfficeStructure(Array.isArray(coRes.data?.data) ? coRes.data.data : []);
     } catch (err) {
+      if (currentFetchId !== fetchRef.current) return;
       console.error('Error fetching consolidation data:', err);
       setError(err.response?.data?.message || 'Failed to fetch consolidation data');
     } finally {
-      setLoading(false);
+      if (currentFetchId === fetchRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -260,6 +308,24 @@ export default function BRDConsolidationPage() {
               ))}
             </Select>
           </FormControl>
+          <Tooltip title="Export CONSO PROPOSAL (Excel)">
+            <IconButton
+              onClick={() => handleExport('excel')}
+              disabled={loading}
+              sx={{ bgcolor: 'success.light', color: 'success.contrastText', '&:hover': { bgcolor: 'success.main' } }}
+            >
+              <FileDownloadIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Export CONSO PROPOSAL (PDF)">
+            <IconButton
+              onClick={() => handleExport('pdf')}
+              disabled={loading}
+              sx={{ bgcolor: 'error.light', color: 'error.contrastText', '&:hover': { bgcolor: 'error.main' } }}
+            >
+              <PictureAsPdfIcon />
+            </IconButton>
+          </Tooltip>
           <IconButton
             onClick={() => fetchConsolidationData()}
             disabled={loading}
@@ -708,6 +774,21 @@ export default function BRDConsolidationPage() {
         consolidationId={selectedConsolidationId}
         onClose={handleEditorClose}
         onSaved={handleOrgInfoSaved}
+      />
+
+      {/* PDF Preview Dialog */}
+      <GenericPdfPreviewDialog
+        open={pdfPreviewOpen}
+        onClose={() => {
+          setPdfPreviewOpen(false);
+          if (pdfUrl) {
+            window.URL.revokeObjectURL(pdfUrl);
+            setPdfUrl(null);
+          }
+        }}
+        pdfUrl={pdfUrl}
+        title="CONSO PROPOSAL Preview"
+        downloadFilename={`CONSO_PROPOSAL_${fiscalYear || 'ALL'}.pdf`}
       />
     </Container>
   );

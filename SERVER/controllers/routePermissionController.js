@@ -1,6 +1,7 @@
 const RoutePermission = require("../models/RoutePermission");
 const UserActivityLog = require("../models/UserActivityLog");
 const routePermissionCache = require("../utils/routePermissionCache");
+const SystemSetting = require("../models/SystemSetting");
 
 const logActivity = (req, action, details) => {
   if (!req.user) return;
@@ -819,3 +820,77 @@ exports.restoreDefaults = async (req, res) => {
 
 // Export defaults so the frontend seed endpoint can be called
 exports.DEFAULT_ROUTE_PERMISSIONS = DEFAULT_ROUTE_PERMISSIONS;
+
+// ─── MAINTENANCE MODE ──────────────────────────────────────────────────────────
+
+/**
+ * GET /api/route-permissions/maintenance-status
+ * Returns current maintenance mode status and message.
+ * Available to all authenticated users.
+ */
+exports.getMaintenanceStatus = async (req, res) => {
+  try {
+    const setting = await SystemSetting.findOne({ key: "maintenance_mode" }).lean();
+    const value = setting?.value || {};
+    return res.json({
+      isMaintenanceMode: Boolean(value.isActive),
+      maintenanceMessage: value.message || "",
+      updatedAt: setting?.updatedAt || null,
+      updatedBy: setting?.updatedBy || null,
+    });
+  } catch (e) {
+    console.error("[getMaintenanceStatus]", e);
+    return res.status(500).json({ error: "Could not fetch maintenance status." });
+  }
+};
+
+/**
+ * PUT /api/route-permissions/maintenance-status
+ * Toggle or update maintenance mode. Super Admin only (enforced by router via requireDynamicPermission).
+ * Body: { isActive: boolean, message?: string }
+ */
+exports.updateMaintenanceStatus = async (req, res) => {
+  try {
+    const { isActive, message } = req.body;
+
+    // Validate
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({ error: "isActive must be a boolean." });
+    }
+
+    // Upsert the setting
+    const setting = await SystemSetting.findOneAndUpdate(
+      { key: "maintenance_mode" },
+      {
+        $set: {
+          value: { isActive, message: message || "" },
+          description: "System maintenance mode toggle",
+          updatedBy: req.user?.particular || req.user?.userId || "SYSTEM",
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    // Invalidate the middleware cache
+    try {
+      const checkMaintenanceMode = require("../middleware/checkMaintenanceMode");
+      if (typeof checkMaintenanceMode.invalidateCache === "function") {
+        checkMaintenanceMode.invalidateCache();
+      }
+    } catch (_) {}
+
+    // Log activity
+    logActivity(req, "TOGGLE_MAINTENANCE_MODE", { isActive, message: message || "" });
+
+    return res.json({
+      success: true,
+      isMaintenanceMode: Boolean(setting.value?.isActive),
+      maintenanceMessage: setting.value?.message || "",
+      updatedAt: setting.updatedAt,
+      updatedBy: setting.updatedBy,
+    });
+  } catch (e) {
+    console.error("[updateMaintenanceStatus]", e);
+    return res.status(500).json({ error: "Could not update maintenance status." });
+  }
+};

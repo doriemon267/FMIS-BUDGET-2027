@@ -103,6 +103,8 @@ const TierPage = () => {
   const isManager = roleList.some((r) => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(norm(r)));
   const isSuperAdmin = roleList.some((r) => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(norm(r)));
   const isTierViewOnly = (isOfficer || isManager) && !isAnalyst && !isSuperAdmin;
+  const isFinalized = tierData?.isFinalized === true;
+  const effectiveReadOnly = isTierViewOnly || isFinalized;
 
   // Compute dirty state without causing setState loops: only set lastSavedJson once when tierData first arrives
   useEffect(() => {
@@ -802,13 +804,16 @@ const TierPage = () => {
           {isTierViewOnly && (
             <Chip label="View only (Budget Officer / Manager)" color="default" variant="outlined" size="small" />
           )}
+          {isFinalized && (
+            <Chip label="Finalized (NEP)" color="error" variant="outlined" size="small" />
+          )}
           {currentVersion != null && (
             <Chip label={`Version ${currentVersion}`} color="primary" variant="outlined" size="small" />
           )}
-          {!isTierViewOnly && (
+          {!effectiveReadOnly && (
             <Chip label={isDirty ? 'Unsaved changes' : 'All changes saved'} color={isDirty ? 'warning' : 'success'} />
           )}
-          {!isTierViewOnly && (
+          {!effectiveReadOnly && (
             <>
               <Button
                 variant="contained"
@@ -913,7 +918,7 @@ const TierPage = () => {
         </Box>
       ) : (
         <>
-          {!isTierViewOnly && (
+          {!effectiveReadOnly && (
             <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
               <Chip size="small" label="Modified rows are highlighted" sx={{ backgroundColor: 'warning.light', fontWeight: 500 }} />
             </Box>
@@ -929,7 +934,7 @@ const TierPage = () => {
             divisionName={selectedDivisionName}
             onTierDataChange={setTierData}
             onVersionChange={setCurrentVersion}
-            readOnly={isTierViewOnly}
+            readOnly={effectiveReadOnly}
           />
         </>
       )}

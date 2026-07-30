@@ -4,6 +4,7 @@
  */
 
 const consolidationService = require('../utils/consolidationService');
+const consoProposalExportService = require('../utils/consoProposalExportService');
 
 /**
  * Get all consolidation folders (both regional and central office)
@@ -238,5 +239,33 @@ exports.updateOrganizationalInfo = async (req, res) => {
       message: 'Failed to update organizational information',
       error: error.message
     });
+  }
+};
+
+exports.exportConsoProposalExcel = async (req, res) => {
+  try {
+    const { fiscalYear } = req.query;
+    const buffer = await consoProposalExportService.generateConsoProposalExcel(fiscalYear);
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=CONSO_PROPOSAL_${fiscalYear || 'ALL'}.xlsx`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('[CONSOLIDATION] Error exporting excel:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate Excel report', error: error.message });
+  }
+};
+
+exports.exportConsoProposalPdf = async (req, res) => {
+  try {
+    const { fiscalYear } = req.query;
+    const buffer = await consoProposalExportService.generateConsoProposalPdf(fiscalYear);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=CONSO_PROPOSAL_${fiscalYear || 'ALL'}.pdf`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('[CONSOLIDATION] Error exporting pdf:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate PDF report', error: error.message });
   }
 };

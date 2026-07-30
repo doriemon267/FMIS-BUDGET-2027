@@ -127,7 +127,9 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   const parsedT2Raw = tier2Focused ? parseAmountFromInput(tier2Raw) : null;
   const t1ForTotal = tier1Focused ? (parsedT1Raw === '' ? 0 : Number(parsedT1Raw)) : displayTier1;
   const t2ForTotal = tier2Focused ? (parsedT2Raw === '' ? 0 : Number(parsedT2Raw)) : displayTier2;
-  const totalValueLive = t1ForTotal + t2ForTotal;
+  const totalValueLive = (entered.hasOwnProperty('tier1') || entered.hasOwnProperty('tier2')) 
+    ? (t1ForTotal + t2ForTotal) 
+    : (orig.total !== undefined && orig.total !== 0 ? orig.total : t1ForTotal + t2ForTotal);
 
   const onTier1Focus = () => {
     setTier1Focused(true);
@@ -403,7 +405,12 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
           if (effectiveDiv) params.division = effectiveDiv;
           const res = await api.get('/api/consolidated-reports/capital-outlay-data', { params });
           const data = res.data?.data || res.data || [];
-          return Array.isArray(data) ? data.flatMap(r => r.items || r) : [];
+          return Array.isArray(data) ? data.flatMap(r => {
+            if (r.items && Array.isArray(r.items)) {
+              return r.items.map(item => ({ ...item, categoryTitleFromGroup: r.category }));
+            }
+            return r;
+          }) : [];
         },
         enabled: hasRequiredParams,
       },
@@ -444,8 +451,64 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
   const projectedSubsidyTier1 = Number(finalizedData?.projectedSubsidy) || 0;
 
   const personnelData = results[0].data || [];
-  const mooeData = results[1].data || [];
-  const capitalOutlayData = results[2].data || [];
+  const rawMooeData = results[1].data || [];
+  const mooeData = useMemo(() => {
+    const map = new Map();
+    rawMooeData.forEach(item => {
+      const key = `${item.sublineItem || ''}-${item.accountingTitle || item.uacsCode || item.sublineItem || 'Unknown'}`;
+      if (map.has(key)) {
+        const existing = map.get(key);
+        if (item.amount !== undefined) existing.amount = (Number(existing.amount) || 0) + (Number(item.amount) || 0);
+        if (item.total !== undefined) existing.total = (Number(existing.total) || 0) + (Number(item.total) || 0);
+        if (item.income !== undefined) existing.income = (Number(existing.income) || 0) + (Number(item.income) || 0);
+        if (item.subsidy !== undefined) existing.subsidy = (Number(existing.subsidy) || 0) + (Number(item.subsidy) || 0);
+        const t1Props = ['tier1','tier_1','tierOne','tier_one','t1','tier1Amount','tier_1_amount','subsidyTier1','subsidy_tier1'];
+        const t2Props = ['tier2','tier_2','tierTwo','tier_two','t2','tier2Amount','tier_2_amount','subsidyTier2','subsidy_tier2'];
+        for (const p of t1Props) if (item[p] !== undefined) existing[p] = (Number(existing[p]) || 0) + (Number(item[p]) || 0);
+        for (const p of t2Props) if (item[p] !== undefined) existing[p] = (Number(existing[p]) || 0) + (Number(item[p]) || 0);
+      } else {
+        map.set(key, { ...item });
+      }
+    });
+    return Array.from(map.values());
+  }, [rawMooeData]);
+
+  const rawCapitalOutlayData = results[2].data || [];
+  const capitalOutlayData = useMemo(() => {
+    const map = new Map();
+    rawCapitalOutlayData.forEach(item => {
+      let categoryName = "Other";
+      if (item.categoryTitleFromGroup) categoryName = item.categoryTitleFromGroup;
+      else if (item.categoryGroup) categoryName = item.categoryGroup;
+      else if (item.categoryName) categoryName = item.categoryName;
+      else if (item.category && typeof item.category === 'object' && item.category.categoryName) categoryName = item.category.categoryName;
+      else if (item.category && typeof item.category === 'object' && item.category.name) categoryName = item.category.name;
+      else if (typeof item.category === 'string' && item.category.trim() && !/^[0-9a-fA-F]{24}$/.test(item.category)) categoryName = item.category;
+      else if (item.sublineItem) categoryName = item.sublineItem;
+      else if (item.categoryTitle) categoryName = item.categoryTitle;
+      else if (item.type) categoryName = item.type;
+      else if (item.classification) categoryName = item.classification;
+      else if (item.accountingTitle) categoryName = item.accountingTitle;
+      else if (item.particulars) categoryName = item.particulars;
+      
+      categoryName = categoryName.trim() || "Other";
+      const key = categoryName;
+      if (map.has(key)) {
+        const existing = map.get(key);
+        if (item.amount !== undefined) existing.amount = (Number(existing.amount) || 0) + (Number(item.amount) || 0);
+        if (item.total !== undefined) existing.total = (Number(existing.total) || 0) + (Number(item.total) || 0);
+        if (item.income !== undefined) existing.income = (Number(existing.income) || 0) + (Number(item.income) || 0);
+        if (item.subsidy !== undefined) existing.subsidy = (Number(existing.subsidy) || 0) + (Number(item.subsidy) || 0);
+        const t1Props = ['tier1','tier_1','tierOne','tier_one','t1','tier1Amount','tier_1_amount','subsidyTier1','subsidy_tier1'];
+        const t2Props = ['tier2','tier_2','tierTwo','tier_two','t2','tier2Amount','tier_2_amount','subsidyTier2','subsidy_tier2'];
+        for (const p of t1Props) if (item[p] !== undefined) existing[p] = (Number(existing[p]) || 0) + (Number(item[p]) || 0);
+        for (const p of t2Props) if (item[p] !== undefined) existing[p] = (Number(existing[p]) || 0) + (Number(item[p]) || 0);
+      } else {
+        map.set(key, { ...item, particulars: categoryName, accountingTitle: categoryName, uacsCode: categoryName, name: categoryName });
+      }
+    });
+    return Array.from(map.values());
+  }, [rawCapitalOutlayData]);
   const incomeData = results[3].data || [];
   const chargedToIncomePersonnel = results[4].data || [];
 
@@ -874,6 +937,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     if (onTierDataChange) {
       onTierDataChange({
         ...allData,
+        isFinalized: finalizedData?.hasFinalized === true,
         reportSummary: {
           sourcesOfFunds,
           usesOfFunds,
@@ -883,7 +947,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
         },
       });
     }
-  }, [allData, sourcesOfFunds, usesOfFunds, surplusDeficit, usesCorporateIncome, reportLineItems, onTierDataChange]);
+  }, [allData, sourcesOfFunds, usesOfFunds, surplusDeficit, usesCorporateIncome, reportLineItems, finalizedData, onTierDataChange]);
 
   if (isLoading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
@@ -1159,18 +1223,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
                           </colgroup>
                           <TableBody>
                             {Object.entries(groupedCapitalOutlayByCategory).map(([categoryName, entries]) => {
-                              const catTotals = categoryTotalsCapitalOutlay[categoryName] || { tier1: 0, tier2: 0, total: 0 };
-                              const catCorporateIncome = entries.reduce((s, { item }) => s + (Number(item?.income) || 0), 0);
                               return (
                                 <React.Fragment key={categoryName}>
-                                  <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                                    <TableCell style={{ fontWeight: 'bold', paddingLeft: 4 }}>{categoryName}</TableCell>
-                                    <TableCell align="right">{formatCurrency(catCorporateIncome)}</TableCell>
-                                    <TableCell align="right">{formatCurrency(catTotals.tier1)}</TableCell>
-                                    <TableCell align="right">{formatCurrency(catTotals.tier2)}</TableCell>
-                                    <TableCell align="right">{formatCurrency(catTotals.total)}</TableCell>
-                                    <TableCell align="right">{formatCurrency(catTotals.total)}</TableCell>
-                                  </TableRow>
                                   {entries.map(({ item, originalIdx }) => (
                                     <SubRow
                                       key={item._id || item.uacsCode || originalIdx}

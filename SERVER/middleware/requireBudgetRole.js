@@ -54,7 +54,7 @@ function isExemptPath(req) {
 /**
  * Middleware: requireBudgetRole
  */
-function requireBudgetRole(req, res, next) {
+async function requireBudgetRole(req, res, next) {
   if (req.method === 'OPTIONS') return next();
   if (isExemptPath(req)) return next();
 
@@ -63,6 +63,14 @@ function requireBudgetRole(req, res, next) {
 
   // Check if the user has a Super Admin role
   const hasSuperAdminRole = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPERADMIN');
+
+  // ---- MAINTENANCE MODE CHECK ----
+  // We run this early (after roles are resolved) so that maintenance mode blocking (503)
+  // takes precedence over "no budget role" blocking (403).
+  const checkMaintenanceMode = require('./checkMaintenanceMode');
+  const isBlocked = await checkMaintenanceMode(req, res);
+  if (isBlocked) return; // Response was already sent by checkMaintenanceMode
+
 
   // DEVELOPMENT MODE: If not production and user has any valid budget role, allow access
   // SUPER_ADMIN_IDS whitelist is only enforced in PRODUCTION mode

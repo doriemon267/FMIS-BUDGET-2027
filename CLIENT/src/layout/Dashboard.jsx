@@ -42,6 +42,8 @@ import { DrawerProvider, useDrawer } from "../context/DrawerContext";
 import ThemeSync from "../components/common/ThemeSync";
 import OfflineBanner from "../components/common/OfflineBanner";
 import logger from "../utils/logger";
+import { useRoutePermissions } from "../context/RoutePermissionContext";
+import { useUser } from "../context/UserContext";
 
 const drawerWidth = 260;
 const collapsedDrawerWidth = 70;
@@ -135,6 +137,13 @@ const DashboardContent = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const isTablet = useMediaQuery(theme.breakpoints.down("sm"));
   const wasMobileRef = useRef(isMobile);
+
+  // Maintenance mode awareness for Super Admin banner
+  const { isMaintenanceMode } = useRoutePermissions();
+  const { currentUser } = useUser();
+  const normalizedRoles = (currentUser?.Roles || []).map((r) => String(r || '').replace(/\s+/g, '_').toUpperCase());
+  const isSuperAdmin = normalizedRoles.includes('SUPER_ADMIN') || normalizedRoles.includes('SUPERADMIN');
+  const showMaintenanceBanner = isMaintenanceMode && isSuperAdmin;
 
   useEffect(() => {
     // When returning to full desktop, normalize drawer into expanded state.
@@ -339,6 +348,47 @@ const DashboardContent = () => {
       >
         <ToastContainer position="top-right" />
         
+        {/* Maintenance mode warning banner (visible to Super Admin only when maintenance is ON) */}
+        {showMaintenanceBanner && (
+          <Box
+            sx={{
+              mx: { xs: 1.5, sm: 2, md: 3 },
+              mt: { xs: 1, md: 1.5 },
+              p: 1.5,
+              borderRadius: 2,
+              background: "linear-gradient(135deg, #fef3c7, #fde68a)",
+              border: "1px solid #fbbf24",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+              flexWrap: "wrap",
+            }}
+          >
+            <Typography variant="body2" sx={{ color: "#92400e", fontWeight: 600 }}>
+              ⚠️ <strong>MAINTENANCE MODE IS ACTIVE</strong> — All non-Super Admin users are currently locked out.
+            </Typography>
+            <Box
+              component="button"
+              onClick={() => nav("/route-permissions")}
+              sx={{
+                background: "#d97706",
+                color: "#fff",
+                border: "none",
+                borderRadius: 1.5,
+                px: 2,
+                py: 0.75,
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                "&:hover": { background: "#b45309" },
+              }}
+            >
+              Manage Maintenance
+            </Box>
+          </Box>
+        )}
         <Box sx={{ flex: 1, p: { xs: 1.5, sm: 2, md: 3 }, pt: { xs: 2, md: 3 } }}>
           <ErrorBoundary FallbackComponent={({ error }) => <Typography color="error">Error: {error.message}</Typography>}>
             <AppTrayLauncher />
