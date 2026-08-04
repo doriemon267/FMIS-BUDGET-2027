@@ -489,9 +489,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
         if (regionName && String(regionName).toLowerCase() !== "all regions") {
           const regionLower = String(regionName).toLowerCase().trim();
-          matched = matched.filter(m => 
+          const regionMatched = matched.filter(m => 
             m.regionName && String(m.regionName).toLowerCase().trim() === regionLower
           );
+          if (regionMatched.length > 0) {
+            matched = regionMatched;
+          }
         }
 
         if (matched && matched.length > 0) {
