@@ -243,9 +243,12 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
           // Set department options based on active region
           if (activeRegion) {
             const regionMappings =
-              response.data.data.mappings?.filter(
-                (mapping) => mapping.regionId === activeRegion._id
-              ) || [];
+              response.data.data.mappings?.filter((mapping) => {
+                if (mapping.regionIds && mapping.regionIds.length > 0) {
+                  return mapping.regionIds.some((id) => String(id) === String(activeRegion._id));
+                }
+                return mapping.regionId === activeRegion._id;
+              }) || [];
             const departmentIds = regionMappings.map(
               (mapping) => mapping.departmentId
             );
@@ -492,9 +495,15 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
         const regionId = regionValue?._id || regionValue;
         const regionName = regionValue?.regionName || regionValue;
         const regionMappings =
-          organizationStructure?.mappings?.filter(
-            (mapping) => mapping.regionId === regionId || mapping.regionName === regionName
-          ) || [];
+          organizationStructure?.mappings?.filter((mapping) => {
+            if (mapping.regionIds && mapping.regionIds.length > 0) {
+              return mapping.regionIds.some((id) => String(id) === String(regionId));
+            }
+            if (mapping.regionNames && mapping.regionNames.length > 0) {
+              return mapping.regionNames.some((rn) => String(rn).toLowerCase() === String(regionName).toLowerCase());
+            }
+            return mapping.regionId === regionId || mapping.regionName === regionName;
+          }) || [];
       const departmentIds = regionMappings.map(
         (mapping) => mapping.departmentId
       );

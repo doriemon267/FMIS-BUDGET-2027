@@ -391,9 +391,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
               regionId = activeRegion._id != null ? String(activeRegion._id) : activeRegion.id != null ? String(activeRegion.id) : null;
             }
             const regionMappings = regionId
-              ? allMappings.filter(
-                  (mapping) => mapping.regionId != null && String(mapping.regionId) === regionId
-                )
+              ? allMappings.filter((mapping) => {
+                  if (mapping.regionIds && mapping.regionIds.length > 0) {
+                    return mapping.regionIds.some((id) => String(id) === regionId);
+                  }
+                  return mapping.regionId != null && String(mapping.regionId) === regionId;
+                })
               : [];
             const departmentIds = regionMappings.map((mapping) => mapping.departmentId);
             const depts =
@@ -442,9 +445,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       regionId = activeRegion._id != null ? String(activeRegion._id) : activeRegion.id != null ? String(activeRegion.id) : null;
     }
     const regionMappings = regionId
-      ? allMappings.filter(
-          (mapping) => mapping.regionId != null && String(mapping.regionId) === regionId
-        )
+      ? allMappings.filter((mapping) => {
+          if (mapping.regionIds && mapping.regionIds.length > 0) {
+            return mapping.regionIds.some((id) => String(id) === regionId);
+          }
+          return mapping.regionId != null && String(mapping.regionId) === regionId;
+        })
       : [];
     const departmentIds = regionMappings.map((mapping) => mapping.departmentId);
     const depts =
@@ -611,9 +617,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       regionId = regionValue?._id != null ? String(regionValue._id) : regionValue?.id != null ? String(regionValue.id) : null;
     }
     const regionMappings = regionId
-      ? allMappings.filter(
-          (mapping) => mapping.regionId != null && String(mapping.regionId) === regionId
-        )
+      ? allMappings.filter((mapping) => {
+          if (mapping.regionIds && mapping.regionIds.length > 0) {
+            return mapping.regionIds.some((id) => String(id) === regionId);
+          }
+          return mapping.regionId != null && String(mapping.regionId) === regionId;
+        })
       : [];
     const departmentIds = regionMappings.map((mapping) => mapping.departmentId);
     const depts =
