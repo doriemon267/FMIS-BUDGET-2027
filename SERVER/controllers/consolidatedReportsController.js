@@ -601,19 +601,17 @@ const consolidatedReportsController = {
       // COLUMN LAYOUT
       // ============================================================
       const COL_RC      = 100;
-      const COL_UACS    = 68;
       const COL_INCOME  = 108;
       const COL_SUBSIDY = 108;
       const COL_AMOUNT  = 108;
-      const COL_TITLE   = CONTENT_WIDTH - COL_RC - COL_UACS - COL_INCOME - COL_SUBSIDY - COL_AMOUNT;
+      const COL_TITLE   = CONTENT_WIDTH - COL_RC - COL_INCOME - COL_SUBSIDY - COL_AMOUNT;
 
       const colX = {
         rc:      CONTENT_LEFT,
-        uacs:    CONTENT_LEFT + COL_RC,
-        title:   CONTENT_LEFT + COL_RC + COL_UACS,
-        income:  CONTENT_LEFT + COL_RC + COL_UACS + COL_TITLE,
-        subsidy: CONTENT_LEFT + COL_RC + COL_UACS + COL_TITLE + COL_INCOME,
-        amount:  CONTENT_LEFT + COL_RC + COL_UACS + COL_TITLE + COL_INCOME + COL_SUBSIDY,
+        title:   CONTENT_LEFT + COL_RC,
+        income:  CONTENT_LEFT + COL_RC + COL_TITLE,
+        subsidy: CONTENT_LEFT + COL_RC + COL_TITLE + COL_INCOME,
+        amount:  CONTENT_LEFT + COL_RC + COL_TITLE + COL_INCOME + COL_SUBSIDY,
       };
 
       // ============================================================
@@ -823,13 +821,12 @@ const consolidatedReportsController = {
         });
 
         // Vertical column dividers inside header
-        [colX.uacs, colX.title, colX.income, colX.subsidy, colX.amount].forEach(x => {
+        [colX.title, colX.income, colX.subsidy, colX.amount].forEach(x => {
           pdfDoc.rectangle(x, hY, 0.5, HDR_ROW_H, { fill: BLACK, stroke: BLACK, lineWidth: 0 });
         });
 
         // Header labels — bold black text
         pdfDoc.text('RESPONSIBILITY CENTER',            colX.rc + 4,                        hY + 5, { color: BLACK, fontSize: 6.5, bold: true });
-        pdfDoc.text('UACS CODE',                        colX.uacs + 4,                      hY + 5, { color: BLACK, fontSize: 7.5, bold: true });
         pdfDoc.text('ACCOUNTING TITLE / DESCRIPTION',   colX.title + 6,                     hY + 5, { color: BLACK, fontSize: 7.5, bold: true });
         pdfDoc.text('INCOME',  colX.income  + COL_INCOME  - 5, hY + 5, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
         pdfDoc.text('SUBSIDY', colX.subsidy + COL_SUBSIDY - 5, hY + 5, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
@@ -932,13 +929,6 @@ const consolidatedReportsController = {
           rows.forEach((row, idx) => {
             const titleLines = wrapText(safeStr(row.accountingTitle), COL_TITLE - 20, 7.5);
             ensureSpace(titleLines.length);
-
-            // UACS code — smaller, gray
-            if (row.uacsCode) {
-              pdfDoc.text(safeStr(row.uacsCode), colX.uacs + 4, curY + 4, {
-                color: MID, fontSize: 6.5
-              });
-            }
 
             // Accounting title — indented under category
             titleLines.forEach((line, lineIdx) => {
