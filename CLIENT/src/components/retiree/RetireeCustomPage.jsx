@@ -24,6 +24,7 @@ import {
 import PesoIcon from "../icons/PesoIcon";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../config/api";
+import { useRegion } from "../../context/RegionContext";
 
 const CustomPage = ({
   dataListName,
@@ -44,11 +45,18 @@ const CustomPage = ({
   const pageDescription = description || `Manage ${dataListName}`;
   const apiPath = `/${dataListName}`;
 
+  const { activeRegion } = useRegion();
+
   // Add stats query
   const { data: stats, isLoading: statsLoading, refetch } = useQuery({
-    queryKey: [dataListName, "stats"],
+    queryKey: [dataListName, "stats", activeRegion],
     queryFn: async () => {
-      const response = await api.get(`${apiPath}/stats`);
+      const activeRegionName = activeRegion?.name || activeRegion?.regionName || "";
+      const params = {};
+      if (activeRegionName) {
+        params.region = activeRegionName;
+      }
+      const response = await api.get(`${apiPath}/stats`, { params });
       return response.data;
     },
     staleTime: 60000,

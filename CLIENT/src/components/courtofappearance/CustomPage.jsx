@@ -1,4 +1,5 @@
 import React from "react";
+import { useRegion } from "../../context/RegionContext";
 import CustomTable from "../courtofappearance/CustomTable";
 import PropTypes from "prop-types";
 import { Box, Paper, Typography, Chip, Zoom } from "@mui/material";
@@ -14,6 +15,9 @@ const CustomPage = ({
   ROWS_PER_PAGE = 20,
   tableData, // override data
 }) => {
+  const { activeRegion } = useRegion();
+
+
   const pageTitle = title ||
     dataListName.split('-').map(word =>
       word.charAt(0).toUpperCase() + word.slice(1)

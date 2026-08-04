@@ -10,7 +10,8 @@ const {
   getEmployeeStats,
   checkEmployeeRegions,
   fixEmployeeRegions,
-  checkEmployeeDuplicate
+  checkEmployeeDuplicate,
+  copyFromPreviousYear
 } = require("../controllers/employeeMasterController");
 const employeeMasterRouter = express.Router();
 // Apply authentication middleware to all routes in this router
@@ -22,6 +23,10 @@ employeeMasterRouter.get("/employees/check-duplicate", checkEmployeeDuplicate);
 // Utility endpoints to check and fix employee regions
 employeeMasterRouter.get("/employees/check-regions", checkEmployeeRegions);
 employeeMasterRouter.post("/employees/fix-regions", fixEmployeeRegions);
+
+// Copy from previous year
+employeeMasterRouter.post("/employees/copy-previous", copyFromPreviousYear);
+
 // Standard CRUD routes
 employeeMasterRouter.get("/employees", getAllEmployees);
 employeeMasterRouter.post("/employees", createEmployee);

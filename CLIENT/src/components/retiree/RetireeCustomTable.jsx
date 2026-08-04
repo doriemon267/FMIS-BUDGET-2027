@@ -50,6 +50,11 @@ const CustomTable = ({
   const [orderBy, setOrderBy] = useState(orderByDefault);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
+
+  useEffect(() => {
+    setPage(0);
+  }, [activeRegion]);
+
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [focusedCell, setFocusedCell] = useState(null);
   const [fieldAndValue, setFieldAndValue] = useState({
@@ -68,19 +73,25 @@ const CustomTable = ({
       fieldAndValue,
       orderBy,
       order,
+      activeRegion,
     ],
     queryFn: async () => {
-      const res = await api.get(apiPath, {
-        params: {
-          page: page + 1,
-          limit: rowsPerPage,
-          search: searchValue,
-          [fieldAndValue.field]: fieldAndValue.value,
-          orderBy,
-          order,
-          operator: fieldAndValue.operator,
-        },
-      });
+      const activeRegionName = activeRegion?.name || activeRegion?.regionName || "";
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+        search: searchValue,
+        [fieldAndValue.field]: fieldAndValue.value,
+        orderBy,
+        order,
+        operator: fieldAndValue.operator,
+      };
+
+      if (activeRegionName) {
+        params.region = activeRegionName;
+      }
+
+      const res = await api.get(apiPath, { params });
       return res.data;
     },
   });

@@ -551,9 +551,16 @@ exports.deleteMealAllowance = async (req, res) => {
 // Add this new controller function
 exports.getMealAllowanceStats = async (req, res) => {
   try {
-    const totalRecords = await MealAllowance.countDocuments();
+    const { region } = req.query;
+    let query = {};
+    if (region) {
+      query.region = { $regex: new RegExp(`^${region}$`, 'i') };
+    }
+    
+    const totalRecords = await MealAllowance.countDocuments(query);
     // Get the sum of all amounts (convert monthly to annual to match table display)
     const aggregationResult = await MealAllowance.aggregate([
+      { $match: query },
       {
         $group: {
           _id: null,
@@ -566,7 +573,7 @@ exports.getMealAllowanceStats = async (req, res) => {
     const totalAmount = totalMonthlyAmount * 12; // Convert to annual
     const averageAmount = totalRecords > 0 ? totalAmount / totalRecords : 0;
     // Get unique employees count
-    const uniqueEmployees = await MealAllowance.distinct('employeeNumber');
+    const uniqueEmployees = await MealAllowance.distinct('employeeNumber', query);
     res.status(200).json({
       totalRecords,
       totalAmount,

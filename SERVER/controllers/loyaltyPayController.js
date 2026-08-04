@@ -328,7 +328,7 @@ exports.deleteLoyaltyPay = async (req, res) => {
  */
 exports.getLoyaltyPayStats = async (req, res) => {
   try {
-    const { fiscalYear } = req.query;
+    const { fiscalYear, region } = req.query;
     // Build query to filter by fiscal year (same logic as getAllLoyaltyPays)
     let query = {};
     if (fiscalYear) {
@@ -343,6 +343,11 @@ exports.getLoyaltyPayStats = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
+
+    if (region) {
+      query.region = { $regex: new RegExp(`^${region}$`, 'i') };
+    }
+
     const totalRecords = await LoyaltyPay.countDocuments(query);
     // Get the sum of all amounts with fiscal year filter
     const aggregationResult = await LoyaltyPay.aggregate([

@@ -1,3 +1,4 @@
+import { useRegion } from "../../context/RegionContext";
 import {
   Box,
   Button,
@@ -46,12 +47,18 @@ const CustomTable = ({
   dataListName = "data",
   overrideRows = null, // New prop for override data
 }) => {
+  const { activeRegion } = useRegion();
+
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
 
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState("updatedAt");
   const [page, setPage] = useState(0);
+  useEffect(() => {
+    setPage(0);
+  }, [activeRegion]);
+
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [fieldAndValue, setFieldAndValue] = useState({
@@ -108,12 +115,14 @@ const CustomTable = ({
   }, [filteredRows]);
 
   const handleRequestSort = (property) => {
+
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
   };
 
   const handleFilterClick = (event, columnKey, columnLabel) => {
+
     setFilterAnchorEl(event.currentTarget);
     setFieldAndValue({ field: columnKey, value: "", label: columnLabel, operator: "=" });
   };
@@ -126,23 +135,27 @@ const CustomTable = ({
   const handleChangePage = (event, newPage) => setPage(newPage);
 
   const handleChangeRowsPerPage = (event) => {
+
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
 
   const handleDateChange = (e) => {
+
     const [year, month, day] = e.target.value.split("-");
     const formattedValue = `${month}-${day}-${year}`;
     setFieldAndValue((prev) => ({ ...prev, value: formattedValue }));
   };
 
   const getFormattedValue = () => {
+
     if (!fieldAndValue.value) return "";
     const [month, day, year] = fieldAndValue.value.split("-");
     return `${year}-${month}-${day}`;
   };
 
   const renderFilter = () => {
+
     const column = columns.find((col) => col.field === fieldAndValue.field);
     if (!column) return null;
     if (column.type === "date") {

@@ -81,6 +81,10 @@ const CustomTable = ({
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState(orderByDefault);
   const [page, setPage] = useState(0);
+  useEffect(() => {
+    setPage(0);
+  }, [activeRegion]);
+
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [focusedCell, setFocusedCell] = useState(null);
@@ -136,6 +140,7 @@ const CustomTable = ({
       activeRegion?.name,
     ],
     queryFn: async () => {
+      const activeRegionName = activeRegion?.name || activeRegion?.regionName || "";
       const params = {
         page: page + 1,
         limit: rowsPerPage,
@@ -145,15 +150,15 @@ const CustomTable = ({
         order,
         operator: fieldAndValue.operator,
       };
-      
-      // Add region parameter if available
-      if (activeRegion?.name) {
-        params.region = activeRegion.name;
+
+      if (activeRegionName) {
+        params.region = activeRegionName;
       }
-      
+
       const res = await api.get(apiPath, { params });
       return res.data;
     },
+
   });
 
   // Enhanced functionality handlers

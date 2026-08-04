@@ -26,6 +26,7 @@ import { blueGrey, green, grey } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import React, { useEffect, useState, useMemo } from "react";
+import { useRegion } from "../../context/RegionContext";
 import { TiFilter } from "react-icons/ti";
 import api from "../../config/api";
 import { useSearch } from "../../context/SearchContext";
@@ -41,6 +42,8 @@ const CustomTable = ({
   dataListName = "data",
   orderByDefault = "updatedAt",
 }) => {
+  const { activeRegion } = useRegion();
+
   const theme = useTheme();
   const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
   const highlightBg = theme.palette.mode === 'dark' ? 'rgba(76, 175, 80, 0.15)' : '#f1f8ed';
@@ -52,6 +55,10 @@ const CustomTable = ({
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState(orderByDefault);
   const [page, setPage] = useState(0);
+  useEffect(() => {
+    setPage(0);
+  }, [activeRegion]);
+
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [fieldAndValue, setFieldAndValue] = useState({
@@ -85,19 +92,25 @@ const CustomTable = ({
   const { data, isLoading, refetch, error } = useQuery({
     queryKey,
     queryFn: async () => {
-      const res = await api.get(apiPath, {
-        params: {
-          page: page + 1,
-          limit: rowsPerPage,
-          search: searchValue,
-          [fieldAndValue.field]: fieldAndValue.value,
-          orderBy,
-          order,
-          operator: fieldAndValue.operator,
-        },
-      });
+      const activeRegionName = activeRegion?.name || activeRegion?.regionName || "";
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+        search: searchValue,
+        [fieldAndValue.field]: fieldAndValue.value,
+        orderBy,
+        order,
+        operator: fieldAndValue.operator,
+      };
+
+      if (activeRegionName) {
+        params.region = activeRegionName;
+      }
+
+      const res = await api.get(apiPath, { params });
       return res.data;
     },
+
     keepPreviousData: true,
   });
 
@@ -107,12 +120,14 @@ const CustomTable = ({
   }, [queryKey, refetch]);
 
   const handleRequestSort = (property) => {
+
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
   };
 
   const handleFilterClick = (event, columnKey, columnLabel) => {
+
     setFilterAnchorEl(event.currentTarget);
     if (fieldAndValue.field !== columnKey)
       setFieldAndValue({
@@ -131,23 +146,27 @@ const CustomTable = ({
   const handleChangePage = (event, newPage) => setPage(newPage);
 
   const handleChangeRowsPerPage = (event) => {
+
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
 
   const handleDateChange = (e) => {
+
     const [year, month, day] = e.target.value.split("-");
     const formattedValue = `${month}-${day}-${year}`;
     setFieldAndValue((prev) => ({ ...prev, value: formattedValue }));
   };
 
   const getFormattedValue = () => {
+
     if (!fieldAndValue.value) return "";
     const [month, day, year] = fieldAndValue.value.split("-");
     return `${year}-${month}-${day}`;
   };
 
   const renderFilter = () => {
+
     const column = columns.find((col) => col.field === fieldAndValue.field);
     if (!column) return null;
 

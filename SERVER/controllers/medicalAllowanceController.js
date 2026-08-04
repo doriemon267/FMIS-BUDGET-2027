@@ -121,6 +121,8 @@ const getAllMedicalAllowances = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
+
+
     // Count total records
     const totalRecords = await MedicalAllowance.countDocuments(query);
     // Validate sort parameters
@@ -581,7 +583,7 @@ const syncAllMedicalAllowances = async (req, res) => {
 // Get medical allowance statistics - updated
 const getMedicalAllowanceStats = async (req, res) => {
   try {
-    const { fiscalYear } = req.query;
+    const { fiscalYear, region } = req.query;
     // Build query to filter by fiscal year (same logic as getAllMedicalAllowances)
     let query = {};
     if (fiscalYear) {
@@ -596,6 +598,11 @@ const getMedicalAllowanceStats = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
+
+    if (region) {
+      query.region = { $regex: new RegExp(`^${region}$`, 'i') };
+    }
+
     const totalRecords = await MedicalAllowance.countDocuments(query);
     // Get the sum of all amounts with fiscal year filter
     const aggregationResult = await MedicalAllowance.aggregate([

@@ -76,6 +76,7 @@ const EmployeeList = () => {
 
   // State to trigger refreshes
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isCopying, setIsCopying] = useState(false);
 
   // Get user's hierarchical access information
   let userAccessLevel = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel || 'REGION';
@@ -236,6 +237,34 @@ const EmployeeList = () => {
     setRefreshTrigger((prev) => prev + 1);
   };
 
+  const handleCopyFromPreviousYear = async () => {
+    try {
+      setIsCopying(true);
+      const settingsRes = await api.get('/settings');
+      const activeSetting = settingsRes.data.find(s => s.isActive);
+      if (!activeSetting || !activeSetting.fiscalYear) {
+        toast.error("No active fiscal year found.");
+        return;
+      }
+      
+      const activeFY = activeSetting.fiscalYear;
+      const prevFY = (parseInt(activeFY, 10) - 1).toString();
+      
+      const copyRes = await api.post('/employees/copy-previous', {
+        activeFiscalYear: activeFY,
+        previousFiscalYear: prevFY
+      });
+      
+      toast.success(copyRes.data.message);
+      refreshStats();
+    } catch (error) {
+      console.error("Error copying from previous year:", error);
+      toast.error(error.response?.data?.message || "Failed to copy from previous year");
+    } finally {
+      setIsCopying(false);
+    }
+  };
+
   const employeeSchema = {
     action: {
       type: "action",
@@ -244,7 +273,7 @@ const EmployeeList = () => {
     EmployeeID: {
       type: "text",
       label: "Employee No.",
-      show: true,
+      show: false,
       searchable: true,
       customRender: (row) => (
         <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
@@ -255,30 +284,48 @@ const EmployeeList = () => {
     EmployeeFullName: {
       type: "text",
       label: "Employee Name",
-      customRender: (row) => (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Avatar
-            sx={{
-              bgcolor: theme.palette.primary.main,
-              width: 32,
-              height: 32,
-              fontSize: "0.9rem",
-            }}
-          >
-            {row.EmployeeFullName ? row.EmployeeFullName.charAt(0) : "E"}
-          </Avatar>
-          <TextSearchable
-            columnName={row.EmployeeFullName}
-            sx={{
-              fontWeight: 500,
-              "&:hover": {
-                color: theme.palette.primary.main,
-                textDecoration: "underline",
-              },
-            }}
-          />
-        </Box>
-      ),
+      customRender: (row) => {
+        if (row.isVacant) {
+          return (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
+              <Chip 
+                label="VACANT" 
+                size="small" 
+                color="error" 
+                variant="outlined" 
+                sx={{ fontWeight: 'bold', height: 20 }} 
+              />
+              <Typography variant="caption" color="textSecondary" sx={{ fontStyle: 'italic', fontSize: '0.75rem' }}>
+                {row.vacatedYear ? `Retired in ${row.vacatedYear} - ` : ''}Former: {row.formerEmployeeName || row.EmployeeFullName}
+              </Typography>
+            </Box>
+          );
+        }
+        return (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Avatar
+              sx={{
+                bgcolor: theme.palette.primary.main,
+                width: 32,
+                height: 32,
+                fontSize: "0.9rem",
+              }}
+            >
+              {row.EmployeeFullName ? row.EmployeeFullName.charAt(0) : "E"}
+            </Avatar>
+            <TextSearchable
+              columnName={row.EmployeeFullName}
+              sx={{
+                fontWeight: 500,
+                "&:hover": {
+                  color: theme.palette.primary.main,
+                  textDecoration: "underline",
+                },
+              }}
+            />
+          </Box>
+        );
+      },
       show: true,
       searchable: true,
     },
@@ -859,6 +906,21 @@ const EmployeeList = () => {
                           <RefreshIcon />
                         </IconButton>
                       </Tooltip>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        disabled={isCopying}
+                        onClick={handleCopyFromPreviousYear}
+                        sx={{
+                          bgcolor: alpha("#fff", 0.2),
+                          color: "white",
+                          "&:hover": {
+                            bgcolor: alpha("#fff", 0.3),
+                          },
+                        }}
+                      >
+                        {isCopying ? "Copying..." : "Copy from Prev. Year"}
+                      </Button>
                       {/* Show inline region selector for BRD-level or FULL-access users */}
                       {(userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' || userAccessLevel === 'FULL') && Array.isArray(availableRegions) && availableRegions.length > 0 && (
                         <FormControl sx={{ minWidth: 200 }} size="small">

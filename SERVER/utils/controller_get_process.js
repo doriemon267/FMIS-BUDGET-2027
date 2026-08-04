@@ -76,7 +76,11 @@ exports.dateFilter = (query, filters) => {
 exports.textFilter = (query, filters) => {
   Object.entries(filters).forEach(([field, value]) => {
     if (value && value !== "undefined") {
-      query[field] = { $regex: value, $options: "i" }; // Case-insensitive regex
+      if (field === "region") {
+        query[field] = { $regex: new RegExp(`^${value}$`, 'i') }; // Exact match for region
+      } else {
+        query[field] = { $regex: value, $options: "i" }; // Case-insensitive regex
+      }
     }
   });
 };

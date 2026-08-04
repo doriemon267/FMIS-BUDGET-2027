@@ -82,6 +82,10 @@ const OvertimePayCustomTable = ({
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState(orderByDefault);
   const [page, setPage] = useState(0);
+  useEffect(() => {
+    setPage(0);
+  }, [activeRegion]);
+
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [fieldAndValue, setFieldAndValue] = useState({
@@ -129,6 +133,7 @@ const OvertimePayCustomTable = ({
   const { data, isLoading, refetch } = useQuery({
     queryKey: [dataListName, page, rowsPerPage, searchValue, fieldAndValue, orderBy, order, activeRegion?.name],
     queryFn: async () => {
+      const activeRegionName = activeRegion?.name || activeRegion?.regionName || "";
       const params = {
         page: page + 1,
         limit: rowsPerPage,
@@ -138,15 +143,15 @@ const OvertimePayCustomTable = ({
         order,
         operator: fieldAndValue.operator,
       };
-      
-      // Add region parameter if available
-      if (activeRegion?.name) {
-        params.region = activeRegion.name;
+
+      if (activeRegionName) {
+        params.region = activeRegionName;
       }
-      
+
       const res = await api.get(apiPath, { params });
       return res.data;
     },
+
   });
 
   const fetchEmployees = async () => {

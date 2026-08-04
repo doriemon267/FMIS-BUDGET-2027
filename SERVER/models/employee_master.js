@@ -69,6 +69,16 @@ const EmployeeMasterSchema = mongoose.Schema({
     type: String,
     required: true
   },
+  isVacant: {
+    type: Boolean,
+    default: false
+  },
+  formerEmployeeName: {
+    type: String
+  },
+  vacatedYear: {
+    type: String
+  },
   // Add date of birth field
   DateOfBirth: {
     type: Date

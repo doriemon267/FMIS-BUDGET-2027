@@ -2,6 +2,7 @@ const Retiree = require("../models/Retiree");
 const PersonnelService = require('../models/PersonnelServices');
 const EmployeeList = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
+const EmployeeMaster = require("../models/employee_master");
 /**
  * Get all retirees with pagination
  */
@@ -217,6 +218,15 @@ exports.createRetiree = async (req, res) => {
       } else {
         console.warn(`[createRetiree] No PersonnelServices record found for employeeNumber=${employeeNumber}, fiscalYear=${usedFiscalYear}`);
       }
+
+      // --- Sync EmployeeMaster record ---
+      const employeeMaster = await EmployeeMaster.findOne({ EmployeeID: employeeNumber, fiscalYear: usedFiscalYear });
+      if (employeeMaster && !employeeMaster.isVacant) {
+        employeeMaster.isVacant = true;
+        employeeMaster.formerEmployeeName = employeeMaster.EmployeeFullName;
+        employeeMaster.vacatedYear = usedFiscalYear;
+        await employeeMaster.save();
+      }
     }
 
     res.status(201).json({ 
@@ -309,6 +319,18 @@ exports.updateRetiree = async (req, res) => {
       );
       personnel.Total = newTotal;
       await personnel.save();
+    }
+
+    // --- Sync EmployeeMaster record ---
+    const employeeMaster = await EmployeeMaster.findOne({
+      EmployeeID: employeeNumber,
+      fiscalYear: usedFiscalYear,
+    });
+    if (employeeMaster && !employeeMaster.isVacant) {
+      employeeMaster.isVacant = true;
+      employeeMaster.formerEmployeeName = employeeMaster.EmployeeFullName;
+      employeeMaster.vacatedYear = usedFiscalYear;
+      await employeeMaster.save();
     }
     return res.status(200).json(updatedRetiree);
   } catch (error) {

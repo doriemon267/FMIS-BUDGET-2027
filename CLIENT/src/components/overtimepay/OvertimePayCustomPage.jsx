@@ -1,4 +1,5 @@
 import React from "react";
+import { useRegion } from "../../context/RegionContext";
 import CustomTable from "../overtimepay/OvertimePayCustomTable";
 import PropTypes from "prop-types";
 import { Box, Paper, Typography, Chip, Zoom } from "@mui/material";
@@ -19,6 +20,9 @@ const CustomPage = ({
   ROWS_PER_PAGE = 20,
   debug = false,
 }) => {
+  const { activeRegion } = useRegion();
+
+
   const pageTitle =
     title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1);
   const pageDescription = description || `Manage ${dataListName}`;

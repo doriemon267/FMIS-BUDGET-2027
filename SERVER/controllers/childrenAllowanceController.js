@@ -163,6 +163,8 @@ const getAllChildrenAllowances = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
+
+
     // Count total records
     const totalRecords = await ChildrenAllowance.countDocuments(query);
     // Validate sort parameters
@@ -554,7 +556,7 @@ const syncAllChildrenAllowances = async (req, res) => {
 // Get children allowance statistics
 const getChildrenAllowanceStats = async (req, res) => {
   try {
-    const { fiscalYear } = req.query;
+    const { fiscalYear, region } = req.query;
     // Build query to filter by fiscal year (same logic as getAllChildrenAllowances)
     let query = {};
     if (fiscalYear) {
@@ -569,6 +571,11 @@ const getChildrenAllowanceStats = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
+
+    if (region) {
+      query.region = { $regex: new RegExp(`^${region}$`, 'i') };
+    }
+
     const totalRecords = await ChildrenAllowance.countDocuments(query);
     // Get the sum of all amounts and total dependents with fiscal year filter
     const aggregationResult = await ChildrenAllowance.aggregate([

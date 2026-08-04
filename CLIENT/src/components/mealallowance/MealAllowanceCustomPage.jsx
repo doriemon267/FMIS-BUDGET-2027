@@ -1,4 +1,5 @@
 import React from "react";
+import { useRegion } from "../../context/RegionContext";
 import CustomCreateUpdateDialog from "./MealAllowanceDialog";
 import CustomMenu from "../../global/components/CustomMenu";
 import CustomTable from "./MealAllowanceCustomTable";
@@ -41,6 +42,8 @@ const CustomPage = ({
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
 }) => {
+  const { activeRegion } = useRegion();
+
   const theme = useTheme();
   const titleColor = theme.palette.mode === 'dark' ? '#a5d6a7' : '#2d5016';
   const refreshBg = theme.palette.mode === 'dark' ? 'rgba(165, 214, 167, 0.1)' : 'rgba(55, 94, 56, 0.1)';
@@ -53,9 +56,14 @@ const CustomPage = ({
 
   // Add stats query
   const { data: stats, isLoading: statsLoading, refetch } = useQuery({
-    queryKey: [dataListName, "stats"],
+    queryKey: [dataListName, "stats", activeRegion],
     queryFn: async () => {
-      const response = await api.get(`${apiPath}/stats`);
+      const activeRegionName = activeRegion?.name || activeRegion?.regionName || "";
+      const params = {};
+      if (activeRegionName) {
+        params.region = activeRegionName;
+      }
+      const response = await api.get(`${apiPath}/stats`, { params });
       return response.data;
     },
     staleTime: 60000,

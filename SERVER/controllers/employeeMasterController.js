@@ -339,6 +339,59 @@ const checkEmployeeDuplicate = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+
+/**
+ * Copy employees from previous fiscal year
+ */
+const copyFromPreviousYear = async (req, res) => {
+  try {
+    const { activeFiscalYear, previousFiscalYear } = req.body;
+
+    if (!activeFiscalYear || !previousFiscalYear) {
+      return res.status(400).json({ message: "Active and Previous Fiscal Years are required." });
+    }
+
+    // Find all records from previous fiscal year
+    const previousRecords = await EmployeeMaster.find({ fiscalYear: previousFiscalYear }).lean();
+    if (previousRecords.length === 0) {
+      return res.status(404).json({ message: "No records found from the previous fiscal year." });
+    }
+
+    // Get current records in active fiscal year to avoid duplicates based on EmployeeID
+    const currentRecords = await EmployeeMaster.find({ fiscalYear: activeFiscalYear }).lean();
+    const existingIds = new Set(currentRecords.map(record => record.EmployeeID).filter(id => id));
+
+    const recordsToInsert = [];
+    for (const record of previousRecords) {
+      if (!existingIds.has(record.EmployeeID)) {
+        // Prepare new record
+        const newRecord = { ...record };
+        delete newRecord._id; // Remove MongoDB object ID
+        delete newRecord.createdAt;
+        delete newRecord.updatedAt;
+        
+        newRecord.fiscalYear = activeFiscalYear;
+        
+        // Preserve isVacant, formerEmployeeName, vacatedYear automatically via object spread
+        recordsToInsert.push(newRecord);
+      }
+    }
+
+    if (recordsToInsert.length === 0) {
+      return res.status(200).json({ message: "All records from previous year already exist in the active fiscal year." });
+    }
+
+    await EmployeeMaster.insertMany(recordsToInsert);
+
+    res.status(200).json({ 
+      message: `Successfully copied ${recordsToInsert.length} records to FY ${activeFiscalYear}.` 
+    });
+  } catch (error) {
+    console.error("Error copying from previous year:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 module.exports = {
   createEmployee,
   getAllEmployees,
@@ -348,5 +401,6 @@ module.exports = {
   getEmployeeStats,
   checkEmployeeRegions,
   fixEmployeeRegions,
-  checkEmployeeDuplicate
+  checkEmployeeDuplicate,
+  copyFromPreviousYear
 };

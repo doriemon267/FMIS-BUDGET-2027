@@ -1,4 +1,5 @@
 import React from "react";
+import { useRegion } from "../../context/RegionContext";
 import CustomCreateUpdateDialog from "../subsistenceallowance/SubsistenceAllowanceDialog";
 import CustomMenu from "../../global/components/CustomMenu";
 import CustomTable from "../subsistenceallowance/SubsistenceAllowanceCustomTable";
@@ -20,6 +21,9 @@ const CustomPage = ({
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
 }) => {
+  const { activeRegion } = useRegion();
+
+
   const pageTitle = title || "Subsistence Allowance";
   const pageDescription = description || "Manage subsistence allowance (amount from Compensation Management monthly × 12).";
   const apiPath = `/${dataListName}`;
