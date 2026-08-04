@@ -550,7 +550,12 @@ router.get(
           }).select('_id').lean();
           if (regionDoc) resolvedRegionId = regionDoc._id;
         }
-        if (resolvedRegionId) query.regionId = resolvedRegionId;
+        if (resolvedRegionId) {
+          query.$or = [
+            { regionId: resolvedRegionId },
+            { regionIds: resolvedRegionId }
+          ];
+        }
       }
 
       const mappings = await mappingsCollection.find(query).toArray();

@@ -515,18 +515,16 @@ const consolidatedReportsController = {
 
         const isMultiRegion = !regionList || regionList.length > 1;
         let rcName;
-        if (isMultiRegion) {
+        if (isMultiRegion || !department) {
           rcName = item.region || 'Unknown Region';
+        } else if (!division) {
+          let deptName = item.department;
+          if (deptName === 'IRRIGATION MANAGEMENT OFFICE') deptName = 'IMO';
+          rcName = deptName || item.region || 'Unknown Responsibility Center';
         } else {
           let deptName = item.department;
-          if (deptName === 'IRRIGATION MANAGEMENT OFFICE') {
-            deptName = 'IMO';
-          }
-          if (deptName && item.division) {
-            rcName = `${deptName} / ${item.division}`;
-          } else {
-            rcName = deptName || item.division || item.region || 'Unknown Responsibility Center';
-          }
+          if (deptName === 'IRRIGATION MANAGEMENT OFFICE') deptName = 'IMO';
+          rcName = `${deptName} / ${item.division}`;
         }
         const categoryName = item.sublineItem || 'Uncategorized';
         const uacs = item.uacsCode || '';
@@ -573,9 +571,9 @@ const consolidatedReportsController = {
       const tmpFilePath = path.join(os.tmpdir(), `consolidated_mooe_${Date.now()}.pdf`);
       const tempSignatureImagePaths = [];
 
-      // A4 Landscape — more horizontal space for columns
-      const PAGE_WIDTH  = 936;
-      const PAGE_HEIGHT = 576;
+      // Folio Portrait
+      const PAGE_WIDTH  = 612;
+      const PAGE_HEIGHT = 936;
       const MARGIN      = 18;
       const CONTENT_LEFT  = MARGIN;
       const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
