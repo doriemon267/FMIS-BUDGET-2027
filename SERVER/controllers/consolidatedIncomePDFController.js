@@ -1031,8 +1031,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       subject: 'Corporate Income Report',
     });
 
-    const PAGE_WIDTH = 936;
-    const PAGE_HEIGHT = 576;
+    const PAGE_WIDTH = 612; // 8.5 x 13 portrait
+    const PAGE_HEIGHT = 936;
     const MARGIN = 18;
     const MARGIN_TOP = 25;
     const MARGIN_BOTTOM = 18;
@@ -1199,7 +1199,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
         pageNo += 1;
         let y = createPageWithHeader(groupRegions, pageNo, totalPages, continuation);
 
-        pdfDoc.rectangle(CONTENT_LEFT, y, TABLE_WIDTH, 16, { stroke: '#1565C0', lineWidth: 0.8, fill: '#EAF2FF' });
+        pdfDoc.rectangle(CONTENT_LEFT, y, TABLE_WIDTH, 16, { stroke: '#000000', lineWidth: 0.8, fill: '#FFFFFF' });
         let x = CONTENT_LEFT + 3;
         pdfDoc.text('INCOME CATEGORY', x, y + 4, textOpt({ fontSize: 8, bold: true }));
         let colX = CONTENT_LEFT + descColW;
@@ -1227,15 +1227,15 @@ const exportConsolidatedIncomePDF = async (req, res) => {
         }
 
         if (rowIndex >= rows.length) {
-          pdfDoc.rectangle(CONTENT_LEFT, y + 2, TABLE_WIDTH, 15, { stroke: '#1565C0', lineWidth: 0.8, fill: '#1565C0' });
-          pdfDoc.text('GRAND TOTAL', CONTENT_LEFT + 3, y + 6, textOpt({ fontSize: 8, bold: true, color: '#FFFFFF' }));
+          pdfDoc.rectangle(CONTENT_LEFT, y + 2, TABLE_WIDTH, 15, { stroke: '#000000', lineWidth: 0.8, fill: '#FFFFFF' });
+          pdfDoc.text('GRAND TOTAL', CONTENT_LEFT + 3, y + 6, textOpt({ fontSize: 8, bold: true, color: '#000000' }));
           let totalX = CONTENT_LEFT + descColW;
           groupRegions.forEach((regionName) => {
             const regionGrand = reportData.regionData?.[regionName]?.total || 0;
-            pdfDoc.text(formatCurrency(regionGrand), totalX + regionColW - 5, y + 6, textOpt({ fontSize: 7, bold: true, color: '#FFFFFF', align: 'right' }));
+            pdfDoc.text(formatCurrency(regionGrand), totalX + regionColW - 5, y + 6, textOpt({ fontSize: 7, bold: true, color: '#000000', align: 'right' }));
             totalX += regionColW;
           });
-          pdfDoc.text(formatCurrency(reportData.grandTotal), CONTENT_RIGHT - 5, y + 6, textOpt({ fontSize: 8, bold: true, color: '#FFFFFF', align: 'right' }));
+          pdfDoc.text(formatCurrency(reportData.grandTotal), CONTENT_RIGHT - 5, y + 6, textOpt({ fontSize: 8, bold: true, color: '#000000', align: 'right' }));
         }
 
         continuation = true;
