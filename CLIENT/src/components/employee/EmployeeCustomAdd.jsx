@@ -489,12 +489,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
         if (regionName && String(regionName).toLowerCase() !== "all regions") {
           const regionLower = String(regionName).toLowerCase().trim();
-          const regionMatched = matched.filter(m => 
-            m.regionName && String(m.regionName).toLowerCase().trim() === regionLower
-          );
-          if (regionMatched.length > 0) {
-            matched = regionMatched;
-          }
+          matched = matched.filter(m => {
+            if (m.regionNames && m.regionNames.length > 0) {
+              return m.regionNames.some(rn => String(rn).toLowerCase().trim() === regionLower);
+            }
+            return m.regionName && String(m.regionName).toLowerCase().trim() === regionLower;
+          });
         }
 
         if (matched && matched.length > 0) {
@@ -538,9 +538,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
           if (regionName && String(regionName).toLowerCase() !== "all regions") {
             const regionLower = String(regionName).toLowerCase().trim();
-            matchedMappings = matchedMappings.filter(m => 
-              m.regionName && String(m.regionName).toLowerCase().trim() === regionLower
-            );
+            matchedMappings = matchedMappings.filter(m => {
+              if (m.regionNames && m.regionNames.length > 0) {
+                return m.regionNames.some(rn => String(rn).toLowerCase().trim() === regionLower);
+              }
+              return m.regionName && String(m.regionName).toLowerCase().trim() === regionLower;
+            });
           }
 
           // If no specific region match, fall back to all mappings for that department

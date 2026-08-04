@@ -1150,6 +1150,9 @@ router.get(
       const formattedMappings = mappings.map(mapping => {
         const rid = mapping.regionId ? mapping.regionId.toString() : null;
         const regionName = mapping.regionName || (rid ? regionIdToName.get(rid) : null) || '';
+        const regionIds = mapping.regionIds ? mapping.regionIds.map(id => id.toString()) : (rid ? [rid] : []);
+        const regionNames = regionIds.map(id => regionIdToName.get(id)).filter(Boolean);
+
         const divisionsList = mapping.divisions ? mapping.divisions.filter(div => div.isActive !== false).map(div => ({
           name: div.name,
           code: div.code,
@@ -1161,7 +1164,9 @@ router.get(
           divisions: divisionsList,
           hasSubDivisions: mapping.hasSubDivisions !== undefined ? mapping.hasSubDivisions : (divisionsList.length > 0),
           regionId: mapping.regionId,
-          regionName: regionName
+          regionName: regionName,
+          regionIds: regionIds,
+          regionNames: regionNames
         };
       });
 
