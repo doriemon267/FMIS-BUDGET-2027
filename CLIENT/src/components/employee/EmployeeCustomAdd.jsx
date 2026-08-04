@@ -374,23 +374,21 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
           const regions = data?.availableUnits?.regions || [];
 
           if (activeRegion) {
-            // Resolve regionId: prefer _id/id, else find by region name from availableUnits.regions
-            let regionId =
-              activeRegion._id != null
-                ? String(activeRegion._id)
-                : activeRegion.id != null
-                  ? String(activeRegion.id)
-                  : null;
-            if (!regionId && (activeRegion.Region || activeRegion.name || activeRegion.regionName)) {
-              const regionName = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+            let regionId = null;
+            const regionName = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+            if (regionName && regions.length > 0) {
               const matchedRegion = regions.find(
                 (r) =>
                   String(r.name || "").toLowerCase() === String(regionName).toLowerCase() ||
-                  String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase()
+                  String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase() ||
+                  String(r.Region || "").toLowerCase() === String(regionName).toLowerCase()
               );
               if (matchedRegion && (matchedRegion.id != null || matchedRegion._id != null)) {
                 regionId = String(matchedRegion.id ?? matchedRegion._id);
               }
+            }
+            if (!regionId) {
+              regionId = activeRegion._id != null ? String(activeRegion._id) : activeRegion.id != null ? String(activeRegion.id) : null;
             }
             const regionMappings = regionId
               ? allMappings.filter(
@@ -427,22 +425,21 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     const allDepts = organizationStructure?.availableUnits?.departments || [];
     const allMappings = organizationStructure?.mappings || [];
     const regions = organizationStructure?.availableUnits?.regions || [];
-    let regionId =
-      activeRegion._id != null
-        ? String(activeRegion._id)
-        : activeRegion.id != null
-          ? String(activeRegion.id)
-          : null;
-    if (!regionId && (activeRegion.Region || activeRegion.name || activeRegion.regionName)) {
-      const regionName = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+    let regionId = null;
+    const regionName = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+    if (regionName && regions.length > 0) {
       const matchedRegion = regions.find(
         (r) =>
           String(r.name || "").toLowerCase() === String(regionName).toLowerCase() ||
-          String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase()
+          String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase() ||
+          String(r.Region || "").toLowerCase() === String(regionName).toLowerCase()
       );
       if (matchedRegion && (matchedRegion.id != null || matchedRegion._id != null)) {
         regionId = String(matchedRegion.id ?? matchedRegion._id);
       }
+    }
+    if (!regionId) {
+      regionId = activeRegion._id != null ? String(activeRegion._id) : activeRegion.id != null ? String(activeRegion.id) : null;
     }
     const regionMappings = regionId
       ? allMappings.filter(
@@ -465,7 +462,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   useEffect(() => {
     const subscription = watch((values, { name }) => {
       if (name === "Department") {
-        const deptName = values?.Department || "";
+        const deptValue = values?.Department || "";
+        const deptName = typeof deptValue === "string" ? deptValue : (deptValue?.name || deptValue?.departmentName || deptValue?.Department || "");
         setValue("Division", "");
         setSectionOptions([]);
 
@@ -512,7 +510,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       }
 
       if (name === "Division") {
-        const divName = values?.Division || "";
+        const divValue = values?.Division || "";
+        const divName = typeof divValue === "string" ? divValue : (divValue?.name || divValue?.code || divValue?.Division || "");
         if (!divName) {
           setSectionOptions([]);
         } else {
@@ -521,7 +520,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
             organizationStructure?.availableUnits?.departmentsWithDivisions ||
             [];
           
-          const deptName = values?.Department || "";
+          const deptValue = values?.Department || "";
+          const deptName = typeof deptValue === "string" ? deptValue : (deptValue?.name || deptValue?.departmentName || deptValue?.Department || "");
           const currentRegion = values?.Region || activeRegion;
           const regionName = typeof currentRegion === "string" 
             ? currentRegion 
@@ -583,25 +583,24 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     const allDepts = organizationStructure?.availableUnits?.departments || [];
     const allMappings = organizationStructure?.mappings || [];
     const regions = organizationStructure?.availableUnits?.regions || [];
-    let regionId =
-      regionValue?._id != null
-        ? String(regionValue._id)
-        : regionValue?.id != null
-          ? String(regionValue.id)
-          : null;
+    let regionId = null;
     const regionName =
       typeof regionValue === "string"
         ? regionValue
         : regionValue?.regionName || regionValue?.name || regionValue?.Region;
-    if (!regionId && regionName && regions.length > 0) {
+    if (regionName && regions.length > 0) {
       const matchedRegion = regions.find(
         (r) =>
           String(r.name || "").toLowerCase() === String(regionName).toLowerCase() ||
-          String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase()
+          String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase() ||
+          String(r.Region || "").toLowerCase() === String(regionName).toLowerCase()
       );
       if (matchedRegion && (matchedRegion.id != null || matchedRegion._id != null)) {
         regionId = String(matchedRegion.id ?? matchedRegion._id);
       }
+    }
+    if (!regionId) {
+      regionId = regionValue?._id != null ? String(regionValue._id) : regionValue?.id != null ? String(regionValue.id) : null;
     }
     const regionMappings = regionId
       ? allMappings.filter(
