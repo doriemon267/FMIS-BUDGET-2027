@@ -39,6 +39,7 @@ import SalaryTablePage from "./pages/SalaryTablePage";
 import EmployeeSalaryTablePage from "./pages/EmployeeSalaryTablePage";
 import CosSalaryTablePage from "./pages/CosSalaryTablePage";
 import GroupedIncomeCategoryPage from "./pages/GroupedIncomeCategoryPage";
+import PositionTitleManagementPage from "./pages/PositionTitleManagementPage";
 import RetireePage from "./pages/RetireePage";
 
 import SubsidyMonitoringPage from "./pages/SubsidyMonitoringPage";
@@ -198,6 +199,18 @@ const App = () => {
               requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
             >
               <SettingsManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/position-titles"
+          element={
+            <ProtectedRoute
+              routeKey="/position-titles"
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["preparer", "reviewer", "approver", "superAdmin", "budgetAnalyst"]}
+            >
+              <PositionTitleManagementPage />
             </ProtectedRoute>
           }
         />

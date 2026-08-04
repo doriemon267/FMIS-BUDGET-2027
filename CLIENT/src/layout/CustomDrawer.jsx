@@ -623,9 +623,15 @@ const CustomDrawer = () => {
               },
               {
                 link: '/cos-salary-table',
-                name: 'COS Salary Table (SSL4)',
+                name: 'COS Salary Table',
                 isAllow: checkAccess('/cos-salary-table', true),
                 icon: <LuBanknote size={18} strokeWidth={1.5} />,
+              },
+              {
+                link: '/position-titles',
+                name: 'Position Titles',
+                isAllow: checkAccess('/position-titles', true),
+                icon: <LuBriefcase size={18} strokeWidth={1.5} />,
               },
               { isDivider: true },
               {

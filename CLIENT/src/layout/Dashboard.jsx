@@ -107,6 +107,7 @@ export const PAGE_TITLES = {
   '/audit-logs': 'Audit Logs',
   '/route-permissions': 'Route Permissions',
   '/settings': 'System Settings',
+  '/position-titles': 'Position Titles',
   '/fiscalYear': 'Fiscal Year',
   '/not-authorized': 'Not Authorized',
 };

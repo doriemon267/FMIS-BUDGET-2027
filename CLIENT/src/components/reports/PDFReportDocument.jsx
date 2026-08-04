@@ -1,5 +1,5 @@
 import React from 'react';
-import { shouldHideGenericOtherUacs, getIndentLevelFromSubline } from '../../utils/uacsDisplayHelper';
+import { getIndentLevelFromSubline } from '../../utils/uacsDisplayHelper';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 // Define styles for PDF
@@ -266,19 +266,16 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [], pre
         
         {/* MOOE Table Header */}
         <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderCell, { width: "15%" }]}>UACS Code</Text>
-          <Text style={[styles.tableHeaderCell, { width: "55%" }]}>Accounting Title</Text>
+          <Text style={[styles.tableHeaderCell, { width: "70%" }]}>Accounting Title</Text>
           <Text style={[styles.tableHeaderCell, { width: "30%", textAlign: "right" }]}>Amount</Text>
         </View>
         
         {/* MOOE Items */}
         {mooe.map((item, idx) => {
-          const hideGenericUACS = shouldHideGenericOtherUacs(item.uacsCode, item.sublineItem);
           const indentLevel = getIndentLevelFromSubline(item.sublineItem || item.accountingTitle || '', item.uacsCode);
           return (
             <View key={idx} style={styles.row}>
-              <Text style={{ width: "15%" }}>{hideGenericUACS ? '' : item.uacsCode}</Text>
-              <Text style={{ width: "55%", marginLeft: indentLevel ? 10 : 0 }}>{item.accountingTitle || item.lineItem}</Text>
+              <Text style={{ width: "70%", marginLeft: indentLevel ? 10 : 0 }}>{item.accountingTitle || item.lineItem}</Text>
               <Text style={{ width: "30%", textAlign: "right" }}>{formatCurrency(item.amount, true)}</Text>
             </View>
           );
@@ -301,8 +298,7 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [], pre
             {/* NIS Row */}
             {(parseFloat(psSummary.iasOMCost.nis) > 0 || parseFloat(psSummary.iasOMCost.nisSubsidy) > 0) && (
               <View style={styles.row}>
-                <Text style={{ width: "15%" }}></Text>
-                <Text style={{ width: "55%" }}>NIS (National Irrigation System)</Text>
+                <Text style={{ width: "70%" }}>NIS (National Irrigation System)</Text>
                 <Text style={{ width: "30%", textAlign: "right" }}>
                   {formatCurrency(
                     (parseFloat(psSummary.iasOMCost.nis) || 0) + 
@@ -316,8 +312,7 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [], pre
             {/* CIS Row */}
             {(parseFloat(psSummary.iasOMCost.cis) > 0 || parseFloat(psSummary.iasOMCost.cisSubsidy) > 0) && (
               <View style={styles.row}>
-                <Text style={{ width: "15%" }}></Text>
-                <Text style={{ width: "55%" }}>CIS (Communal Irrigation System)</Text>
+                <Text style={{ width: "70%" }}>CIS (Communal Irrigation System)</Text>
                 <Text style={{ width: "30%", textAlign: "right" }}>
                   {formatCurrency(
                     (parseFloat(psSummary.iasOMCost.cis) || 0) + 

@@ -1,136 +1,81 @@
-const fs = require('fs');
-const path = require('path');
+@"
+const fs = require("fs");
 
-const controllersDir = path.join(__dirname, 'SERVER', 'controllers');
+function addOnChange(filepath) {
+  let content = fs.readFileSync(filepath, "utf-8");
 
-const updates = [
-  {
-    file: 'childrenAllowanceController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'],
-    numberFields: ['noOfDependents', 'amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
-  },
-  {
-    file: 'employeeCourtAppearanceController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'],
-    numberFields: ['daysPresent', 'rate', 'amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
-  },
-  {
-    file: 'loyaltyPayController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region', 'milestoneYear'],
-    numberFields: ['amount', 'yearsOfService'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region', 'milestoneYear']
-  },
-  {
-    file: 'mealAllowanceController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'],
-    numberFields: ['daysPresent', 'amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
-  },
-  {
-    file: 'medicalAllowanceController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'],
-    numberFields: ['amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
-  },
-  {
-    file: 'overtimePayController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region', 'processBy'],
-    numberFields: ['weekdayHours', 'weekendHours', 'monthlySalary', 'amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeFullName', 'positionTitle', 'processBy', 'fiscalYear', 'employeeNumber', 'department']
-  },
-  {
-    file: 'subsistenceAllowanceController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'],
-    numberFields: ['daysPresent', 'amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
-  },
-  {
-    file: 'subsistenceAllowanceMDSController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'],
-    numberFields: ['daysPresent', 'amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
-  },
-  {
-    file: 'subsistenceAllowanceSTController.js',
-    textFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region'],
-    numberFields: ['daysPresent', 'amount'],
-    dateFields: ['processDate', 'createdAt', 'updatedAt'],
-    searchFields: ['employeeNumber', 'employeeFullName', 'positionTitle', 'department', 'division', 'region']
-  }
-];
-
-updates.forEach(config => {
-  const filePath = path.join(controllersDir, config.file);
-  if (!fs.existsSync(filePath)) {
-    console.log(`File not found: ${filePath}`);
-    return;
-  }
-
-  let content = fs.readFileSync(filePath, 'utf8');
-
-  // Inject require if not exists
-  if (!content.includes('applyTableFilters')) {
-    content = `const { applyTableFilters } = require('../utils/controller_get_process');\n` + content;
-  }
-
-  // Find the if (search) { ... } block
-  let startIndex = content.indexOf('if (search) {');
-  if (startIndex === -1) {
-    startIndex = content.indexOf('if(search) {');
-  }
+  const target = `                        rules={{ required: "Position title is required" }}`;
   
-  if (startIndex !== -1) {
-    let braceCount = 0;
-    let endIndex = -1;
-    let started = false;
-    
-    for (let i = startIndex; i < content.length; i++) {
-      if (content[i] === '{') {
-        braceCount++;
-        started = true;
-      } else if (content[i] === '}') {
-        braceCount--;
-      }
-      
-      if (started && braceCount === 0) {
-        endIndex = i;
-        break;
-      }
-    }
-    
-    if (endIndex !== -1) {
-      // In overtimePayController, there is an extra `const n = ...` after the search if, wait, it's inside the if(search) block!
-      // So replacing the whole if (search) block is perfectly safe and handles it all.
-      
-      const replacement = `
-    // Apply dynamic table filters
-    applyTableFilters(
-      query, 
-      req.query, 
-      ${JSON.stringify(config.textFields)}, 
-      ${JSON.stringify(config.numberFields)}, 
-      ${JSON.stringify(config.dateFields)}, 
-      ${JSON.stringify(config.searchFields)}
-    );
-      `;
-      
-      content = content.substring(0, startIndex) + replacement + content.substring(endIndex + 1);
-      fs.writeFileSync(filePath, content, 'utf8');
-      console.log(`Patched ${config.file}`);
-    } else {
-      console.log(`Could not find end of if(search) in ${config.file}`);
-    }
+  const replacement = `                        rules={{ required: "Position title is required" }}
+                        onChange={async (selectedPosition) => {
+                          if (selectedPosition) {
+                            if (selectedPosition.SG != null) {
+                              setValue("SG", selectedPosition.SG);
+                            }
+                            if (selectedPosition.JG) {
+                              setValue("JG", selectedPosition.JG);
+                            }
+                            if (selectedPosition.PG) {
+                              setValue("PG", selectedPosition.PG);
+                            }
+
+                            // Trigger Rate recalculation
+                            const stepVal = getValues("Step") || "1";
+                            setValue("Step", stepVal);
+                            const status = getValues("StatusOfAppointment")?.toString().toUpperCase();
+                            
+                            if (status) {
+                              if (status === "COS" && selectedPosition.SG != null) {
+                                try {
+                                  const res = await api.get(\`/cos-salary/rate/\${selectedPosition.SG}/\${stepVal}\`);
+                                  if (res.data?.rate != null) setValue("Rate", res.data.rate);
+                                } catch (err) {
+                                  console.error("Error fetching COS rate:", err);
+                                }
+                              } else if (status === "CASUAL" && selectedPosition.JG) {
+                                try {
+                                  const path = typeof useCPCSForEmployeeAdd !== "undefined" && useCPCSForEmployeeAdd
+                                    ? \`/cpcs-salary/rate-by-job-grade-and-step/\${selectedPosition.JG}/\${stepVal}\`
+                                    : \`/rate-by-job-grade-and-step/\${selectedPosition.JG}/\${stepVal}\`;
+                                  const response = await api.get(path);
+                                  if (response.data?.rate) setValue("Rate", response.data.rate);
+                                } catch (error) {
+                                  console.error("Error fetching JG rate:", error);
+                                }
+                              } else if ((status === "PERMANENT" || status === "CONTRACTUAL" || (status === "CASUAL" && typeof cpcs2Types !== "undefined" && cpcs2Types.includes("CASUAL"))) && selectedPosition.SG != null) {
+                                try {
+                                  const url = typeof useCPCSForEmployeeAdd !== "undefined" && useCPCSForEmployeeAdd
+                                    ? \`cpcs-salary/grades?salary_grade=\${selectedPosition.SG}\`
+                                    : \`salary-grades?salary_grade=\${selectedPosition.SG}\`;
+                                  const response = await api.get(url);
+                                  const salaryGrades = response.data.grades?.[0];
+                                  if (salaryGrades) {
+                                    if (typeof setSalaryData !== "undefined") setSalaryData(salaryGrades);
+                                    const steps = salaryGrades.steps.map(aw => aw + "");
+                                    if (typeof setStepOptions !== "undefined") setStepOptions(steps);
+                                    const stepToUse = steps.includes(stepVal) ? stepVal : (steps[0] || "1");
+                                    setValue("Step", stepToUse);
+                                    const rate = salaryGrades.rates?.[stepToUse];
+                                    setValue("Rate", rate || "");
+                                  }
+                                } catch (err) {
+                                  console.error("Error fetching SG rate:", err);
+                                }
+                              }
+                            }
+                            trigger(["SG", "JG", "PG", "Step", "Rate"]);
+                          }
+                        }}`;
+
+  if (content.includes(target) && !content.includes("setValue(\"SG\", selectedPosition.SG)")) {
+    content = content.replace(target, replacement);
+    fs.writeFileSync(filepath, content, "utf-8");
+    console.log("Patched " + filepath);
   } else {
-    console.log(`Could not find if(search) in ${config.file}`);
+    console.log("Target not found or already patched in " + filepath);
   }
-});
+}
+
+addOnChange("D:/_2026_FMIS-BUDGET/GOKO/SYSTEM_LOST_V4/FMIS-BUDGET/CLIENT/src/components/employee/EmployeeCustomAdd.jsx");
+addOnChange("D:/_2026_FMIS-BUDGET/GOKO/SYSTEM_LOST_V4/FMIS-BUDGET/CLIENT/src/components/employee/EmployeeEditDialog.jsx");
+"@
