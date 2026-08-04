@@ -477,8 +477,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
           organizationStructure?.availableUnits?.departmentsWithDivisions || [];
         let matched = departmentsWithDivisions.filter(
           (d) =>
-            String(d.departmentName).toLowerCase() ===
-            String(deptName).toLowerCase()
+            (d.departmentId != null && deptValue?.id != null && String(d.departmentId) === String(deptValue.id)) ||
+            (String(d.departmentName).toLowerCase().trim() === String(deptName).toLowerCase().trim())
         );
 
         // FILTER BY REGION: If a specific region is selected (not "All Regions"), filter divisions by that region
@@ -488,9 +488,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
           : (currentRegion?.Region || currentRegion?.name || currentRegion?.regionName || "");
 
         if (regionName && String(regionName).toLowerCase() !== "all regions") {
-          const regionLower = String(regionName).toLowerCase();
+          const regionLower = String(regionName).toLowerCase().trim();
           matched = matched.filter(m => 
-            m.regionName && String(m.regionName).toLowerCase() === regionLower
+            m.regionName && String(m.regionName).toLowerCase().trim() === regionLower
           );
         }
 
@@ -529,25 +529,27 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
           // Find specific division matching both department and region if possible
           let matchedMappings = departmentsWithDivisions.filter(dept => 
-            String(dept.departmentName).toLowerCase() === String(deptName).toLowerCase()
+            (dept.departmentId != null && deptValue?.id != null && String(dept.departmentId) === String(deptValue.id)) ||
+            (String(dept.departmentName).toLowerCase().trim() === String(deptName).toLowerCase().trim())
           );
 
           if (regionName && String(regionName).toLowerCase() !== "all regions") {
-            const regionLower = String(regionName).toLowerCase();
+            const regionLower = String(regionName).toLowerCase().trim();
             matchedMappings = matchedMappings.filter(m => 
-              m.regionName && String(m.regionName).toLowerCase() === regionLower
+              m.regionName && String(m.regionName).toLowerCase().trim() === regionLower
             );
           }
 
           // If no specific region match, fall back to all mappings for that department
           if (matchedMappings.length === 0) {
             matchedMappings = departmentsWithDivisions.filter(dept => 
-              String(dept.departmentName).toLowerCase() === String(deptName).toLowerCase()
+              (dept.departmentId != null && deptValue?.id != null && String(dept.departmentId) === String(deptValue.id)) ||
+              (String(dept.departmentName).toLowerCase().trim() === String(deptName).toLowerCase().trim())
             );
           }
 
           const matchedDiv = matchedMappings.flatMap(m => m.divisions || [])
-            .find(div => String(div.name).toLowerCase() === String(divName).toLowerCase());
+            .find(div => String(div.name).toLowerCase().trim() === String(divName).toLowerCase().trim());
 
           if (matchedDiv && matchedDiv.sections) {
             const sections = matchedDiv.sections
