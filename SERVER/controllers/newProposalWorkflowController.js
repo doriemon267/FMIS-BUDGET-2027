@@ -3846,7 +3846,12 @@ exports.getAuditTrail = async (req, res) => {
       });
     }
 
-    const editLogs = await ProposalEditLog.find({ workflowRef: id })
+    const editLogs = await ProposalEditLog.find({
+      $or: [
+        { workflowRef: id },
+        { proposalId: id }
+      ]
+    })
       .sort({ timestamp: -1 })
       .lean();
 

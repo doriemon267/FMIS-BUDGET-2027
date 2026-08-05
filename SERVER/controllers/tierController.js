@@ -871,11 +871,195 @@ const safeNum = (val, fallback = 0) => {
   const n = Number(val);
   return (n !== undefined && n !== null && !isNaN(n) && Number.isFinite(n)) ? n : fallback;
 };
+const PS_STRUCTURE_GETTERS = {
+  "Salaries - Regular (Authorized Positions)": (e) => {
+    const app = String(e.statusOfAppointment || '').toUpperCase();
+    return (app.includes('PERMANENT') || app.includes('REGULAR') || app.includes('PLANTILLA')) ? (Number(e.annualSalary)||0) : 0;
+  },
+  "Casual Personnel": (e) => {
+    const app = String(e.statusOfAppointment || '').toUpperCase();
+    return app.includes('CASUAL') ? (Number(e.annualSalary)||0) : 0;
+  },
+  "PERA": (e) => Number(e.PERA) || 0,
+  "Representation Allowance": (e) => Number(e.RATA) || 0,
+  "Uniform/Clothing Allowance": (e) => Number(e.uniformALLOWANCE) || 0,
+  "Additional Medical Allowance": (e) => Number(e.additionalMedical) || 0,
+  "Meal Allowances": (e) => Number(e.meal) || 0,
+  "Longevity Pay (Loyalty Award)": (e) => Number(e.loyaltyAward) || 0,
+  "Productivity Enhancement Incentive": (e) => Number(e.productivityIncentive) || 0,
+  "Cash Gift": (e) => Number(e.cashGift) || 0,
+  "Mid-Year and Year-End Bonus": (e) => (Number(e.midyearBonus)||0) + (Number(e.yearEndBonus)||0),
+  "Hazard Pay": (e) => Number(e.hazardPay) || 0,
+  "GSIS Ret. & Life Insurance Premium": (e) => Number(e.gsisPremium) || 0,
+  "PAG-IBIG Contributions": (e) => Number(e.pagibigPremium) || 0,
+  "PHILHEALTH Contributions": (e) => Number(e.philhealthPremium) || 0,
+  "Employees Compensation Insurance Premium": (e) => Number(e.employeeCompensation) || 0,
+  "Provident Fund": (e) => Number(e.providentFund) || 0,
+  "Earned Leaves": (e) => Number(e.earnedLeaves) || 0,
+};
+
+/**
+ * Get regional tier breakdown by aggregating source data (PS, MOOE, CO, Income)
+ * per region using exact line-item structure matching.
+ * Returns { regions: [regionName, ...], data: { regionName: { lineItemName: { tier1, tier2, total }, ... }, ... } }
+ */
+const getRegionalTierBreakdown = async (fiscalYear, department, division) => {
+  const fyStr = String(fiscalYear);
+  const buildQuery = (extraFields = {}) => {
+    const q = { fiscalYear: fyStr, budgetType: 'Initial', ...extraFields };
+    if (department) {
+      const d = String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      q.department = new RegExp('^' + d + '$', 'i');
+    }
+    if (division) {
+      const dv = String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      q.division = new RegExp('^' + dv + '$', 'i');
+    }
+    return q;
+  };
+
+  // Fetch all source data
+  const PersonnelService = mongoose.connection.collection('personnelservices');
+  const MooeProposal = mongoose.connection.collection('mooeproposals');
+  const CapitalOutlayModel = require('../models/CapitalOutlay');
+  const CapitalOutlayDetail = mongoose.connection.collection('capitaloutlaydetails');
+  const Income = mongoose.connection.collection('incomes');
+
+  const [psData, mooeData, coData, codData, incData] = await Promise.all([
+    PersonnelService.find(buildQuery()).toArray(),
+    MooeProposal.find(buildQuery()).toArray(),
+    CapitalOutlayModel.find(buildQuery()).populate('category', 'categoryName').lean(),
+    CapitalOutlayDetail.find().toArray(),
+    Income.find(buildQuery()).toArray(),
+  ]);
+
+  const codByParent = {};
+  (codData || []).forEach(d => {
+    const parentId = String(d.capital_outlay_id || '');
+    if (parentId) {
+      if (!codByParent[parentId]) codByParent[parentId] = [];
+      codByParent[parentId].push(d);
+    }
+  });
+
+  // Collect all regions
+  const regionSet = new Set();
+  const addRegion = (items) => items.forEach(it => {
+    const r = String(it.region || '').trim().toUpperCase();
+    if (r && r !== 'ALL') regionSet.add(r);
+  });
+  addRegion(psData);
+  addRegion(mooeData);
+  addRegion(coData);
+  addRegion(incData);
+
+  const regions = Array.from(regionSet).sort();
+  const data = {};
+  const summaryTotals = {};
+
+  regions.forEach(rName => {
+    const regionData = {};
+    const norm = (s) => String(s || '').trim().toUpperCase();
+
+    let psTotal = 0;
+    let mooeTotal = 0;
+    let coTotal = 0;
+    let incTotal = 0;
+
+    // 1. Personnel Services items (aggregate per employee record into PS line items)
+    psData.filter(it => norm(it.region) === rName).forEach(emp => {
+      Object.entries(PS_STRUCTURE_GETTERS).forEach(([itemName, getter]) => {
+        const val = getter(emp);
+        if (val > 0) {
+          psTotal += val;
+          if (!regionData[itemName]) regionData[itemName] = { tier1: 0, tier2: 0, total: 0 };
+          regionData[itemName].tier2 += val;
+          regionData[itemName].total += val;
+        }
+      });
+    });
+
+    // 2. MOOE items (aggregate by accounting title / subline item)
+    mooeData.filter(it => norm(it.region) === rName).forEach(it => {
+      const title = it.accountingTitle || it.sublineItem || it.uacsCode || 'MOOE Item';
+      const total = Number(it.amount || it.total || it.Total) || 0;
+      if (total > 0) {
+        mooeTotal += total;
+        if (!regionData[title]) regionData[title] = { tier1: 0, tier2: 0, total: 0 };
+        regionData[title].tier2 += total;
+        regionData[title].total += total;
+      }
+    });
+
+    // 3. Capital Outlay items (joined with capitaloutlaydetails)
+    coData.filter(it => norm(it.region) === rName).forEach(it => {
+      const parentId = String(it._id || '');
+      const details = codByParent[parentId] || [];
+      const parentTotal = Number(it.amount || it.total || it.Total) || 0;
+      const catTitle = (it.category && typeof it.category === 'object' ? it.category.categoryName : null) || it.categoryName || 'Capital Outlay Item';
+
+      if (details.length > 0) {
+        details.forEach(det => {
+          const t1 = Number(det.subsidy_amount) || 0;
+          const inc = Number(det.income_amount) || 0;
+          const total = t1 + inc;
+          if (total > 0) {
+            coTotal += total;
+            const keysToStore = [catTitle, det.particulars, it.sublineItem, it.accountingTitle, it.uacsCode].filter(Boolean);
+            keysToStore.forEach(k => {
+              if (!regionData[k]) regionData[k] = { tier1: 0, tier2: 0, total: 0 };
+              regionData[k].tier2 += total;
+              regionData[k].total += total;
+            });
+          }
+        });
+      } else if (parentTotal > 0) {
+        const keysToStore = [catTitle, it.sublineItem, it.accountingTitle, it.uacsCode].filter(Boolean);
+        coTotal += parentTotal;
+        keysToStore.forEach(k => {
+          if (!regionData[k]) regionData[k] = { tier1: 0, tier2: 0, total: 0 };
+          regionData[k].tier2 += parentTotal;
+          regionData[k].total += parentTotal;
+        });
+      }
+    });
+
+    // 4. Income items
+    incData.filter(it => norm(it.region) === rName).forEach(it => {
+      const title = it.name || it.particulars || it.uacsCode || 'Income Item';
+      const total = Number(it.amount || it.total || it.Total) || 0;
+      if (total > 0) {
+        incTotal += total;
+        if (!regionData[title]) regionData[title] = { tier1: 0, tier2: 0, total: 0 };
+        regionData[title].tier2 += total;
+        regionData[title].total += total;
+      }
+    });
+
+    const totalUses = psTotal + mooeTotal + coTotal;
+    const bgtSupport = Math.max(0, totalUses - incTotal);
+
+    summaryTotals[rName] = {
+      CorpIncome: { inc: incTotal, t1: 0, t2: 0, tot: 0, bgt: incTotal },
+      PS: { inc: 0, t1: 0, t2: psTotal, tot: psTotal, bgt: psTotal },
+      MOOE: { inc: 0, t1: 0, t2: mooeTotal, tot: mooeTotal, bgt: mooeTotal },
+      CO: { inc: 0, t1: 0, t2: coTotal, tot: coTotal, bgt: coTotal },
+      TotalUses: { inc: 0, t1: 0, t2: totalUses, tot: totalUses, bgt: totalUses },
+      BudgetSupport: { inc: 0, t1: 0, t2: bgtSupport, tot: bgtSupport, bgt: bgtSupport },
+      TotalSources: { inc: incTotal, t1: 0, t2: bgtSupport, tot: totalUses, bgt: totalUses },
+    };
+
+    data[rName] = regionData;
+  });
+
+  return { regions, data, summaryTotals };
+};
 
 /**
  * Generate Tier Report PDF from reportSummary (view-only; inline disposition).
  * Accepts POST body: { fiscalYear, region, department, division, reportSummary }.
  */
+
 const generateTierPDF = async (req, res) => {
   try {
     if (!MuhammaraRecipe) {
@@ -886,21 +1070,29 @@ const generateTierPDF = async (req, res) => {
     if (!reportSummary || !fiscalYear) {
       return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
     }
-    const regionDisplay = regionName || (region === 'ALL' || !region ? 'All' : region);
-    const departmentDisplay = departmentName || (!department ? 'All' : department);
-    const divisionDisplay = divisionName || (!division ? 'All' : division);
+    const regionDisplay = regionName || (region && typeof region === 'object' ? (region.RegionName || region.Region || region.regionName || region.name || 'All') : (region === 'ALL' || !region ? 'All' : region));
+    const departmentDisplay = departmentName || (department && typeof department === 'object' ? (department.DepartmentName || department.name || 'All') : (department === 'ALL' || !department ? 'All' : department));
+    const divisionDisplay = divisionName || (division && typeof division === 'object' ? (division.DivisionName || division.name || 'All') : (division === 'ALL' || !division ? 'All' : division));
     const version = versionFromBody != null ? Number(versionFromBody) : (await getCurrentVersionForScope(fiscalYear, region, department, division));
 
-    const requesterLabel = (req.user && (req.user.name || req.user.UserName || req.user.FirstName || req.user.id)) || '';
-
-    const { sourcesOfFunds = {}, usesOfFunds = {}, usesCorporateIncome = {}, surplusDeficit = 0, lineItems: rawLineItems = [] } = reportSummary;
-    // MOOE and Capital Outlay: show only line items with total value > 0
-    const lineItems = rawLineItems.filter((item) => {
-      const cat = (item.category || '').toString();
-      const total = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
-      if (cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') return total > 0;
-      return true;
-    });
+    const isAllRegions = regionDisplay.toLowerCase() === 'all';
+    let regionalBreakdown = { regions: [], data: {}, summaryTotals: {} };
+    if (isAllRegions) {
+      regionalBreakdown = await getRegionalTierBreakdown(fiscalYear, department, division);
+    }
+    
+    // Group logic
+    // We will have: GRAND TOTAL, CENTRAL OFFICE, TOTAL REGIONS, REGION 1, REGION 2...
+    const groups = ['GRAND TOTAL'];
+    if (isAllRegions) {
+       groups.push('CENTRAL OFFICE');
+       groups.push('TOTAL REGIONS');
+       regionalBreakdown.regions.forEach(r => {
+          if (r !== 'CENTRAL OFFICE' && r !== 'TOTAL REGIONS') {
+             groups.push(r);
+          }
+       });
+    }
 
     const generateDocumentId = () => {
       const timestamp = Date.now().toString(36);
@@ -911,48 +1103,43 @@ const generateTierPDF = async (req, res) => {
 
     const filename = `Tier_Report_${fiscalYear}_${regionDisplay}_${departmentDisplay}_${divisionDisplay}.pdf`;
     const tmpFilePath = path.join(os.tmpdir(), `tier_report_${Date.now()}.pdf`);
-    const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
+    
+    const recipe = new MuhammaraRecipe('new', tmpFilePath, {
       version: 1.6,
       author: 'FMIS-BUDGET',
       title: 'Tier Budget Report',
       subject: 'Tier Budget Report',
     });
 
-    const PAGE_WIDTH = 936;
-    const PAGE_HEIGHT = 576;
-    const MARGIN = 40;
-    const MARGIN_TOP = 50;
-    const MARGIN_BOTTOM = 60;
-    const LINE_HEIGHT = 14;
-    const CONTENT_LEFT = MARGIN + 5;
-    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN - 5;
-    const pageW = PAGE_WIDTH - 80;
+    const SUB_COL_WIDTH = 78; 
+    const GROUP_WIDTH = SUB_COL_WIDTH * 5; // Inc, Tier1, Tier2, Total, Bgt
+    const colX = [40]; // Particular
+    const borderX = [35, 240]; 
+    const groupStartBorderX = [240]; 
 
-    let currentY = MARGIN_TOP;
-    let currentPage = 1;
-    const rowH = 16;
-    const descColWidth = 230;
-    const col1 = CONTENT_LEFT;
-    const numAreaLeft = col1 + descColWidth + 6;
-    const numColStep = (CONTENT_RIGHT - numAreaLeft) / 5;
-    const col2 = numAreaLeft + numColStep;
-    const col3 = numAreaLeft + 2 * numColStep;
-    const col4 = numAreaLeft + 3 * numColStep;
-    const col5 = numAreaLeft + 4 * numColStep;
-    const col6 = CONTENT_RIGHT;
+    groups.forEach((g, i) => {
+      const startX = 240 + (i * GROUP_WIDTH);
+      colX.push(startX + 5); 
+      colX.push(startX + SUB_COL_WIDTH + 5); 
+      colX.push(startX + (SUB_COL_WIDTH * 2) + 5); 
+      colX.push(startX + (SUB_COL_WIDTH * 3) + 5); 
+      colX.push(startX + (SUB_COL_WIDTH * 4) + 5); 
+      
+      borderX.push(startX + SUB_COL_WIDTH);
+      borderX.push(startX + (SUB_COL_WIDTH * 2));
+      borderX.push(startX + (SUB_COL_WIDTH * 3));
+      borderX.push(startX + (SUB_COL_WIDTH * 4));
+      borderX.push(startX + GROUP_WIDTH);
+      groupStartBorderX.push(startX + GROUP_WIDTH);
+    });
+    
+    const TABLE_WIDTH = borderX[borderX.length - 1] - 35;
+    const PAGE_WIDTH = Math.max(1008, TABLE_WIDTH + 70); 
+    const PAGE_HEIGHT = 612;
 
-    const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
-    const drawBorder = () => {
-      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, {
-        stroke: '#000000',
-        lineWidth: 1.2
-      });
-    };
-    const drawFooter = () => {
-      pdfDoc.text('Tier Budget Report', CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 25, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 45, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
-    };
+    recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+    
+    // Header Logo
     const resolveLogoPath = (name) => {
       const serverAsset = path.join(__dirname, `../assets/${name}`);
       if (fs.existsSync(serverAsset)) return serverAsset;
@@ -960,130 +1147,337 @@ const generateTierPDF = async (req, res) => {
       if (fs.existsSync(clientAsset)) return clientAsset;
       return null;
     };
-    const startNewPage = (continued = false) => {
-      if (currentPage > 1 || currentY !== MARGIN_TOP) {
-        drawFooter();
-        pdfDoc.endPage();
-        currentPage += 1;
-      }
-      pdfDoc.createPage(842, 595);
-      currentY = MARGIN_TOP;
-      drawBorder();
+    try {
+       const l = resolveLogoPath('logo.png');
+       if (l) recipe.image(l, 40, 30, { width: 50, height: 50 });
+    } catch (e) {}
 
-      const sealPath = resolveLogoPath('Seal.png');
-      const logoPath = resolveLogoPath('logo.png');
-      const bagongPath = resolveLogoPath('Bagong_Pilipinas.png');
-      const logoY = currentY + 3;
-      try {
-        if (sealPath) pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: 34, height: 34 });
-        if (logoPath) pdfDoc.image(logoPath, CONTENT_LEFT + 38, logoY, { width: 34, height: 34 });
-        if (bagongPath) pdfDoc.image(bagongPath, CONTENT_RIGHT - 34, logoY, { width: 34, height: 34 });
-      } catch (e) {
-        console.warn('Tier header logo load failed:', e.message);
-      }
+    const title1 = "NATIONAL IRRIGATION ADMINISTRATION";
+    const title2 = `TIER BUDGET REPORT FOR FY ${fiscalYear || 'ALL'}`;
+    const title3 = `REGION: ${regionDisplay} | VERSION: ${version}`;
+    
+    recipe.text(title1, (PAGE_WIDTH / 2) - (title1.length * 4), 40, { color: [0, 0, 0], fontSize: 14, bold: true });
+    recipe.text(title2, (PAGE_WIDTH / 2) - (title2.length * 3.5), 58, { color: [0, 0, 0], fontSize: 12, bold: true });
+    recipe.text(title3, (PAGE_WIDTH / 2) - (title3.length * 3.5), 72, { color: [0, 0, 0], fontSize: 12, bold: true });
+    
+    let currentRowY = 100;
 
-      const centerX = PAGE_WIDTH / 2;
-      pdfDoc.text('TIER BUDGET REPORT', centerX, currentY + 6, textOpt({ fontSize: 12, bold: true, align: 'center' }));
-      pdfDoc.text(`Fiscal Year: ${fiscalYear} | Region: ${regionDisplay} | Department: ${departmentDisplay} | Division: ${divisionDisplay}`, centerX, currentY + 20, textOpt({ fontSize: 8, align: 'center' }));
-      pdfDoc.text(`Version ${Number.isFinite(Number(version)) ? version : 0}${continued ? ' (continued)' : ''}`, centerX, currentY + 31, textOpt({ fontSize: 8, align: 'center' }));
-      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 45, currentY + 39, textOpt({ fontSize: 9, bold: true }));
-      currentY += 52;
+    const drawHeaders = (y) => {
+      // Draw background for entire header (height 50)
+      recipe.rectangle(35, y, TABLE_WIDTH, 50, { fill: '#eaeaea' });
+      
+      // "PARTICULAR" text, centered vertically in the 50px header
+      recipe.text("PARTICULAR", 40, y + 25, { bold: true, fontSize: 10, color: [0, 0, 0] });
+      
+      groups.forEach((g, i) => {
+        const startX = 240 + (i * GROUP_WIDTH);
+        
+        // Group Name (e.g. GRAND TOTAL) - Row 1
+        const gWidth = recipe.textDimensions(g, { bold: true, fontSize: 8 }).width || (g.length * 4);
+        recipe.text(g, startX + (GROUP_WIDTH / 2) - (gWidth / 2), y + 10, { bold: true, fontSize: 8, color: [0, 0, 0] });
+        
+        // Col 1: Projected Corporate Income [a]
+        recipe.text("PROJECTED CORPORATE", startX + 5, y + 26, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        recipe.text("INCOME [a]", startX + 5, y + 34, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+        // Col 2: Projected Subsidy (Spans 3 cols) - Row 2
+        recipe.text("PROJECTED SUBSIDY", startX + SUB_COL_WIDTH + 5, y + 24, { bold: true, fontSize: 7, color: [0, 0, 0] });
+        
+        // Tier 1 - Row 3
+        recipe.text("TIER 1", startX + SUB_COL_WIDTH + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        recipe.text("[b]", startX + SUB_COL_WIDTH + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+        // Tier 2 - Row 3
+        recipe.text("TIER 2", startX + (SUB_COL_WIDTH * 2) + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        recipe.text("[c]", startX + (SUB_COL_WIDTH * 2) + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+        // Total - Row 3
+        recipe.text("TOTAL", startX + (SUB_COL_WIDTH * 3) + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        recipe.text("[d = b + c]", startX + (SUB_COL_WIDTH * 3) + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+        // Col 5: Proposed Budget [e = a + d]
+        recipe.text("PROPOSED", startX + (SUB_COL_WIDTH * 4) + 5, y + 26, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        recipe.text("BUDGET [e = a + d]", startX + (SUB_COL_WIDTH * 4) + 5, y + 34, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+        // Horizontal line under PROJECTED SUBSIDY (spans from Tier 1 to Total)
+        recipe.rectangle(startX + SUB_COL_WIDTH, y + 30, SUB_COL_WIDTH * 3, 1, { fill: [0, 0, 0] });
+        
+        // Vertical lines for sub-columns
+        // Between Corporate Income and Tier 1 (starts from y + 16, height 34)
+        recipe.rectangle(startX + SUB_COL_WIDTH, y + 16, 1, 34, { fill: [0, 0, 0] });
+        
+        // Between Tier 1 and Tier 2 (starts from y + 30, height 20)
+        recipe.rectangle(startX + (SUB_COL_WIDTH * 2), y + 30, 1, 20, { fill: [0, 0, 0] });
+        
+        // Between Tier 2 and Total (starts from y + 30, height 20)
+        recipe.rectangle(startX + (SUB_COL_WIDTH * 3), y + 30, 1, 20, { fill: [0, 0, 0] });
+        
+        // Between Total and Proposed Budget (starts from y + 16, height 34)
+        recipe.rectangle(startX + (SUB_COL_WIDTH * 4), y + 16, 1, 34, { fill: [0, 0, 0] });
+      });
+
+      // Group borders (vertical lines for each group) - height 50
+      groupStartBorderX.forEach(x => {
+        recipe.rectangle(x, y, 1, 50, { fill: [0, 0, 0] });
+      });
+      
+      // Rightmost border for PARTICULAR column
+      recipe.rectangle(240, y, 1, 50, { fill: [0, 0, 0] });
+      
+      // Top border of header
+      recipe.rectangle(35, y, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
+      
+      // Horizontal line under Group Names
+      recipe.rectangle(240, y + 16, TABLE_WIDTH - 205, 1, { fill: [0, 0, 0] });
+      
+      // Bottom border of header
+      recipe.rectangle(35, y + 50, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
     };
-    const ensureSpace = (lines = 1) => {
-      if (currentY + lines * LINE_HEIGHT > PAGE_HEIGHT - MARGIN_BOTTOM) {
-        startNewPage(true);
+
+    drawHeaders(currentRowY);
+    currentRowY += 52;
+
+    const getWrappedText = (text, maxLineLength) => {
+      const words = String(text || '').split(' ');
+      let lines = [];
+      let currentLine = '';
+      words.forEach(word => {
+        if ((currentLine + ' ' + word).length > maxLineLength) {
+          if (currentLine) lines.push(currentLine.trim());
+          currentLine = word;
+        } else {
+          currentLine += (currentLine ? ' ' : '') + word;
+        }
+      });
+      if (currentLine) lines.push(currentLine.trim());
+      return lines;
+    };
+
+    const drawRow = (title, rowDataMap, isBold = false) => {
+      const lines = getWrappedText(title, 32);
+      const textHeight = Math.max(lines.length * 10, 10);
+      const rowHeight = textHeight + 4; 
+
+      if (currentRowY + rowHeight > PAGE_HEIGHT - 40) {
+        recipe.endPage();
+        recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+        currentRowY = 40;
+        drawHeaders(currentRowY);
+        currentRowY += 52;
       }
+
+      const rowBot = currentRowY + rowHeight;
+      const textStartY = currentRowY + 2;
+
+      lines.forEach((line, index) => {
+        recipe.text(line, colX[0], textStartY + (index * 10), { bold: isBold, fontSize: 9, color: [0, 0, 0] });
+      });
+      
+      let colIdx = 1;
+      groups.forEach(g => {
+         const data = rowDataMap[g] || { inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 };
+         const incStr = data.inc ? formatTierCurrency(data.inc) : '-';
+         const t1Str = data.t1 ? formatTierCurrency(data.t1) : '-';
+         const t2Str = data.t2 ? formatTierCurrency(data.t2) : '-';
+         const totStr = data.tot ? formatTierCurrency(data.tot) : '-';
+         const bgtStr = data.bgt ? formatTierCurrency(data.bgt) : '-';
+         
+         const getStrWidth = (str) => {
+            let w = 0;
+            for (let i=0; i < str.length; i++) {
+              if (str[i] === ',' || str[i] === '.' || str[i] === '-' || str[i] === ' ') w += 2.5;
+              else w += 4.5;
+            }
+            return w;
+         };
+
+         recipe.text(incStr, borderX[colIdx + 1] - 5 - getStrWidth(incStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+         recipe.text(t1Str, borderX[colIdx + 1] - 5 - getStrWidth(t1Str), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+         recipe.text(t2Str, borderX[colIdx + 1] - 5 - getStrWidth(t2Str), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+         recipe.text(totStr, borderX[colIdx + 1] - 5 - getStrWidth(totStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+         recipe.text(bgtStr, borderX[colIdx + 1] - 5 - getStrWidth(bgtStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+      });
+      
+      recipe.rectangle(35, rowBot, TABLE_WIDTH, 0.5, { fill: [0, 0, 0] });
+      borderX.forEach(x => {
+        recipe.rectangle(x, currentRowY, 0.5, rowBot - currentRowY, { fill: [0, 0, 0] });
+      });
+      
+      currentRowY = rowBot;
     };
-    const drawRow = (cells, bold = false, fontSize = 8) => {
-      ensureSpace(1);
-      const safe = (v) => (v == null ? '—' : String(v));
-      pdfDoc.text(safe(cells[0]), col1, currentY, textOpt({ fontSize, bold }));
-      pdfDoc.text(safe(cells[1]), col2, currentY, textOpt({ fontSize, bold, align: 'right' }));
-      pdfDoc.text(safe(cells[2]), col3, currentY, textOpt({ fontSize, bold, align: 'right' }));
-      pdfDoc.text(safe(cells[3]), col4, currentY, textOpt({ fontSize, bold, align: 'right' }));
-      pdfDoc.text(safe(cells[4]), col5, currentY, textOpt({ fontSize, bold, align: 'right' }));
-      pdfDoc.text(safe(cells[5]), col6, currentY, textOpt({ fontSize, bold, align: 'right' }));
-      currentY += rowH;
+
+    // Calculate aggregated rowDataMap
+    const getRowDataMapForLineItem = (lineItem) => {
+       const map = {};
+       const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
+       
+       if (!isAllRegions) {
+          map['GRAND TOTAL'] = {
+             inc: Number(lineItem.corporateIncome) || 0,
+             t1: Number(lineItem.tier1) || 0,
+             t2: Number(lineItem.tier2) || 0,
+             tot: Number(lineItem.total) || 0,
+             bgt: Number(lineItem.proposedBudget || lineItem.total) || 0
+          };
+          return map;
+       }
+       
+       // Central Office
+       const coData = regionalBreakdown.data['CENTRAL OFFICE']?.[lineItem.lineItemId];
+       if (coData) {
+          map['CENTRAL OFFICE'] = {
+             inc: 0,
+             t1: Number(coData.tier1) || 0,
+             t2: Number(coData.tier2) || 0,
+             tot: Number(coData.total) || 0,
+             bgt: Number(coData.total) || 0
+          };
+       } else {
+          map['CENTRAL OFFICE'] = getEmpty();
+       }
+       
+       // Total Regions
+       let trT1 = 0, trT2 = 0, trTot = 0, trBgt = 0;
+       regionalBreakdown.regions.forEach(r => {
+          if (r !== 'CENTRAL OFFICE' && r !== 'TOTAL REGIONS') {
+             const targetKeys = [
+                String(lineItem.lineItemId || '').trim().toLowerCase().replace(/\s+/g, ' '),
+                String(lineItem.description || '').trim().toLowerCase().replace(/\s+/g, ' '),
+                String(lineItem.name || '').trim().toLowerCase().replace(/\s+/g, ' ')
+             ];
+             const rMap = regionalBreakdown.data[r] || {};
+             const actualKey = Object.keys(rMap).find(k => {
+                const normK = k.trim().toLowerCase().replace(/\s+/g, ' ');
+                return targetKeys.some(tk => tk === normK || tk.endsWith('-' + normK) || normK.endsWith('-' + tk) || tk.includes(normK) || normK.includes(tk));
+             });
+             const rData = actualKey ? rMap[actualKey] : null;
+             if (rData) {
+                trT1 += Number(rData.tier1) || 0;
+                trT2 += Number(rData.tier2) || 0;
+                trTot += Number(rData.total) || 0;
+                trBgt += Number(rData.total) || 0;
+                map[r] = {
+                   inc: 0,
+                   t1: Number(rData.tier1) || 0,
+                   t2: Number(rData.tier2) || 0,
+                   tot: Number(rData.total) || 0,
+                   bgt: Number(rData.total) || 0
+                };
+             } else {
+                map[r] = getEmpty();
+             }
+          }
+       });
+       map['TOTAL REGIONS'] = { inc: 0, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
+       
+       // GRAND TOTAL is sum of Central Office + Total Regions
+       const coItem = map['CENTRAL OFFICE'] || getEmpty();
+       map['GRAND TOTAL'] = {
+          inc: coItem.inc,
+          t1: coItem.t1 + trT1,
+          t2: coItem.t2 + trT2,
+          tot: coItem.tot + trTot,
+          bgt: coItem.bgt + trBgt
+       };
+       
+       return map;
     };
 
-    startNewPage(false);
+    // Calculate aggregated rowDataMap for summary
+    const getRowDataMapForSummary = (summaryName) => {
+       const map = {};
+       const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
+       const { sourcesOfFunds = {}, usesOfFunds = {}, usesCorporateIncome = {} } = reportSummary;
+       const src = sourcesOfFunds;
+       const bs = src.budgetarySupport || {};
+       const ps = usesOfFunds['Personnel Services'] || {};
+       const mooe = usesOfFunds['Maintenance and Other Operating Expenses'] || {};
+       const co = usesOfFunds['Capital Outlay'] || {};
+       
+       let gTotal = getEmpty();
+       if (summaryName === 'CorpIncome') {
+          gTotal = { inc: src.corporateIncome || 0, t1: 0, t2: 0, tot: 0, bgt: src.corporateIncome || 0 };
+       } else if (summaryName === 'BudgetSupport') {
+          gTotal = { inc: 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: bs.total || 0 };
+       } else if (summaryName === 'TotalSources') {
+          gTotal = { inc: src.corporateIncome || 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: src.proposedBudget || src.total || 0 };
+       } else if (summaryName === 'PS') {
+          gTotal = { inc: usesCorporateIncome['Personnel Services'] || 0, t1: ps.tier1 || 0, t2: ps.tier2 || 0, tot: ps.total || 0, bgt: ps.proposedBudget || ps.total || 0 };
+       } else if (summaryName === 'MOOE') {
+          gTotal = { inc: usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0, t1: mooe.tier1 || 0, t2: mooe.tier2 || 0, tot: mooe.total || 0, bgt: mooe.proposedBudget || mooe.total || 0 };
+       } else if (summaryName === 'CO') {
+          gTotal = { inc: usesCorporateIncome['Capital Outlay'] || 0, t1: co.tier1 || 0, t2: co.tier2 || 0, tot: co.total || 0, bgt: co.proposedBudget || co.total || 0 };
+       } else if (summaryName === 'TotalUses') {
+          const totInc = (usesCorporateIncome['Personnel Services'] || 0) + (usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0) + (usesCorporateIncome['Capital Outlay'] || 0);
+          gTotal = { inc: totInc, t1: usesOfFunds.tier1 || 0, t2: usesOfFunds.tier2 || 0, tot: usesOfFunds.total || 0, bgt: usesOfFunds.proposedBudget || usesOfFunds.total || 0 };
+       }
+       
+       map['GRAND TOTAL'] = gTotal;
+       if (!isAllRegions) return map;
+       
+       groups.forEach(g => {
+          if (g === 'GRAND TOTAL') return;
+          if (g === 'CENTRAL OFFICE') {
+             map[g] = getEmpty();
+          } else if (g === 'TOTAL REGIONS') {
+             // Computed after all regions
+          } else {
+             const rSummary = regionalBreakdown.summaryTotals?.[g]?.[summaryName];
+             map[g] = rSummary ? { ...rSummary } : getEmpty();
+          }
+       });
+       
+       // Calculate TOTAL REGIONS by summing all actual regions
+       let trInc = 0, trT1 = 0, trT2 = 0, trTot = 0, trBgt = 0;
+       groups.forEach(g => {
+          if (g !== 'GRAND TOTAL' && g !== 'CENTRAL OFFICE' && g !== 'TOTAL REGIONS') {
+             const item = map[g] || getEmpty();
+             trInc += item.inc || 0;
+             trT1 += item.t1 || 0;
+             trT2 += item.t2 || 0;
+             trTot += item.tot || 0;
+             trBgt += item.bgt || 0;
+          }
+       });
+       map['TOTAL REGIONS'] = { inc: trInc, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
+       
+       // If CENTRAL OFFICE is empty/0, ensure GRAND TOTAL equals TOTAL REGIONS for consistency when filtering all regions
+       const coItem = map['CENTRAL OFFICE'] || getEmpty();
+       if (coItem.tot === 0 && coItem.inc === 0 && coItem.bgt === 0 && (trTot > 0 || trInc > 0)) {
+          map['GRAND TOTAL'] = { inc: trInc, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
+       }
+       
+       return map;
+    };
 
-    const src = sourcesOfFunds;
-    const bs = src.budgetarySupport || {};
-    const ps = usesOfFunds['Personnel Services'];
-    const mooe = usesOfFunds['Maintenance and Other Operating Expenses'];
-    const co = usesOfFunds['Capital Outlay'];
-    const tot = usesOfFunds;
-    const totalCorp = (usesCorporateIncome['Personnel Services'] || 0)
-      + (usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0)
-      + (usesCorporateIncome['Capital Outlay'] || 0);
-
-    pdfDoc.text('A. SOURCES OF FUNDS', CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
-    currentY += LINE_HEIGHT;
-    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total', 'Proposed Budget'], true);
-    pdfDoc.rectangle(col1, currentY - 4, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
-    drawRow(['Projected Corporate Income', formatTierCurrency(src.corporateIncome), '—', '—', '—', formatTierCurrency(src.corporateIncome)]);
-    drawRow(['Budgetary Support (Tier 1 + Tier 2)', '—', formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(bs.total), formatTierCurrency(bs.total)]);
-    drawRow(['TOTAL SOURCES OF FUNDS', formatTierCurrency(src.corporateIncome), formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(bs.total), formatTierCurrency(src.proposedBudget || src.total)], true);
-    currentY += 6;
-
-    pdfDoc.text('B. USES OF FUNDS', CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
-    currentY += LINE_HEIGHT;
-    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total', 'Proposed Budget'], true);
-    pdfDoc.rectangle(col1, currentY - 4, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
-
+    drawRow('A. SOURCES OF FUNDS', {}, true);
+    drawRow('Projected Corporate Income', getRowDataMapForSummary('CorpIncome'));
+    drawRow('Budgetary Support', getRowDataMapForSummary('BudgetSupport'));
+    drawRow('TOTAL SOURCES OF FUNDS', getRowDataMapForSummary('TotalSources'), true);
+    
+    drawRow('B. USES OF FUNDS', {}, true);
+    
+    const lineItems = reportSummary.lineItems || [];
     let currentCategory = '';
-    for (const item of lineItems) {
-      const cat = item.category || '';
-      if (cat !== currentCategory) {
-        currentCategory = cat;
-        ensureSpace(2);
-        pdfDoc.text(String(cat), col1, currentY, textOpt({ fontSize: 9, bold: true }));
-        currentY += 12;
-      }
-      drawRow([
-        item.description || '—',
-        formatTierCurrency(item.corporateIncome),
-        formatTierCurrency(item.tier1),
-        formatTierCurrency(item.tier2),
-        formatTierCurrency(item.total),
-        formatTierCurrency((Number(item.corporateIncome) || 0) + (Number(item.total) || 0)),
-      ]);
-    }
-
-    currentY += 3;
-    pdfDoc.rectangle(col1, currentY, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
-    currentY += 6;
-    drawRow(['Personnel Services', formatTierCurrency(usesCorporateIncome['Personnel Services']), formatTierCurrency(ps?.tier1), formatTierCurrency(ps?.tier2), formatTierCurrency(ps?.total), formatTierCurrency((Number(usesCorporateIncome['Personnel Services']) || 0) + (Number(ps?.total) || 0))], true);
-    drawRow(['Maintenance and Other Operating Expenses', formatTierCurrency(usesCorporateIncome['Maintenance and Other Operating Expenses']), formatTierCurrency(mooe?.tier1), formatTierCurrency(mooe?.tier2), formatTierCurrency(mooe?.total), formatTierCurrency((Number(usesCorporateIncome['Maintenance and Other Operating Expenses']) || 0) + (Number(mooe?.total) || 0))], true);
-    drawRow(['Capital Outlay', formatTierCurrency(usesCorporateIncome['Capital Outlay']), formatTierCurrency(co?.tier1), formatTierCurrency(co?.tier2), formatTierCurrency(co?.total), formatTierCurrency((Number(usesCorporateIncome['Capital Outlay']) || 0) + (Number(co?.total) || 0))], true);
-    drawRow(['TOTAL USES OF FUNDS', formatTierCurrency(tot.totalCorporateIncome ?? totalCorp), formatTierCurrency(tot.totalTier1), formatTierCurrency(tot.totalTier2), formatTierCurrency((Number(tot.totalTier1) || 0) + (Number(tot.totalTier2) || 0)), formatTierCurrency(tot.proposedBudget)], true);
-
-    currentY += 8;
-    ensureSpace(1);
-    pdfDoc.text(`Surplus/(Deficit): ${formatTierCurrency(surplusDeficit)}`, CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
-
-    ensureSpace(6);
-    currentY += 30;
+    lineItems.forEach(item => {
+       const cat = item.category || '';
+       if (cat !== currentCategory) {
+          currentCategory = cat;
+          drawRow(String(cat), {}, true);
+       }
+       // only draw if total > 0 or whatever logic
+       const catTotal = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
+       if ((cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') && catTotal <= 0) return;
+       
+       drawRow('  ' + (item.description || '—'), getRowDataMapForLineItem(item));
+    });
     
-    const sigWidth = 140;
-    const sigSpacing = (pageW - (sigWidth * 3)) / 2;
-    const sig1X = CONTENT_LEFT;
-    const sig2X = sig1X + sigWidth + sigSpacing;
-    const sig3X = sig2X + sigWidth + sigSpacing;
-    
-    const drawSigBlock = (x, label, name, title) => {
-      pdfDoc.text(`${label}:`, x, currentY, textOpt({ fontSize: 8 }));
-      pdfDoc.text(name || '________________________', x, currentY + 15, textOpt({ fontSize: 9, bold: true }));
-      pdfDoc.text(title, x, currentY + 25, textOpt({ fontSize: 8 }));
-    };
+    drawRow('TOTAL PERSONNEL SERVICES', getRowDataMapForSummary('PS'), true);
+    drawRow('TOTAL MOOE', getRowDataMapForSummary('MOOE'), true);
+    drawRow('TOTAL CAPITAL OUTLAY', getRowDataMapForSummary('CO'), true);
+    drawRow('TOTAL USES OF FUNDS', getRowDataMapForSummary('TotalUses'), true);
 
-    drawSigBlock(sig1X, 'Prepared by', requesterLabel, 'Budget Planning Analyst');
-    drawSigBlock(sig2X, 'Noted by', '', 'Budget Officer');
-    drawSigBlock(sig3X, 'Approved by', '', 'Budget Manager');
-
-    drawFooter();
-    pdfDoc.endPage().endPDF((err) => {
+    recipe.endPage().endPDF((err) => {
       if (err) {
         console.error('Error generating tier PDF:', err);
         return res.status(500).json({ message: 'Error generating PDF' });
@@ -1097,142 +1491,283 @@ const generateTierPDF = async (req, res) => {
       const readStream = fs.createReadStream(tmpFilePath);
       readStream.on('error', (streamErr) => {
         console.error('Error streaming tier PDF:', streamErr);
-        if (!res.headersSent) {
-          res.status(500).json({ message: 'Failed to stream PDF' });
-        }
+        if (!res.headersSent) res.status(500).json({ message: 'Failed to stream PDF' });
       });
-      res.on('finish', () => {
-        fs.unlink(tmpFilePath, () => {});
-      });
+      res.on('finish', () => { fs.unlink(tmpFilePath, () => {}); });
       readStream.pipe(res);
     });
   } catch (error) {
-    console.error('Error generating tier PDF:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ message: error.message || 'Error generating PDF' });
-    }
+    console.error('Error generating tier PDF:', error?.message || error, error?.stack);
+    if (!res.headersSent) res.status(500).json({ message: error.message || 'Error generating PDF' });
   }
 };
 
-/**
- * Generate Tier Report Excel from reportSummary.
- * POST body: { fiscalYear, region, department, division, reportSummary }.
- */
 const generateTierExcel = async (req, res) => {
   try {
     const ExcelJS = require('exceljs');
     const { fiscalYear, region, department, division, regionName, departmentName, divisionName, reportSummary, version: versionFromBody } = req.body || {};
-    if (!reportSummary || !fiscalYear) {
-      return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
-    }
+    if (!reportSummary || !fiscalYear) return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
+    
     const regionDisplay = regionName || (region === 'ALL' || !region ? 'All' : region);
     const departmentDisplay = departmentName || (!department ? 'All' : department);
     const divisionDisplay = divisionName || (!division ? 'All' : division);
     const version = versionFromBody != null ? Number(versionFromBody) : (await getCurrentVersionForScope(fiscalYear, region, department, division));
 
-    const { sourcesOfFunds = {}, usesOfFunds = {}, usesCorporateIncome = {}, surplusDeficit = 0, lineItems: rawLineItems = [] } = reportSummary;
-    // MOOE and Capital Outlay: show only line items with total value > 0
-    const lineItems = rawLineItems.filter((item) => {
-      const cat = (item.category || '').toString();
-      const total = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
-      if (cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') return total > 0;
-      return true;
-    });
+    const isAllRegions = regionDisplay.toLowerCase() === 'all';
+    let regionalBreakdown = { regions: [], data: {} };
+    if (isAllRegions) {
+      regionalBreakdown = await getRegionalTierBreakdown(fiscalYear, department, division);
+    }
+    
+    const groups = ['GRAND TOTAL'];
+    if (isAllRegions) {
+       groups.push('CENTRAL OFFICE');
+       groups.push('TOTAL REGIONS');
+       regionalBreakdown.regions.forEach(r => {
+          if (r !== 'CENTRAL OFFICE' && r !== 'TOTAL REGIONS') groups.push(r);
+       });
+    }
+
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'FMIS Budget System';
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet('Tier Report', { views: [{ state: 'frozen', ySplit: 4 }] });
-    sheet.columns = [
-      { width: 42 },
-      { width: 18 },
-      { width: 16 },
-      { width: 16 },
-      { width: 16 },
-    ];
+    const sheet = workbook.addWorksheet('Tier Report', { views: [{ state: 'frozen', ySplit: 5 }] });
+    
+    const cols = [{ width: 42 }];
+    groups.forEach(() => {
+      cols.push({ width: 18 }); // Inc
+      cols.push({ width: 16 }); // T1
+      cols.push({ width: 16 }); // T2
+      cols.push({ width: 16 }); // Tot
+      cols.push({ width: 16 }); // Bgt
+    });
+    sheet.columns = cols;
+    const maxCols = 1 + (groups.length * 5);
+    const maxColLetter = sheet.getColumn(maxCols).letter;
 
     const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2e7d32' } };
-    const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
     const titleFont = { bold: true, size: 14, color: { argb: 'FF1a472a' } };
     const numFormat = '#,##0.00';
 
-    sheet.mergeCells('A1:E1');
+    sheet.mergeCells(`A1:${maxColLetter}1`);
     sheet.getCell('A1').value = 'TIER BUDGET REPORT';
     sheet.getCell('A1').font = titleFont;
     sheet.getCell('A1').alignment = { horizontal: 'center' };
     sheet.addRow([`Fiscal Year: ${fiscalYear}  |  Region: ${regionDisplay}  |  Department: ${departmentDisplay}  |  Division: ${divisionDisplay}`]);
-    sheet.mergeCells('A2:E2');
+    sheet.mergeCells(`A2:${maxColLetter}2`);
     sheet.getCell('A2').alignment = { horizontal: 'center' };
     sheet.addRow([`Version ${version}`]);
-    sheet.mergeCells('A3:E3');
+    sheet.mergeCells(`A3:${maxColLetter}3`);
     sheet.getCell('A3').alignment = { horizontal: 'center' };
     sheet.getCell('A3').font = { italic: true, size: 9 };
     sheet.addRow([]);
 
+    const drawHeaders = () => {
+      const topRow = ['PARTICULAR'];
+      groups.forEach(g => { topRow.push(g); topRow.push(''); topRow.push(''); topRow.push(''); topRow.push(''); });
+      sheet.addRow(topRow);
+      let cIdx = 2;
+      groups.forEach(() => {
+        sheet.mergeCells(sheet.lastRow.number, cIdx, sheet.lastRow.number, cIdx + 4);
+        sheet.getCell(sheet.lastRow.number, cIdx).alignment = { horizontal: 'center' };
+        cIdx += 5;
+      });
+      sheet.lastRow.eachCell(c => { c.font = headerFont; c.fill = headerFill; });
+      
+      const subRow = [''];
+      groups.forEach(() => {
+         subRow.push('PROJECTED CORPORATE INCOME [a]');
+         subRow.push('TIER 1 [b]');
+         subRow.push('TIER 2 [c]');
+         subRow.push('TOTAL [d = b + c]');
+         subRow.push('PROPOSED BUDGET [e = a + d]');
+      });
+      sheet.addRow(subRow);
+      sheet.lastRow.eachCell(c => { c.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } }; c.fill = headerFill; c.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' }; });
+      sheet.getRow(sheet.lastRow.number).height = 40;
+    };
+
+    drawHeaders();
+
+    const addDataRow = (title, rowDataMap, isBold = false) => {
+       const rowData = [title];
+       groups.forEach(g => {
+          const data = rowDataMap[g] || { inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 };
+          rowData.push(data.inc || '');
+          rowData.push(data.t1 || '');
+          rowData.push(data.t2 || '');
+          rowData.push(data.tot || '');
+          rowData.push(data.bgt || '');
+       });
+       const row = sheet.addRow(rowData);
+       row.eachCell(c => {
+         if (isBold) c.font = { bold: true };
+         if (c.col > 1 && typeof c.value === 'number') c.numFmt = numFormat;
+         // Draw borders
+         c.border = {
+           top: {style:'thin'},
+           left: {style:'thin'},
+           bottom: {style:'thin'},
+           right: {style:'thin'}
+         };
+       });
+       if (isBold) {
+         row.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } }; });
+       }
+    };
+
+    // Reuse the map builders
+    const { sourcesOfFunds = {}, usesOfFunds = {}, usesCorporateIncome = {} } = reportSummary;
     const src = sourcesOfFunds;
     const bs = src.budgetarySupport || {};
-    sheet.addRow(['A. SOURCES OF FUNDS']).getCell(1).font = { bold: true };
-    sheet.addRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total']);
-    sheet.lastRow.eachCell(c => { c.fill = headerFill; c.font = headerFont; });
-    sheet.addRow(['Projected Corporate Income', Number(src.corporateIncome) || 0, '', '', Number(src.corporateIncome) || 0]);
-    sheet.addRow(['Budgetary Support', '', Number(bs.tier1) || 0, Number(bs.tier2) || 0, Number(bs.total) || 0]);
-    sheet.addRow(['TOTAL SOURCES OF FUNDS', Number(src.corporateIncome) || 0, Number(bs.tier1) || 0, Number(bs.tier2) || 0, Number(src.proposedBudget || src.total) || 0]);
-    sheet.lastRow.eachCell(c => { c.font = { bold: true }; if (c.col > 1) c.numFmt = numFormat; });
-    sheet.addRow([]);
+    const ps = usesOfFunds['Personnel Services'] || {};
+    const mooe = usesOfFunds['Maintenance and Other Operating Expenses'] || {};
+    const co = usesOfFunds['Capital Outlay'] || {};
+    const lineItems = reportSummary.lineItems || [];
 
-    sheet.addRow(['B. USES OF FUNDS']).getCell(1).font = { bold: true };
-    sheet.addRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total']);
-    sheet.lastRow.eachCell(c => { c.fill = headerFill; c.font = headerFont; });
+    const getRowDataMapForLineItem = (lineItem) => {
+       const map = {};
+       const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
+       map['GRAND TOTAL'] = {
+          inc: Number(lineItem.corporateIncome) || 0,
+          t1: Number(lineItem.tier1) || 0,
+          t2: Number(lineItem.tier2) || 0,
+          tot: Number(lineItem.total) || 0,
+          bgt: Number(lineItem.proposedBudget || lineItem.total) || 0
+       };
+       if (!isAllRegions) return map;
+       const coData = regionalBreakdown.data['CENTRAL OFFICE']?.[lineItem.lineItemId];
+       if (coData) {
+          map['CENTRAL OFFICE'] = { inc: 0, t1: Number(coData.tier1) || 0, t2: Number(coData.tier2) || 0, tot: Number(coData.total) || 0, bgt: Number(coData.total) || 0 };
+       } else {
+          map['CENTRAL OFFICE'] = getEmpty();
+       }
+       let trT1 = 0, trT2 = 0, trTot = 0, trBgt = 0;
+       regionalBreakdown.regions.forEach(r => {
+          if (r !== 'CENTRAL OFFICE' && r !== 'TOTAL REGIONS') {
+             const targetKey = String(lineItem.lineItemId).trim().toLowerCase().replace(/\s+/g, ' ');
+             const rMap = regionalBreakdown.data[r] || {};
+             const actualKey = Object.keys(rMap).find(k => k.trim().toLowerCase().replace(/\s+/g, ' ') === targetKey);
+             const rData = actualKey ? rMap[actualKey] : null;
+             if (rData) {
+                trT1 += Number(rData.tier1) || 0;
+                trT2 += Number(rData.tier2) || 0;
+                trTot += Number(rData.total) || 0;
+                trBgt += Number(rData.total) || 0;
+                map[r] = { inc: 0, t1: Number(rData.tier1) || 0, t2: Number(rData.tier2) || 0, tot: Number(rData.total) || 0, bgt: Number(rData.total) || 0 };
+             } else {
+                map[r] = getEmpty();
+             }
+          }
+       });
+       map['TOTAL REGIONS'] = { inc: 0, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
+       return map;
+    };
 
+    const getRowDataMapForSummary = (summaryName) => {
+       const map = {};
+       const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
+       let gTotal = getEmpty();
+       if (summaryName === 'CorpIncome') {
+          gTotal = { inc: src.corporateIncome || 0, t1: 0, t2: 0, tot: 0, bgt: src.corporateIncome || 0 };
+       } else if (summaryName === 'BudgetSupport') {
+          gTotal = { inc: 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: bs.total || 0 };
+       } else if (summaryName === 'TotalSources') {
+          gTotal = { inc: src.corporateIncome || 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: src.proposedBudget || src.total || 0 };
+       } else if (summaryName === 'PS') {
+          gTotal = { inc: usesCorporateIncome['Personnel Services'] || 0, t1: ps.tier1 || 0, t2: ps.tier2 || 0, tot: ps.total || 0, bgt: ps.proposedBudget || ps.total || 0 };
+       } else if (summaryName === 'MOOE') {
+          gTotal = { inc: usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0, t1: mooe.tier1 || 0, t2: mooe.tier2 || 0, tot: mooe.total || 0, bgt: mooe.proposedBudget || mooe.total || 0 };
+       } else if (summaryName === 'CO') {
+          gTotal = { inc: usesCorporateIncome['Capital Outlay'] || 0, t1: co.tier1 || 0, t2: co.tier2 || 0, tot: co.total || 0, bgt: co.proposedBudget || co.total || 0 };
+       } else if (summaryName === 'TotalUses') {
+          const totInc = (usesCorporateIncome['Personnel Services'] || 0) + (usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0) + (usesCorporateIncome['Capital Outlay'] || 0);
+          gTotal = { inc: totInc, t1: usesOfFunds.tier1 || 0, t2: usesOfFunds.tier2 || 0, tot: usesOfFunds.total || 0, bgt: usesOfFunds.proposedBudget || usesOfFunds.total || 0 };
+       }
+       map['GRAND TOTAL'] = gTotal;
+       if (!isAllRegions) return map;
+       
+       const sumCategoryForRegion = (rName, categoryName) => {
+          let t1 = 0, t2 = 0, tot = 0;
+          lineItems.forEach(item => {
+             if (categoryName && item.category !== categoryName) return;
+             const targetKey2 = String(item.lineItemId).trim().toLowerCase().replace(/\s+/g, ' ');
+             const rMap2 = regionalBreakdown.data[rName] || {};
+             const actualKey2 = Object.keys(rMap2).find(k => k.trim().toLowerCase().replace(/\s+/g, ' ') === targetKey2);
+             const data = actualKey2 ? rMap2[actualKey2] : null;
+             if (data) {
+                t1 += Number(data.tier1) || 0;
+                t2 += Number(data.tier2) || 0;
+                tot += Number(data.total) || 0;
+             }
+          });
+          return { inc: 0, t1, t2, tot, bgt: tot }; 
+       };
+       
+       groups.forEach(g => {
+          if (g === 'GRAND TOTAL') return;
+          if (summaryName === 'CorpIncome' || summaryName === 'BudgetSupport' || summaryName === 'TotalSources') {
+             map[g] = getEmpty();
+          } else if (summaryName === 'PS') {
+             map[g] = sumCategoryForRegion(g, 'Personnel Services');
+          } else if (summaryName === 'MOOE') {
+             map[g] = sumCategoryForRegion(g, 'Maintenance and Other Operating Expenses');
+          } else if (summaryName === 'CO') {
+             map[g] = sumCategoryForRegion(g, 'Capital Outlay');
+          } else if (summaryName === 'TotalUses') {
+             map[g] = sumCategoryForRegion(g, null);
+          }
+       });
+       
+       if (summaryName === 'PS' || summaryName === 'MOOE' || summaryName === 'CO' || summaryName === 'TotalUses') {
+          let trT1 = 0, trT2 = 0, trTot = 0;
+          groups.forEach(g => {
+             if (g !== 'GRAND TOTAL' && g !== 'CENTRAL OFFICE' && g !== 'TOTAL REGIONS') {
+                trT1 += map[g].t1; trT2 += map[g].t2; trTot += map[g].tot;
+             }
+          });
+          map['TOTAL REGIONS'] = { inc: 0, t1: trT1, t2: trT2, tot: trTot, bgt: trTot };
+       }
+       return map;
+    };
+
+    addDataRow('A. SOURCES OF FUNDS', {}, true);
+    addDataRow('Projected Corporate Income', getRowDataMapForSummary('CorpIncome'));
+    addDataRow('Budgetary Support', getRowDataMapForSummary('BudgetSupport'));
+    addDataRow('TOTAL SOURCES OF FUNDS', getRowDataMapForSummary('TotalSources'), true);
+    
+    addDataRow('B. USES OF FUNDS', {}, true);
     let currentCategory = '';
-    for (const item of lineItems) {
-      if ((item.category || '') !== currentCategory) {
-        currentCategory = item.category || '';
-        sheet.addRow([currentCategory]).getCell(1).font = { bold: true };
-      }
-      const row = sheet.addRow([
-        item.description || '—',
-        Number(item.corporateIncome) || 0,
-        Number(item.tier1) || 0,
-        Number(item.tier2) || 0,
-        Number(item.total) || 0,
-      ]);
-      row.getCell(2).numFmt = numFormat;
-      row.getCell(3).numFmt = numFormat;
-      row.getCell(4).numFmt = numFormat;
-      row.getCell(5).numFmt = numFormat;
-    }
-
-    const ps = usesOfFunds['Personnel Services'];
-    const mooe = usesOfFunds['Maintenance and Other Operating Expenses'];
-    const co = usesOfFunds['Capital Outlay'];
-    const tot = usesOfFunds;
-    sheet.addRow(['Personnel Services', Number(usesCorporateIncome['Personnel Services']) || 0, Number(ps?.tier1) || 0, Number(ps?.tier2) || 0, Number(ps?.total) || 0]);
-    sheet.lastRow.eachCell(c => { c.font = { bold: true }; if (c.col > 1) c.numFmt = numFormat; });
-    sheet.addRow(['Maintenance and Other Operating Expenses', Number(usesCorporateIncome['Maintenance and Other Operating Expenses']) || 0, Number(mooe?.tier1) || 0, Number(mooe?.tier2) || 0, Number(mooe?.total) || 0]);
-    sheet.lastRow.eachCell(c => { c.font = { bold: true }; if (c.col > 1) c.numFmt = numFormat; });
-    sheet.addRow(['Capital Outlay', Number(usesCorporateIncome['Capital Outlay']) || 0, Number(co?.tier1) || 0, Number(co?.tier2) || 0, Number(co?.total) || 0]);
-    sheet.lastRow.eachCell(c => { c.font = { bold: true }; if (c.col > 1) c.numFmt = numFormat; });
-    sheet.addRow(['TOTAL USES OF FUNDS', Number(tot.totalCorporateIncome) || 0, Number(tot.totalTier1) || 0, Number(tot.totalTier2) || 0, Number(tot.proposedBudget) || 0]);
-    sheet.lastRow.eachCell(c => { c.fill = headerFill; c.font = headerFont; if (c.col > 1) c.numFmt = numFormat; });
-    sheet.addRow([]);
-    sheet.addRow(['Surplus/(Deficit)', Number(surplusDeficit) || 0]).getCell(1).font = { bold: true };
-    sheet.lastRow.getCell(2).numFmt = numFormat;
+    lineItems.forEach(item => {
+       const cat = item.category || '';
+       if (cat !== currentCategory) {
+          currentCategory = cat;
+          addDataRow(String(cat), {}, true);
+       }
+       const catTotal = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
+       if ((cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') && catTotal <= 0) return;
+       
+       addDataRow('  ' + (item.description || '—'), getRowDataMapForLineItem(item));
+    });
+    
+    addDataRow('TOTAL PERSONNEL SERVICES', getRowDataMapForSummary('PS'), true);
+    addDataRow('TOTAL MOOE', getRowDataMapForSummary('MOOE'), true);
+    addDataRow('TOTAL CAPITAL OUTLAY', getRowDataMapForSummary('CO'), true);
+    addDataRow('TOTAL USES OF FUNDS', getRowDataMapForSummary('TotalUses'), true);
 
     const filename = `Tier_Report_${fiscalYear}_${regionDisplay}_${departmentDisplay}_${divisionDisplay}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    res.send(buffer);
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (error) {
     console.error('Error generating tier Excel:', error);
-    res.status(500).json({ message: error.message });
+    if (!res.headersSent) res.status(500).json({ message: error.message || 'Error generating Excel' });
   }
 };
-
-
 module.exports = {
   getFinalizedData,
   getTierData,

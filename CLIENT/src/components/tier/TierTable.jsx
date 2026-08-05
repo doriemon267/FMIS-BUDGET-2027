@@ -292,13 +292,14 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
   // When region is "ALL", omit region filter to consolidate all regions.
   // effectiveRegion (ObjectId) for finalized data; regionName (string) for Capital Outlay & Income (DB stores region as string)
   const effectiveRegion = (region && region !== 'ALL') ? region : undefined;
+  const effectiveRegionName = (region && region !== 'ALL' && regionName !== 'ALL' && regionName !== 'All') ? regionName : undefined;
   const baseParams = useMemo(() => {
     const params = { fiscalYear, budgetType: 'Initial' };
-    if (regionName) params.region = regionName;
+    if (effectiveRegionName) params.region = effectiveRegionName;
     if (effectiveDept) params.department = effectiveDept;
     if (effectiveDiv) params.division = effectiveDiv;
     return params;
-  }, [fiscalYear, regionName, effectiveDept, effectiveDiv]);
+  }, [fiscalYear, effectiveRegionName, effectiveDept, effectiveDiv]);
 
   const finalizedParams = useMemo(() => {
     const params = { fiscalYear };
@@ -919,10 +920,11 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       const tier2 = Number(d.tier2) || 0;
       const total = tier1 + tier2;
       if (total <= 0) return;
+      const catTitle = item.categoryTitleFromGroup || item.category?.categoryName || item.sublineItem || '—';
       rows.push({
         category: 'Capital Outlay',
-        subCategory: item.category?.categoryName || '—',
-        description: item.particulars || item.accountingTitle || item.uacsCode || '—',
+        subCategory: catTitle,
+        description: catTitle,
         corporateIncome: Number(item?.income) || 0,
         tier1,
         tier2,
@@ -933,9 +935,10 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     return rows;
   }, [personnelItems, groupedMooeData, capitalOutlayData, usesCorporateIncome, usesOfFunds, allData.displayedItems]);
 
+  const lastTierDataJsonRef = useRef(null);
   useEffect(() => {
     if (onTierDataChange) {
-      onTierDataChange({
+      const payload = {
         ...allData,
         isFinalized: finalizedData?.hasFinalized === true,
         reportSummary: {
@@ -945,7 +948,12 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
           usesCorporateIncome,
           lineItems: reportLineItems,
         },
-      });
+      };
+      const sig = JSON.stringify(payload);
+      if (sig !== lastTierDataJsonRef.current) {
+        lastTierDataJsonRef.current = sig;
+        onTierDataChange(payload);
+      }
     }
   }, [allData, sourcesOfFunds, usesOfFunds, surplusDeficit, usesCorporateIncome, reportLineItems, finalizedData, onTierDataChange]);
 

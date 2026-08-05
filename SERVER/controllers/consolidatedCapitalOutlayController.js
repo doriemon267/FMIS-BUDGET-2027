@@ -213,8 +213,8 @@ const consolidatedCapitalOutlayController = {
       let grandTotal = 0;
 
       coData.forEach((parent) => {
-        // GROUP BY categoryName from the Category collection (e.g., "ACQUISITION OF FURNITURE & FIXTURES AND BOOKS")
-        const titleKey = (parent.category?.categoryName) || parent.accountingTitle || parent.sublineItem || 'Other';
+        // GROUP STRICTLY BY categoryName from the Category collection (e.g., "ACQUISITION OF FURNITURE & FIXTURES AND BOOKS")
+        const titleKey = (parent.category?.categoryName) || (parent.category && typeof parent.category === 'string' ? parent.category : null) || 'Other';
         if (!titleGroups[titleKey]) titleGroups[titleKey] = [];
 
         const details = detailsByParentId[parent._id.toString()];

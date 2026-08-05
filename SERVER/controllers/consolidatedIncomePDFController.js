@@ -1086,10 +1086,10 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     const effectiveTabType = isNaN(tabType) ? 1 : tabType;
     const getTabTitle = () => {
       switch (effectiveTabType) {
-        case 0: return 'CONSOLIDATED CORPORATE INCOME - EXECUTIVE SUMMARY';
-        case 1: return 'CONSOLIDATED CORPORATE INCOME - CATEGORY BREAKDOWN';
-        case 2: return 'CONSOLIDATED CORPORATE INCOME - SUBCATEGORY DETAILS';
-        default: return 'CONSOLIDATED CORPORATE INCOME REPORT';
+        case 0: return 'CORPORATE INCOME - EXECUTIVE SUMMARY';
+        case 1: return 'CORPORATE INCOME - CATEGORY BREAKDOWN';
+        case 2: return 'CORPORATE INCOME - SUBCATEGORY DETAILS';
+        default: return 'CORPORATE INCOME REPORT';
       }
     };
 

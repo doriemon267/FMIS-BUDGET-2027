@@ -603,10 +603,16 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     psData.forEach((employee) => {
       const isMultiRegion = !regionList || regionList.length > 1;
       let rcName;
-      if (isMultiRegion) {
+      if (isMultiRegion || !department) {
         rcName = employee.region || 'Unknown Region';
+      } else if (!division) {
+        let deptName = employee.department;
+        if (deptName === 'IRRIGATION MANAGEMENT OFFICE') deptName = 'IMO';
+        rcName = deptName || employee.region || 'Unknown Responsibility Center';
       } else {
-        rcName = employee.department || employee.division || employee.region || 'Unknown Responsibility Center';
+        let deptName = employee.department;
+        if (deptName === 'IRRIGATION MANAGEMENT OFFICE') deptName = 'IMO';
+        rcName = `${deptName} / ${employee.division}`;
       }
       if (!grouped[rcName]) grouped[rcName] = {};
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {

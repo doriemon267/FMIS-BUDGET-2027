@@ -197,7 +197,12 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
     const isExcludeRegionalAndIMO = rn === "CENTRAL OFFICE" || rn === "MARIIS" || rn === "UPRIIS";
     const excludeNames = isExcludeRegionalAndIMO ? ["REGIONAL OFFICE", "IRRIGATION MANAGEMENT OFFICE"] : [];
 
-    let regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === regionId);
+    let regionMappings = mappings.filter(
+      (m) =>
+        (m.regionId && String(m.regionId) === regionId) ||
+        (m.regionIds && m.regionIds.includes(regionId)) ||
+        (m.regionNames && m.regionNames.some((name) => norm(name) === rn))
+    );
     if (regionMappings.length === 0) {
       regionMappings = mappings.filter((m) => norm(m.regionName) === rn);
     }
