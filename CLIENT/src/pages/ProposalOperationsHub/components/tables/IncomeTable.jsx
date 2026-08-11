@@ -171,7 +171,7 @@ const IncomeTable = ({
 
   const shouldHideNetRow = useNet && hasGrossIrrigation;
 
-  const groupedIncome = items.reduce((acc, item) => {
+  const groupedIncome = items.reduce((acc, item, sourceIndex) => {
     const rawCategory =
       item.category ||
       item.categoryName ||
@@ -190,16 +190,37 @@ const IncomeTable = ({
         ? irrigationLabel
         : rawCategory;
     if (!acc[category]) acc[category] = [];
-    acc[category].push(item);
+
+    const itemLabel = item.particulars || item.itemName || item.title || "N/A";
+    const mergeKey = [category, itemLabel]
+      .map(normalizeName)
+      .join("|");
+    const existing = acc[category].find((entry) => entry.mergeKey === mergeKey);
+
+    if (existing) {
+      existing.sourceIndices.push(sourceIndex);
+    } else {
+      acc[category].push({
+        ...item,
+        mergeKey,
+        sourceIndices: [sourceIndex],
+      });
+    }
     return acc;
   }, {});
+
+  const getMergedAmount = (item) => item.sourceIndices.reduce((sum, sourceIndex) => {
+    const source = proposalDetails.income[sourceIndex];
+    const edited = editableItems?.income?.[sourceIndex];
+    return sum + toNumber(edited?.amount ?? source?.amount ?? 0);
+  }, 0);
 
   const groupedEntries = Object.entries(groupedIncome);
   const grandTotal = groupedEntries.reduce((sum, [category, groupItems]) => {
     const categoryTotal =
       normalizeName(category).includes("irrigation service fees") && useNet
         ? irrigationTotal
-        : groupItems.reduce((groupSum, item) => groupSum + toNumber(item.amount || 0), 0);
+        : groupItems.reduce((groupSum, item) => groupSum + getMergedAmount(item), 0);
     return sum + categoryTotal;
   }, 0);
 
@@ -209,7 +230,7 @@ const IncomeTable = ({
         const categoryTotal =
           normalizeName(category).includes("irrigation service fees") && useNet
             ? irrigationTotal
-            : groupItems.reduce((sum, item) => sum + toNumber(item.amount || 0), 0);
+            : groupItems.reduce((sum, item) => sum + getMergedAmount(item), 0);
         const isExpanded = expandedGroups[`income-${category}`];
 
         return (
@@ -270,14 +291,14 @@ const IncomeTable = ({
                   </TableHead>
                   <TableBody>
                     {groupItems.map((item, idx) => {
-                      const globalIndex = proposalDetails.income.indexOf(item);
-                      const itemKey = `income-${globalIndex}`;
-                      const isChanged = changedItems.has(itemKey);
-                      const editedItem = editableItems.income[globalIndex];
-                      const itemAmount = editedItem?.amount || 0;
+                      const sourceIndices = item.sourceIndices;
+                      const isChanged = sourceIndices.some((sourceIndex) =>
+                        changedItems.has(`income-${sourceIndex}`)
+                      );
+                      const itemAmount = getMergedAmount(item);
                       return (
                         <TableRow
-                          key={idx}
+                          key={item.mergeKey || idx}
                           hover
                           sx={{
                             bgcolor: isChanged ? "#fff3cd" : "transparent",
@@ -306,7 +327,7 @@ const IncomeTable = ({
                                 onKeyDown={preventNegativeNumericKey}
                                 onChange={(e) => {
                                   const numValue = toNonNegativeNumber(e.target.value);
-                                  handleEditItemAmount("income", globalIndex, numValue);
+                                  handleEditItemAmount("income", sourceIndices, numValue);
                                 }}
                                 inputProps={{
                                   style: {

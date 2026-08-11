@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+  const mongoose = require("mongoose");
 const CapitalOutlay = require("../models/CapitalOutlay");
 const ChartOfAccounts = require('../models/chartOfAccounts');
 const Category = require("../models/Category");

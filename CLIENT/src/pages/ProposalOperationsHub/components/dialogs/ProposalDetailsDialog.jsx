@@ -136,7 +136,11 @@ const ProposalDetailsDialog = ({
   return (
     <Dialog
       open={open}
-      onClose={handleDialogClose}
+      onClose={(_event, reason) => {
+        if (reason === "backdropClick" || reason === "escapeKeyDown") return;
+        handleDialogClose();
+      }}
+      disableEscapeKeyDown
       maxWidth="lg"
       fullWidth
       slotProps={{

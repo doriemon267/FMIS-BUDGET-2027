@@ -603,6 +603,31 @@ const ProposalOperationsHub = () => {
     };
   };
 
+  const enrichCapitalOutlayParticulars = async (items = []) => Promise.all(
+    items.map(async (item) => {
+      const parentId = item?._id;
+      if (!parentId) return item;
+
+      try {
+        const response = await api.get(`/api/capital-outlay/${parentId}/details`, {
+          hideErrorToast: true,
+        });
+        const detailRows = Array.isArray(response.data?.details)
+          ? response.data.details
+          : [];
+        const detailParticulars = detailRows
+          .map((detail) => String(detail?.particulars || "").trim())
+          .filter(Boolean)
+          .join(" • ");
+
+        return detailParticulars ? { ...item, detailParticulars } : item;
+      } catch (error) {
+        logger.warn(`Failed to load Capital Outlay details for ${parentId}`, error);
+        return item;
+      }
+    })
+  );
+
   // View Details fetcher
   const handleViewDetails = async (proposal) => {
     setDetailsLoading(true);
@@ -657,11 +682,14 @@ const ProposalOperationsHub = () => {
         return [];
       };
 
+      const capitalOutlayItems = proposal.isConsolidated ? capitalRes.data : toArray(capitalRes);
+      const capitalOutlayWithParticulars = await enrichCapitalOutlayParticulars(capitalOutlayItems);
+
       const details = {
         income: proposal.isConsolidated ? incomeRes.data : toArray(incomeRes),
         personnel: proposal.isConsolidated ? personnelRes.data : toArray(personnelRes),
         mooe: proposal.isConsolidated ? mooeRes.data : toArray(mooeRes),
-        capitalOutlay: proposal.isConsolidated ? capitalRes.data : toArray(capitalRes),
+        capitalOutlay: capitalOutlayWithParticulars,
       };
 
       setProposalDetails(details);
@@ -822,31 +850,36 @@ const ProposalOperationsHub = () => {
   ) => {
     if (!canUserEdit()) return;
 
+    const targetIndices = Array.isArray(index) ? index : [index];
+
     setEditableItems((prev) => {
       const updated = { ...prev };
-      if (updated[category] && updated[category][index]) {
+      targetIndices.forEach((targetIndex, position) => {
+        if (!updated[category] || !updated[category][targetIndex]) return;
+        const distributedAmount = position === 0 ? newAmount : 0;
+
         if (fieldType === "income" || fieldType === "subsidy") {
-          updated[category][index][fieldType] = newAmount;
+          updated[category][targetIndex][fieldType] = distributedAmount;
           const currentIncome =
-            fieldType === "income" ? newAmount : updated[category][index].income || 0;
+            fieldType === "income" ? distributedAmount : updated[category][targetIndex].income || 0;
           const currentSubsidy =
-            fieldType === "subsidy" ? newAmount : updated[category][index].subsidy || 0;
+            fieldType === "subsidy" ? distributedAmount : updated[category][targetIndex].subsidy || 0;
           const totalAmount = currentIncome + currentSubsidy;
 
-          if ("amount" in updated[category][index]) {
-            updated[category][index].amount = totalAmount;
-          } else if ("cost" in updated[category][index]) {
-            updated[category][index].cost = totalAmount;
+          if ("amount" in updated[category][targetIndex]) {
+            updated[category][targetIndex].amount = totalAmount;
+          } else if ("cost" in updated[category][targetIndex]) {
+            updated[category][targetIndex].cost = totalAmount;
           }
         } else if (category === "personnel" && fieldName) {
-          updated[category][index][fieldName] = newAmount;
+          updated[category][targetIndex][fieldName] = distributedAmount;
           if (fieldName === "monthlySalary") {
-            updated[category][index].annualSalary = newAmount * 12;
+            updated[category][targetIndex].annualSalary = distributedAmount * 12;
           } else if (fieldName === "annualSalary") {
-            updated[category][index].monthlySalary = newAmount / 12;
+            updated[category][targetIndex].monthlySalary = distributedAmount / 12;
           }
 
-          const personnel = updated[category][index];
+          const personnel = updated[category][targetIndex];
           personnel.Total =
             (Number(personnel.annualSalary) || 0) +
             (Number(personnel.RATA) || 0) +
@@ -871,38 +904,41 @@ const ProposalOperationsHub = () => {
             (Number(personnel.retirementBenefits) || 0) +
             (Number(personnel.terminalLeave) || 0) +
             (Number(personnel.courtAppearance) || 0);
-        } else if ("amount" in updated[category][index]) {
-          updated[category][index].amount = newAmount;
-        } else if ("Total" in updated[category][index]) {
-          updated[category][index].Total = newAmount;
-        } else if ("cost" in updated[category][index]) {
-          updated[category][index].cost = newAmount;
+        } else if ("amount" in updated[category][targetIndex]) {
+          updated[category][targetIndex].amount = distributedAmount;
+        } else if ("Total" in updated[category][targetIndex]) {
+          updated[category][targetIndex].Total = distributedAmount;
+        } else if ("cost" in updated[category][targetIndex]) {
+          updated[category][targetIndex].cost = distributedAmount;
         }
-      }
+      });
       return updated;
     });
 
-    const itemKey = fieldName ? `${category}-${index}-${fieldName}` : `${category}-${index}`;
-    const newChangedItems = new Set(changedItems);
-    const originalItem = proposalDetails[category]?.[index];
+    setChangedItems((previous) => {
+      const next = new Set(previous);
+      targetIndices.forEach((targetIndex, position) => {
+        const itemKey = fieldName
+          ? `${category}-${targetIndex}-${fieldName}`
+          : `${category}-${targetIndex}`;
+        const originalItem = proposalDetails[category]?.[targetIndex];
+        if (!originalItem) return;
 
-    if (originalItem) {
-      let originalValue;
-      if (fieldType === "income" || fieldType === "subsidy") {
-        originalValue = originalItem[fieldType] ?? 0;
-      } else if (category === "personnel" && fieldName) {
-        originalValue = originalItem[fieldName] ?? 0;
-      } else {
-        originalValue = originalItem.amount ?? originalItem.Total ?? originalItem.cost ?? 0;
-      }
+        const distributedAmount = position === 0 ? newAmount : 0;
+        let originalValue;
+        if (fieldType === "income" || fieldType === "subsidy") {
+          originalValue = originalItem[fieldType] ?? 0;
+        } else if (category === "personnel" && fieldName) {
+          originalValue = originalItem[fieldName] ?? 0;
+        } else {
+          originalValue = originalItem.amount ?? originalItem.Total ?? originalItem.cost ?? 0;
+        }
 
-      if (originalValue !== newAmount) {
-        newChangedItems.add(itemKey);
-      } else {
-        newChangedItems.delete(itemKey);
-      }
-    }
-    setChangedItems(newChangedItems);
+        if (Number(originalValue) !== Number(distributedAmount)) next.add(itemKey);
+        else next.delete(itemKey);
+      });
+      return next;
+    });
   };
 
   // Save changes handler
@@ -1063,11 +1099,14 @@ const ProposalOperationsHub = () => {
             return [];
           };
 
+          const capitalOutlayItems = toArray(capitalRes);
+          const capitalOutlayWithParticulars = await enrichCapitalOutlayParticulars(capitalOutlayItems);
+
           const details = {
             income: toArray(incomeRes),
             personnel: toArray(personnelRes),
             mooe: toArray(mooeRes),
-            capitalOutlay: toArray(capitalRes),
+            capitalOutlay: capitalOutlayWithParticulars,
           };
 
           setProposalDetails(details);

@@ -18,7 +18,6 @@ import {
 import { useUser } from "../../../../context/UserContext";
 import ProposalAttachments from "../../../../components/workflow/ProposalAttachments";
 import { preventNegativeNumericKey, toNonNegativeNumber } from "../../../../utils/preventNegativeInput";
-import { displayUacs } from "../../../../utils/uacsDisplayHelper";
 
 const BRAND_COLORS = {
   darkGreen: "#375e38",
@@ -74,9 +73,7 @@ const CapitalOutlayTable = ({
           <Table size="small">
             <TableHead>
               <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
-                <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>Particulars</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Income</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsidy</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
@@ -85,7 +82,7 @@ const CapitalOutlayTable = ({
             <TableBody>
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={4}
                   align="center"
                   sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}
                 >
@@ -196,9 +193,7 @@ const CapitalOutlayTable = ({
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
-                      <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
-                      <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
-                      <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Particulars</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Income</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsidy</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
@@ -223,11 +218,9 @@ const CapitalOutlayTable = ({
                             transition: "background-color 0.3s ease",
                           }}
                         >
-                          <TableCell>{item.sublineItem || item.sublimeItem || "N/A"}</TableCell>
                           <TableCell>
-                            {item.accountingTitle || item.particulars || "N/A"}
+                            {item.detailParticulars || item.particulars || item.accountingTitle || "N/A"}
                           </TableCell>
-                          <TableCell>{displayUacs(item.uacsCode, item.sublineItem)}</TableCell>
                           <TableCell align="right" sx={{ minWidth: 130 }}>
                             {canUserEdit() ? (
                               <TextField

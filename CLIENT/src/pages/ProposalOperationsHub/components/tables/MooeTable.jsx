@@ -100,13 +100,41 @@ const MooeTable = ({
     );
   }
 
-  // Group MOOE by Subline Item (Chart of Accounts Category)
-  const groupedMOOE = proposalDetails.mooe.reduce((acc, item) => {
+  const normalizeMergePart = (value) => String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
+  // Group first by subline, then merge identical accounting rows coming from
+  // the source proposals of a consolidated proposal.
+  const groupedMOOE = proposalDetails.mooe.reduce((acc, item, sourceIndex) => {
     const category = item.sublineItem || item.sublimeItem || "Other Expenses";
     if (!acc[category]) acc[category] = [];
-    acc[category].push(item);
+
+    const mergeKey = [
+      category,
+      item.accountingTitle || item.particulars,
+      item.uacsCode,
+    ].map(normalizeMergePart).join("|");
+    const existing = acc[category].find((entry) => entry.mergeKey === mergeKey);
+
+    if (existing) {
+      existing.sourceIndices.push(sourceIndex);
+    } else {
+      acc[category].push({
+        ...item,
+        mergeKey,
+        sourceIndices: [sourceIndex],
+      });
+    }
     return acc;
   }, {});
+
+  const getMergedValue = (item, field) => item.sourceIndices.reduce((sum, sourceIndex) => {
+    const source = proposalDetails.mooe[sourceIndex];
+    const edited = editableItems?.mooe?.[sourceIndex];
+    return sum + Number(edited?.[field] ?? source?.[field] ?? 0);
+  }, 0);
 
   // Compute Grand Total using editable items with fallback safety
   const grandTotal = (editableItems?.mooe || proposalDetails.mooe).reduce(
@@ -181,18 +209,18 @@ const MooeTable = ({
                   </TableHead>
                   <TableBody>
                     {items.map((item, itemIdx) => {
-                      const globalIndex = proposalDetails.mooe.indexOf(item);
-                      const itemKey = `mooe-${globalIndex}`;
-                      const isChanged = changedItems?.has(itemKey);
-                      
-                      const editedItem = editableItems?.mooe?.[globalIndex];
-                      const income = Number(editedItem?.income ?? item.income ?? 0);
-                      const subsidy = Number(editedItem?.subsidy ?? item.subsidy ?? 0);
+                      const sourceIndices = item.sourceIndices;
+                      const isChanged = sourceIndices.some((sourceIndex) =>
+                        changedItems?.has(`mooe-${sourceIndex}`)
+                      );
+
+                      const income = getMergedValue(item, "income");
+                      const subsidy = getMergedValue(item, "subsidy");
                       const itemTotal = income + subsidy;
 
                       return (
                         <TableRow
-                          key={item.uacsCode || itemIdx}
+                          key={item.mergeKey || item.uacsCode || itemIdx}
                           hover
                           sx={{
                             bgcolor: isChanged ? "#fff3cd" : "transparent",
@@ -227,7 +255,7 @@ const MooeTable = ({
                                   const numValue = toNonNegativeNumber(e.target.value);
                                   handleEditItemAmount(
                                     "mooe",
-                                    globalIndex,
+                                    sourceIndices,
                                     numValue,
                                     "income"
                                   );
@@ -264,7 +292,7 @@ const MooeTable = ({
                                   const numValue = toNonNegativeNumber(e.target.value);
                                   handleEditItemAmount(
                                     "mooe",
-                                    globalIndex,
+                                    sourceIndices,
                                     numValue,
                                     "subsidy"
                                   );
@@ -328,9 +356,7 @@ const MooeTable = ({
                         ₱
                         {items
                           .reduce((sum, item) => {
-                            const idx = proposalDetails.mooe.indexOf(item);
-                            const val = editableItems?.mooe?.[idx]?.income ?? item.income ?? 0;
-                            return sum + Number(val);
+                            return sum + getMergedValue(item, "income");
                           }, 0)
                           .toLocaleString("en-US", {
                             minimumFractionDigits: 2,
@@ -348,9 +374,7 @@ const MooeTable = ({
                         ₱
                         {items
                           .reduce((sum, item) => {
-                            const idx = proposalDetails.mooe.indexOf(item);
-                            const val = editableItems?.mooe?.[idx]?.subsidy ?? item.subsidy ?? 0;
-                            return sum + Number(val);
+                            return sum + getMergedValue(item, "subsidy");
                           }, 0)
                           .toLocaleString("en-US", {
                             minimumFractionDigits: 2,
@@ -368,10 +392,7 @@ const MooeTable = ({
                         ₱
                         {items
                           .reduce((sum, item) => {
-                            const idx = proposalDetails.mooe.indexOf(item);
-                            const inc = Number(editableItems?.mooe?.[idx]?.income ?? item.income ?? 0);
-                            const sub = Number(editableItems?.mooe?.[idx]?.subsidy ?? item.subsidy ?? 0);
-                            return sum + inc + sub;
+                            return sum + getMergedValue(item, "income") + getMergedValue(item, "subsidy");
                           }, 0)
                           .toLocaleString("en-US", {
                             minimumFractionDigits: 2,
