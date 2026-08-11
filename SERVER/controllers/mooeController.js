@@ -8,6 +8,7 @@ const Proposal         = require('../models/Proposal');
 const ProposalEditLog  = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeInItems, MOOE_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
+const { isRecordLockedForUser } = require('../utils/workflowRecordEditAccess');
 
 // Statuses that prevent Budget Preparer from editing MOOE records
 const LOCKED_MOOE_STATUSES = [
@@ -1554,7 +1555,7 @@ exports.bulkUpdateMOOE = async (req, res) => {
       });
 
       // Prevent editing of MOOE records that have been forwarded or approved
-      if (LOCKED_MOOE_STATUSES.includes(existingMooe.status)) {
+      if (isRecordLockedForUser(existingMooe.status, LOCKED_MOOE_STATUSES, req.user?.Roles)) {
         return res.status(403).json({
           error: "Update not allowed",
           message: `Cannot edit MOOE record ${item._id} that has been submitted or approved (status: ${existingMooe.status})`

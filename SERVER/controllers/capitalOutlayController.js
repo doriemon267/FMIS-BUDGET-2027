@@ -7,6 +7,7 @@ const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeFields, validateNonNegativeInItems, CAPITAL_OUTLAY_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
+const { isRecordLockedForUser } = require('../utils/workflowRecordEditAccess');
 
 // Statuses that prevent Budget Preparer from editing Capital Outlay records
 const LOCKED_CAPITAL_STATUSES = [
@@ -750,7 +751,7 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
       });
 
       // Check if the record has been submitted and prevent editing
-      if (LOCKED_CAPITAL_STATUSES.includes(existingCapitalOutlay.status)) {
+      if (isRecordLockedForUser(existingCapitalOutlay.status, LOCKED_CAPITAL_STATUSES, req.user?.Roles)) {
         return res.status(403).json({
           error: "Update not allowed",
           message: `Cannot edit Capital Outlay record ${item._id} that has been submitted or approved (status: ${existingCapitalOutlay.status})`

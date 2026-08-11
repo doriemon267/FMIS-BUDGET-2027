@@ -73,9 +73,7 @@ const MooeTable = ({
           <Table size="small">
             <TableHead>
               <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
-                <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>Particular</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Income</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsidy</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
@@ -84,7 +82,7 @@ const MooeTable = ({
             <TableBody>
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={4}
                   align="center"
                   sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}
                 >
@@ -199,9 +197,7 @@ const MooeTable = ({
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
-                      <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
-                      <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
-                      <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Particular</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Income</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsidy</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
@@ -227,19 +223,8 @@ const MooeTable = ({
                             transition: "background-color 0.3s ease",
                           }}
                         >
-                          <TableCell
-                            sx={{
-                              fontSize: "0.85rem",
-                              fontWeight: 500,
-                            }}
-                          >
-                            {item.sublineItem || item.sublimeItem || "N/A"}
-                          </TableCell>
                           <TableCell sx={{ fontWeight: 500 }}>
                             {item.accountingTitle || item.particulars || "N/A"}
-                          </TableCell>
-                          <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
-                            {item.uacsCode || "N/A"}
                           </TableCell>
                           <TableCell align="right" sx={{ minWidth: 120 }}>
                             {canUserEdit() ? (
@@ -336,7 +321,7 @@ const MooeTable = ({
                     {/* Category Subtotal Row */}
                     <TableRow sx={{ bgcolor: "#e8f5e9" }}>
                       <TableCell
-                        colSpan={3}
+                        colSpan={1}
                         sx={{
                           fontWeight: "bold",
                           textAlign: "right",

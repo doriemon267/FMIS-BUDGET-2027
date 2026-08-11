@@ -255,6 +255,12 @@ const getFinalizedData = async (req, res) => {
     const proposals = await NewProposalWorkflow.find(query).lean();
     console.log(`getFinalizedData found ${proposals.length} proposals`);
 
+    // Reaching the BRD stage makes Tier data available, but it must remain
+    // editable until the proposal itself is actually finalized.
+    const hasFinalized = proposals.some(
+      (proposal) => String(proposal.status || '').trim().toUpperCase() === 'FINALIZED'
+    );
+
     const projectedCorporateIncome = proposals.reduce(
       (sum, p) => sum + (Number(p.projectedCorporateIncome) || 0),
       0
@@ -266,7 +272,7 @@ const getFinalizedData = async (req, res) => {
 
     res.json({
       success: true,
-      hasFinalized: proposals.length > 0,
+      hasFinalized,
       hasTierData: proposals.length > 0,
       projectedCorporateIncome,
       projectedSubsidy,

@@ -95,8 +95,7 @@ const IncomeTable = ({
           <Table size="small">
             <TableHead>
               <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
-                <TableCell sx={{ fontWeight: "bold" }}>Item</TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Category</TableCell>
+                <TableCell sx={{ fontWeight: "bold" }}>Particular</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Amount</TableCell>
                 <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
               </TableRow>
@@ -104,7 +103,7 @@ const IncomeTable = ({
             <TableBody>
               <TableRow>
                 <TableCell
-                  colSpan={4}
+                  colSpan={3}
                   align="center"
                   sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}
                 >
@@ -283,8 +282,7 @@ const IncomeTable = ({
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
-                      <TableCell sx={{ fontWeight: "bold" }}>Item</TableCell>
-                      <TableCell sx={{ fontWeight: "bold" }}>Category</TableCell>
+                      <TableCell sx={{ fontWeight: "bold" }}>Particular</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Amount</TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
                     </TableRow>
@@ -307,13 +305,6 @@ const IncomeTable = ({
                         >
                           <TableCell>
                             {item.particulars || item.itemName || item.title || "N/A"}
-                          </TableCell>
-                          <TableCell>
-                            {item.categoryName ||
-                              item.category ||
-                              item.type ||
-                              item.subcategory ||
-                              "N/A"}
                           </TableCell>
                           <TableCell align="right">
                             {canUserEdit() ? (
@@ -379,9 +370,6 @@ const IncomeTable = ({
                                   maximumFractionDigits: 2,
                                 })}{" "}
                             Discount on Current Account
-                          </TableCell>
-                          <TableCell sx={{ color: "#d32f2f", fontWeight: 500 }}>
-                            ISF Discount
                           </TableCell>
                           <TableCell align="right" sx={{ color: "#d32f2f", fontWeight: "bold" }}>
                             -₱

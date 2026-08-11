@@ -7,6 +7,7 @@ const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeFields, validateNonNegativeInItems, INCOME_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
+const { isRecordLockedForUser } = require('../utils/workflowRecordEditAccess');
 
 // Statuses that prevent Budget Preparer from editing Income records
 const LOCKED_INCOME_STATUSES = [
@@ -975,7 +976,7 @@ exports.bulkUpdateIncome = async (req, res) => {
       }
 
       // Check if the record has been submitted and prevent editing
-      if (LOCKED_INCOME_STATUSES.includes(existingIncome.status)) {
+      if (isRecordLockedForUser(existingIncome.status, LOCKED_INCOME_STATUSES, req.user?.Roles)) {
         return res.status(403).json({
           error: "Update not allowed",
           message: `Cannot edit income record ${item._id} that has been submitted or approved (status: ${existingIncome.status})`

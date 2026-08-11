@@ -111,18 +111,9 @@ const ActionConfirmDialog = ({
         <Typography variant="body1" sx={{ mb: 3, color: "#333", lineHeight: 1.6 }}>
           {isSubmitToAnalystAction && analystsForProposal.length > 0 ? (
             <>
-              {analystsForProposal.length === 1 ? (
+              Approved and Forward to Central Office BRD
+              {analystsForProposal.length > 1 && (
                 <>
-                  Are you sure you want to send this proposal to{" "}
-                  <strong>
-                    {analystsForProposal[0]?.userName || targetAnalystId} (
-                    {analystsForProposal[0]?.userId || targetAnalystId})
-                  </strong>
-                  ?
-                </>
-              ) : (
-                <>
-                  Send this proposal to the Budget Planning Analyst for this region:
                   <FormControl fullWidth sx={{ mt: 2 }}>
                     <InputLabel>Select Analyst</InputLabel>
                     <Select

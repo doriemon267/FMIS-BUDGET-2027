@@ -40,12 +40,15 @@ import {
 } from "@mui/material";
 import {
   Send as SendIcon,
-  ThumbDown as RejectIcon,
+  CallSplit as UnconsolidateIcon,
   ThumbUp as ApproveIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Visibility as ViewIcon,
   TableChart as TableChartIcon,
+  ListAlt as LogsIcon,
+  ForwardToInbox as ApproveForwardIcon,
+  KeyboardReturn as ReturnIcon,
 } from "@mui/icons-material";
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -1668,7 +1671,7 @@ const NewProposalWorkflowPage = () => {
     actions.push({
       label: "View History",
       value: "view-history",
-      icon: <ExpandMoreIcon />,
+      icon: <HistoryIcon />,
       color: headerBg,
     });
 
@@ -1676,7 +1679,7 @@ const NewProposalWorkflowPage = () => {
     actions.push({
       label: "View Logs",
       value: "view-audit-trail",
-      icon: <ExpandMoreIcon />,
+      icon: <LogsIcon />,
       color: "#d97706",
     });
 
@@ -1744,13 +1747,13 @@ const NewProposalWorkflowPage = () => {
           {
             label: "Approve & Forward to Budget Approver",
             value: "reviewer-approve-forward-approver",
-            icon: <SendIcon />,
+            icon: <ApproveForwardIcon />,
             color: "primary",
           },
           {
             label: "Return to Budget Preparer",
             value: "reviewer-return",
-            icon: <RejectIcon />,
+            icon: <ReturnIcon />,
             color: "warning",
           }
         );
@@ -1772,13 +1775,13 @@ const NewProposalWorkflowPage = () => {
           {
             label: analystLabelAdmin,
             value: "approver-approve-forward-analyst",
-            icon: <SendIcon />,
+            icon: <ApproveForwardIcon />,
             color: "primary",
           },
           {
             label: "Return to Budget Reviewer",
             value: "approver-return",
-            icon: <RejectIcon />,
+            icon: <ReturnIcon />,
             color: "warning",
           }
         );
@@ -1804,7 +1807,7 @@ const NewProposalWorkflowPage = () => {
           {
             label: "Return to Budget Preparer",
             value: "analyst-return",
-            icon: <RejectIcon />,
+            icon: <ReturnIcon />,
             color: "warning",
           }
         );
@@ -1830,7 +1833,7 @@ const NewProposalWorkflowPage = () => {
           {
             label: "Return to Budget Preparer",
             value: "officer-return",
-            icon: <RejectIcon />,
+            icon: <ReturnIcon />,
             color: "warning",
           }
         );
@@ -1857,7 +1860,7 @@ const NewProposalWorkflowPage = () => {
           {
             label: "Return to Budget Preparer",
             value: "manager-return",
-            icon: <RejectIcon />,
+            icon: <ReturnIcon />,
             color: "warning",
           }
         );
@@ -1912,7 +1915,7 @@ const NewProposalWorkflowPage = () => {
         {
           label: "Approve & Forward to Budget Approver",
           value: "reviewer-approve-forward-approver",
-          icon: <SendIcon />,
+          icon: <ApproveForwardIcon />,
           color: "primary",
         },
         {
@@ -1926,7 +1929,7 @@ const NewProposalWorkflowPage = () => {
         {
           label: "Return to Budget Preparer",
           value: "reviewer-return",
-          icon: <RejectIcon />,
+          icon: <ReturnIcon />,
           color: "warning",
         }
       );
@@ -1948,7 +1951,7 @@ const NewProposalWorkflowPage = () => {
           {
             label: analystLabel,
             value: "approver-approve-forward-analyst",
-            icon: <SendIcon />,
+            icon: <ApproveForwardIcon />,
             color: "primary",
           }
         );
@@ -1957,7 +1960,7 @@ const NewProposalWorkflowPage = () => {
           actions.push({
             label: "Return to Budget Reviewer",
             value: "approver-return",
-            icon: <RejectIcon />,
+            icon: <ReturnIcon />,
             color: "warning",
           });
         }
@@ -1969,7 +1972,7 @@ const NewProposalWorkflowPage = () => {
       actions.push({
         label: "Un-consolidate Proposal",
         value: "unconsolidate",
-        icon: <RejectIcon />,
+        icon: <UnconsolidateIcon />,
         color: "error",
       });
     }
@@ -1994,7 +1997,7 @@ const NewProposalWorkflowPage = () => {
         {
           label: "Return to Budget Preparer",
           value: "analyst-return",
-          icon: <RejectIcon />,
+          icon: <ReturnIcon />,
           color: "warning",
         }
       );
@@ -2019,7 +2022,7 @@ const NewProposalWorkflowPage = () => {
         {
           label: "Return to Budget Preparer",
           value: "officer-return",
-          icon: <RejectIcon />,
+          icon: <ReturnIcon />,
           color: "warning",
         }
       );
@@ -2051,7 +2054,7 @@ const NewProposalWorkflowPage = () => {
         {
           label: "Return to Budget Preparer",
           value: "manager-return",
-          icon: <RejectIcon />,
+          icon: <ReturnIcon />,
           color: "warning",
         }
       );
@@ -3481,17 +3484,9 @@ const NewProposalWorkflowPage = () => {
           >
             {isSubmitToAnalystAction && analystsForProposal.length > 0 ? (
               <>
-                {analystsForProposal.length === 1 ? (
+                Approved and Forward to Central Office BRD
+                {analystsForProposal.length > 1 && (
                   <>
-                    Are you sure you want to send this proposal to{" "}
-                    <strong>
-                      {analystsForProposal[0]?.userName || targetAnalystId} ({analystsForProposal[0]?.userId || targetAnalystId})
-                    </strong>
-                    ?
-                  </>
-                ) : (
-                  <>
-                    Send this proposal to the Budget Planning Analyst for this region:
                     <FormControl fullWidth sx={{ mt: 2 }}>
                       <InputLabel>Select Analyst</InputLabel>
                       <Select
@@ -7382,7 +7377,7 @@ const NewProposalWorkflowPage = () => {
         }}
       >
         <DialogTitle sx={{ bgcolor: "#fdf3f2", color: "#c62828", fontWeight: 700, display: "flex", alignItems: "center", gap: 1.5 }}>
-          <RejectIcon />
+          <UnconsolidateIcon />
           Kumpirmahin ang Paghihiwalay (Un-consolidate)
         </DialogTitle>
         <DialogContent sx={{ p: 3, pt: 4 }}>

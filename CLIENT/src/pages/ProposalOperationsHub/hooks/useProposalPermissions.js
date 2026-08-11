@@ -3,11 +3,15 @@ import { useUser } from "../../../context/UserContext";
 import { useRegion } from "../../../context/RegionContext";
 import {
   Send as SendIcon,
-  ThumbDown as RejectIcon,
+  CallSplit as UnconsolidateIcon,
   ThumbUp as ApproveIcon,
   Visibility as ViewIcon,
   TableChart as TableChartIcon,
   ExpandMore as ExpandMoreIcon,
+  History as HistoryIcon,
+  ListAlt as LogsIcon,
+  ForwardToInbox as ApproveForwardIcon,
+  KeyboardReturn as ReturnIcon,
 } from "@mui/icons-material";
 
 export const useProposalPermissions = () => {
@@ -261,7 +265,7 @@ export const useProposalPermissions = () => {
     actions.push({
       label: "View History",
       value: "view-history",
-      icon: React.createElement(ExpandMoreIcon),
+      icon: React.createElement(HistoryIcon),
       color: headerBg,
     });
 
@@ -269,7 +273,7 @@ export const useProposalPermissions = () => {
     actions.push({
       label: "View Logs",
       value: "view-audit-trail",
-      icon: React.createElement(ExpandMoreIcon),
+      icon: React.createElement(LogsIcon),
       color: "#d97706",
     });
 
@@ -341,13 +345,13 @@ export const useProposalPermissions = () => {
           {
             label: "Approve & Forward to Budget Approver",
             value: "reviewer-approve-forward-approver",
-            icon: React.createElement(SendIcon),
+            icon: React.createElement(ApproveForwardIcon),
             color: "primary",
           },
           {
             label: "Return to Budget Preparer",
             value: "reviewer-return",
-            icon: React.createElement(RejectIcon),
+            icon: React.createElement(ReturnIcon),
             color: "warning",
           }
         );
@@ -372,13 +376,13 @@ export const useProposalPermissions = () => {
           {
             label: analystLabelAdmin,
             value: "approver-approve-forward-analyst",
-            icon: React.createElement(SendIcon),
+            icon: React.createElement(ApproveForwardIcon),
             color: "primary",
           },
           {
             label: "Return to Budget Reviewer",
             value: "approver-return",
-            icon: React.createElement(RejectIcon),
+            icon: React.createElement(ReturnIcon),
             color: "warning",
           }
         );
@@ -404,7 +408,7 @@ export const useProposalPermissions = () => {
           {
             label: "Return to Budget Preparer",
             value: "analyst-return",
-            icon: React.createElement(RejectIcon),
+            icon: React.createElement(ReturnIcon),
             color: "warning",
           }
         );
@@ -430,7 +434,7 @@ export const useProposalPermissions = () => {
           {
             label: "Return to Budget Preparer",
             value: "officer-return",
-            icon: React.createElement(RejectIcon),
+            icon: React.createElement(ReturnIcon),
             color: "warning",
           }
         );
@@ -458,7 +462,7 @@ export const useProposalPermissions = () => {
           {
             label: "Return to Budget Preparer",
             value: "manager-return",
-            icon: React.createElement(RejectIcon),
+            icon: React.createElement(ReturnIcon),
             color: "warning",
           }
         );
@@ -500,7 +504,7 @@ export const useProposalPermissions = () => {
         {
           label: "Approve & Forward to Budget Approver",
           value: "reviewer-approve-forward-approver",
-          icon: React.createElement(SendIcon),
+          icon: React.createElement(ApproveForwardIcon),
           color: "primary",
         },
         {
@@ -517,7 +521,7 @@ export const useProposalPermissions = () => {
         {
           label: "Return to Budget Preparer",
           value: "reviewer-return",
-          icon: React.createElement(RejectIcon),
+          icon: React.createElement(ReturnIcon),
           color: "warning",
         }
       );
@@ -540,7 +544,7 @@ export const useProposalPermissions = () => {
         actions.push({
           label: analystLabel,
           value: "approver-approve-forward-analyst",
-          icon: React.createElement(SendIcon),
+          icon: React.createElement(ApproveForwardIcon),
           color: "primary",
         });
 
@@ -548,7 +552,7 @@ export const useProposalPermissions = () => {
           actions.push({
             label: "Return to Budget Reviewer",
             value: "approver-return",
-            icon: React.createElement(RejectIcon),
+            icon: React.createElement(ReturnIcon),
             color: "warning",
           });
         }
@@ -559,7 +563,7 @@ export const useProposalPermissions = () => {
       actions.push({
         label: "Un-consolidate Proposal",
         value: "unconsolidate",
-        icon: React.createElement(RejectIcon),
+        icon: React.createElement(UnconsolidateIcon),
         color: "error",
       });
     }
@@ -585,7 +589,7 @@ export const useProposalPermissions = () => {
         {
           label: "Return to Budget Preparer",
           value: "analyst-return",
-          icon: React.createElement(RejectIcon),
+          icon: React.createElement(ReturnIcon),
           color: "warning",
         }
       );
@@ -610,7 +614,7 @@ export const useProposalPermissions = () => {
         {
           label: "Return to Budget Preparer",
           value: "officer-return",
-          icon: React.createElement(RejectIcon),
+          icon: React.createElement(ReturnIcon),
           color: "warning",
         }
       );
@@ -642,7 +646,7 @@ export const useProposalPermissions = () => {
         {
           label: "Return to Budget Preparer",
           value: "manager-return",
-          icon: React.createElement(RejectIcon),
+          icon: React.createElement(ReturnIcon),
           color: "warning",
         }
       );
