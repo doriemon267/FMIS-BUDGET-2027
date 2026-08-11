@@ -400,7 +400,61 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
       return [];
     }
 
-    const grouped = rawData.reduce((acc, item) => {
+    const normalizeCategoryName = (value) => String(value || '')
+      .replace(/^\s*-\s*/, '')
+      .trim();
+    const categoryUacsCode = (parentUacsCode, category) => {
+      const normalized = normalizeCategoryName(category);
+      if (parentUacsCode === '5-02-99-990' && /^contractual services$/i.test(normalized)) {
+        return '5-02-99-990-3';
+      }
+
+      const slug = normalized
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 40);
+      return `${parentUacsCode}-CATEGORY-${slug}`;
+    };
+
+    // COA stores account breakdowns in `category`. Convert every category into
+    // a real child row so it gets independent Income/Subsidy inputs and a
+    // stable persistence key based on its parent UACS code.
+    const expandedRawData = [...rawData];
+    rawData.forEach((item) => {
+      if (!item.uacsCode) return;
+
+      const categories = Array.isArray(item.category)
+        ? item.category
+        : (item.category ? [item.category] : []);
+
+      categories.forEach((rawCategory) => {
+        const category = normalizeCategoryName(rawCategory);
+        if (!category) return;
+
+        const uacsCode = categoryUacsCode(item.uacsCode, category);
+        const existing = rawData.find((candidate) =>
+          candidate.sublineItem === item.sublineItem && (
+            candidate.uacsCode === uacsCode ||
+            normalizeCategoryName(candidate.accountingTitle).toLowerCase() === category.toLowerCase()
+          )
+        );
+        if (existing) return;
+
+        expandedRawData.push({
+          sublineItem: item.sublineItem,
+          accountingTitle: category,
+          categoryName: category,
+          uacsCode,
+          income: '0',
+          subsidy: '0',
+          amount: '0',
+          isCategoryEntry: true,
+        });
+      });
+    });
+
+    const grouped = expandedRawData.reduce((acc, item) => {
       const key = item.sublineItem;
       if (!acc[key]) {
         acc[key] = {
@@ -2039,9 +2093,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                       c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
                     );
                     const hasHierarchicalChildren = hierarchicalChildren.length > 0;
-                    // Show sub-children total in 5-02-99-990 row regardless of category name (e.g. "Regular MOOE")
+                    // A COA row with category/sub-account children acts as the
+                    // parent total; values are entered in its child rows.
                     const isMainOtherMooeRow = child.uacsCode === '5-02-99-990';
-                    const showSubChildrenTotal = isMainOtherMooeRow && hasHierarchicalChildren;
+                    const showSubChildrenTotal = hasHierarchicalChildren;
                     // Include amount from any blank siblings we skip (no label, 5-02-99-990 or no UACS) so total is correct
                     const blankSiblings = row.children.filter(c =>
                       c !== child && !(c.accountingTitle || c.name) && (c.uacsCode === '5-02-99-990' || !c.uacsCode || c.uacsCode === '')
@@ -2062,7 +2117,9 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                         <TableCell></TableCell>
                         {viewMode === "consolidated" && <TableCell></TableCell>}
                         <TableCell></TableCell>
-                        <TableCell sx={{ pl: indentLevel ? 3 : 0 }}>{displayLabel}</TableCell>
+                        <TableCell sx={{ pl: indentLevel ? 3 : 0 }}>
+                          {displayLabel}
+                        </TableCell>
                         <TableCell>{hideGenericUacs ? '' : (child.uacsCode || child.particulars)}</TableCell>
 
                         {/* Income field - sub-children total only in 5-02-99-990 row */}

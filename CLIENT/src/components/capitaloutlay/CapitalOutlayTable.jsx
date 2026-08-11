@@ -1704,7 +1704,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false, proposa
             Deadline was {dueDateStatus.dueDateFormatted}. 
             {canDeleteItems 
               ? " You have admin privileges and can still make changes."
-              : " Contact your administrator if you need to make changes."
+              : " Contact BRD Officer if you need to make changes."
             }
           </Typography>
         </Alert>

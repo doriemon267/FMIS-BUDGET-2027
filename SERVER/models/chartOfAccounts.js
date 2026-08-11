@@ -8,6 +8,7 @@ const chartOfAccountsSchema = new mongoose.Schema(
     lineItem: { type: String },
     sublineItem: { type: String },
     accountingTitle: { type: String, required: true },
+    category: [{ type: String }],
     uacsCode: { type: String, required: true, index: true },
     normalBalance: { type: String, min: 0 },
     mooes: { type: mongoose.Schema.Types.ObjectId, ref: "MooeProposal" },

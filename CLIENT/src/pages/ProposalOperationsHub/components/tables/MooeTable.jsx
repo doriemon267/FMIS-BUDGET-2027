@@ -100,15 +100,17 @@ const MooeTable = ({
     );
   }
 
+  // Group MOOE by Subline Item (Chart of Accounts Category)
   const groupedMOOE = proposalDetails.mooe.reduce((acc, item) => {
-    const category = item.sublineItem || "Uncategorized";
+    const category = item.sublineItem || item.sublimeItem || "Other Expenses";
     if (!acc[category]) acc[category] = [];
     acc[category].push(item);
     return acc;
   }, {});
 
-  const grandTotal = editableItems.mooe.reduce(
-    (sum, item) => sum + ((item.income || 0) + (item.subsidy || 0)),
+  // Compute Grand Total using editable items with fallback safety
+  const grandTotal = (editableItems?.mooe || proposalDetails.mooe).reduce(
+    (sum, item) => sum + (Number(item.income) || 0) + (Number(item.subsidy) || 0),
     0
   );
 
@@ -139,7 +141,7 @@ const MooeTable = ({
               sx={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
+                justifySpaceBetween: "space-between",
                 p: 2,
                 bgcolor: headerBg,
                 color: "white",
@@ -165,7 +167,7 @@ const MooeTable = ({
             </Box>
 
             {isExpanded && (
-              <TableContainer sx={{ mt: 1 }}>
+              <TableContainer sx={{ mt: 1, ...TABLE_CONTAINER }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ ...TABLE_HEADER_ROW, bgcolor: headerBg }}>
@@ -178,206 +180,205 @@ const MooeTable = ({
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {(() => {
-                      const groupedBySubline = items.reduce((acc, item) => {
-                        const sublineKey = item.sublineItem || item.sublimeItem || "N/A";
-                        if (!acc[sublineKey]) acc[sublineKey] = [];
-                        acc[sublineKey].push(item);
-                        return acc;
-                      }, {});
+                    {items.map((item, itemIdx) => {
+                      const globalIndex = proposalDetails.mooe.indexOf(item);
+                      const itemKey = `mooe-${globalIndex}`;
+                      const isChanged = changedItems?.has(itemKey);
+                      
+                      const editedItem = editableItems?.mooe?.[globalIndex];
+                      const income = Number(editedItem?.income ?? item.income ?? 0);
+                      const subsidy = Number(editedItem?.subsidy ?? item.subsidy ?? 0);
+                      const itemTotal = income + subsidy;
 
-                      return Object.entries(groupedBySubline).map(([sublineKey, sublineItems]) => {
-                        return (
-                          <React.Fragment key={sublineKey}>
-                            {sublineItems.map((item, itemIdx) => {
-                              const globalIndex = proposalDetails.mooe.indexOf(item);
-                              const itemKey = `mooe-${globalIndex}`;
-                              const isChanged = changedItems.has(itemKey);
-                              const editedItem = editableItems.mooe[globalIndex];
-                              const income = editedItem?.income || item.income || 0;
-                              const subsidy = editedItem?.subsidy || item.subsidy || 0;
-                              const itemTotal = income + subsidy;
-
-                              return (
-                                <TableRow
-                                  key={itemIdx}
-                                  hover
-                                  sx={{
-                                    bgcolor: isChanged ? "#fff3cd" : "transparent",
-                                    transition: "background-color 0.3s ease",
-                                  }}
-                                >
-                                  <TableCell
-                                    sx={{
-                                      fontSize: itemIdx === 0 ? "0.9rem" : "0.85rem",
-                                      fontWeight: itemIdx === 0 ? 600 : 400,
-                                    }}
-                                  >
-                                    {itemIdx === 0 ? item.sublineItem || item.sublimeItem || "N/A" : ""}
-                                  </TableCell>
-                                  <TableCell>
-                                    {item.accountingTitle || item.particulars || "N/A"}
-                                  </TableCell>
-                                  <TableCell>{item.uacsCode || "N/A"}</TableCell>
-                                  <TableCell align="right" sx={{ minWidth: 120 }}>
-                                    {canUserEdit() ? (
-                                      <TextField
-                                        type="text"
-                                        size="small"
-                                        value={income.toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}
-                                        onKeyDown={preventNegativeNumericKey}
-                                        onChange={(e) => {
-                                          const numValue = toNonNegativeNumber(e.target.value);
-                                          handleEditItemAmount(
-                                            "mooe",
-                                            globalIndex,
-                                            numValue,
-                                            "income"
-                                          );
-                                        }}
-                                        inputProps={{
-                                          style: {
-                                            textAlign: "right",
-                                          },
-                                        }}
-                                        sx={{
-                                          width: "100%",
-                                          "& .MuiOutlinedInput-root": {
-                                            bgcolor: isChanged ? "#fff9e6" : "white",
-                                            borderColor: isChanged ? "#ffc107" : undefined,
-                                          },
-                                        }}
-                                      />
-                                    ) : (
-                                      `₱${income.toLocaleString("en-US", {
-                                        minimumFractionDigits: 2,
-                                      })}`
-                                    )}
-                                  </TableCell>
-                                  <TableCell align="right" sx={{ minWidth: 120 }}>
-                                    {canUserEdit() ? (
-                                      <TextField
-                                        type="text"
-                                        size="small"
-                                        value={subsidy.toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}
-                                        onKeyDown={preventNegativeNumericKey}
-                                        onChange={(e) => {
-                                          const numValue = toNonNegativeNumber(e.target.value);
-                                          handleEditItemAmount(
-                                            "mooe",
-                                            globalIndex,
-                                            numValue,
-                                            "subsidy"
-                                          );
-                                        }}
-                                        inputProps={{
-                                          style: {
-                                            textAlign: "right",
-                                          },
-                                        }}
-                                        sx={{
-                                          width: "100%",
-                                          "& .MuiOutlinedInput-root": {
-                                            bgcolor: isChanged ? "#fff9e6" : "white",
-                                            borderColor: isChanged ? "#ffc107" : undefined,
-                                          },
-                                        }}
-                                      />
-                                    ) : (
-                                      `₱${subsidy.toLocaleString("en-US", {
-                                        minimumFractionDigits: 2,
-                                      })}`
-                                    )}
-                                  </TableCell>
-                                  <TableCell
-                                    align="right"
-                                    sx={{
-                                      fontWeight: "bold",
-                                      bgcolor: "#e8f5e9",
-                                      minWidth: 130,
-                                    }}
-                                  >
-                                    ₱
-                                    {itemTotal.toLocaleString("en-US", {
-                                      minimumFractionDigits: 2,
-                                    })}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                            {sublineItems.length > 1 && (
-                              <TableRow sx={{ bgcolor: "#e8f5e9" }}>
-                                <TableCell
-                                  colSpan={3}
-                                  sx={{
-                                    fontWeight: "bold",
-                                    textAlign: "right",
-                                    pr: 2,
-                                  }}
-                                >
-                                  Subtotal ({sublineKey}):
-                                </TableCell>
-                                <TableCell
-                                  align="right"
-                                  sx={{
-                                    fontWeight: "bold",
-                                    bgcolor: "#c8e6c9",
-                                    minWidth: 120,
-                                  }}
-                                >
-                                  ₱
-                                  {sublineItems
-                                    .reduce((sum, item) => sum + (item.income || 0), 0)
-                                    .toLocaleString("en-US", {
-                                      minimumFractionDigits: 2,
-                                    })}
-                                </TableCell>
-                                <TableCell
-                                  align="right"
-                                  sx={{
-                                    fontWeight: "bold",
-                                    bgcolor: "#c8e6c9",
-                                    minWidth: 120,
-                                  }}
-                                >
-                                  ₱
-                                  {sublineItems
-                                    .reduce((sum, item) => sum + (item.subsidy || 0), 0)
-                                    .toLocaleString("en-US", {
-                                      minimumFractionDigits: 2,
-                                    })}
-                                </TableCell>
-                                <TableCell
-                                  align="right"
-                                  sx={{
-                                    fontWeight: "bold",
-                                    bgcolor: "#a5d6a7",
-                                    minWidth: 130,
-                                  }}
-                                >
-                                  ₱
-                                  {(
-                                    sublineItems.reduce((sum, item) => sum + (item.income || 0), 0) +
-                                    sublineItems.reduce(
-                                      (sum, item) => sum + (item.subsidy || 0),
-                                      0
-                                    )
-                                  ).toLocaleString("en-US", {
-                                    minimumFractionDigits: 2,
-                                  })}
-                                </TableCell>
-                              </TableRow>
+                      return (
+                        <TableRow
+                          key={item.uacsCode || itemIdx}
+                          hover
+                          sx={{
+                            bgcolor: isChanged ? "#fff3cd" : "transparent",
+                            transition: "background-color 0.3s ease",
+                          }}
+                        >
+                          <TableCell
+                            sx={{
+                              fontSize: "0.85rem",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {item.sublineItem || item.sublimeItem || "N/A"}
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 500 }}>
+                            {item.accountingTitle || item.particulars || "N/A"}
+                          </TableCell>
+                          <TableCell sx={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                            {item.uacsCode || "N/A"}
+                          </TableCell>
+                          <TableCell align="right" sx={{ minWidth: 120 }}>
+                            {canUserEdit() ? (
+                              <TextField
+                                type="text"
+                                size="small"
+                                value={income.toLocaleString("en-US", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                                onKeyDown={preventNegativeNumericKey}
+                                onChange={(e) => {
+                                  const numValue = toNonNegativeNumber(e.target.value);
+                                  handleEditItemAmount(
+                                    "mooe",
+                                    globalIndex,
+                                    numValue,
+                                    "income"
+                                  );
+                                }}
+                                inputProps={{
+                                  style: { textAlign: "right" },
+                                }}
+                                sx={{
+                                  width: "100%",
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: isChanged ? "#fff9e6" : "white",
+                                    borderColor: isChanged ? "#ffc107" : undefined,
+                                  },
+                                }}
+                              />
+                            ) : (
+                              `₱${income.toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
                             )}
-                          </React.Fragment>
-                        );
-                      });
-                    })()}
+                          </TableCell>
+                          <TableCell align="right" sx={{ minWidth: 120 }}>
+                            {canUserEdit() ? (
+                              <TextField
+                                type="text"
+                                size="small"
+                                value={subsidy.toLocaleString("en-US", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                                onKeyDown={preventNegativeNumericKey}
+                                onChange={(e) => {
+                                  const numValue = toNonNegativeNumber(e.target.value);
+                                  handleEditItemAmount(
+                                    "mooe",
+                                    globalIndex,
+                                    numValue,
+                                    "subsidy"
+                                  );
+                                }}
+                                inputProps={{
+                                  style: { textAlign: "right" },
+                                }}
+                                sx={{
+                                  width: "100%",
+                                  "& .MuiOutlinedInput-root": {
+                                    bgcolor: isChanged ? "#fff9e6" : "white",
+                                    borderColor: isChanged ? "#ffc107" : undefined,
+                                  },
+                                }}
+                              />
+                            ) : (
+                              `₱${subsidy.toLocaleString("en-US", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
+                            )}
+                          </TableCell>
+                          <TableCell
+                            align="right"
+                            sx={{
+                              fontWeight: "bold",
+                              bgcolor: "#e8f5e9",
+                              minWidth: 130,
+                            }}
+                          >
+                            ₱
+                            {itemTotal.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+
+                    {/* Category Subtotal Row */}
+                    <TableRow sx={{ bgcolor: "#e8f5e9" }}>
+                      <TableCell
+                        colSpan={3}
+                        sx={{
+                          fontWeight: "bold",
+                          textAlign: "right",
+                          pr: 2,
+                        }}
+                      >
+                        Subtotal ({category}):
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          fontWeight: "bold",
+                          bgcolor: "#c8e6c9",
+                          minWidth: 120,
+                        }}
+                      >
+                        ₱
+                        {items
+                          .reduce((sum, item) => {
+                            const idx = proposalDetails.mooe.indexOf(item);
+                            const val = editableItems?.mooe?.[idx]?.income ?? item.income ?? 0;
+                            return sum + Number(val);
+                          }, 0)
+                          .toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          fontWeight: "bold",
+                          bgcolor: "#c8e6c9",
+                          minWidth: 120,
+                        }}
+                      >
+                        ₱
+                        {items
+                          .reduce((sum, item) => {
+                            const idx = proposalDetails.mooe.indexOf(item);
+                            const val = editableItems?.mooe?.[idx]?.subsidy ?? item.subsidy ?? 0;
+                            return sum + Number(val);
+                          }, 0)
+                          .toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                      </TableCell>
+                      <TableCell
+                        align="right"
+                        sx={{
+                          fontWeight: "bold",
+                          bgcolor: "#a5d6a7",
+                          minWidth: 130,
+                        }}
+                      >
+                        ₱
+                        {items
+                          .reduce((sum, item) => {
+                            const idx = proposalDetails.mooe.indexOf(item);
+                            const inc = Number(editableItems?.mooe?.[idx]?.income ?? item.income ?? 0);
+                            const sub = Number(editableItems?.mooe?.[idx]?.subsidy ?? item.subsidy ?? 0);
+                            return sum + inc + sub;
+                          }, 0)
+                          .toLocaleString("en-US", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -386,6 +387,7 @@ const MooeTable = ({
         );
       })}
 
+      {/* Grand Total Box */}
       <Box
         sx={{
           mt: 3,
@@ -398,6 +400,7 @@ const MooeTable = ({
           Grand Total: ₱
           {grandTotal.toLocaleString("en-US", {
             minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
           })}
         </Typography>
       </Box>

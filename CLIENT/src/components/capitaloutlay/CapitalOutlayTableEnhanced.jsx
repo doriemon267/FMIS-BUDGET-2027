@@ -29,6 +29,7 @@ import {
   DialogContentText,
   DialogActions,
   Select,
+  Autocomplete,
   TextField,
   FormHelperText,
   InputAdornment,
@@ -1218,7 +1219,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
             Deadline was {dueDateStatus.dueDateFormatted}. 
             {canDeleteItems 
               ? " You have admin privileges and can still make changes."
-              : " Contact your administrator if you need to make changes."
+              : " Contact your BRD Officer if you need to make changes."
             }
           </Typography>
         </Alert>
@@ -1652,8 +1653,9 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                             <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 0.5, display: 'block' }}>
                               Subline Item *
                             </Typography>
-                            <Select
-                              value={newOutlays[group.categoryId]?.sublineItem || ""}
+                            <Autocomplete
+                              options={sublineItems[group.categoryName] || []}
+                              value={newOutlays[group.categoryId]?.sublineItem || null}
                               onOpen={() => {
                                 setOpenSublineCategoryId(group.categoryId);
                                 if (!sublineItems[group.categoryName]?.length) {
@@ -1663,16 +1665,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                               onClose={() => {
                                 setOpenSublineCategoryId((current) => (current === group.categoryId ? null : current));
                               }}
-                              onKeyDown={(event) => {
-                                if (!keyboardShortcutsEnabled) return;
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  resetQuickAddDraft(group.categoryId);
-                                  return;
-                                }
-                              }}
-                              onChange={(e) => {
-                                const selectedSublineItem = e.target.value;
+                              onChange={(event, newValue) => {
+                                const selectedSublineItem = newValue || "";
                                 handleOutlayChange(group.categoryId, "sublineItem", selectedSublineItem);
                                 if (selectedSublineItem) {
                                   fetchAccountingTitles(selectedSublineItem);
@@ -1682,28 +1676,27 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                   }, 0);
                                 }
                               }}
-                              fullWidth
+                              clearOnEscape
                               size="small"
-                              error={!!errors.sublineItem}
-                              displayEmpty
-                              sx={{ 
-                                backgroundColor: 'white', 
-                                minWidth: '150px',
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: errors.sublineItem ? 'error.main' : 'success.main',
-                                  borderWidth: 2
-                                }
-                              }}
-                            >
-                              <MenuItem value="" disabled>
-                                <em>Select subline item</em>
-                              </MenuItem>
-                              {(sublineItems[group.categoryName] || []).map((item) => (
-                                <MenuItem key={item} value={item}>
-                                  {item}
-                                </MenuItem>
-                              ))}
-                            </Select>
+                              fullWidth
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  placeholder="Search / select subline..."
+                                  error={!!errors.sublineItem}
+                                  sx={{ 
+                                    backgroundColor: 'white', 
+                                    minWidth: '180px',
+                                    '& .MuiOutlinedInput-root': {
+                                      '& fieldset': {
+                                        borderColor: errors.sublineItem ? 'error.main' : 'success.main',
+                                        borderWidth: 2
+                                      }
+                                    }
+                                  }}
+                                />
+                              )}
+                            />
                             {errors.sublineItem && <FormHelperText error>{errors.sublineItem}</FormHelperText>}
                           </Box>
                         </TableCell>
@@ -1714,10 +1707,10 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                             <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 0.5, display: 'block' }}>
                               Accounting Title *
                             </Typography>
-                            <Select
-                              inputRef={(node) => setAccountingTitleSelectRef(group.categoryId, node)}
-                              open={openAccountingTitleCategoryId === group.categoryId}
-                              value={newOutlays[group.categoryId]?.accountingTitle || ""}
+                            <Autocomplete
+                              options={(accountingTitles[newOutlays[group.categoryId]?.sublineItem] || []).map((t) => t.accountingTitle)}
+                              value={newOutlays[group.categoryId]?.accountingTitle || null}
+                              disabled={!newOutlays[group.categoryId]?.sublineItem}
                               onOpen={() => {
                                 const selectedSubline = newOutlays[group.categoryId]?.sublineItem;
                                 if (selectedSubline && !(accountingTitles[selectedSubline] || []).length) {
@@ -1730,17 +1723,9 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                               onClose={() => {
                                 setOpenAccountingTitleCategoryId((current) => (current === group.categoryId ? null : current));
                               }}
-                              onKeyDown={(event) => {
-                                if (!keyboardShortcutsEnabled) return;
-                                if (event.key === "Escape") {
-                                  event.preventDefault();
-                                  resetQuickAddDraft(group.categoryId);
-                                  return;
-                                }
-                              }}
-                              onChange={(e) => {
-                                const selectedTitle = e.target.value;
-                                const selectedTitleObj = accountingTitles[newOutlays[group.categoryId]?.sublineItem]?.find(
+                              onChange={(event, newValue) => {
+                                const selectedTitle = newValue || "";
+                                const selectedTitleObj = (accountingTitles[newOutlays[group.categoryId]?.sublineItem] || []).find(
                                   (title) => title.accountingTitle === selectedTitle
                                 );
                                 
@@ -1750,29 +1735,28 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                 }
                                 setOpenAccountingTitleCategoryId((current) => (current === group.categoryId ? null : current));
                               }}
-                              fullWidth
+                              clearOnEscape
                               size="small"
-                              error={!!errors.accountingTitle}
-                              disabled={!newOutlays[group.categoryId]?.sublineItem}
-                              displayEmpty
-                              sx={{ 
-                                backgroundColor: !newOutlays[group.categoryId]?.sublineItem ? '#f5f5f5' : 'white',
-                                minWidth: '200px',
-                                '& .MuiOutlinedInput-notchedOutline': {
-                                  borderColor: errors.accountingTitle ? 'error.main' : 'success.main',
-                                  borderWidth: 2
-                                }
-                              }}
-                            >
-                              <MenuItem value="" disabled>
-                                <em>{!newOutlays[group.categoryId]?.sublineItem ? 'Select subline first' : 'Choose accounting title'}</em>
-                              </MenuItem>
-                              {(accountingTitles[newOutlays[group.categoryId]?.sublineItem] || []).map((title) => (
-                                <MenuItem key={title._id || title.accountingTitle} value={title.accountingTitle}>
-                                  {title.accountingTitle}
-                                </MenuItem>
-                              ))}
-                            </Select>
+                              fullWidth
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  inputRef={(node) => setAccountingTitleSelectRef(group.categoryId, node)}
+                                  placeholder={!newOutlays[group.categoryId]?.sublineItem ? "Select subline first" : "Search / select title..."}
+                                  error={!!errors.accountingTitle}
+                                  sx={{ 
+                                    backgroundColor: !newOutlays[group.categoryId]?.sublineItem ? '#f5f5f5' : 'white',
+                                    minWidth: '220px',
+                                    '& .MuiOutlinedInput-root': {
+                                      '& fieldset': {
+                                        borderColor: errors.accountingTitle ? 'error.main' : 'success.main',
+                                        borderWidth: 2
+                                      }
+                                    }
+                                  }}
+                                />
+                              )}
+                            />
                             {errors.accountingTitle && <FormHelperText error>{errors.accountingTitle}</FormHelperText>}
                           </Box>
                         </TableCell>
