@@ -1,11 +1,13 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const ExcelJS = require('exceljs');
 const MooeProposal = require('../models/mooeProposals');
 const Region = require('../models/Region');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
+const { getFolioPageSize, isAllRegionsSelection } = require('../utils/reportPageLayout');
 
 let MuhammaraRecipe;
 try {
@@ -38,6 +40,171 @@ const FULL_ACCESS_ROLES = new Set([
 
 const normalizeRole = (r) => String(r || '').trim().replace(/\s+/g, '_').toUpperCase();
 
+const getConsolidatedMooeTitle = (budgetType) => {
+  const normalizedBudgetType = String(budgetType || 'INITIAL').trim().toUpperCase();
+  return `Consolidated MOOE – ${normalizedBudgetType || 'INITIAL'} BUDGET PROPOSAL`;
+};
+
+const createFinancialTotals = () => ({ income: 0, subsidy: 0, amount: 0, total: 0 });
+
+const addFinancialValues = (target, values = {}) => {
+  const income = Number(values.income || 0);
+  const subsidy = Number(values.subsidy || 0);
+  const amount = Number(values.amount || 0);
+  target.income += income;
+  target.subsidy += subsidy;
+  target.amount += amount;
+  target.total += income + subsidy + amount;
+};
+
+const MATRIX_FINANCIAL_COLUMNS = [
+  { key: 'income', label: 'INCOME', compactLabel: 'I' },
+  { key: 'subsidy', label: 'SUBSIDY', compactLabel: 'S' },
+  { key: 'amount', label: 'AMOUNT', compactLabel: 'A' },
+];
+
+const getMatrixFinancialColumns = (values = {}) => (
+  MATRIX_FINANCIAL_COLUMNS.map((column) => ({
+    ...column,
+    value: Number(values[column.key] || 0),
+  }))
+);
+
+const getMooeMatrixPdfSubheaders = (subcolumnWidth) => (
+  MATRIX_FINANCIAL_COLUMNS.map((column) => (
+    Number(subcolumnWidth || 0) >= 45 ? column.label : column.compactLabel
+  ))
+);
+
+const sumFinancialValues = (values = []) => {
+  const totals = createFinancialTotals();
+  values.forEach((entry) => addFinancialValues(totals, entry));
+  return totals;
+};
+
+const MATRIX_PDF_PARTICULARS_TARGET_WIDTH = 300;
+const MATRIX_PDF_MIN_SUBCOLUMN_WIDTH = 50;
+const MATRIX_PDF_DETAIL_BASE_HEIGHT = 17;
+const MATRIX_PDF_DETAIL_LINE_HEIGHT = 7.4;
+const MATRIX_PDF_DETAIL_VERTICAL_ALLOWANCE = 6;
+
+const getMooeMatrixPdfDetailHeight = (wrappedLineCount) => Math.max(
+  MATRIX_PDF_DETAIL_BASE_HEIGHT,
+  MATRIX_PDF_DETAIL_VERTICAL_ALLOWANCE +
+    (Math.max(1, Number(wrappedLineCount || 0)) * MATRIX_PDF_DETAIL_LINE_HEIGHT)
+);
+
+const chunkMooeMatrixRegions = (regions = [], capacity = 1) => {
+  const safeCapacity = Math.max(1, Math.floor(Number(capacity || 1)));
+  const safeRegions = Array.isArray(regions) ? regions : [];
+  const chunks = [];
+  for (let index = 0; index < safeRegions.length; index += safeCapacity) {
+    chunks.push(safeRegions.slice(index, index + safeCapacity));
+  }
+  return chunks;
+};
+
+const getMooeMatrixPdfLayout = ({ contentLeft = 0, contentWidth, regionCount }) => {
+  const safeContentWidth = Math.max(1, Number(contentWidth || 0));
+  const safeRegionCount = Math.max(1, Number(regionCount || 0));
+  const particularsWidth = Math.min(
+    MATRIX_PDF_PARTICULARS_TARGET_WIDTH,
+    safeContentWidth * 0.45
+  );
+  const financialGroupWidth = (safeContentWidth - particularsWidth) / (safeRegionCount + 1);
+  const subcolumnWidth = financialGroupWidth / MATRIX_FINANCIAL_COLUMNS.length;
+  const regionXs = Array.from(
+    { length: safeRegionCount },
+    (_, index) => contentLeft + particularsWidth + (index * financialGroupWidth)
+  );
+  const totalX = contentLeft + particularsWidth + (safeRegionCount * financialGroupWidth);
+
+  return {
+    particularsX: contentLeft,
+    particularsWidth,
+    financialGroupWidth,
+    subcolumnWidth,
+    regionXs,
+    totalX,
+    right: contentLeft + safeContentWidth,
+  };
+};
+
+const getMooeMatrixRegionsPerPage = (contentWidth) => {
+  const safeContentWidth = Math.max(1, Number(contentWidth || 0));
+  const particularsWidth = Math.min(
+    MATRIX_PDF_PARTICULARS_TARGET_WIDTH,
+    safeContentWidth * 0.45
+  );
+  return Math.max(
+    1,
+    Math.floor(
+      (safeContentWidth - particularsWidth) /
+      (MATRIX_PDF_MIN_SUBCOLUMN_WIDTH * MATRIX_FINANCIAL_COLUMNS.length)
+    ) - 1
+  );
+};
+
+const buildMooeRegionMatrix = (groups = []) => {
+  const rowMap = new Map();
+  const totalsByRegion = {};
+  const regionalTotal = createFinancialTotals();
+
+  (groups || []).forEach((group) => {
+    const regionName = String(group?.region || '').trim();
+    if (!regionName) return;
+    const category = String(group?.category || 'Uncategorized').trim() || 'Uncategorized';
+
+    (group?.items || []).forEach((item) => {
+      const uacsCode = String(item?.uacsCode || '').trim();
+      const accountingTitle = String(item?.accountingTitle || item?.name || '').trim();
+      const values = {
+        income: Number(item?.income || 0),
+        subsidy: Number(item?.subsidy || 0),
+        amount: Number(item?.amount || 0),
+      };
+      if (values.income === 0 && values.subsidy === 0 && values.amount === 0) return;
+      if (!totalsByRegion[regionName]) totalsByRegion[regionName] = createFinancialTotals();
+
+      const identity = `${category}\u001f${uacsCode}\u001f${accountingTitle}`;
+      if (!rowMap.has(identity)) {
+        rowMap.set(identity, {
+          id: identity,
+          category,
+          uacsCode,
+          accountingTitle,
+          valuesByRegion: {},
+          totals: createFinancialTotals(),
+        });
+      }
+
+      const row = rowMap.get(identity);
+      if (!row.valuesByRegion[regionName]) row.valuesByRegion[regionName] = createFinancialTotals();
+      addFinancialValues(row.valuesByRegion[regionName], values);
+      addFinancialValues(row.totals, values);
+      addFinancialValues(totalsByRegion[regionName], values);
+      addFinancialValues(regionalTotal, values);
+    });
+  });
+
+  const rows = [...rowMap.values()].sort((a, b) => {
+    const aUacs = String(a.uacsCode || '').padStart(20, '0');
+    const bUacs = String(b.uacsCode || '').padStart(20, '0');
+    const uacsOrder = aUacs.localeCompare(bUacs);
+    if (uacsOrder !== 0) return uacsOrder;
+    const categoryOrder = a.category.localeCompare(b.category, 'en', { sensitivity: 'base' });
+    if (categoryOrder !== 0) return categoryOrder;
+    return a.accountingTitle.localeCompare(b.accountingTitle, 'en', { sensitivity: 'base' });
+  });
+  const regionNames = Object.keys(totalsByRegion)
+    .sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  const orderedTotalsByRegion = Object.fromEntries(
+    regionNames.map((regionName) => [regionName, totalsByRegion[regionName]])
+  );
+
+  return { regions: regionNames, rows, totalsByRegion: orderedTotalsByRegion, regionalTotal };
+};
+
 const getVisibleWorkflowIds = async (req, { fiscalYear, budgetType, regions } = {}) => {
   const userRoles = (req.user?.Roles || req.user?.roles || []).map(normalizeRole);
 
@@ -61,6 +228,12 @@ const getVisibleWorkflowIds = async (req, { fiscalYear, budgetType, regions } = 
   if (!visibleStatuses) {
     visibleStatuses = new Set(VISIBLE_STATUSES_BY_ROLE.BUDGET_PREPARER);
   }
+
+  // Draft proposals remain private to the Budget Preparer who created them.
+  // Other statuses continue to follow the role and organizational visibility rules.
+  visibleStatuses.delete('DRAFT');
+  const requesterId = String(req.user?.id || req.user?.userId || req.user?._id || '').trim();
+  const canSeeOwnDraft = userRoles.includes('BUDGET_PREPARER') && requesterId;
 
   // --- OPSYON A FIX: Get all active/released consolidated proposals to find their merged source IDs ---
   const activeConsolidatedQuery = {
@@ -92,7 +265,8 @@ const getVisibleWorkflowIds = async (req, { fiscalYear, budgetType, regions } = 
       {
         $or: [
           { status: { $in: [...visibleStatuses] } },
-          { _id: { $in: allowedMergedIds } }
+          { _id: { $in: allowedMergedIds } },
+          ...(canSeeOwnDraft ? [{ status: 'DRAFT', createdBy: requesterId }] : [])
         ]
       }
     ]
@@ -202,6 +376,7 @@ const consolidatedReportsController = {
           return res.status(200).json({
             success: true,
             data: [],
+            matrix: buildMooeRegionMatrix([]),
             summary: { totalRegions: 0, totalCategories: 0, totalEntries: 0, grandTotal: 0 }
           });
         }
@@ -221,6 +396,7 @@ const consolidatedReportsController = {
         return res.status(200).json({
           success: true,
           data: [],
+          matrix: buildMooeRegionMatrix([]),
           summary: { totalRegions: 0, totalCategories: 0, totalEntries: 0, grandTotal: 0 }
         });
       }
@@ -301,9 +477,11 @@ const consolidatedReportsController = {
       const safeResult = Array.isArray(result)
         ? result.map(g => ({ ...g, items: Array.isArray(g.items) ? g.items : [] }))
         : [];
+      const matrix = buildMooeRegionMatrix(safeResult);
       res.status(200).json({
         success: true,
         data: Array.isArray(safeResult) ? safeResult.map(g => ({ ...g, items: Array.isArray(g.items) ? g.items : [] })) : [],
+        matrix,
         summary: {
           totalRegions: regionSet.size,
           totalCategories: categorySet.size,
@@ -316,6 +494,7 @@ const consolidatedReportsController = {
       res.status(200).json({
         success: false,
         data: [],
+        matrix: buildMooeRegionMatrix([]),
         summary: { totalRegions: 0, totalCategories: 0, totalEntries: 0, grandTotal: 0 },
         message: 'Failed to fetch consolidated MOOE data',
         error: error.message
@@ -409,7 +588,7 @@ const consolidatedReportsController = {
     }
 
     try {
-      const { regions, region, fiscalYear, budgetType } = req.query;
+      const { regions, region, fiscalYear, budgetType, consolidationType } = req.query;
       let { department, division } = req.query;
 
       // --- SECURITY OVERRIDE: Enforce scope based on user roles and assignments ---
@@ -485,11 +664,15 @@ const consolidatedReportsController = {
       if (department) mooeQuery.department = new RegExp(`^${String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
       if (division)   mooeQuery.division   = new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
-      const mooeData = await MooeProposal.find(mooeQuery).lean();
+      const visibleWorkflowIds = await getVisibleWorkflowIds(req, { fiscalYear, budgetType, regions: regionList });
+      if (visibleWorkflowIds !== null) {
+        if (visibleWorkflowIds.length === 0) {
+          return res.status(404).json({ message: 'No budget proposals found for the selected filters.' });
+        }
+        mooeQuery.workflowRef = { $in: visibleWorkflowIds };
+      }
 
-      // Track what to SHOW in the PDF header (only explicitly scoped values)
-      const headerDept = isSuperAdmin ? null : department;
-      const headerDiv  = isSuperAdmin ? null : division;
+      const mooeData = await MooeProposal.find(mooeQuery).lean();
 
       // --- Resolve signatories from workflow ---
       let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
@@ -565,15 +748,20 @@ const consolidatedReportsController = {
         }
       }
 
+      const pdfMatrixGroups = Object.entries(grouped).flatMap(([regionName, categories]) => (
+        Object.entries(categories).map(([category, items]) => ({ region: regionName, category, items }))
+      ));
+      const regionMatrix = buildMooeRegionMatrix(pdfMatrixGroups);
+
       // ============================================================
       // PAGE SETUP
       // ============================================================
       const tmpFilePath = path.join(os.tmpdir(), `consolidated_mooe_${Date.now()}.pdf`);
       const tempSignatureImagePaths = [];
 
-      // Folio Portrait
-      const PAGE_WIDTH  = 612;
-      const PAGE_HEIGHT = 936;
+      const useLandscape = isAllRegionsSelection({ consolidationType, regions: regionList });
+      const useRegionMatrix = useLandscape && regionMatrix.regions.length > 0;
+      const { width: PAGE_WIDTH, height: PAGE_HEIGHT } = getFolioPageSize(useLandscape);
       const MARGIN      = 18;
       const CONTENT_LEFT  = MARGIN;
       const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
@@ -680,10 +868,11 @@ const consolidatedReportsController = {
         path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png')
       );
 
+      const reportTitle = getConsolidatedMooeTitle(budgetType);
       const recipeOptions = {
         version: 1.6,
         author: 'FMIS-BUDGET',
-        title: 'Consolidated MOOE Report',
+        title: reportTitle,
         subject: `MOOE - FY ${fiscalYear || 'All Years'}`,
       };
 
@@ -752,22 +941,9 @@ const consolidatedReportsController = {
         pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', cx, hy, { color: DARK, fontSize: 10, bold: true, align: 'center' });
         hy += 11;
 
-        let rcHeader = regionList && regionList.length ? regionList.join(', ') : 'ALL REGIONS';
-        if (headerDept || headerDiv) {
-          let subHeader = '';
-          if (headerDept) subHeader += headerDept;
-          if (headerDiv) subHeader += (subHeader ? ' - ' : '') + headerDiv;
-          pdfDoc.text(rcHeader, cx, hy, { color: MID, fontSize: 9, bold: true, align: 'center' });
-          hy += 12;
-          pdfDoc.text(subHeader, cx, hy, { color: MID, fontSize: 8, align: 'center' });
-        } else {
-          pdfDoc.text(rcHeader, cx, hy, { color: MID, fontSize: 9, bold: true, align: 'center' });
-        }
-        hy += 14;
-
         // Report title — bold text only, no colored bar
-        pdfDoc.text('CONSOLIDATED MOOE REPORT', cx, hy, {
-          color: BLACK, fontSize: 13, bold: true, align: 'center'
+        pdfDoc.text(reportTitle, cx, hy, {
+          color: BLACK, fontSize: 11.5, bold: true, align: 'center'
         });
         hy += 13;
         pdfDoc.text(
@@ -792,7 +968,7 @@ const consolidatedReportsController = {
         const cx = PAGE_WIDTH / 2;
         let hy = MARGIN + 6;
 
-        pdfDoc.text('CONSOLIDATED MOOE REPORT (continued)', cx, hy, {
+        pdfDoc.text(`${reportTitle} (continued)`, cx, hy, {
           color: BLACK, fontSize: 9, bold: true, align: 'center'
         });
         hy += 11;
@@ -861,15 +1037,219 @@ const consolidatedReportsController = {
       // ============================================================
       // START PDF
       // ============================================================
+      if (useRegionMatrix) {
+        const MATRIX_GROUP_HEADER_H = 16;
+        const MATRIX_SUBHEADER_H = 12;
+        const MATRIX_HEADER_H = MATRIX_GROUP_HEADER_H + MATRIX_SUBHEADER_H;
+        const MATRIX_CATEGORY_H = 14;
+        const MATRIX_TOTAL_H = 19;
+        const matrixRegionsPerPage = getMooeMatrixRegionsPerPage(CONTENT_WIDTH);
+        const regionChunks = chunkMooeMatrixRegions(regionMatrix.regions, matrixRegionsPerPage);
+        const matrixCategories = new Map();
+        regionMatrix.rows.forEach((row) => {
+          if (!matrixCategories.has(row.category)) matrixCategories.set(row.category, []);
+          matrixCategories.get(row.category).push(row);
+        });
+
+        const drawMatrixFinancialValues = (values, x, y, rowHeight, subcolumnWidth, options = {}) => {
+          const fontSize = options.bold ? 6.2 : 6;
+          const valueY = y + Math.max(4, (rowHeight - fontSize) / 2);
+          getMatrixFinancialColumns(values).forEach(({ value }, subcolumnIndex) => {
+            pdfDoc.text(
+              formatPhp(value),
+              x + ((subcolumnIndex + 1) * subcolumnWidth) - 3,
+              valueY,
+              { color: BLACK, fontSize, bold: options.bold, align: 'right' }
+            );
+          });
+        };
+
+        const getMatrixColumns = (chunk) => {
+          const layout = getMooeMatrixPdfLayout({
+            contentLeft: CONTENT_LEFT,
+            contentWidth: CONTENT_WIDTH,
+            regionCount: chunk.length,
+          });
+          return {
+            particulars: layout.particularsX,
+            particularsWidth: layout.particularsWidth,
+            financialGroupWidth: layout.financialGroupWidth,
+            subcolumnWidth: layout.subcolumnWidth,
+            regions: chunk.map((regionName, index) => ({
+              regionName,
+              x: layout.regionXs[index],
+            })),
+            total: layout.totalX,
+            right: layout.right,
+          };
+        };
+
+        const getMatrixFinancialBoundaries = (columns) => (
+          [...columns.regions.map((column) => column.x), columns.total].flatMap((groupX) => ([
+            groupX,
+            groupX + columns.subcolumnWidth,
+            groupX + (columns.subcolumnWidth * 2),
+          ]))
+        );
+
+        const drawMatrixHeader = (chunk) => {
+          const columns = getMatrixColumns(chunk);
+          const y = curY;
+          pdfDoc.rectangle(CONTENT_LEFT, y, columns.right - CONTENT_LEFT, MATRIX_HEADER_H, {
+            stroke: BLACK, lineWidth: 0.8,
+          });
+          [...columns.regions.map((column) => column.x), columns.total]
+            .forEach((x) => pdfDoc.rectangle(x, y, 0.5, MATRIX_HEADER_H, { fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0 }));
+          [...columns.regions.map((column) => column.x), columns.total].forEach((groupX) => {
+            [groupX + columns.subcolumnWidth, groupX + (columns.subcolumnWidth * 2)]
+              .forEach((x) => pdfDoc.rectangle(x, y + MATRIX_GROUP_HEADER_H, 0.35, MATRIX_SUBHEADER_H, {
+                fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0,
+              }));
+          });
+          const firstFinancialX = columns.regions[0]?.x || columns.total;
+          pdfDoc.rectangle(firstFinancialX, y + MATRIX_GROUP_HEADER_H, columns.right - firstFinancialX, 0.5, {
+            fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0,
+          });
+          pdfDoc.text('PARTICULARS', columns.particulars + 5, y + 6, { color: BLACK, fontSize: 6.3, bold: true });
+          columns.regions.forEach(({ regionName, x }) => {
+            const lines = wrapText(regionName, columns.financialGroupWidth - 8, 5.8).slice(0, 2);
+            lines.forEach((line, lineIndex) => {
+              pdfDoc.text(line, x + (columns.financialGroupWidth / 2), y + 4 + (lineIndex * 7), {
+                color: BLACK, fontSize: 5.8, bold: true, align: 'center',
+              });
+            });
+            getMooeMatrixPdfSubheaders(columns.subcolumnWidth).forEach((label, subcolumnIndex) => {
+              pdfDoc.text(label, x + ((subcolumnIndex + 0.5) * columns.subcolumnWidth), y + MATRIX_GROUP_HEADER_H + 4, {
+                color: MID, fontSize: 5.1, bold: true, align: 'center',
+              });
+            });
+          });
+          pdfDoc.text(regionChunks.length > 1 ? 'CHUNK TOTAL' : 'REGIONAL TOTAL', columns.total + (columns.financialGroupWidth / 2), y + 5, {
+            color: BLACK, fontSize: 5.8, bold: true, align: 'center',
+          });
+          getMooeMatrixPdfSubheaders(columns.subcolumnWidth).forEach((label, subcolumnIndex) => {
+            pdfDoc.text(label, columns.total + ((subcolumnIndex + 0.5) * columns.subcolumnWidth), y + MATRIX_GROUP_HEADER_H + 4, {
+              color: MID, fontSize: 5.1, bold: true, align: 'center',
+            });
+          });
+          curY += MATRIX_HEADER_H;
+          return columns;
+        };
+
+        const startMatrixPage = (chunk, firstPage = false) => {
+          if (pageNo > 0 && !firstPage) pdfDoc.endPage();
+          if (!firstPage) pageNo += 1;
+          pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+          drawPageChrome();
+          if (firstPage) drawFirstPageHeader();
+          else drawContinuationHeader();
+          pdfDoc.text('Financial subcolumns: I = Income   |   S = Subsidy   |   A = Amount', CONTENT_LEFT, curY + 1, {
+            color: MID, fontSize: 6.2,
+          });
+          curY += 10;
+          return drawMatrixHeader(chunk);
+        };
+
+        let isFirstMatrixPage = true;
+        let activeColumns = null;
+        const ensureMatrixSpace = (height, chunk) => {
+          if (curY + height <= FOOTER_Y - 8) return;
+          activeColumns = startMatrixPage(chunk, false);
+        };
+
+        for (let chunkIndex = 0; chunkIndex < regionChunks.length; chunkIndex += 1) {
+          const chunk = regionChunks[chunkIndex];
+          const isFinalChunk = chunkIndex === regionChunks.length - 1;
+          activeColumns = startMatrixPage(chunk, isFirstMatrixPage);
+          isFirstMatrixPage = false;
+
+          for (const [categoryName, rows] of matrixCategories.entries()) {
+            const firstTitleLines = rows[0]
+              ? wrapText(rows[0].accountingTitle, activeColumns.particularsWidth - 18, 6.5)
+              : [];
+            ensureMatrixSpace(
+              MATRIX_CATEGORY_H + getMooeMatrixPdfDetailHeight(firstTitleLines.length),
+              chunk
+            );
+            const categoryY = curY;
+            pdfDoc.rectangle(CONTENT_LEFT, categoryY, activeColumns.right - CONTENT_LEFT, MATRIX_CATEGORY_H, {
+              fill: '#f2f2f2', stroke: BORDER_BOLD, lineWidth: 0.5,
+            });
+            pdfDoc.text(categoryName, CONTENT_LEFT + 5, categoryY + 5, {
+              color: BLACK, fontSize: 6.8, bold: true,
+            });
+            curY += MATRIX_CATEGORY_H;
+
+            for (const row of rows) {
+              const titleLines = wrapText(row.accountingTitle, activeColumns.particularsWidth - 18, 6.5);
+              const detailRowHeight = getMooeMatrixPdfDetailHeight(titleLines.length);
+              ensureMatrixSpace(detailRowHeight, chunk);
+              const rowY = curY;
+              pdfDoc.rectangle(CONTENT_LEFT, rowY, activeColumns.right - CONTENT_LEFT, detailRowHeight, {
+                stroke: BORDER_STD, lineWidth: 0.35,
+              });
+              getMatrixFinancialBoundaries(activeColumns)
+                .forEach((x) => pdfDoc.rectangle(x, rowY, 0.35, detailRowHeight, { fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0 }));
+
+              titleLines.forEach((line, lineIndex) => pdfDoc.text(line, activeColumns.particulars + 10, rowY + 4 + (lineIndex * MATRIX_PDF_DETAIL_LINE_HEIGHT), {
+                color: DARK, fontSize: 6.5,
+              }));
+              activeColumns.regions.forEach(({ regionName, x }) => {
+                drawMatrixFinancialValues(row.valuesByRegion?.[regionName], x, rowY, detailRowHeight, activeColumns.subcolumnWidth);
+              });
+              const chunkRowTotal = sumFinancialValues(
+                chunk.map((regionName) => row.valuesByRegion?.[regionName])
+              );
+              drawMatrixFinancialValues(chunkRowTotal, activeColumns.total, rowY, detailRowHeight, activeColumns.subcolumnWidth, { bold: true });
+              curY += detailRowHeight;
+            }
+          }
+
+          ensureMatrixSpace(MATRIX_TOTAL_H, chunk);
+          const totalY = curY;
+          pdfDoc.rectangle(CONTENT_LEFT, totalY, activeColumns.right - CONTENT_LEFT, MATRIX_TOTAL_H, {
+            fill: '#ededed', stroke: BLACK, lineWidth: 0.9,
+          });
+          getMatrixFinancialBoundaries(activeColumns)
+            .forEach((x) => pdfDoc.rectangle(x, totalY, 0.5, MATRIX_TOTAL_H, { fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0 }));
+          pdfDoc.text(regionChunks.length > 1 ? 'CHUNK REGIONAL TOTAL' : 'REGIONAL TOTAL', CONTENT_LEFT + 5, totalY + 5, {
+            color: BLACK, fontSize: 7.4, bold: true,
+          });
+          activeColumns.regions.forEach(({ regionName, x }) => {
+            drawMatrixFinancialValues(regionMatrix.totalsByRegion[regionName], x, totalY, MATRIX_TOTAL_H, activeColumns.subcolumnWidth, { bold: true });
+          });
+          const chunkTotal = sumFinancialValues(
+            chunk.map((regionName) => regionMatrix.totalsByRegion[regionName])
+          );
+          drawMatrixFinancialValues(chunkTotal, activeColumns.total, totalY, MATRIX_TOTAL_H, activeColumns.subcolumnWidth, { bold: true });
+          curY += MATRIX_TOTAL_H + 6;
+
+          if (regionChunks.length > 1 && isFinalChunk) {
+            ensureMatrixSpace(MATRIX_TOTAL_H, chunk);
+            const allRegionTotalY = curY;
+            pdfDoc.rectangle(CONTENT_LEFT, allRegionTotalY, activeColumns.right - CONTENT_LEFT, MATRIX_TOTAL_H, {
+              fill: '#dfe8df', stroke: BLACK, lineWidth: 1,
+            });
+            getMatrixFinancialBoundaries(activeColumns)
+              .forEach((x) => pdfDoc.rectangle(x, allRegionTotalY, 0.5, MATRIX_TOTAL_H, {
+                fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0,
+              }));
+            pdfDoc.text('ALL-REGION TOTAL', CONTENT_LEFT + 5, allRegionTotalY + 5, {
+              color: BLACK, fontSize: 8, bold: true,
+            });
+            drawMatrixFinancialValues(regionMatrix.regionalTotal, activeColumns.total, allRegionTotalY, MATRIX_TOTAL_H, activeColumns.subcolumnWidth, { bold: true });
+            curY += MATRIX_TOTAL_H + 6;
+          }
+        }
+      } else {
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       drawPageChrome();
       drawFirstPageHeader();
       drawTableHeader();
 
-      let grandIncome  = 0;
-      let grandSubsidy = 0;
-      let grandAmount  = 0;
-
+      let regionalIncome = 0;
+      let regionalSubsidy = 0;
+      let regionalAmount = 0;
       const regionNames = Object.keys(grouped).sort();
 
       for (const rcName of regionNames) {
@@ -888,7 +1268,6 @@ const consolidatedReportsController = {
         let rcRowHeight = Math.max(RC_ROW_H, rcLines.length * ROW_H);
         // curY += rcRowHeight; // No, we want to align with category name if it's the first row
 
-        let rcFirstRow = true;
         let regionIncome  = 0;
         let regionSubsidy = 0;
         let regionAmount  = 0;
@@ -922,8 +1301,6 @@ const consolidatedReportsController = {
             });
           });
           curY += categoryRowHeight;
-          rcFirstRow = false;
-
           let catIncome  = 0;
           let catSubsidy = 0;
           let catAmount  = 0;
@@ -952,61 +1329,41 @@ const consolidatedReportsController = {
             catAmount  += row.amount;
           });
 
-          // ---- CATEGORY SUBTOTAL ROW ----
-          const subtotalLines = wrapText(`Subtotal - ${catName}`, COL_TITLE - 12, 7.5);
-          const subtotalRowHeight = Math.max(ROW_H, subtotalLines.length * ROW_H);
-          ensureSpace(1, subtotalRowHeight);
-          subtotalLines.forEach((line, lineIdx) => {
-            pdfDoc.text(line, colX.title + 6, curY + 4 + (lineIdx * ROW_H), {
-              color: BLACK, fontSize: 7.5, bold: true
-            });
-          });
-          pdfDoc.text(formatPhp(catIncome),  colX.income  + COL_INCOME  - 5, curY + 4, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
-          pdfDoc.text(formatPhp(catSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY + 4, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
-          pdfDoc.text(formatPhp(catAmount),  colX.amount  + COL_AMOUNT  - 5, curY + 4, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
-          curY += subtotalRowHeight + 2;
-
           regionIncome  += catIncome;
           regionSubsidy += catSubsidy;
           regionAmount  += catAmount;
         }
 
-        // ---- RC TOTAL ROW ----
-        ensureSpace(1);
-        pdfDoc.text(`Total for ${rcName}:`, CONTENT_LEFT + 6, curY + 5, {
-          color: BLACK, fontSize: 8, bold: true
-        });
-        pdfDoc.text(formatPhp(regionIncome),  colX.income  + COL_INCOME  - 5, curY + 5, { color: BLACK, fontSize: 8, bold: true, align: 'right' });
-        pdfDoc.text(formatPhp(regionSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY + 5, { color: BLACK, fontSize: 8, bold: true, align: 'right' });
-        pdfDoc.text(formatPhp(regionAmount),  colX.amount  + COL_AMOUNT  - 5, curY + 5, { color: BLACK, fontSize: 8, bold: true, align: 'right' });
-        curY += ROW_H + 2 + 5;
-
-        grandIncome  += regionIncome;
-        grandSubsidy += regionSubsidy;
-        grandAmount  += regionAmount;
+        regionalIncome += regionIncome;
+        regionalSubsidy += regionSubsidy;
+        regionalAmount += regionAmount;
       }
 
-      // ============================================================
-      // GRAND TOTAL
-      // Heaviest treatment: thick rule top + double rule bottom
-      // Very faint gray fill (the only background fill in the document)
-      // to make it stand out without wasting much ink
-      // ============================================================
-      ensureSpace(2, ROW_H + 6);
-      const gtH = ROW_H + 6;
-      pdfDoc.text('GRAND TOTAL', CONTENT_LEFT + 6, curY + 7, {
-        color: BLACK, fontSize: 9.5, bold: true
+      // Single aggregate row for every visible region/responsibility center.
+      ensureSpace(1, ROW_H + 4);
+      drawHRule(curY, 1.2, BLACK);
+      pdfDoc.text('REGIONAL TOTAL', CONTENT_LEFT + 6, curY + 6, {
+        color: BLACK, fontSize: 9, bold: true
       });
-      pdfDoc.text(formatPhp(grandIncome),  colX.income  + COL_INCOME  - 5, curY + 7, { color: BLACK, fontSize: 9.5, bold: true, align: 'right' });
-      pdfDoc.text(formatPhp(grandSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY + 7, { color: BLACK, fontSize: 9.5, bold: true, align: 'right' });
-      pdfDoc.text(formatPhp(grandAmount),  colX.amount  + COL_AMOUNT  - 5, curY + 7, { color: BLACK, fontSize: 9.5, bold: true, align: 'right' });
-      curY += gtH + 8;
+      pdfDoc.text(formatPhp(regionalIncome),  colX.income  + COL_INCOME  - 5, curY + 6, { color: BLACK, fontSize: 9, bold: true, align: 'right' });
+      pdfDoc.text(formatPhp(regionalSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY + 6, { color: BLACK, fontSize: 9, bold: true, align: 'right' });
+      pdfDoc.text(formatPhp(regionalAmount),  colX.amount  + COL_AMOUNT  - 5, curY + 6, { color: BLACK, fontSize: 9, bold: true, align: 'right' });
+      curY += ROW_H + 9;
+      }
 
       // ============================================================
       // SIGNATURE BLOCK
       // Plain lines — no boxes, no fills
       // ============================================================
-      ensureSpace(10);
+      if (useRegionMatrix && curY + (ROW_H * 10) > FOOTER_Y - 8) {
+        pdfDoc.endPage();
+        pageNo += 1;
+        pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+        drawPageChrome();
+        drawContinuationHeader();
+      } else if (!useRegionMatrix) {
+        ensureSpace(10);
+      }
       signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo);
       curY = drawWorkflowSignatureBlock(pdfDoc, signatoriesInfo, curY, MARGIN, CONTENT_WIDTH, tempSignatureImagePaths);
       curY += ROW_H * 2.5 + ROW_H + 20;
@@ -1052,13 +1409,165 @@ const consolidatedReportsController = {
 
   exportConsolidatedData: async (req, res) => {
     try {
-      const { format = 'json', regions, fiscalYear, budgetType } = req.query;
-      req.query = { regions, fiscalYear, budgetType };
-      res.status(200).json({
-        success: true,
-        message: `Export functionality for ${format} format will be implemented`,
-        note: 'Use the /consolidated-data endpoint to get the data for now'
+      const format = String(req.query.format || 'xlsx').toLowerCase();
+      if (!['xlsx', 'excel'].includes(format)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Unsupported export format. Use xlsx.'
+        });
+      }
+
+      let reportPayload;
+      let reportStatusCode = 200;
+      const captureResponse = {
+        status(code) {
+          reportStatusCode = code;
+          return this;
+        },
+        json(payload) {
+          reportPayload = payload;
+          return this;
+        }
+      };
+
+      await consolidatedReportsController.getConsolidatedData(req, captureResponse);
+      if (reportStatusCode >= 400 || !reportPayload?.success) {
+        throw new Error(reportPayload?.message || 'Unable to load budget proposals for export.');
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'FMIS-BUDGET';
+      workbook.created = new Date();
+      workbook.modified = new Date();
+
+      const worksheet = workbook.addWorksheet('Budget Proposals', {
+        views: [{ state: 'frozen', ySplit: 5 }],
+        pageSetup: {
+          orientation: 'landscape',
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 0,
+          paperSize: 9,
+          margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 }
+        }
       });
+
+      worksheet.columns = [
+        { key: 'region', width: 22 },
+        { key: 'category', width: 34 },
+        { key: 'uacsCode', width: 18 },
+        { key: 'accountingTitle', width: 52 },
+        { key: 'income', width: 18 },
+        { key: 'subsidy', width: 18 },
+        { key: 'amount', width: 18 },
+        { key: 'total', width: 18 }
+      ];
+
+      worksheet.mergeCells('A1:H1');
+      const titleCell = worksheet.getCell('A1');
+      titleCell.value = getConsolidatedMooeTitle(req.query.budgetType);
+      titleCell.font = { bold: true, size: 15, color: { argb: 'FF1F4D2E' } };
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getRow(1).height = 26;
+
+      const selectedRegions = req.query.regions
+        ? (Array.isArray(req.query.regions) ? req.query.regions : [req.query.regions]).join(', ')
+        : 'All accessible regions';
+      worksheet.mergeCells('A2:H2');
+      worksheet.getCell('A2').value = `Fiscal Year: ${req.query.fiscalYear || 'All Years'} | Budget Type: ${req.query.budgetType || 'All'} | Region: ${selectedRegions}`;
+      worksheet.getCell('A2').alignment = { horizontal: 'center' };
+      worksheet.getCell('A2').font = { size: 10, color: { argb: 'FF475569' } };
+
+      const organizationParts = [req.query.department, req.query.division].filter(Boolean);
+      worksheet.mergeCells('A3:H3');
+      worksheet.getCell('A3').value = organizationParts.length > 0
+        ? organizationParts.join(' / ')
+        : `Generated: ${new Date().toLocaleString('en-PH')}`;
+      worksheet.getCell('A3').alignment = { horizontal: 'center' };
+      worksheet.getCell('A3').font = { size: 9, italic: true, color: { argb: 'FF64748B' } };
+
+      const headerRow = worksheet.getRow(5);
+      headerRow.values = ['Region', 'Category', 'UACS Code', 'Accounting Title / Line Item', 'Income', 'Subsidy', 'Amount', 'Total'];
+      headerRow.height = 24;
+      headerRow.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF375E38' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF27452A' } },
+          left: { style: 'thin', color: { argb: 'FF27452A' } },
+          bottom: { style: 'thin', color: { argb: 'FF27452A' } },
+          right: { style: 'thin', color: { argb: 'FF27452A' } }
+        };
+      });
+      worksheet.autoFilter = 'A5:H5';
+
+      const currencyFormat = '₱#,##0.00;[Red]-₱#,##0.00';
+      const regionalTotals = { income: 0, subsidy: 0, amount: 0, total: 0 };
+      (reportPayload.data || []).forEach((group) => {
+        (group.items || []).forEach((item) => {
+          const income = Number(item.income || 0);
+          const subsidy = Number(item.subsidy || 0);
+          const amount = Number(item.amount || 0);
+          const total = income + subsidy + amount;
+          const row = worksheet.addRow({
+            region: group.region,
+            category: group.category,
+            uacsCode: item.uacsCode,
+            accountingTitle: item.accountingTitle,
+            income,
+            subsidy,
+            amount,
+            total
+          });
+          row.alignment = { vertical: 'top', wrapText: true };
+          [5, 6, 7, 8].forEach((columnNumber) => {
+            row.getCell(columnNumber).numFmt = currencyFormat;
+            row.getCell(columnNumber).alignment = { horizontal: 'right', vertical: 'top' };
+          });
+
+          regionalTotals.income += income;
+          regionalTotals.subsidy += subsidy;
+          regionalTotals.amount += amount;
+          regionalTotals.total += total;
+        });
+      });
+
+      if ((reportPayload.data || []).length === 0) {
+        worksheet.mergeCells('A6:H6');
+        worksheet.getCell('A6').value = 'No budget proposals found for the selected filters.';
+        worksheet.getCell('A6').alignment = { horizontal: 'center' };
+        worksheet.getCell('A6').font = { italic: true, color: { argb: 'FF64748B' } };
+      } else {
+        const totalRow = worksheet.addRow([
+          'REGIONAL TOTAL', '', '', '', regionalTotals.income, regionalTotals.subsidy, regionalTotals.amount, regionalTotals.total
+        ]);
+        totalRow.font = { bold: true, color: { argb: 'FF1F2937' } };
+        totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F1E9' } };
+        totalRow.eachCell((cell) => {
+          cell.border = { top: { style: 'medium', color: { argb: 'FF375E38' } } };
+        });
+        [5, 6, 7, 8].forEach((columnNumber) => {
+          totalRow.getCell(columnNumber).numFmt = currencyFormat;
+          totalRow.getCell(columnNumber).alignment = { horizontal: 'right' };
+        });
+      }
+
+      worksheet.getColumn(3).numFmt = '@';
+      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber > 5) row.height = Math.max(row.height || 15, 18);
+      });
+      worksheet.headerFooter.oddFooter = '&LFMIS-BUDGET&CPage &P of &N&R&D';
+
+      const safeFiscalYear = String(req.query.fiscalYear || 'ALL').replace(/[^A-Za-z0-9_-]/g, '_');
+      const safeBudgetType = String(req.query.budgetType || 'ALL').replace(/[^A-Za-z0-9_-]/g, '_');
+      const filename = `Consolidated_MOOE_${safeFiscalYear}_${safeBudgetType}.xlsx`;
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+      return res.status(200).send(Buffer.from(buffer));
     } catch (error) {
       console.error('Error exporting consolidated data:', error);
       res.status(500).json({
@@ -1068,6 +1577,18 @@ const consolidatedReportsController = {
       });
     }
   }
+};
+
+consolidatedReportsController._private = {
+  buildMooeRegionMatrix,
+  chunkMooeMatrixRegions,
+  getConsolidatedMooeTitle,
+  getMatrixFinancialColumns,
+  getMooeMatrixPdfDetailHeight,
+  getMooeMatrixPdfLayout,
+  getMooeMatrixRegionsPerPage,
+  getMooeMatrixPdfSubheaders,
+  sumFinancialValues,
 };
 
 module.exports = consolidatedReportsController;

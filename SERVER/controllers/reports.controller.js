@@ -4,11 +4,11 @@ const MOOEProposal = require("../models/mooeProposals");
 const CapitalOutlay = require("../models/CapitalOutlay");
 const Category = require("../models/Category");
 const Income = require("../models/Income");
-const Region = require("../models/Region");
 const IncomeCategory = require("../models/IncomeCategory");
 const IncomeSubCategory = require("../models/IncomeSubcategory");
 const IAsOMCost = require("../models/IAsOMCost");
 const DiscountSettings = require("../models/DiscountSettings");
+const { getRegionsWithReportEntries } = require('../utils/reportRegionSelection');
 const getConsolidatedSummary = async (req, res) => {
   try {
     let fiscalYear;
@@ -198,12 +198,14 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     // Optional region filter from query (set by region interceptor)
     const regionFilterRaw = (req.query.region || '').trim();
     const regionFilter = regionFilterRaw && regionFilterRaw.toLowerCase() !== 'all' ? regionFilterRaw : null;
-    // Get regions: if region filter present, only include that; else include all
+    // A specific-region report keeps the requested region. All Regions is
+    // populated later from matching proposal entries so empty master-list
+    // regions are not rendered as report columns.
     let regions;
     if (regionFilter) {
       regions = [{ Region: regionFilter }];
     } else {
-      regions = await Region.find().sort({ Region: 1 });
+      regions = [];
     }
     // console.log(`Generating report${regionFilter ? ` (filtered to: ${regionFilter})` : ''}`);
     // // Get all income categories and deduplicate by name
@@ -246,6 +248,9 @@ const getConsolidatedCorporateIncome = async (req, res) => {
       query.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
     }
     const incomeEntries = await Income.find(query).populate('incomecategory');
+    if (!regionFilter) {
+      regions = getRegionsWithReportEntries(incomeEntries);
+    }
     // Extract unique subcategories from income entries
     const subcategorySet = new Set();
     const subcategoryToCategoryMap = new Map(); // Track which category each subcategory belongs to
@@ -333,12 +338,15 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     // First pass: Process income entries and collect subcategory information
     const subcategoryByCategoryMap = new Map(); // Map to track which subcategories belong to which category
     incomeEntries.forEach(entry => {
-      const region = entry.region || 'Unspecified';
+      const entryRegion = String(entry.region || '').trim();
       const entryCategory = entry.incomecategory;
       const subcategoryName = entry.subcategory || 'Uncategorized';
       const amount = Number(entry.amount) || 0;
-      // Skip if region doesn't exist in our structure
-      if (!result.regionData[region]) {
+      const region = Object.keys(result.regionData).find(
+        regionName => regionName.toLowerCase() === entryRegion.toLowerCase()
+      );
+      // Skip entries without a valid region in the selected report scope.
+      if (!region) {
         return;
       }
       // Find the matching category by name

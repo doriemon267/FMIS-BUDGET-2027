@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
-import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from "../../constants/roles";
+import { isBRDLevelUser } from "../../constants/roles";
 import {
   Box,
   Paper,
@@ -20,80 +20,101 @@ import {
   InputAdornment,
   IconButton,
   Chip,
-  Tooltip,
-  Menu,
   MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Checkbox,
-  FormGroup,
-  Divider,
-  Alert,
-  Fade,
-  Card,
-  CardContent,
   Grid,
   Select,
   FormControl,
   InputLabel,
-  Breadcrumbs,
-  Link,
   Skeleton,
 } from "@mui/material";
 import { ToastContainer, toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
-import { NumericFormat } from "react-number-format";
 import ReportPageLayout from "./ReportPageLayout";
+import {
+  MATRIX_FINANCIAL_COLUMNS,
+  MATRIX_PARTICULARS_WIDTH,
+  MATRIX_SUBCOLUMN_MIN_WIDTH,
+  getMooeMatrixScreenMinimumWidth,
+} from "./mooeMatrixLayout";
 
 // Import icons
 import SearchIcon from "@mui/icons-material/Search";
-import FilterListIcon from "@mui/icons-material/FilterList";
 import ClearIcon from "@mui/icons-material/Clear";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
-import PrintIcon from "@mui/icons-material/Print";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import GenericPdfPreviewDialog from '../GenericPdfPreviewDialog';
 import RefreshIcon from "@mui/icons-material/Refresh";
-import HomeIcon from "@mui/icons-material/Home";
-import AssessmentIcon from "@mui/icons-material/Assessment";
-import CategoryIcon from "@mui/icons-material/Category";
-import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
-import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
-import SavingsIcon from "@mui/icons-material/Savings";
-import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
-import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 
-// Custom component for numeric input formatting
-const NumberFormatCustom = React.memo(React.forwardRef(function NumberFormatCustom(props, ref) {
-  const { onChange, ...other } = props;
+const EXCEL_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-  const handleValueChange = React.useCallback((values, sourceInfo) => {
-    if (sourceInfo.source !== 'prop') {
-      const numericValue = values.value === undefined || values.value === "" ? "" : values.value;
-      onChange({
-        target: {
-          value: numericValue,
-        },
-      });
-    }
-  }, [onChange]);
+const EMPTY_MATRIX = { regions: [], rows: [], totalsByRegion: {}, regionalTotal: { income: 0, subsidy: 0, amount: 0, total: 0 } };
 
-  return (
-    <NumericFormat
-      {...other}
-      getInputRef={ref}
-      thousandSeparator
-      decimalScale={2}
-      fixedDecimalScale={false}
-      allowNegative={false}
-      onValueChange={handleValueChange}
-    />
-  );
-}));
+const formatMoney = (value) => `₱${Number(value || 0).toLocaleString(undefined, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})}`;
+
+const MATRIX_DETAIL_ROW_HEIGHT = 30;
+
+const MatrixFinancialCells = ({
+  values = {},
+  strong = false,
+  groupStart = false,
+  backgroundColor = 'inherit',
+  borderTop,
+  verticalPadding = 0.45,
+}) => (
+  <>
+    {MATRIX_FINANCIAL_COLUMNS.map(({ key }, index) => (
+      <TableCell
+        key={key}
+        align="right"
+        sx={{
+          width: MATRIX_SUBCOLUMN_MIN_WIDTH,
+          minWidth: MATRIX_SUBCOLUMN_MIN_WIDTH,
+          px: 0.75,
+          py: verticalPadding,
+          bgcolor: backgroundColor,
+          borderLeft: groupStart && index === 0 ? '2px solid #cbd5e1' : undefined,
+          borderTop,
+          fontSize: '0.7rem',
+          fontWeight: strong ? 800 : 500,
+          fontVariantNumeric: 'tabular-nums',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {formatMoney(values[key])}
+      </TableCell>
+    ))}
+  </>
+);
+
+const sumMatrixRows = (rows, regionName) => (rows || []).reduce((totals, row) => {
+  const values = regionName ? row?.valuesByRegion?.[regionName] : row?.totals;
+  totals.income += Number(values?.income || 0);
+  totals.subsidy += Number(values?.subsidy || 0);
+  totals.amount += Number(values?.amount || 0);
+  return totals;
+}, { income: 0, subsidy: 0, amount: 0 });
+
+const getConsolidatedMooeTitle = (budgetType) => {
+  const normalizedBudgetType = String(budgetType || "INITIAL").trim().toUpperCase();
+  return `Consolidated MOOE – ${normalizedBudgetType || "INITIAL"} BUDGET PROPOSAL`;
+};
+
+const getResponseFilename = (contentDisposition, fallback) => {
+  if (!contentDisposition) return fallback;
+
+  const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (filenameStarMatch?.[1]) return decodeURIComponent(filenameStarMatch[1]);
+
+  const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  return filenameMatch?.[1] || fallback;
+};
 
 const ConsolidatedReportsPage = () => {
   const { currentUser } = useUser();
@@ -102,9 +123,9 @@ const ConsolidatedReportsPage = () => {
 
   // State management (Moved up to avoid ReferenceError in hooks below)
   const [expandedRows, setExpandedRows] = useState([]);
+  const matrixExpansionKeyRef = useRef("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterAnchorEl, setFilterAnchorEl] = useState(null);
-  const [selectedFilters, setSelectedFilters] = useState({
+  const [selectedFilters] = useState({
     dataTypes: [], // MOOE, Corporate Income, etc.
     regions: [],
     amountRange: { min: "", max: "" },
@@ -123,7 +144,6 @@ const ConsolidatedReportsPage = () => {
   // --- ROLE-BASED SCOPING LOGIC ---
   const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
   const scope = useMemo(() => String(hierarchical.scope || hierarchical.assignmentLevel || "").toUpperCase(), [hierarchical]);
-  const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
   const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
 
   // Enforce restriction: restricted roles (Preparer, Reviewer, Approver) are locked to "Current Region Only".
@@ -183,6 +203,7 @@ const ConsolidatedReportsPage = () => {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const [pdfFilename, setPdfFilename] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -235,7 +256,9 @@ const ConsolidatedReportsPage = () => {
       try {
         const res = await api.get("/api/hierarchical-rbac/organization-structure", { params: { structure: "old" } });
         setOrganizationStructure(res.data?.data || res.data);
-      } catch (_) {}
+      } catch (_) {
+        setOrganizationStructure(null);
+      }
     };
     fetchOrgStructure();
   }, []);
@@ -333,7 +356,7 @@ const ConsolidatedReportsPage = () => {
   }, [selectedDepartment, consolidationType, effectiveCurrentRegion, activeRegion, regions]);
 
   // Fetch consolidated data
-  const { data: consolidatedData, isLoading: consolidatedLoading } = useQuery({
+  const { data: reportResult, isLoading: consolidatedLoading } = useQuery({
     queryKey: ["consolidatedReports", effectiveCurrentRegion, selectedRegions, consolidationType, activeSettings?.fiscalYear, activeSettings?.budgetType, selectedDepartmentName, selectedDivisionName],
     queryFn: async () => {
       try {
@@ -347,7 +370,7 @@ const ConsolidatedReportsPage = () => {
         }
 
         if (consolidationType !== "all" && (!regionsToFetch || regionsToFetch.length === 0)) {
-          return [];
+          return { data: [], matrix: EMPTY_MATRIX };
         }
 
         // Use the consolidated reports API endpoint
@@ -443,7 +466,7 @@ const ConsolidatedReportsPage = () => {
           }));
         }
 
-        return transformedData;
+        return { data: transformedData, matrix: response.data?.matrix || EMPTY_MATRIX };
       } catch (err) {
         console.error("Error fetching consolidated data:", err);
         throw err;
@@ -474,38 +497,8 @@ const ConsolidatedReportsPage = () => {
       toast.error("Failed to load consolidated data");
     },
   });
-
-  // Calculate MOOE totals for all financial columns
-  const grandTotals = useMemo(() => {
-    try {
-      if (!consolidatedData || !Array.isArray(consolidatedData)) {
-        return { income: 0, subsidy: 0, amount: 0, nis: 0, cis: 0, total: 0 };
-      }
-      
-      let income = 0, subsidy = 0, amount = 0, nis = 0, cis = 0;
-
-      consolidatedData.forEach(row => {
-        if (row && row.children && Array.isArray(row.children)) {
-          row.children.forEach(child => {
-            if (child) {
-              income += parseFloat(child.income || 0);
-              subsidy += parseFloat(child.subsidy || 0);
-              amount += parseFloat(child.amount || 0);
-              // nis += parseFloat(child.nis || 0);
-              // cis += parseFloat(child.cis || 0);
-            }
-          });
-        }
-      });
-
-      const total = income + subsidy + amount;
-
-      return { income, subsidy, amount, total };
-    } catch (error) {
-      console.error('Error calculating grandTotals:', error);
-      return { income: 0, subsidy: 0, amount: 0, total: 0 };
-    }
-  }, [consolidatedData]);
+  const consolidatedData = useMemo(() => reportResult?.data || [], [reportResult?.data]);
+  const allRegionsMatrix = useMemo(() => reportResult?.matrix || EMPTY_MATRIX, [reportResult?.matrix]);
 
   // Filter and sort data
   const filteredData = useMemo(() => {
@@ -577,6 +570,90 @@ const ConsolidatedReportsPage = () => {
     return filtered;
   }, [consolidatedData, searchTerm, selectedFilters]);
 
+  const filteredMatrixRows = useMemo(() => {
+    if (consolidationType !== 'all') return [];
+    const search = searchTerm.trim().toLowerCase();
+    return (allRegionsMatrix.rows || []).filter((row) => {
+      if (!search) return true;
+      return [row.category, row.uacsCode, row.accountingTitle]
+        .some((value) => String(value || '').toLowerCase().includes(search));
+    });
+  }, [allRegionsMatrix.rows, consolidationType, searchTerm]);
+
+  const matrixCategoryGroups = useMemo(() => {
+    const categoryMap = new Map();
+    filteredMatrixRows.forEach((row) => {
+      const category = row.category || 'Uncategorized';
+      if (!categoryMap.has(category)) categoryMap.set(category, []);
+      categoryMap.get(category).push(row);
+    });
+    return [...categoryMap.entries()].map(([category, rows]) => ({
+      id: `all-regions-${category}`,
+      category,
+      rows,
+    }));
+  }, [filteredMatrixRows]);
+
+  const matrixExpansionKey = useMemo(
+    () => (allRegionsMatrix.rows || []).map((row) => row.id).join("\u001e"),
+    [allRegionsMatrix.rows]
+  );
+
+  useEffect(() => {
+    if (consolidationType !== 'all' || !matrixExpansionKey || matrixExpansionKeyRef.current === matrixExpansionKey) {
+      return;
+    }
+
+    const categoryIds = [...new Set((allRegionsMatrix.rows || []).map((row) => `all-regions-${row.category || 'Uncategorized'}`))];
+    setExpandedRows(categoryIds);
+    matrixExpansionKeyRef.current = matrixExpansionKey;
+  }, [allRegionsMatrix.rows, consolidationType, matrixExpansionKey]);
+
+  const visibleTotals = useMemo(() => {
+    let income = 0;
+    let subsidy = 0;
+    let amount = 0;
+
+    if (consolidationType === 'all') {
+      filteredMatrixRows.forEach((row) => {
+        income += Number(row?.totals?.income || 0);
+        subsidy += Number(row?.totals?.subsidy || 0);
+        amount += Number(row?.totals?.amount || 0);
+      });
+    } else {
+      filteredData.forEach((row) => {
+        (row?.children || []).forEach((child) => {
+          income += parseFloat(child?.income || 0);
+          subsidy += parseFloat(child?.subsidy || 0);
+          amount += parseFloat(child?.amount || 0);
+        });
+      });
+    }
+
+    return { income, subsidy, amount, total: income + subsidy + amount };
+  }, [consolidationType, filteredData, filteredMatrixRows]);
+
+  const visibleCategoryCount = consolidationType === 'all' ? matrixCategoryGroups.length : filteredData.length;
+  const visibleLineItemCount = consolidationType === 'all'
+    ? filteredMatrixRows.length
+    : filteredData.reduce((sum, row) => sum + (row.children?.length || 0), 0);
+  const matrixVisibleTotalsByRegion = useMemo(() => {
+    const totals = Object.fromEntries(
+      (allRegionsMatrix.regions || []).map((regionName) => [regionName, { income: 0, subsidy: 0, amount: 0 }])
+    );
+    filteredMatrixRows.forEach((row) => {
+      Object.entries(row.valuesByRegion || {}).forEach(([regionName, values]) => {
+        if (!totals[regionName]) return;
+        totals[regionName].income += Number(values.income || 0);
+        totals[regionName].subsidy += Number(values.subsidy || 0);
+        totals[regionName].amount += Number(values.amount || 0);
+      });
+    });
+    return totals;
+  }, [allRegionsMatrix.regions, filteredMatrixRows]);
+
+  const hasActiveViewFilter = Boolean(searchTerm.trim() || selectedFilters.dataTypes.length > 0);
+
   // Toggle expand row
   const toggleExpandRow = useCallback((rowId) => {
     setExpandedRows(prev => 
@@ -617,16 +694,49 @@ const ConsolidatedReportsPage = () => {
 
   // Expand/Collapse all
   const toggleExpandAll = () => {
-    if (expandedRows.length === filteredData.length) {
+    const visibleGroups = consolidationType === 'all' ? matrixCategoryGroups : filteredData;
+    if (expandedRows.length === visibleGroups.length) {
       setExpandedRows([]);
     } else {
-      setExpandedRows(filteredData.map(row => row.id));
+      setExpandedRows(visibleGroups.map(row => row.id));
     }
   };
 
   const isLoading = consolidatedLoading;
   const hasReportData = Array.isArray(consolidatedData) && consolidatedData.length > 0;
   const canPreviewPdf = !pdfLoading && !isLoading && hasReportData;
+  const canExportExcel = !excelLoading && !isLoading && hasReportData;
+  const hasVisibleRows = consolidationType === 'all' ? filteredMatrixRows.length > 0 : filteredData.length > 0;
+
+  const buildReportParams = (format) => {
+    let regionsToFetch;
+    if (consolidationType === "current") {
+      regionsToFetch = [effectiveCurrentRegion].filter(Boolean);
+    } else if (consolidationType === "all") {
+      regionsToFetch = null;
+    } else {
+      regionsToFetch = selectedRegions;
+    }
+
+    const params = new URLSearchParams();
+    const fiscalYear = activeSettings?.fiscalYear || new Date().getFullYear();
+    const budgetType = activeSettings?.budgetType || "INITIAL";
+    if (format) params.append("format", format);
+    params.append("consolidationType", consolidationType);
+    params.append("fiscalYear", fiscalYear);
+    params.append("budgetType", budgetType);
+    if (regionsToFetch?.length) {
+      regionsToFetch.forEach((region) => params.append("regions", region));
+    }
+    if (consolidationType === "current" && selectedDepartmentName) {
+      params.append("department", selectedDepartmentName);
+    }
+    if (consolidationType === "current" && selectedDivisionName) {
+      params.append("division", selectedDivisionName);
+    }
+
+    return { params, fiscalYear, budgetType };
+  };
 
   const closePdfDialog = () => {
     setPdfDialogOpen(false);
@@ -639,43 +749,16 @@ const ConsolidatedReportsPage = () => {
   const handlePreviewPdf = async () => {
     try {
       setPdfLoading(true);
-      let regionsToFetch;
-      if (consolidationType === "current") {
-        regionsToFetch = [effectiveCurrentRegion].filter(Boolean);
-      } else if (consolidationType === "all") {
-        regionsToFetch = null;
-      } else {
-        regionsToFetch = selectedRegions;
-      }
-      const params = new URLSearchParams();
-      const fy = activeSettings?.fiscalYear || new Date().getFullYear();
-      const bt = activeSettings?.budgetType || "INITIAL";
-      if (fy) params.append("fiscalYear", fy);
-      if (bt) params.append("budgetType", bt);
-      if (regionsToFetch && regionsToFetch.length) {
-        regionsToFetch.forEach((r) => params.append("regions", r));
-      }
-      if (consolidationType === "current" && selectedDepartmentName) params.append("department", selectedDepartmentName);
-      if (consolidationType === "current" && selectedDivisionName) params.append("division", selectedDivisionName);
+      const { params, fiscalYear } = buildReportParams();
 
       const response = await api.get(`/api/consolidated-reports/consolidated-data-pdf?${params.toString()}`, {
         responseType: "blob",
       });
 
-      // Extract filename from Content-Disposition header
-      let filename = `Consolidated_MOOE_${fy}.pdf`;
-      const contentDisposition = response.headers['content-disposition'];
-      if (contentDisposition) {
-        const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
-        if (filenameStarMatch && filenameStarMatch[1]) {
-          filename = decodeURIComponent(filenameStarMatch[1]);
-        } else {
-          const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
-          if (filenameMatch && filenameMatch[1]) {
-            filename = filenameMatch[1];
-          }
-        }
-      }
+      const filename = getResponseFilename(
+        response.headers['content-disposition'],
+        `Consolidated_MOOE_${fiscalYear}.pdf`
+      );
       setPdfFilename(filename);
 
       const blob = new Blob([response.data], { type: "application/pdf" });
@@ -684,31 +767,57 @@ const ConsolidatedReportsPage = () => {
       setPdfPreviewUrl(url);
       setPdfDialogOpen(true);
     } catch (err) {
+      console.error("Error generating consolidated MOOE PDF preview:", err);
       toast.error("Failed to generate PDF preview.");
     } finally {
       setPdfLoading(false);
     }
   };
 
+  const handleExportExcel = async () => {
+    try {
+      setExcelLoading(true);
+      const { params, fiscalYear, budgetType } = buildReportParams("xlsx");
+      const response = await api.get(
+        `/api/consolidated-reports/export?${params.toString()}`,
+        { responseType: "blob" }
+      );
+      const filename = getResponseFilename(
+        response.headers['content-disposition'],
+        `Consolidated_MOOE_${fiscalYear}_${budgetType}.xlsx`
+      );
+      const blob = new Blob([response.data], { type: EXCEL_MIME_TYPE });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Excel report downloaded successfully.");
+    } catch (err) {
+      console.error("Error exporting consolidated MOOE report:", err);
+      toast.error("Failed to export the Excel report. Please try again.");
+    } finally {
+      setExcelLoading(false);
+    }
+  };
+
   return (
     <ReportPageLayout
-      title="CONSOLIDATED MAINTENANCE AND OTHER OPERATING EXPENSES (MOOE)"
-      subtitle={
-        consolidationType === "current" && effectiveCurrentRegion
-          ? `MOOE data for ${effectiveCurrentRegion}`
-          : consolidationType === "all"
-          ? "Consolidated MOOE data from all regions"
-          : consolidationType === "custom" && selectedRegions.length > 0
-          ? `MOOE data for selected regions: ${selectedRegions.join(", ")}`
-          : "Select a region or consolidation type above"
-      }
+      title={getConsolidatedMooeTitle(activeSettings?.budgetType)}
       showNiaBranding={true}
       breadcrumbLabel="Consolidated MOOE"
       fiscalYear={activeSettings?.fiscalYear || new Date().getFullYear()}
     >
-      <ToastContainer position="top-right" autoClose={3000} />
-      <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
-        <Grid container spacing={2} alignItems="center">
+      <ToastContainer className="report-no-print" position="top-right" autoClose={3000} />
+      <Paper
+        className="report-no-print"
+        elevation={0}
+        sx={{ p: 2, mb: 2.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}
+      >
+        <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} md={3}>
             <FormControl fullWidth size="small">
               <InputLabel>Consolidation Type</InputLabel>
@@ -851,8 +960,8 @@ const ConsolidatedReportsPage = () => {
             />
           </Grid>
 
-          <Grid item xs={12} md={2}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
+          <Grid item xs={12} md={8}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: { md: 'flex-end' }, gap: 1 }}>
               <Button
                 variant="outlined"
                 startIcon={<RefreshIcon />}
@@ -872,103 +981,118 @@ const ConsolidatedReportsPage = () => {
               >
                 PDF Preview
               </Button>
+              <Button
+                variant="contained"
+                startIcon={excelLoading ? <CircularProgress size={16} color="inherit" /> : <FileDownloadIcon />}
+                onClick={handleExportExcel}
+                disabled={!canExportExcel}
+                size="small"
+              >
+                {excelLoading ? "Exporting..." : "Export Excel"}
+              </Button>
             </Box>
           </Grid>
         </Grid>
 
         {/* Action buttons */}
-        <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, mt: 1.5 }}>
           <Button
-            variant="outlined"
+            variant={consolidationType === 'all' ? "contained" : "outlined"}
             onClick={toggleExpandAll}
             size="small"
           >
-            {expandedRows.length === filteredData.length ? "Collapse All" : "Expand All"}
+            {expandedRows.length === visibleCategoryCount
+              ? (consolidationType === 'all' ? "Collapse all details" : "Collapse All")
+              : (consolidationType === 'all' ? "Expand all details" : "Expand All")}
           </Button>
-          <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center', ml: 2 }}>
-            Showing {filteredData.length} categories
+          <Typography variant="body2" color="text.secondary" sx={{ ml: { sm: 1 } }}>
+            Showing {visibleCategoryCount} categories
           </Typography>
         </Box>
       </Paper>
 
-      {/* Summary Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        {[
-          {
-            title: "Total Categories",
-            value: filteredData?.length || 0,
-            icon: <CategoryIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #4776E6 0%, #8E54E9 100%)",
-          },
-          {
-            title: "Total Line Items",
-            value: filteredData?.reduce((sum, row) => sum + (row.children?.length || 0), 0) || 0,
-            icon: <FormatListBulletedIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
-          },
-          {
-            title: "Total Income",
-            value: `₱${(grandTotals?.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <AttachMoneyIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #f2994a 0%, #f2c94c 100%)",
-          },
-          {
-            title: "Total Subsidy",
-            value: `₱${(grandTotals?.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <SavingsIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #ee0979 0%, #ff6a00 100%)",
-          },
-          {
-            title: "Total Amount",
-            value: `₱${(grandTotals?.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <ReceiptLongIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%)",
-          },
-          {
-            title: "Grand Total",
-            value: `₱${(grandTotals?.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <AccountBalanceWalletIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #1f4037 0%, #99f2c8 100%)",
-          },
-        ].map((metric, index) => (
-          <Grid item xs={12} md={2} key={index}>
-            <Card
-              sx={{
-                background: metric.bgColor,
-                color: "#fff",
-                borderRadius: 2,
-                boxShadow: "0 4px 20px 0 rgba(0,0,0,0.1)",
-                transition: "transform 0.2s",
-                "&:hover": { transform: "translateY(-4px)" },
-              }}
+      <Paper
+        className="report-summary"
+        elevation={0}
+        sx={{
+          mb: 2.5,
+          p: { xs: 2, md: 2.5 },
+          border: '1px solid',
+          borderColor: 'primary.light',
+          borderLeft: '5px solid',
+          borderLeftColor: 'primary.main',
+          borderRadius: 1.5,
+          bgcolor: 'rgba(55, 94, 56, 0.07)',
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'flex-start', md: 'center' },
+            gap: 2,
+          }}
+        >
+          <Box>
+            <Typography variant="overline" sx={{ color: 'primary.dark', fontWeight: 700, letterSpacing: '0.08em' }}>
+              Regional Total
+            </Typography>
+            <Typography
+              variant="h4"
+              sx={{ color: 'primary.dark', fontWeight: 700, fontVariantNumeric: 'tabular-nums', lineHeight: 1.15 }}
             >
-              <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9, mb: 1 }}>
-                      {metric.title}
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                      {metric.value}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ opacity: 0.8 }}>{metric.icon}</Box>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+              ₱{(visibleTotals.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {hasActiveViewFilter
+                ? `Filtered view · Combined total for ${visibleCategoryCount} visible categories`
+                : 'Combined Income, Subsidy, and Amount'}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'repeat(2, minmax(120px, 1fr))', sm: 'repeat(5, auto)' },
+              gap: { xs: 1, sm: 2.5 },
+              width: { xs: '100%', md: 'auto' },
+            }}
+          >
+            {[
+              ['Income', visibleTotals.income || 0, true],
+              ['Subsidy', visibleTotals.subsidy || 0, true],
+              ['Amount', visibleTotals.amount || 0, true],
+              ['Categories', visibleCategoryCount, false],
+              ['Line items', visibleLineItemCount, false],
+            ].map(([label, value, isMoney]) => (
+              <Box key={label}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {label}
+                </Typography>
+                <Typography variant="body2" fontWeight={600} sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {isMoney
+                    ? `₱${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : value.toLocaleString()}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Paper>
 
       {/* Main Table */}
-      <Paper elevation={1} sx={{ borderRadius: 2, overflow: "hidden" }}>
+      <Paper
+        className="report-section"
+        elevation={0}
+        sx={{ borderRadius: 1.5, overflow: "hidden", border: '1px solid', borderColor: 'divider' }}
+      >
         {isLoading ? (
           <Box sx={{ p: 3 }}>
             {[...Array(5)].map((_, i) => (
               <Skeleton key={i} variant="rectangular" height={40} sx={{ mb: 1, borderRadius: 1 }} />
             ))}
           </Box>
-        ) : !filteredData || filteredData.length === 0 ? (
+        ) : !hasVisibleRows ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 4 }}>
             <Typography variant="h6" color="text.secondary">
               No data available
@@ -989,9 +1113,224 @@ const ConsolidatedReportsPage = () => {
               Refresh Data
             </Button>
           </Box>
+        ) : consolidationType === 'all' ? (
+          <>
+            <Box
+              className="report-no-print"
+              sx={{
+                display: { xs: 'flex', sm: 'none' },
+                alignItems: 'center',
+                px: 1.5,
+                py: 0.75,
+                color: 'text.secondary',
+                bgcolor: '#f8fafc',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                fontSize: '0.72rem',
+              }}
+            >
+              Swipe horizontally to compare regions. The Particulars column scrolls on narrow screens.
+            </Box>
+            <TableContainer
+              className="report-table-container"
+              sx={{ maxHeight: { xs: 'none', md: 'calc(100vh - 340px)' }, overflow: 'auto' }}
+            >
+            <Table
+              stickyHeader
+              size="small"
+              aria-label="All Regions MOOE comparison matrix"
+              sx={{
+                width: '100%',
+                minWidth: `max(100%, ${getMooeMatrixScreenMinimumWidth(allRegionsMatrix.regions?.length)}px)`,
+                tableLayout: 'fixed',
+                fontVariantNumeric: 'tabular-nums',
+                '& .matrix-sticky': { position: 'sticky', zIndex: 3, bgcolor: 'background.paper' },
+                '& thead .matrix-sticky': { zIndex: 6, bgcolor: '#f4f7f5' },
+                '& tfoot .matrix-sticky': { zIndex: 5, bgcolor: '#f4f7f5' },
+                '@media (max-width: 599.95px)': {
+                  '& .matrix-sticky': {
+                    position: 'static',
+                    left: 'auto',
+                    zIndex: 'auto',
+                  },
+                },
+              }}
+            >
+              <TableHead>
+                <TableRow className="report-column-header" sx={{ height: 30 }}>
+                  <TableCell
+                    className="matrix-sticky"
+                    rowSpan={2}
+                    scope="col"
+                    sx={{ left: 0, top: 0, width: MATRIX_PARTICULARS_WIDTH, minWidth: MATRIX_PARTICULARS_WIDTH, py: 0.5, fontWeight: 800, borderRight: '2px solid #94a3b8', borderBottom: '2px solid #94a3b8', verticalAlign: 'middle' }}
+                  >
+                    Particulars
+                  </TableCell>
+                  {(allRegionsMatrix.regions || []).map((regionName) => (
+                    <TableCell
+                      key={regionName}
+                      colSpan={3}
+                      scope="colgroup"
+                      align="center"
+                      sx={{
+                        width: MATRIX_FINANCIAL_COLUMNS.length * MATRIX_SUBCOLUMN_MIN_WIDTH,
+                        minWidth: MATRIX_FINANCIAL_COLUMNS.length * MATRIX_SUBCOLUMN_MIN_WIDTH,
+                        bgcolor: '#f4f7f5',
+                        borderLeft: '2px solid #94a3b8',
+                        borderBottom: '1px solid #cbd5e1',
+                        py: 0.5,
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                        {regionName}
+                      </Typography>
+                    </TableCell>
+                  ))}
+                  <TableCell
+                    colSpan={3}
+                    scope="colgroup"
+                    align="center"
+                    sx={{
+                      width: MATRIX_FINANCIAL_COLUMNS.length * MATRIX_SUBCOLUMN_MIN_WIDTH,
+                      minWidth: MATRIX_FINANCIAL_COLUMNS.length * MATRIX_SUBCOLUMN_MIN_WIDTH,
+                      bgcolor: 'rgba(55, 94, 56, 0.1)',
+                      borderLeft: '2px solid #94a3b8',
+                      borderBottom: '1px solid #cbd5e1',
+                      py: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ display: 'block', fontSize: '0.7rem', fontWeight: 900, lineHeight: 1.2 }}>
+                      REGIONAL TOTAL
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+                <TableRow className="report-column-header">
+                  {[...(allRegionsMatrix.regions || []), 'regional-total'].flatMap((groupName) => (
+                    MATRIX_FINANCIAL_COLUMNS.map(({ key, label }, index) => (
+                      <TableCell
+                        key={`${groupName}-${key}`}
+                        scope="col"
+                        align="center"
+                        sx={{
+                          top: 30,
+                          width: MATRIX_SUBCOLUMN_MIN_WIDTH,
+                          minWidth: MATRIX_SUBCOLUMN_MIN_WIDTH,
+                          px: 0.5,
+                          py: 0.4,
+                          bgcolor: groupName === 'regional-total' ? 'rgba(55, 94, 56, 0.1)' : '#f4f7f5',
+                          borderLeft: index === 0 ? '2px solid #94a3b8' : undefined,
+                          borderBottom: '2px solid #94a3b8',
+                          color: 'text.secondary',
+                          fontSize: '0.62rem',
+                          fontWeight: 800,
+                          letterSpacing: '0.04em',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {label}
+                      </TableCell>
+                    ))
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {matrixCategoryGroups.map((group) => {
+                  const expanded = expandedRows.includes(group.id);
+                  return (
+                    <React.Fragment key={group.id}>
+                      <TableRow
+                        hover
+                        onClick={() => toggleExpandRow(group.id)}
+                        sx={{ height: 34, bgcolor: expanded ? 'rgba(55, 94, 56, 0.09)' : 'rgba(55, 94, 56, 0.05)', cursor: 'pointer' }}
+                      >
+                        <TableCell className="matrix-sticky" sx={{ left: 0, py: 0.55, fontWeight: 800, lineHeight: 1.25, bgcolor: 'inherit', borderRight: '2px solid #cbd5e1' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <IconButton className="report-expansion-control" size="small" sx={{ p: 0.15, color: 'primary.main' }}>
+                              {expanded ? <RemoveCircleOutlineIcon fontSize="small" /> : <AddCircleOutlineIcon fontSize="small" />}
+                            </IconButton>
+                            {group.category}
+                          </Box>
+                        </TableCell>
+                        {(allRegionsMatrix.regions || []).map((regionName) => (
+                          <MatrixFinancialCells
+                            key={regionName}
+                            values={sumMatrixRows(group.rows, regionName)}
+                            strong
+                            groupStart
+                            verticalPadding={0.55}
+                          />
+                        ))}
+                        <MatrixFinancialCells
+                          values={sumMatrixRows(group.rows)}
+                          strong
+                          groupStart
+                          backgroundColor="rgba(55, 94, 56, 0.08)"
+                          verticalPadding={0.55}
+                        />
+                      </TableRow>
+                      {group.rows.map((row) => (
+                        <TableRow
+                          className="report-detail-row"
+                          key={row.id}
+                          sx={{ height: MATRIX_DETAIL_ROW_HEIGHT, display: expanded ? 'table-row' : 'none', '&:hover': { bgcolor: 'rgba(55, 94, 56, 0.025)' } }}
+                        >
+                          <TableCell className="matrix-sticky" sx={{ left: 0, pl: 4, py: 0.45, bgcolor: 'background.paper', borderRight: '2px solid #e2e8f0', fontSize: '0.76rem', fontWeight: 400, lineHeight: 1.3, overflowWrap: 'anywhere' }}>
+                            {row.accountingTitle || '—'}
+                          </TableCell>
+                          {(allRegionsMatrix.regions || []).map((regionName) => (
+                            <MatrixFinancialCells
+                              key={regionName}
+                              values={row.valuesByRegion?.[regionName]}
+                              groupStart
+                            />
+                          ))}
+                          <MatrixFinancialCells
+                            values={row.totals}
+                            strong
+                            groupStart
+                            backgroundColor="rgba(55, 94, 56, 0.035)"
+                          />
+                        </TableRow>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </TableBody>
+              <TableFooter>
+                <TableRow className="report-total-row" sx={{ height: 34 }}>
+                  <TableCell className="matrix-sticky" sx={{ left: 0, py: 0.6, bgcolor: '#f4f7f5', fontWeight: 900, borderTop: '2px solid #64748b', borderRight: '2px solid #94a3b8' }}>
+                    REGIONAL TOTAL
+                  </TableCell>
+                  {(allRegionsMatrix.regions || []).map((regionName) => (
+                    <MatrixFinancialCells
+                      key={regionName}
+                      values={matrixVisibleTotalsByRegion[regionName]}
+                      strong
+                      groupStart
+                      backgroundColor="#f4f7f5"
+                      borderTop="2px solid #64748b"
+                      verticalPadding={0.6}
+                    />
+                  ))}
+                  <MatrixFinancialCells
+                    values={visibleTotals}
+                    strong
+                    groupStart
+                    backgroundColor="rgba(55, 94, 56, 0.1)"
+                    borderTop="2px solid #64748b"
+                    verticalPadding={0.6}
+                  />
+                </TableRow>
+              </TableFooter>
+            </Table>
+            </TableContainer>
+          </>
         ) : (
-          <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
-            <Table stickyHeader>
+          <TableContainer
+            className="report-table-container"
+            sx={{ maxHeight: { xs: 'none', md: 'calc(100vh - 360px)' }, overflowX: 'auto' }}
+          >
+            <Table stickyHeader size="small" sx={{ minWidth: 900, fontVariantNumeric: 'tabular-nums' }}>
               <colgroup>
                 <col style={{ width: '5%' }} />
                 <col style={{ width: '18%' }} />
@@ -1018,7 +1357,7 @@ const ConsolidatedReportsPage = () => {
                         backgroundColor: "#f8fafc",
                         color: "#475569",
                         fontWeight: 700,
-                        padding: "12px",
+                        padding: "9px 10px",
                         borderBottom: "2px solid #e2e8f0",
                         textAlign: index >= 4 ? "right" : "center",
                         fontSize: "0.75rem",
@@ -1032,7 +1371,7 @@ const ConsolidatedReportsPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredData?.map((row, index) => {
+                {filteredData?.map((row) => {
                   // Debug: Check if row and children exist
                   
                   if (!row) return null;
@@ -1048,6 +1387,7 @@ const ConsolidatedReportsPage = () => {
                     >
                       <TableCell sx={{ padding: "8px 12px" }}>
                         <IconButton
+                          className="report-expansion-control"
                           size="small"
                           onClick={() => toggleExpandRow(row.id)}
                           sx={{ color: "#375e38" }}
@@ -1069,20 +1409,27 @@ const ConsolidatedReportsPage = () => {
                       <TableCell sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
                         {row.category}
                       </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
+                      <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem", fontVariantNumeric: 'tabular-nums' }}>
                         ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.income || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
+                      <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem", fontVariantNumeric: 'tabular-nums' }}>
                         ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.subsidy || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
+                      <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem", fontVariantNumeric: 'tabular-nums' }}>
                         ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
 
                     {/* Child rows */}
-                    {expandedRows.includes(row.id) && (row.children || []).map((child) => (
-                      <TableRow key={child.id} sx={{ '&:hover': { backgroundColor: "rgba(55, 94, 56, 0.04)" } }}>
+                    {(row.children || []).map((child) => (
+                      <TableRow
+                        className="report-detail-row"
+                        key={child.id}
+                        sx={{
+                          display: expandedRows.includes(row.id) ? 'table-row' : 'none',
+                          '&:hover': { backgroundColor: "rgba(55, 94, 56, 0.04)" },
+                        }}
+                      >
                         <TableCell sx={{ padding: "6px 12px" }}></TableCell>
                         <TableCell sx={{ textAlign: "center", fontSize: "0.8rem", color: "#666", padding: "6px 12px" }}>
                           {child.region || row.region}
@@ -1093,13 +1440,13 @@ const ConsolidatedReportsPage = () => {
                         <TableCell sx={{ fontSize: "0.8rem", paddingLeft: "20px", padding: "6px 12px 6px 20px" }}>
                           {child.accountingTitle || child.lineItem || child.name}
                         </TableCell>
-                        <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
+                        <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333", fontVariantNumeric: 'tabular-nums' }}>
                           ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
-                        <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
+                        <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333", fontVariantNumeric: 'tabular-nums' }}>
                           ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
-                        <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
+                        <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333", fontVariantNumeric: 'tabular-nums' }}>
                           ₱{parseFloat(child.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
@@ -1108,109 +1455,46 @@ const ConsolidatedReportsPage = () => {
                   );
                 })}
               </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    align="right"
+                    sx={{
+                      bgcolor: '#f8fafc',
+                      color: '#1e293b',
+                      fontWeight: 800,
+                      py: 1.5,
+                      borderTop: '2px solid #94a3b8',
+                      fontSize: '0.8rem',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    REGIONAL TOTAL
+                  </TableCell>
+                  {['income', 'subsidy', 'amount'].map((key) => (
+                    <TableCell
+                      key={key}
+                      align="right"
+                      sx={{
+                        bgcolor: '#f8fafc',
+                        color: '#1e293b',
+                        fontWeight: 800,
+                        py: 1.5,
+                        borderTop: '2px solid #94a3b8',
+                        fontSize: '0.8rem',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      ₱{(visibleTotals[key] || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableFooter>
             </Table>
           </TableContainer>
         )}
 
-        {/* Footer with totals */}
-        <Fade in={true} timeout={1000}>
-          <Table
-            sx={{
-              position: 'sticky',
-              bottom: 0,
-              width: '100%',
-              tableLayout: 'fixed',
-              borderCollapse: 'separate',
-              borderSpacing: 0,
-              marginTop: '-2px',
-              zIndex: 2,
-              boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-              transition: 'all 0.3s ease'
-            }}
-          >
-            <colgroup>
-              <col style={{ width: '5%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '30%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '11%' }} />
-            </colgroup>
-            <TableFooter>
-              <TableRow>
-                {/* Empty cells for first 4 columns */}
-                <TableCell sx={{ backgroundColor: "#f8fafc", borderTop: "2px solid #cbd5e1", borderBottom: "none" }} />
-                <TableCell sx={{ backgroundColor: "#f8fafc", borderTop: "2px solid #cbd5e1", borderBottom: "none" }} />
-                <TableCell sx={{ backgroundColor: "#f8fafc", borderTop: "2px solid #cbd5e1", borderBottom: "none" }} />
-                
-                {/* GRAND TOTAL label */}
-                <TableCell 
-                  sx={{ 
-                    backgroundColor: "#f8fafc",
-                    color: "#1e293b",
-                    fontWeight: 800,
-                    padding: "16px 12px",
-                    borderTop: "2px solid #cbd5e1",
-                    borderBottom: "none",
-                    textAlign: "right",
-                    fontSize: "0.875rem"
-                  }}
-                >
-                  GRAND TOTAL:
-                </TableCell>
-                
-                {/* Income total - nakatapat sa INCOME column */}
-                <TableCell 
-                  sx={{ 
-                    backgroundColor: "#f8fafc",
-                    color: "#1e293b",
-                    fontWeight: 800,
-                    padding: "16px 12px",
-                    borderTop: "2px solid #cbd5e1",
-                    borderBottom: "none",
-                    textAlign: "right",
-                    fontSize: "0.875rem"
-                  }}
-                >
-                  ₱{(grandTotals && typeof grandTotals.income === 'number' ? grandTotals.income : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </TableCell>
-                
-                {/* Subsidy total - nakatapat sa SUBSIDY column */}
-                <TableCell 
-                  sx={{ 
-                    backgroundColor: "#f8fafc",
-                    color: "#1e293b",
-                    fontWeight: 800,
-                    padding: "16px 12px",
-                    borderTop: "2px solid #cbd5e1",
-                    borderBottom: "none",
-                    textAlign: "right",
-                    fontSize: "0.875rem"
-                  }}
-                >
-                  ₱{(grandTotals && typeof grandTotals.subsidy === 'number' ? grandTotals.subsidy : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </TableCell>
-                
-                {/* Amount total - nakatapat sa AMOUNT column */}
-                <TableCell 
-                  sx={{ 
-                    backgroundColor: "#f8fafc",
-                    color: "#1e293b",
-                    fontWeight: 800,
-                    padding: "16px 12px",
-                    borderTop: "2px solid #cbd5e1",
-                    borderBottom: "none",
-                    textAlign: "right",
-                    fontSize: "0.875rem"
-                  }}
-                >
-                  ₱{(grandTotals && typeof grandTotals.amount === 'number' ? grandTotals.amount : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        </Fade>
       </Paper>
 
       <GenericPdfPreviewDialog

@@ -221,6 +221,20 @@ const REPORT_RELEASE_WORKFLOW_STATUSES = [
   'RETURNED_TO_OFFICER'
 ];
 
+const buildReportWorkflowVisibilityConditions = ({ allowedMergedIds = [], draftOwnerId = null } = {}) => {
+  const conditions = [
+    { status: { $in: REPORT_RELEASE_WORKFLOW_STATUSES } },
+    { _id: { $in: allowedMergedIds } }
+  ];
+  if (draftOwnerId) {
+    conditions.push({
+      status: 'DRAFT',
+      createdBy: String(draftOwnerId)
+    });
+  }
+  return conditions;
+};
+
 const roleToPositionLabel = (role) => {
   const normalized = String(role || '').replace(/\s+/g, '_').toUpperCase();
   const map = {
@@ -509,7 +523,7 @@ const resolveWorkflowSignatories = async (workflowDocs) => {
     });
 };
 
-const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters, preparerScope }) => {
+const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters, preparerScope, draftOwnerId }) => {
   // 1. Get all active/released consolidated proposals to find their merged source IDs
   const activeConsolidatedQuery = {
     isConsolidated: true,
@@ -537,13 +551,15 @@ const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType,
   });
 
   // 2. Initialize query with statuses and allowed merged IDs in an $and block to prevent collisions with other filters
+  const visibleWorkflowConditions = buildReportWorkflowVisibilityConditions({
+    allowedMergedIds,
+    draftOwnerId
+  });
+
   const npwQuery = {
     $and: [
       {
-        $or: [
-          { status: { $in: REPORT_RELEASE_WORKFLOW_STATUSES } },
-          { _id: { $in: allowedMergedIds } }
-        ]
+        $or: visibleWorkflowConditions
       }
     ]
   };
@@ -600,7 +616,7 @@ const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType,
   }
 
   const workflowDocs = await NewProposalWorkflow.find(npwQuery)
-    .select('_id createdBy createdByName workflowHistory')
+    .select('_id status createdBy createdByName workflowHistory')
     .lean();
 
   const workflowIds = workflowDocs.map((d) => d._id);
@@ -610,7 +626,7 @@ const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType,
   return { workflowIds, proposalIds, workflowDocs };
 };
 
-const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope, groupBy, offices, responsibilityCenters, approverProposalFilter }) => {
+const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope, groupBy, offices, responsibilityCenters, approverProposalFilter, draftOwnerId }) => {
   const normalizeList = (value) => {
     const list = Array.isArray(value) ? value : (value ? [value] : []);
     return list
@@ -663,7 +679,8 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     groupBy,
     offices: selectedOffices,
     responsibilityCenters: selectedResponsibilityCenters,
-    preparerScope
+    preparerScope,
+    draftOwnerId
   });
 
   const noReleasedProposalScope = !releasedProposalScope.workflowIds?.length && !releasedProposalScope.proposalIds?.length;
@@ -786,11 +803,19 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
       department: summaryDepartment,
       division: summaryDivision,
       eligibleForGeneration: true,
+      isDraftPreview: releasedProposalScope.workflowDocs.some((workflow) => workflow.status === 'DRAFT'),
       preparedBy: await resolvePreparedByInfo(releasedProposalScope.workflowDocs),
       signatories: workflowSignatories
     },
     sections: []
   };
+
+  // Keep scope identifiers available to server-side renderers without exposing
+  // internal workflow linkage in the JSON report response.
+  Object.defineProperties(reportData.summary, {
+    _workflowIds: { value: releasedProposalScope.workflowIds, enumerable: false },
+    _proposalIds: { value: releasedProposalScope.proposalIds, enumerable: false }
+  });
 
   const addSectionTotals = (section) => {
     reportData.summary.grandTotal += section.sectionTotal || 0;
@@ -878,7 +903,9 @@ const getComprehensiveReportData = async (req, res) => {
       }
     }
 
-    approverProposalFilter = await getRoleBasedProposalFilterFromRequest(req, regionsParam, fiscalYear, budgetType);
+    approverProposalFilter = isPreparer
+      ? null
+      : await getRoleBasedProposalFilterFromRequest(req, regionsParam, fiscalYear, budgetType);
 
     const reportData = await buildComprehensiveReportData({
       regions: regionsParam,
@@ -888,7 +915,8 @@ const getComprehensiveReportData = async (req, res) => {
       groupBy: groupBy || 'region',
       offices: officesParam,
       responsibilityCenters: responsibilityCentersParam,
-      approverProposalFilter
+      approverProposalFilter,
+      draftOwnerId: isPreparer ? req.user.id : null
     });
 
     res.status(200).json({
@@ -1616,7 +1644,9 @@ const getComprehensiveReportPdf = async (req, res) => {
         };
       }
     }
-    const approverProposalFilter = await getRoleBasedProposalFilterFromRequest(req, regionsParam, fiscalYear, budgetType);
+    const approverProposalFilter = isPreparer
+      ? null
+      : await getRoleBasedProposalFilterFromRequest(req, regionsParam, fiscalYear, budgetType);
     const reportData = await buildComprehensiveReportData({
       regions: regionsParam,
       fiscalYear,
@@ -1625,7 +1655,8 @@ const getComprehensiveReportPdf = async (req, res) => {
       groupBy: groupBy || 'region',
       offices: officesParam,
       responsibilityCenters: responsibilityCentersParam,
-      approverProposalFilter
+      approverProposalFilter,
+      draftOwnerId: isPreparer ? req.user.id : null
     });
 
     if (reportData?.summary?.eligibleForGeneration === false || reportData?.summary?.reportLockedUntilSubmission) {
@@ -1749,7 +1780,10 @@ const getComprehensiveReportPdf = async (req, res) => {
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
     const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.FirstName || req.user?.id || 'Authorized User');
-    const watermarkText = process.env.COMPREHENSIVE_PDF_WATERMARK_TEXT || `FMIS CONFIDENTIAL • ${requesterLabel}`;
+    const defaultWatermark = reportData.summary.isDraftPreview
+      ? `DRAFT PREVIEW • FMIS CONFIDENTIAL • ${requesterLabel}`
+      : `FMIS CONFIDENTIAL • ${requesterLabel}`;
+    const watermarkText = process.env.COMPREHENSIVE_PDF_WATERMARK_TEXT || defaultWatermark;
     const drawWatermark = () => {
       const centerX = PAGE_WIDTH / 2;
       const centerY = PAGE_HEIGHT / 2;
@@ -1880,7 +1914,18 @@ const getComprehensiveReportPdf = async (req, res) => {
         pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 12, bold: true, align: 'center' }));
         currentY += LINE_HEIGHT * 1.2;
         pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
-        currentY += LINE_HEIGHT * 1.5;
+        currentY += LINE_HEIGHT * 1.1;
+        if (reportData.summary.isDraftPreview) {
+          pdfDoc.text('DRAFT PREVIEW – NOT YET SUBMITTED', CENTER_X, currentY, textOpt({
+            fontSize: 9,
+            bold: true,
+            align: 'center',
+            color: '#555555'
+          }));
+          currentY += LINE_HEIGHT * 1.1;
+        } else {
+          currentY += LINE_HEIGHT * 0.4;
+        }
       } else {
         // Continuation page - add simple note
         pdfDoc.text('(Continued)', CENTER_X, currentY, textOpt({ fontSize: 10, italic: true, align: 'center' }));
@@ -1920,6 +1965,14 @@ const getComprehensiveReportPdf = async (req, res) => {
     if (regionsParam && regionsParam !== 'all') baseFilter.region = regionsParam;
     if (fiscalYear) baseFilter.fiscalYear = fiscalYear;
     if (budgetType) baseFilter.budgetType = budgetType;
+    const scopedWorkflowIds = reportData.summary._workflowIds || [];
+    const scopedProposalIds = reportData.summary._proposalIds || [];
+    if (scopedWorkflowIds.length > 0 || scopedProposalIds.length > 0) {
+      baseFilter.$or = [
+        ...(scopedWorkflowIds.length > 0 ? [{ workflowRef: { $in: scopedWorkflowIds } }] : []),
+        ...(scopedProposalIds.length > 0 ? [{ proposalId: { $in: scopedProposalIds } }] : [])
+      ];
+    }
 
     // Get actual employee counts from database using statusOfAppointment field
     // Non-Casual employees (PERMANENT, etc.)
@@ -2623,5 +2676,8 @@ module.exports = {
   getActiveSettings,
   getComprehensiveReportPdf,
   verifyDocument,
-  verifyDocumentUpload
+  verifyDocumentUpload,
+  _private: {
+    buildReportWorkflowVisibilityConditions
+  }
 };

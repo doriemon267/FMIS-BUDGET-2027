@@ -20,7 +20,6 @@ try {
   MuhammaraRecipe = null;
 }
 const Settings = require('../models/Settings');
-const Region = require('../models/Region');
 const Income = require('../models/Income');
 const IncomeCategory = require('../models/IncomeCategory');
 const IncomeSubCategory = require('../models/IncomeSubcategory');
@@ -28,6 +27,8 @@ const DiscountSettings = require('../models/DiscountSettings');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
+const { getFolioPageSize, isAllRegionsSelection } = require('../utils/reportPageLayout');
+const { getRegionsWithReportEntries } = require('../utils/reportRegionSelection');
 
 // Constants for PDF styling
 const COLORS = {
@@ -686,7 +687,9 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     // Fetch data from database
     const queryBudgetType = (budgetType || 'INITIAL').toUpperCase();
     
-    // Get regions
+    // A specific-region report keeps the requested region. All Regions is
+    // populated after the proposal query so regions without matching data do
+    // not consume empty columns in the PDF.
     let regions;
     if (regionFilter) {
       if (Array.isArray(regionFilter)) {
@@ -695,7 +698,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
         regions = [{ Region: regionFilter }];
       }
     } else {
-      regions = await Region.find().sort({ Region: 1 });
+      regions = [];
     }
     
     // Get income categories (deduplicated)
@@ -729,6 +732,9 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     
     // Fetch data using the same query as the screen report (reports.controller.js)
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
+    if (!regionFilter) {
+      regions = getRegionsWithReportEntries(incomeEntries);
+    }
 
     // Resolve workflow signatories from linked NewProposalWorkflow
     let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
@@ -1031,8 +1037,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       subject: 'Corporate Income Report',
     });
 
-    const PAGE_WIDTH = 612; // 8.5 x 13 portrait
-    const PAGE_HEIGHT = 936;
+    const useLandscape = isAllRegionsSelection({ selectedRegions });
+    const { width: PAGE_WIDTH, height: PAGE_HEIGHT } = getFolioPageSize(useLandscape);
     const MARGIN = 18;
     const MARGIN_TOP = 25;
     const MARGIN_BOTTOM = 18;
@@ -1132,7 +1138,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       if (currentPage > 0) {
         pdfDoc.endPage();
       }
-      // Use Folio Landscape
+      // All Regions uses Folio landscape; a single region keeps Folio portrait.
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage += 1;
       drawBorder();
