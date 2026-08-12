@@ -8,6 +8,10 @@ const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeFields, validateNonNegativeInItems, CAPITAL_OUTLAY_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
 const { isRecordLockedForUser } = require('../utils/workflowRecordEditAccess');
+const {
+  validateCapitalOutlayAccount,
+  isAllowedCapitalOutlayAccount,
+} = require('../utils/capitalOutlayAccountValidation');
 
 // Statuses that prevent Budget Preparer from editing Capital Outlay records
 const LOCKED_CAPITAL_STATUSES = [
@@ -34,6 +38,32 @@ const LOCKED_CAPITAL_STATUSES = [
   "Office",
   "Office Submitted"
 ];
+
+const validateCategorySubline = async (categoryId, sublineItem) => {
+  if (!categoryId || !sublineItem || !mongoose.Types.ObjectId.isValid(categoryId)) {
+    return { valid: true };
+  }
+
+  const categoryDoc = await Category.findById(categoryId).select('categoryName sublineItems').lean();
+  if (!categoryDoc || !Array.isArray(categoryDoc.sublineItems) || categoryDoc.sublineItems.length === 0) {
+    return { valid: true };
+  }
+
+  const normalizedSubline = String(sublineItem).trim().toUpperCase();
+  const allowedSublineItems = categoryDoc.sublineItems
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  const isAllowed = allowedSublineItems.some(
+    (item) => item.toUpperCase() === normalizedSubline
+  );
+
+  return isAllowed
+    ? { valid: true }
+    : {
+        valid: false,
+        message: `Subline Item "${sublineItem}" is not allowed for category "${categoryDoc.categoryName}". Allowed value(s): ${allowedSublineItems.join(', ')}.`,
+      };
+};
 
 // All Chart of Accounts entries are read straight from the FMIS main database via MONGODB_MAIN_URL.
 // We intentionally avoid local file-based seeding so the data always mirrors the source system.
@@ -218,11 +248,22 @@ exports.addCapitalOutlay = async (req, res) => {
     if (!nonNeg.valid) {
       return res.status(400).json({ error: nonNeg.message });
     }
-    // ─── UACS CODE VALIDATION REMOVED ───
-    // Previous validation required codes starting with "5-01-" or "5-02-"
-    // However, the chart_of_accounts table contains codes starting with "1-"
-    // Validation removed to accept all UACS codes from chart_of_accounts
-    console.log("UACS code check skipped - accepting all codes from chart_of_accounts:", uacsCode);
+
+    const accountValidation = validateCapitalOutlayAccount({ uacsCode, sublineItem, accountingTitle });
+    if (!accountValidation.valid) {
+      return res.status(400).json({
+        error: accountValidation.message,
+        code: accountValidation.code,
+      });
+    }
+
+    const categorySublineValidation = await validateCategorySubline(category, sublineItem);
+    if (!categorySublineValidation.valid) {
+      return res.status(400).json({
+        error: categorySublineValidation.message,
+        code: 'INVALID_CAPITAL_OUTLAY_SUBLINE',
+      });
+    }
     
     // Fetch active settings
     console.log("Fetching active settings...");
@@ -427,6 +468,30 @@ exports.editCapitalOutlay = async (req, res) => {
     const nonNeg = validateNonNegativeFields({ cost, income, subsidy }, CAPITAL_OUTLAY_NUMERIC_FIELDS);
     if (!nonNeg.valid) {
       return res.status(400).json({ error: nonNeg.message });
+    }
+
+    const effectiveAccount = {
+      uacsCode: uacsCode ?? existingOutlay.uacsCode,
+      sublineItem: sublineItem ?? existingOutlay.sublineItem,
+      accountingTitle: accountingTitle ?? existingOutlay.accountingTitle,
+    };
+    const accountValidation = validateCapitalOutlayAccount(effectiveAccount);
+    if (!accountValidation.valid) {
+      return res.status(400).json({
+        error: accountValidation.message,
+        code: accountValidation.code,
+      });
+    }
+
+    const categorySublineValidation = await validateCategorySubline(
+      category ?? existingOutlay.category,
+      effectiveAccount.sublineItem
+    );
+    if (!categorySublineValidation.valid) {
+      return res.status(400).json({
+        error: categorySublineValidation.message,
+        code: 'INVALID_CAPITAL_OUTLAY_SUBLINE',
+      });
     }
     // Update capital outlay
     // Use submission workflow data for ownership normalization
@@ -666,13 +731,22 @@ exports.getAccountingTitles = async (req, res) => {
     // // Debugging
     // First try to get from database
     const accountingTitleDocs = await ChartOfAccounts.find({ sublineItem }).select("accountingTitle uacsCode");
-    const accountingTitles = accountingTitleDocs.map((doc) => ({
+    const allAccountingTitles = accountingTitleDocs.map((doc) => ({
       accountingTitle: doc.accountingTitle,
       uacsCode: doc.uacsCode,
+      sublineItem,
     }));
 
+    // Do not expose MOOE/semi-expendable accounts in Capital Outlay selectors.
+    const accountingTitles = allAccountingTitles
+      .filter(isAllowedCapitalOutlayAccount)
+      .map(({ accountingTitle, uacsCode }) => ({ accountingTitle, uacsCode }));
+    const excludedCount = allAccountingTitles.length - accountingTitles.length;
+
     if (accountingTitles.length === 0) {
-      const message = `No Chart of Accounts entries found for "${sublineItem}". Please verify the FMIS main database (MONGODB_MAIN_URL) contains the expected Chart of Accounts records.`;
+      const message = excludedCount > 0
+        ? `All ${excludedCount} account(s) found for "${sublineItem}" are MOOE/semi-expendable accounts and are not allowed under Capital Outlay.`
+        : `No Chart of Accounts entries found for "${sublineItem}". Please verify the FMIS main database (MONGODB_MAIN_URL) contains the expected Chart of Accounts records.`;
 
       console.warn(`[CapitalOutlay] ${message}`);
 
@@ -682,17 +756,12 @@ exports.getAccountingTitles = async (req, res) => {
       });
     }
 
-    const nonCapitalOutlayCodes = accountingTitles
-      .filter(({ uacsCode }) => !(typeof uacsCode === 'string' && /^(5-01|5-02)-/.test(uacsCode.trim())))
-      .map(({ uacsCode }) => uacsCode)
-      .filter(Boolean);
-
     const responsePayload = { accountingTitles };
 
-    if (nonCapitalOutlayCodes.length > 0) {
-      responsePayload.message = `Returned ${nonCapitalOutlayCodes.length} accounting title(s) whose UACS codes are outside the usual Capital Outlay prefixes (5-01 or 5-02). Review the source data if this is unexpected.`;
+    if (excludedCount > 0) {
+      responsePayload.message = `Excluded ${excludedCount} MOOE/semi-expendable account(s) because they are not allowed under Capital Outlay.`;
       console.warn(
-        `[CapitalOutlay] Subline "${sublineItem}" includes non-capital-outlay UACS codes: ${nonCapitalOutlayCodes.join(", ")}`
+        `[CapitalOutlay] Subline "${sublineItem}" contained ${excludedCount} blocked MOOE/semi-expendable account(s).`
       );
     }
 

@@ -7,6 +7,12 @@ const ChartOfAccounts = require("../models/chartOfAccounts");
 const TitleMapping = require("../models/titleMapping");
 const Settings = require("../models/Settings");
 const { regionsMatch, normalizeRegionName } = require("../utils/regionUtils");
+const {
+  validateCapitalOutlayAccount,
+  normalizeAccountLabel,
+  findConfiguredCapitalOutlayCategory,
+  selectCapitalOutlayMapping,
+} = require("../utils/capitalOutlayAccountValidation");
 
 const normalizeHeader = (value = "") => value.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
 
@@ -27,23 +33,71 @@ const parseAmount = (value) => {
 
 const escapeRegex = (value = "") => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle, particulars }) => {
+const normalizeText = normalizeAccountLabel;
+
+const resolveCapitalOutlayUacs = async ({
+  title,
+  sublineItem,
+  accountingTitle,
+  particulars,
+  uacsCode,
+  allowedSublineItems = [],
+}) => {
   const exactSubline = sublineItem ? new RegExp(`^${escapeRegex(sublineItem)}$`, "i") : null;
   const exactAccountingTitle = accountingTitle ? new RegExp(`^${escapeRegex(accountingTitle)}$`, "i") : null;
   const exactTitle = title ? new RegExp(`^${escapeRegex(title)}$`, "i") : null;
+  const preferredSubline = sublineItem || (allowedSublineItems.length === 1 ? allowedSublineItems[0] : "");
 
   let resolved = {
-    uacsCode: null,
-    sublineItem: sublineItem || "",
+    uacsCode: uacsCode || null,
+    sublineItem: preferredSubline,
     accountingTitle: accountingTitle || ""
   };
 
-  // 1. Try exact match from TitleMapping if we have the Title
+  // 1. Honor an explicitly supplied, valid Capital Outlay UACS code.
+  if (uacsCode) {
+    const exactUacs = new RegExp(`^${escapeRegex(uacsCode)}$`, "i");
+    const matchingMappings = await TitleMapping.find({ uacsCode: exactUacs, isActive: true }).lean();
+    const matchingAccounts = matchingMappings.length > 0
+      ? []
+      : await ChartOfAccounts.find({ uacsCode: exactUacs }).lean();
+    const match = selectCapitalOutlayMapping(
+      [...matchingMappings, ...matchingAccounts],
+      { sublineItem: preferredSubline, accountingTitle, allowedSublineItems }
+    );
+    if (match) {
+      if (!resolved.sublineItem) resolved.sublineItem = match.sublineItem;
+      if (!resolved.accountingTitle) resolved.accountingTitle = match.accountingTitle;
+    }
+    return resolved;
+  }
+
+  // 2. Try exact match from TitleMapping. Never select 5-02 or semi-expendable mappings.
   if (exactTitle) {
-    const titleMapping = await TitleMapping.findOne({
+    const exactQuery = {
       lineItem: exactTitle,
       isActive: true,
-    }).sort({ accountingTitle: 1, sublineItem: 1 }).lean();
+    };
+    if (exactSubline) exactQuery.sublineItem = exactSubline;
+    if (exactAccountingTitle) exactQuery.accountingTitle = exactAccountingTitle;
+
+    let titleMappings = await TitleMapping.find(exactQuery)
+      .sort({ accountingTitle: 1, sublineItem: 1 })
+      .lean();
+
+    // If the optional Excel labels did not exactly match the source database,
+    // retry by TITLE and let the allowed category sublines choose the CO account.
+    if (titleMappings.length === 0 && (exactSubline || exactAccountingTitle)) {
+      titleMappings = await TitleMapping.find({ lineItem: exactTitle, isActive: true })
+        .sort({ accountingTitle: 1, sublineItem: 1 })
+        .lean();
+    }
+
+    const titleMapping = selectCapitalOutlayMapping(titleMappings, {
+      sublineItem: preferredSubline,
+      accountingTitle,
+      allowedSublineItems,
+    });
 
     if (titleMapping?.uacsCode) {
       resolved.uacsCode = titleMapping.uacsCode;
@@ -53,12 +107,12 @@ const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle, p
     }
   }
 
-  // 2. SMART FALLBACK: If exact Title fails, try fuzzy match or keyword match
+  // 3. SMART FALLBACK: If exact Title fails, try fuzzy match or keyword match
   const searchStr = `${title} ${particulars}`.toUpperCase();
   const keywords = [
     { key: "FURNITURE", match: /FURNITURE|FIXTURE|BOOK/i, defaultUacs: "5060407001", defaultSubline: "Furniture and Fixtures", defaultAcc: "Furniture and Fixtures" },
     { key: "INTANGIBLE", match: /INTANGIBLE|SOFTWARE|LICENSE|APP/i, defaultUacs: "5060601000", defaultSubline: "Computer Software", defaultAcc: "Computer Software" },
-    { key: "MACHINERY", match: /MACHINERY|EQUIPMENT|IT|COMPUTER/i, defaultUacs: "5060405003", defaultSubline: "IT Equipment", defaultAcc: "Information and Communication Technology Equipment" },
+    { key: "MACHINERY", match: /MACHINERY|EQUIPMENT|IT|COMPUTER/i, defaultUacs: "5060405003", defaultSubline: "Machinery and Equipment", defaultAcc: "Information and Communication Technology Equipment" },
     { key: "TRANSPORTATION", match: /TRANSPORTATION|VEHICLE|CAR|MOTOR|TRUCK/i, defaultUacs: "5060406001", defaultSubline: "Motor Vehicles", defaultAcc: "Motor Vehicles" },
     { key: "LAND", match: /LAND|LOT|TITLING/i, defaultUacs: "5060101000", defaultSubline: "Land", defaultAcc: "Land" },
     { key: "CONSTRUCTION", match: /CONSTRUCTION|BUILDING|STRUCTURE|FACILITIES|REHABILITATION/i, defaultUacs: "5060404001", defaultSubline: "Buildings", defaultAcc: "Buildings" }
@@ -67,13 +121,19 @@ const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle, p
   for (const k of keywords) {
     if (k.match.test(searchStr)) {
       // Try TitleMapping first
-      const fuzzyMapping = await TitleMapping.findOne({
+      const fuzzyMappings = await TitleMapping.find({
         $or: [
           { lineItem: new RegExp(k.key, "i") },
           { sublineItem: new RegExp(k.key, "i") },
           { accountingTitle: new RegExp(k.key, "i") }
-        ]
-      }).sort({ isActive: -1 }).lean();
+        ],
+        isActive: true,
+      }).sort({ accountingTitle: 1, sublineItem: 1 }).limit(100).lean();
+      const fuzzyMapping = selectCapitalOutlayMapping(fuzzyMappings, {
+        sublineItem: preferredSubline,
+        accountingTitle,
+        allowedSublineItems,
+      });
 
       if (fuzzyMapping?.uacsCode) {
         resolved.uacsCode = fuzzyMapping.uacsCode;
@@ -84,12 +144,17 @@ const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle, p
       }
 
       // Try ChartOfAccounts fallback
-      const chartAccount = await ChartOfAccounts.findOne({
+      const chartAccounts = await ChartOfAccounts.find({
         $or: [
           { sublineItem: new RegExp(k.key, "i") },
           { accountingTitle: new RegExp(k.key, "i") }
         ]
-      }).lean();
+      }).sort({ accountingTitle: 1, sublineItem: 1 }).limit(100).lean();
+      const chartAccount = selectCapitalOutlayMapping(chartAccounts, {
+        sublineItem: preferredSubline,
+        accountingTitle,
+        allowedSublineItems,
+      });
 
       if (chartAccount?.uacsCode) {
         resolved.uacsCode = chartAccount.uacsCode;
@@ -101,14 +166,18 @@ const resolveCapitalOutlayUacs = async ({ title, sublineItem, accountingTitle, p
 
       // FINAL HARDCODED FALLBACK
       resolved.uacsCode = k.defaultUacs;
-      if (!resolved.sublineItem) resolved.sublineItem = k.defaultSubline;
+      if (!resolved.sublineItem) {
+        resolved.sublineItem = allowedSublineItems.length === 1
+          ? allowedSublineItems[0]
+          : k.defaultSubline;
+      }
       if (!resolved.accountingTitle) resolved.accountingTitle = k.defaultAcc;
       console.log(`Hardcoded Fallback Used: Keyword "${k.key}" -> Resolved to ${resolved.uacsCode}`);
       return resolved;
     }
   }
 
-  // 3. Diagnostics if all failed
+  // 4. Diagnostics if all failed
   if (!resolved.uacsCode) {
     try {
       const allItems = await TitleMapping.find({ isActive: true }).distinct('lineItem');
@@ -147,7 +216,7 @@ const getUploadOrgContext = async (req) => {
 /**
  * Upload Capital Outlay data from Excel file.
  * Expected format mirrors the actual table columns:
- * TITLE | Subline Item | Accounting Title | Particulars | INCOME | SUBSIDY | TOTAL
+ * TITLE | Subline Item | Accounting Title | UACS Code (optional) | Particulars | INCOME | SUBSIDY | TOTAL
  */
 exports.uploadCapitalOutlay = async (req, res) => {
   // Drop the old index if it exists to prevent duplicate key errors with category
@@ -192,6 +261,7 @@ exports.uploadCapitalOutlay = async (req, res) => {
     const titleCol = findColumn(headers, ["TITLE", "Category"]);
     const sublineCol = findColumn(headers, ["Subline Item"]);
     const accountingCol = findColumn(headers, ["Accounting Title"]);
+    const uacsCol = findColumn(headers, ["UACS Code", "UACS"]);
     const particularsCol = findColumn(headers, ["Particulars"]);
     const incomeCol = findColumn(headers, ["INCOME", "Income", "AMOUNT", "Amount"]);
     const subsidyCol = findColumn(headers, ["SUBSIDY", "Subsidy"]);
@@ -220,6 +290,21 @@ exports.uploadCapitalOutlay = async (req, res) => {
     const DepartmentModel = require('../models/Department');
     const allRegions = await RegionModel.find({}).lean();
     const allDepartments = await DepartmentModel.find({}).lean();
+    const allCategories = await Category.find({})
+      .select('_id categoryName sublineItems')
+      .sort({ categoryName: 1 })
+      .lean();
+
+    if (allCategories.length === 0) {
+      return res.status(400).json({
+        error: "Capital Outlay categories are not configured",
+        message: "Add the allowed Capital Outlay titles on the /categories page before uploading."
+      });
+    }
+
+    const configuredCategoryNames = allCategories
+      .map((category) => category.categoryName)
+      .filter(Boolean);
     
     const knownRegions = allRegions.map(r => String(r.regionName || r.Region || '').toUpperCase().trim());
     const knownDepts = allDepartments.map(d => String(d.departmentName || d.DepartmentName || d.Department || '').toUpperCase().trim());
@@ -297,6 +382,7 @@ exports.uploadCapitalOutlay = async (req, res) => {
       let title = row[titleCol]?.toString().trim() || "";
       let sublineItem = row[sublineCol]?.toString().trim() || "";
       let accountingTitle = row[accountingCol]?.toString().trim() || "";
+      const suppliedUacsCode = uacsCol ? row[uacsCol]?.toString().trim() || "" : "";
       const particulars = particularsCol ? row[particularsCol]?.toString().trim() || "" : "";
       const income = parseAmount(row[incomeCol]);
       const subsidy = parseAmount(row[subsidyCol]);
@@ -336,7 +422,18 @@ exports.uploadCapitalOutlay = async (req, res) => {
         rc = currentRC;
       }
 
-      if (title) currentTitle = title; else title = currentTitle;
+      if (title) {
+        const titleChanged = currentTitle && normalizeText(currentTitle) !== normalizeText(title);
+        currentTitle = title;
+        if (titleChanged) {
+          // A new category starts a new mapping group. Do not carry the previous
+          // category's subline/accounting title into this row.
+          currentSubline = '';
+          currentAccountingTitle = '';
+        }
+      } else {
+        title = currentTitle;
+      }
       if (sublineItem) currentSubline = sublineItem; else sublineItem = currentSubline;
       if (accountingTitle) currentAccountingTitle = accountingTitle; else accountingTitle = currentAccountingTitle;
 
@@ -352,22 +449,51 @@ exports.uploadCapitalOutlay = async (req, res) => {
           throw new Error("TITLE (Category) is required");
         }
 
-        // Auto-create category if it doesn't exist yet
-        // This ensures all Excel title categories (FURNITURE, MACHINERY, etc.) are saved
-        const categoryDoc = await Category.findOneAndUpdate(
-          { categoryName: new RegExp(`^${escapeRegex(title)}$`, 'i') },
-          { $setOnInsert: { categoryName: title.toUpperCase() } },
-          { upsert: true, new: true, lean: true }
-        );
+        const uploadedTitle = title;
+        const categoryDoc = findConfiguredCapitalOutlayCategory(uploadedTitle, allCategories);
         if (!categoryDoc) {
-          throw new Error(`Failed to find or create Category for title "${title}"`);
+          throw new Error(
+            `TITLE "${uploadedTitle}" does not match any configured category from /categories. Allowed title(s): ${configuredCategoryNames.join('; ')}.`
+          );
         }
+
+        // Use the canonical title from /categories for this row and its
+        // fill-down rows. Uploads must never create or persist a new title.
+        title = categoryDoc.categoryName;
+        currentTitle = title;
+
+        const suppliedAccountValidation = validateCapitalOutlayAccount({
+          uacsCode: suppliedUacsCode,
+          sublineItem,
+          accountingTitle,
+        });
+        if (!suppliedAccountValidation.valid) {
+          throw new Error(suppliedAccountValidation.message);
+        }
+
+        const allowedSublineItems = (categoryDoc.sublineItems || [])
+          .map((item) => String(item || '').trim())
+          .filter(Boolean);
+        const allowedSublineSet = new Set(allowedSublineItems.map(normalizeText));
+
+        if (sublineItem && allowedSublineSet.size > 0 && !allowedSublineSet.has(normalizeText(sublineItem))) {
+          throw new Error(
+            `Subline Item "${sublineItem}" is not allowed for TITLE "${title}". Allowed value(s): ${allowedSublineItems.join(', ')}.`
+          );
+        }
+
+        // When the category defines exactly one allowed subline (for example,
+        // ACQUISITION OF MACHINERY AND EQUIPMENT -> Machinery and Equipment),
+        // use it instead of guessing from unrelated Chart of Accounts entries.
+        const preferredSubline = sublineItem || (allowedSublineItems.length === 1 ? allowedSublineItems[0] : '');
 
         const resolution = await resolveCapitalOutlayUacs({
           title,
-          sublineItem,
+          sublineItem: preferredSubline,
           accountingTitle,
-          particulars
+          particulars,
+          uacsCode: suppliedUacsCode,
+          allowedSublineItems,
         });
 
         console.log(`Row ${index + 2} resolution: UACS=${resolution.uacsCode}, Subline=${resolution.sublineItem}`);
@@ -377,9 +503,24 @@ exports.uploadCapitalOutlay = async (req, res) => {
         }
 
         // Use resolved values if they were missing in Excel
-        const finalSubline = sublineItem || resolution.sublineItem;
+        const finalSubline = preferredSubline || resolution.sublineItem;
         const finalAccountingTitle = accountingTitle || resolution.accountingTitle;
         const resolvedUacsCode = resolution.uacsCode;
+
+        const resolvedAccountValidation = validateCapitalOutlayAccount({
+          uacsCode: resolvedUacsCode,
+          sublineItem: finalSubline,
+          accountingTitle: finalAccountingTitle,
+        });
+        if (!resolvedAccountValidation.valid) {
+          throw new Error(resolvedAccountValidation.message);
+        }
+
+        if (allowedSublineSet.size > 0 && !allowedSublineSet.has(normalizeText(finalSubline))) {
+          throw new Error(
+            `Resolved Subline Item "${finalSubline}" is not allowed for TITLE "${title}". Allowed value(s): ${allowedSublineItems.join(', ')}.`
+          );
+        }
 
         let targetRegion = rowRegionInput || org.region || null;
         let targetDepartment = rowDeptInput || org.department || null;
@@ -584,6 +725,7 @@ exports.uploadCapitalOutlay = async (req, res) => {
           row: index + 2,
           title,
           sublineItem,
+          uacsCode: suppliedUacsCode || undefined,
           region: org.region,
           error: error.message
         });
@@ -624,9 +766,10 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "DEPARTMENT": "ADMINISTRATIVE DEPARTMENT",
         "RESPONSIBILITY CENTER": "MANAGEMENT INFORMATION DIVISION",
         "TITLE": "ACQUISITION OF MACHINERY AND EQUIPMENT",
-        "Subline Item": "Service Vehicles",
-        "Accounting Title": "Motor Vehicles",
-        "Particulars": "One service vehicle for field operations",
+        "Subline Item": "Machinery and Equipment",
+        "Accounting Title": "Information and Communication Technology Equipment",
+        "UACS Code": "5060405003",
+        "Particulars": "Desktop computers for operations",
         "INCOME": 500000,
         "SUBSIDY": 250000
       },
@@ -635,9 +778,10 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "DEPARTMENT": "",
         "RESPONSIBILITY CENTER": "",
         "TITLE": "ACQUISITION OF MACHINERY AND EQUIPMENT",
-        "Subline Item": "Office Equipment",
-        "Accounting Title": "Furniture and Fixtures",
-        "Particulars": "Replacement of workstations and cabinets",
+        "Subline Item": "Machinery and Equipment",
+        "Accounting Title": "Information and Communication Technology Equipment",
+        "UACS Code": "5060405003",
+        "Particulars": "Laptop computers for field personnel",
         "INCOME": 300000,
         "SUBSIDY": 150000
       },
@@ -646,8 +790,9 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
         "DEPARTMENT": "",
         "RESPONSIBILITY CENTER": "",
         "TITLE": "ACQUISITION OF TRANSPORTATION EQUIPMENT",
-        "Subline Item": "Motorcycles",
+        "Subline Item": "Transportation Equipment",
         "Accounting Title": "Transportation Equipment",
+        "UACS Code": "5060406001",
         "Particulars": "Motorcycles for monitoring teams",
         "INCOME": 400000,
         "SUBSIDY": 200000
@@ -663,6 +808,7 @@ exports.getSampleCapitalOutlayTemplate = async (req, res) => {
       { wch: 40 },
       { wch: 24 },
       { wch: 28 },
+      { wch: 18 },
       { wch: 38 },
       { wch: 16 },
       { wch: 16 }

@@ -89,6 +89,10 @@ SERVER/scripts/
 SERVER/archieve/
 SERVER/archive/
 
+# Keep this focused Capital Outlay validation regression suite under version control.
+!SERVER/tests/
+!SERVER/tests/capitalOutlayAccountValidation.test.js
+
 # Build artifacts
 *.tgz
 *.tar.gz

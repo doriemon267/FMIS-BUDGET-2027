@@ -760,16 +760,20 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
         const parLines = wrapText(safeStr(row.particulars), COL_PAR - 10, 8);
         let rcLines  = wrapText(displayRc,          COL_RC  - 8,  8);
-        
-        // Recalculate row height based on full RC length to maintain correct spacing even if hidden
-        const fullRcLines = wrapText(currentRc, COL_RC - 8, 8);
-        const rowLines = Math.max(parLines.length, fullRcLines.length, 1);
-        const rowH     = rowLines * LINE_H + PAD_V * 2;
-        
-        const isNewPage = ensureSpace(rowLines + 1);
+
+        // Repeated responsibility centers are intentionally hidden. Size the row
+        // from the text that is actually rendered so blank RC cells stay compact.
+        let rowLines = Math.max(parLines.length, rcLines.length, 1);
+        let rowH     = rowLines * LINE_H + PAD_V * 2;
+
+        const isNewPage = ensureSpace(Math.ceil(rowH / LINE_H));
         if (isNewPage && currentRc === lastRc) {
+          // Repeat the RC at the top of a continuation page and expand only that
+          // row when the restored label needs more lines than the particulars.
           displayRc = currentRc;
           rcLines = wrapText(displayRc, COL_RC - 8, 8);
+          rowLines = Math.max(parLines.length, rcLines.length, 1);
+          rowH = rowLines * LINE_H + PAD_V * 2;
         }
 
         pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, rowH, { stroke: '#aaaaaa', lineWidth: 0.3 });

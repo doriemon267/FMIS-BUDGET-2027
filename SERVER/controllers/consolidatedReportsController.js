@@ -911,13 +911,17 @@ const consolidatedReportsController = {
 
         for (const catName of catNames) {
           const rows = categories[catName];
-          ensureSpace(2);
+          const categoryLines = wrapText(catName, COL_TITLE - 12, 7.5);
+          const categoryRowHeight = Math.max(ROW_H, categoryLines.length * ROW_H);
+          ensureSpace(1, categoryRowHeight + ROW_H);
 
           // ---- CATEGORY HEADER ROW ----
-          pdfDoc.text(catName, colX.title + 6, curY + 4, {
-            color: DARK, fontSize: 7.5, bold: true
-          }, { columnWidth: COL_TITLE - 9, overflow: 'truncate' });
-          curY += ROW_H;
+          categoryLines.forEach((line, lineIdx) => {
+            pdfDoc.text(line, colX.title + 6, curY + 4 + (lineIdx * ROW_H), {
+              color: DARK, fontSize: 7.5, bold: true
+            });
+          });
+          curY += categoryRowHeight;
           rcFirstRow = false;
 
           let catIncome  = 0;
@@ -949,17 +953,18 @@ const consolidatedReportsController = {
           });
 
           // ---- CATEGORY SUBTOTAL ROW ----
-          ensureSpace(1);
-          pdfDoc.text(
-            `Subtotal — ${catName}`,
-            colX.title + 6, curY + 4,
-            { color: BLACK, fontSize: 7.5, bold: true },
-            { columnWidth: COL_TITLE - 9, overflow: 'truncate' }
-          );
+          const subtotalLines = wrapText(`Subtotal - ${catName}`, COL_TITLE - 12, 7.5);
+          const subtotalRowHeight = Math.max(ROW_H, subtotalLines.length * ROW_H);
+          ensureSpace(1, subtotalRowHeight);
+          subtotalLines.forEach((line, lineIdx) => {
+            pdfDoc.text(line, colX.title + 6, curY + 4 + (lineIdx * ROW_H), {
+              color: BLACK, fontSize: 7.5, bold: true
+            });
+          });
           pdfDoc.text(formatPhp(catIncome),  colX.income  + COL_INCOME  - 5, curY + 4, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
           pdfDoc.text(formatPhp(catSubsidy), colX.subsidy + COL_SUBSIDY - 5, curY + 4, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
           pdfDoc.text(formatPhp(catAmount),  colX.amount  + COL_AMOUNT  - 5, curY + 4, { color: BLACK, fontSize: 7.5, bold: true, align: 'right' });
-          curY += ROW_H + 2;
+          curY += subtotalRowHeight + 2;
 
           regionIncome  += catIncome;
           regionSubsidy += catSubsidy;
