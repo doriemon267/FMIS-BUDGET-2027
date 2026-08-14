@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   CardContent,
-  Grid,
   Typography,
   Chip,
   IconButton,
@@ -24,7 +23,6 @@ import {
 import {
   MdCalendarToday,
   MdSettings,
-  MdTrendingUp,
   MdAccountBalance,
   MdDateRange,
   MdTimer
@@ -35,14 +33,15 @@ import {
   AiOutlineDownload,
   AiOutlineReload,
   AiOutlinePlus,
-  AiOutlineDelete
+  AiOutlineDelete,
+  AiOutlineCheckCircle
 } from "react-icons/ai";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-hot-toast";
 import AddSettingsDialog_Enhanced from "../components/settings/AddSettingsDialog_Enhanced";
 import AddRegionExtensionDialog from "../components/settings/AddRegionExtensionDialog";
 import EditRegionExtensionDialog from "../components/settings/EditRegionExtensionDialog";
-import ProposalActionsButton from "../global/components/ProposalActionsButton";
+import ConfirmationDialog from "../global/components/ConfirmationDialog";
 import CustomPage from "../global/components/CustomPage";
 import api from "../config/api";
 
@@ -57,6 +56,7 @@ const FiscalYearSettingsPage = () => {
   const [extensionMenuRow, setExtensionMenuRow] = useState(null);
   const [editExtensionDialogOpen, setEditExtensionDialogOpen] = useState(false);
   const [extensionToEdit, setExtensionToEdit] = useState(null);
+  const [settingsToReactivate, setSettingsToReactivate] = useState(null);
   // Periods are simplified to a single window; no separate manage dialog
 
   const removeExtensionMutation = useMutation({
@@ -74,8 +74,23 @@ const FiscalYearSettingsPage = () => {
     }
   });
 
+  const reactivateSettingsMutation = useMutation({
+    mutationFn: async (settingsId) => {
+      const response = await api.patch(`/settings/${settingsId}/activate`);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+      toast.success(data?.message || "Cut off setting reactivated successfully.");
+      setSettingsToReactivate(null);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || "Failed to reactivate cut off setting.");
+    }
+  });
+
   // Fetch settings data for summary cards
-  const { data: settingsData, isLoading: settingsLoading, refetch, error } = useQuery({
+  const { data: settingsData, isLoading: settingsLoading, refetch } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => {
       const response = await api.get("/settings", {
@@ -169,7 +184,7 @@ const FiscalYearSettingsPage = () => {
       customRender: (row) => (
         <Stack direction="row" spacing={1}>
           {/* Manage Periods removed: single submission window now */}
-          <Tooltip title={row.isActive ? "Edit Cut Off Settings" : "Expired/inactive settings cannot be edited. Create a new one."}>
+          <Tooltip title={row.isActive ? "Edit Cut Off Settings" : "Inactive settings must be reactivated before editing."}>
             <span>
               <IconButton
                 size="small"
@@ -186,6 +201,25 @@ const FiscalYearSettingsPage = () => {
               </IconButton>
             </span>
           </Tooltip>
+          {!row.isActive && (
+            <Tooltip title="Reactivate Cut Off Settings">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => setSettingsToReactivate(row)}
+                  disabled={reactivateSettingsMutation.isPending}
+                  sx={{
+                    color: theme.palette.success.main,
+                    '&:hover': {
+                      backgroundColor: alpha(theme.palette.success.main, 0.1)
+                    }
+                  }}
+                >
+                  <AiOutlineCheckCircle />
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
           <Tooltip title="Add region due date extension (same FY & budget type, extended due date for specific region)">
             <span>
               <IconButton
@@ -696,6 +730,27 @@ const FiscalYearSettingsPage = () => {
           onSuccess={() => refetch()}
         />
       )}
+
+      <ConfirmationDialog
+        open={Boolean(settingsToReactivate)}
+        title="Reactivate Cut Off Settings"
+        content={
+          settingsData?.settings?.some(
+            (setting) => setting.isActive && setting._id !== settingsToReactivate?._id
+          )
+            ? `Reactivate FY ${settingsToReactivate?.fiscalYear} - ${settingsToReactivate?.budgetType}? The currently active cut off setting will be deactivated.`
+            : `Reactivate FY ${settingsToReactivate?.fiscalYear} - ${settingsToReactivate?.budgetType}?`
+        }
+        confirmText="Reactivate"
+        confirmColor="success"
+        isLoading={reactivateSettingsMutation.isPending}
+        onCancel={() => setSettingsToReactivate(null)}
+        onConfirm={() => {
+          if (settingsToReactivate?._id) {
+            reactivateSettingsMutation.mutate(settingsToReactivate._id);
+          }
+        }}
+      />
 
       {/* Periods management dialog removed in simplified flow */}
     </Box>
