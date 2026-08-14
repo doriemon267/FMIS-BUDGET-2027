@@ -20,6 +20,7 @@ const { recalculateAndSaveProposalTotals } = require('../utils/recalculatePropos
 const { verifyWorkflowDigitalSignature } = require('../utils/digitalSignatureService');
 const { encryptESignatureDataUrl } = require('../utils/eSignatureCrypto');
 const { sanitizeWorkflowQuery, resolveRegionToObjectId } = require('../utils/regionUtils');
+const { getRoleQueueStatuses } = require('../utils/proposalQueueVisibility');
 
 const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
   'submit-to-reviewer',
@@ -2374,7 +2375,8 @@ exports.getProposals = async (req, res) => {
       case 'pending-review':
         // Ensure BRD roles only see items that were actually forwarded to them (exclude drafts)
         if (userRole && WORKFLOW_TRANSITIONS[userRole]) {
-          const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole]); // enum codes
+          const allowedStatuses =
+            getRoleQueueStatuses(userRole) || Object.keys(WORKFLOW_TRANSITIONS[userRole]);
           const pendingEnum = allowedStatuses.filter(s => s !== 'DRAFT');
 
           // Map enum codes to DB-stored statuses
@@ -2470,9 +2472,13 @@ exports.getProposals = async (req, res) => {
         }
         break;
       case 'all-proposals':
-        // Show all non-draft proposals by default.
-        // For Budget Preparer, also include OWN draft proposals so newly-created items are visible on this tab.
-        if (userRole === 'BUDGET PREPARER') {
+        // Queue-scoped roles only see proposals currently assigned to their workflow step.
+        // Other roles retain the existing all non-draft behavior.
+        const roleQueueStatuses = getRoleQueueStatuses(userRole);
+        if (roleQueueStatuses) {
+          query.status = { $in: roleQueueStatuses };
+        } else if (userRole === 'BUDGET PREPARER') {
+          // Budget Preparer also sees OWN drafts so newly-created items remain visible here.
           query.$or = [
             { status: { $ne: 'DRAFT' } },
             {
