@@ -6,6 +6,7 @@ import {
   View, 
   StyleSheet 
 } from '@react-pdf/renderer';
+import { shouldShowDraftWatermark } from '../utils/proposalPdfWatermark';
 
 // Styles for the PDF - optimized for A4 landscape with 4 regions per table
 const styles = StyleSheet.create({
@@ -15,6 +16,17 @@ const styles = StyleSheet.create({
     padding: 20,
     fontFamily: 'Helvetica',
     fontSize: 10,
+  },
+  watermark: {
+    position: 'absolute',
+    top: '42%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 70,
+    fontWeight: 'bold',
+    color: '#e4c8c8',
+    transform: 'rotate(-30deg)',
   },
   header: {
     marginBottom: 5,
@@ -156,6 +168,7 @@ const formatCurrency = (amount) => {
 
 const ConsolidatedIncomeReportPDF = ({ reportData, activeTab, selectedRegions, showPercentages }) => {
   if (!reportData) return null;
+  const showDraftWatermark = shouldShowDraftWatermark({ isFinalized: reportData.isFinalized === true });
 
   const filteredRegions = reportData.regions.filter(region => 
     selectedRegions === 'all' || selectedRegions === region
@@ -438,6 +451,7 @@ const ConsolidatedIncomeReportPDF = ({ reportData, activeTab, selectedRegions, s
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
+        {showDraftWatermark && <Text style={styles.watermark} fixed>DRAFT</Text>}
         {/* Header - Compact */}
         <View style={styles.header}>
           <Text style={styles.title}>

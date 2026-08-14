@@ -940,7 +940,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     if (onTierDataChange) {
       const payload = {
         ...allData,
-        isFinalized: finalizedData?.hasFinalized === true,
+        isFinalized: finalizedData?.allFinalized === true,
         reportSummary: {
           sourcesOfFunds,
           usesOfFunds,

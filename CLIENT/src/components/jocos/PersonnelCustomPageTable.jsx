@@ -22,6 +22,9 @@ import {
   Typography,
   Divider,
   Checkbox,
+  TextField,
+  InputAdornment,
+  Alert,
   FormControlLabel as MuiFormControlLabel,
 } from "@mui/material";
 import {
@@ -30,7 +33,6 @@ import {
   Visibility as VisibilityIcon,
   GetApp as GetAppIcon,
   MoreVert as MoreVertIcon,
-  Edit as EditIcon,
 } from "@mui/icons-material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -59,25 +61,28 @@ const allowedCOSColumns = [
   "statusOfAppointment",
   "monthlySalary",
   "annualSalary",
+  "premiumRate",
+  "premiumAmount",
   "Total",
 ];
+
+const getRegionName = (value) =>
+  typeof value === "string"
+    ? value
+    : value?.name || value?.regionName || value?.Region || "";
 
 const PSCOSCustomPageTable = ({
   dataListName,
   schema,
-  title = "",
-  description = "",
-  searchable = true,
   hasEdit = true,
   hasDelete = true,
-  hasAdd = true,
-  customAddElement = null,
   customEditElement = null,
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
   locked = false,
   proposalId = null,  // ADDED: Accept proposalId from parent
   region = null,  // ADDED: Accept region from parent for SUPER_ADMIN
+  fiscalYear: proposalFiscalYear = null,
 }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -87,13 +92,20 @@ const PSCOSCustomPageTable = ({
   const { currentUser } = useUser();
   const queryClient = useQueryClient();
   const { workflowRef, headerConfig } = useWorkflowRef();
-  const hasWorkflowRef = Boolean(workflowRef);
+  const effectiveProposalId = proposalId || workflowRef;
+  const effectiveFiscalYear = proposalFiscalYear || fiscalYear;
+  const hasWorkflowRef = Boolean(effectiveProposalId);
+  const [premiumSettings, setPremiumSettings] = useState({
+    enabled: false,
+    percentage: 10,
+  });
+  const [premiumSettingsLoading, setPremiumSettingsLoading] = useState(false);
+  const [premiumSettingsSaving, setPremiumSettingsSaving] = useState(false);
 
   // New state for enhanced features
-  const [selectedPersonnel, setSelectedPersonnel] = useState(null);
+  const [, setSelectedPersonnel] = useState(null);
   const [openViewDialog, setOpenViewDialog] = useState(false);
   const [viewData, setViewData] = useState([]);
-  const [grandTotal, setGrandTotal] = useState(0);
 
   // Enhanced UI state
   const [selectedRows, setSelectedRows] = useState([]);
@@ -126,6 +138,64 @@ const PSCOSCustomPageTable = ({
     fetchActiveSettings();
   }, [fetchActiveSettings]);
 
+  const fetchPremiumSettings = useCallback(async () => {
+    if (!effectiveProposalId) return;
+    setPremiumSettingsLoading(true);
+    try {
+      const response = await api.get("/cos-personnel/premium-settings", {
+        params: { proposalId: effectiveProposalId },
+        headers: headerConfig(),
+      });
+      setPremiumSettings({
+        enabled: Boolean(response.data.enabled),
+        percentage: Number(response.data.percentage ?? 10),
+        updatedByName: response.data.updatedByName || "",
+        updatedAt: response.data.updatedAt || null,
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Unable to load COS/JO premium settings.");
+    } finally {
+      setPremiumSettingsLoading(false);
+    }
+  }, [effectiveProposalId, headerConfig]);
+
+  useEffect(() => {
+    fetchPremiumSettings();
+  }, [fetchPremiumSettings]);
+
+  const handleSavePremiumSettings = async () => {
+    const percentage = Number(premiumSettings.percentage);
+    if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+      toast.error("Premium percentage must be from 0 to 100.");
+      return;
+    }
+    setPremiumSettingsSaving(true);
+    try {
+      const response = await api.put(
+        `/cos-personnel/premium-settings/${effectiveProposalId}`,
+        { enabled: premiumSettings.enabled, percentage },
+        { headers: headerConfig() }
+      );
+      setPremiumSettings({
+        enabled: Boolean(response.data.enabled),
+        percentage: Number(response.data.percentage),
+        updatedByName: response.data.updatedByName || "",
+        updatedAt: response.data.updatedAt || null,
+      });
+      await Promise.all([
+        invalidateDataList(queryClient, dataListName),
+        queryClient.invalidateQueries({ queryKey: ["cosGrandTotal"] }),
+        queryClient.invalidateQueries({ queryKey: ["mooeData"] }),
+        queryClient.invalidateQueries({ queryKey: ["proposalWorkflow", effectiveProposalId] }),
+      ]);
+      toast.success("COS/JO premium settings saved and proposal totals recalculated.");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Unable to save COS/JO premium settings.");
+    } finally {
+      setPremiumSettingsSaving(false);
+    }
+  };
+
   // Auto-refresh functionality
   useEffect(() => {
     if (!autoRefresh) return;
@@ -141,11 +211,11 @@ const PSCOSCustomPageTable = ({
   const handleAddAllPersonnel = useCallback(async (statusOfAppointment) => {
     setLoading(true);
     try {
-      if (!workflowRef) {
+      if (!effectiveProposalId) {
         toast.error("Create a proposal first to add COS/JO personnel.");
         return;
       }
-      let currentFiscalYear = fiscalYear;
+      let currentFiscalYear = effectiveFiscalYear;
       let currentBudgetType = budgetType;
 
       if (!currentFiscalYear) {
@@ -162,7 +232,7 @@ const PSCOSCustomPageTable = ({
       const processBy = `${currentUser.FirstName} ${currentUser.LastName}`;
       
       // Get active region from prop first, then fallback to localStorage (same as Permanent/Casual)
-      let requestRegion = region;
+      let requestRegion = getRegionName(region);
       if (!requestRegion) {
         try {
           const activeRegionStr = localStorage.getItem('activeRegion');
@@ -180,7 +250,7 @@ const PSCOSCustomPageTable = ({
         statusOfAppointment,
         fiscalYear: currentFiscalYear,
         budgetType: currentBudgetType,
-        proposalId: proposalId || workflowRef,  // ADDED: Use prop first, then hook storage
+        proposalId: effectiveProposalId,
         region: requestRegion,  // Include region from prop or localStorage
       }, { headers: headerConfig() });
 
@@ -201,25 +271,29 @@ const PSCOSCustomPageTable = ({
       if (error.response?.status === 403) {
         toast.error(error.response.data.message || "Submission is locked.");
       } else {
-        toast.error("Error bulk adding personnel: " + error.message);
+        toast.error(
+          error.response?.data?.message ||
+            "Error bulk adding personnel: " + error.message
+        );
       }
     } finally {
       setLoading(false);
       setOpenDialog(false);
     }
   }, [
-    fiscalYear,
+    effectiveFiscalYear,
     budgetType,
     currentUser,
     queryClient,
     dataListName,
     fetchActiveSettings,
-    workflowRef,
-    headerConfig
+    effectiveProposalId,
+    headerConfig,
+    region,
   ]);
 
   const handleOpenDialog = () => {
-    if (!workflowRef) {
+    if (!effectiveProposalId) {
       toast.error("Please create a proposal first before adding COS/JO personnel.");
       return;
     }
@@ -302,8 +376,28 @@ const PSCOSCustomPageTable = ({
   // Export functionality
   const handleExportExcel = useCallback(async () => {
     try {
-      const response = await api.get(`${apiPath}?limit=10000`);
-      const data = response.data.data || response.data;
+      const response = await api.get(apiPath, {
+        params: {
+          limit: 10000,
+          proposalId: effectiveProposalId,
+          fiscalYear: effectiveFiscalYear,
+          region: getRegionName(region) || undefined,
+        },
+      });
+      const rawData = response.data[dataListName] || response.data.data || response.data;
+      const data = Array.isArray(rawData)
+        ? rawData.map((row) => ({
+            "Employee Name": row.employeeFullName,
+            Position: row.positionTitle,
+            Region: row.region,
+            "Monthly Salary": row.monthlySalary,
+            "Annual Salary": row.annualSalary,
+            "Premium Enabled": row.premiumEnabled ? "Yes" : "No",
+            "Premium Rate (%)": row.premiumRate,
+            "Premium Amount": row.premiumAmount,
+            Total: row.Total,
+          }))
+        : [];
 
       if (!Array.isArray(data) || data.length === 0) {
         toast.warning("No data to export");
@@ -328,7 +422,7 @@ const PSCOSCustomPageTable = ({
       console.error("Export error:", error);
     }
     handleExportMenuClose();
-  }, [apiPath]);
+  }, [apiPath, dataListName, effectiveFiscalYear, effectiveProposalId, region]);
 
   // PDF export functionality for COS personnel
   const handleExportPDF = useCallback(async () => {
@@ -337,7 +431,7 @@ const PSCOSCustomPageTable = ({
       handleExportMenuClose();
 
       // Get active region from localStorage (same pattern as permanent/casual exports)
-      let activeRegionVal = region;
+      let activeRegionVal = getRegionName(region);
       if (!activeRegionVal) {
         try {
           const activeRegionStr = localStorage.getItem('activeRegion');
@@ -352,7 +446,8 @@ const PSCOSCustomPageTable = ({
 
       // Call server-side PDF generation endpoint
       const exportParams = {
-        fiscalYear: fiscalYear,
+        fiscalYear: effectiveFiscalYear,
+        proposalId: effectiveProposalId,
         region: activeRegionVal || '',
         office: headerConfig?.office || '',
         division: headerConfig?.division || '',
@@ -372,7 +467,7 @@ const PSCOSCustomPageTable = ({
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Personnel_COS_FY${fiscalYear || 'N_A'}_${activeRegionVal || 'Region'}.pdf`;
+      link.download = `Personnel_COS_FY${effectiveFiscalYear || 'N_A'}_${activeRegionVal || 'Region'}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -385,7 +480,12 @@ const PSCOSCustomPageTable = ({
     } finally {
       setLoading(false);
     }
-  }, [fiscalYear, region, headerConfig]);
+  }, [effectiveFiscalYear, effectiveProposalId, region, headerConfig]);
+
+  const premiumExampleRate = premiumSettings.enabled && Number(effectiveFiscalYear) >= 2026
+    ? Number(premiumSettings.percentage) || 0
+    : 0;
+  const premiumExampleAmount = (100000 * premiumExampleRate) / 100;
 
   return (
     <>
@@ -414,6 +514,101 @@ const PSCOSCustomPageTable = ({
         </Paper>
       )} */}
 
+      <Paper
+        variant="outlined"
+        sx={{
+          p: { xs: 2, md: 2.5 },
+          mb: 2,
+          borderColor: "success.light",
+          bgcolor: "success.50",
+        }}
+      >
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems={{ xs: "stretch", md: "center" }}
+          flexDirection={{ xs: "column", md: "row" }}
+          gap={2}
+        >
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>
+              COS/JO Premium
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Effective July 2026. For fiscal year 2026 and later, the premium is
+              calculated from the full annual salary.
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+              Current-state example: ₱100,000.00 × {premiumExampleRate}% = ₱{premiumExampleAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}; resulting total ₱{(100000 + premiumExampleAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {premiumSettings.updatedAt
+                ? `Last saved ${new Date(premiumSettings.updatedAt).toLocaleString()}${premiumSettings.updatedByName ? ` by ${premiumSettings.updatedByName}` : ""}.`
+                : "This proposal is using the default premium configuration."}
+            </Typography>
+          </Box>
+          <Box display="flex" alignItems="center" flexWrap="wrap" gap={1.5}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={premiumSettings.enabled}
+                  onChange={(event) =>
+                    setPremiumSettings((current) => ({
+                      ...current,
+                      enabled: event.target.checked,
+                    }))
+                  }
+                  disabled={locked || !hasWorkflowRef || premiumSettingsLoading || premiumSettingsSaving}
+                  inputProps={{ "aria-label": "Enable COS/JO premium" }}
+                />
+              }
+              label="Apply COS/JO premium"
+            />
+            <TextField
+              label="Premium rate"
+              type="number"
+              size="small"
+              value={premiumSettings.percentage}
+              onChange={(event) =>
+                setPremiumSettings((current) => ({
+                  ...current,
+                  percentage: event.target.value,
+                }))
+              }
+              slotProps={{
+                htmlInput: { min: 0, max: 100, step: 0.01 },
+                input: { endAdornment: <InputAdornment position="end">%</InputAdornment> },
+              }}
+              disabled={locked || !hasWorkflowRef || premiumSettingsLoading || premiumSettingsSaving}
+              sx={{ width: 150 }}
+            />
+            <Button
+              variant="contained"
+              color="success"
+              onClick={handleSavePremiumSettings}
+              disabled={locked || !hasWorkflowRef || premiumSettingsLoading || premiumSettingsSaving}
+            >
+              {premiumSettingsSaving ? <CircularProgress size={22} color="inherit" /> : "Save premium"}
+            </Button>
+          </Box>
+        </Box>
+        {Number(effectiveFiscalYear) < 2026 && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Fiscal year {effectiveFiscalYear || "—"} is before eligibility. Premium amounts remain zero.
+          </Alert>
+        )}
+        {!hasWorkflowRef && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Create or select a proposal to configure its COS/JO premium.
+          </Alert>
+        )}
+        {locked && hasWorkflowRef && (
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Read-only proposal: premium settings and row edits are locked.
+          </Alert>
+        )}
+      </Paper>
+
       {/* Enhanced Action Bar */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
@@ -432,7 +627,7 @@ const PSCOSCustomPageTable = ({
                 },
               }}
               startIcon={<PersonAddIcon />}
-              disabled={!fiscalYear || locked || !hasWorkflowRef}
+              disabled={!effectiveFiscalYear || locked || !hasWorkflowRef}
             >
               Add COS Personnel
             </Button>
@@ -614,6 +809,9 @@ const PSCOSCustomPageTable = ({
         ROWS_PER_PAGE={ROWS_PER_PAGE}
         dataListName={dataListName}
         apiPath={apiPath}
+        proposalId={effectiveProposalId}
+        fiscalYear={effectiveFiscalYear}
+        region={region}
         selectedRows={selectedRows}
         onSelectionChange={setSelectedRows}
         columnVisibility={columnVisibility}
@@ -639,10 +837,10 @@ const PSCOSCustomPageTable = ({
                   hasDelete={hasDelete}
                   row={row}
                   schema={schema}
-                  endpoint={apiPath}
+                  endpoint="/cos-personnel"
                   dataListName={dataListName}
-                  activeFiscalYear={fiscalYear}
-                  disableEdit={row.status === "Submitted" || row.status === "Approved"}
+                  activeFiscalYear={effectiveFiscalYear}
+                  disableEdit={locked || row.status === "Submitted" || row.status === "Approved"}
                   disableDelete={row.status === "Submitted" || row.status === "Approved"}
                 />
               );
@@ -651,7 +849,7 @@ const PSCOSCustomPageTable = ({
               column.render = (row) => fieldSchema.customRender(row);
             }
             return column;
-          }), [schema, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, apiPath, dataListName, fiscalYear, columnVisibility])}
+          }), [schema, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, dataListName, effectiveFiscalYear, columnVisibility, locked])}
       />
     </>
   );
@@ -680,6 +878,10 @@ PSCOSCustomPageTable.propTypes = {
   customEditElement: PropTypes.element,
   additionalMenuOptions: PropTypes.array,
   ROWS_PER_PAGE: PropTypes.number,
+  locked: PropTypes.bool,
+  proposalId: PropTypes.string,
+  region: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
+  fiscalYear: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 export default PSCOSCustomPageTable;

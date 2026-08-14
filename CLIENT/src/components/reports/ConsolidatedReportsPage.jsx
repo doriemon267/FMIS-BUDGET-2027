@@ -609,29 +609,57 @@ const ConsolidatedReportsPage = () => {
     matrixExpansionKeyRef.current = matrixExpansionKey;
   }, [allRegionsMatrix.rows, consolidationType, matrixExpansionKey]);
 
-  const visibleTotals = useMemo(() => {
-    let income = 0;
-    let subsidy = 0;
-    let amount = 0;
+  // const visibleTotals = useMemo(() => {
+  //   let income = 0;
+  //   let subsidy = 0;
+  //   let amount = 0;
 
-    if (consolidationType === 'all') {
-      filteredMatrixRows.forEach((row) => {
-        income += Number(row?.totals?.income || 0);
-        subsidy += Number(row?.totals?.subsidy || 0);
-        amount += Number(row?.totals?.amount || 0);
-      });
-    } else {
-      filteredData.forEach((row) => {
-        (row?.children || []).forEach((child) => {
-          income += parseFloat(child?.income || 0);
-          subsidy += parseFloat(child?.subsidy || 0);
-          amount += parseFloat(child?.amount || 0);
-        });
-      });
-    }
+  //   if (consolidationType === 'all') {
+  //     filteredMatrixRows.forEach((row) => {
+  //       income += Number(row?.totals?.income || 0);
+  //       subsidy += Number(row?.totals?.subsidy || 0);
+  //       amount += Number(row?.totals?.amount || 0);
+  //     });
+  //   } else {
+  //     filteredData.forEach((row) => {
+  //       (row?.children || []).forEach((child) => {
+  //         income += parseFloat(child?.income || 0);
+  //         subsidy += parseFloat(child?.subsidy || 0);
+  //         amount += parseFloat(child?.amount || 0);
+  //       });
+  //     });
+  //   }
 
-    return { income, subsidy, amount, total: income + subsidy + amount };
-  }, [consolidationType, filteredData, filteredMatrixRows]);
+  //   return { income, subsidy, amount, total: income + subsidy + amount };
+  // }, [consolidationType, filteredData, filteredMatrixRows]);
+
+const visibleTotals = useMemo(() => {
+  let income = 0;
+  let subsidy = 0;
+
+  if (consolidationType === 'all') {
+    filteredMatrixRows.forEach((row) => {
+      income += Number(row?.totals?.income || 0);
+      subsidy += Number(row?.totals?.subsidy || 0);
+    });
+  } else {
+    filteredData.forEach((row) => {
+      (row?.children || []).forEach((child) => {
+        income += parseFloat(child?.income || 0);
+        subsidy += parseFloat(child?.subsidy || 0);
+      });
+    });
+  }
+
+  const grandTotal = income + subsidy;
+
+  return {
+    income,
+    subsidy,
+    amount: grandTotal, // Equal to Income + Subsidy
+    total: grandTotal   // Equal to Income + Subsidy
+  };
+}, [consolidationType, filteredData, filteredMatrixRows]);
 
   const visibleCategoryCount = consolidationType === 'all' ? matrixCategoryGroups.length : filteredData.length;
   const visibleLineItemCount = consolidationType === 'all'
@@ -639,14 +667,14 @@ const ConsolidatedReportsPage = () => {
     : filteredData.reduce((sum, row) => sum + (row.children?.length || 0), 0);
   const matrixVisibleTotalsByRegion = useMemo(() => {
     const totals = Object.fromEntries(
-      (allRegionsMatrix.regions || []).map((regionName) => [regionName, { income: 0, subsidy: 0, amount: 0 }])
+      (allRegionsMatrix.regions || []).map((regionName) => [regionName, { income: 0, subsidy: 0 }])
     );
     filteredMatrixRows.forEach((row) => {
       Object.entries(row.valuesByRegion || {}).forEach(([regionName, values]) => {
         if (!totals[regionName]) return;
         totals[regionName].income += Number(values.income || 0);
         totals[regionName].subsidy += Number(values.subsidy || 0);
-        totals[regionName].amount += Number(values.amount || 0);
+
       });
     });
     return totals;
@@ -1047,7 +1075,7 @@ const ConsolidatedReportsPage = () => {
             <Typography variant="caption" color="text.secondary">
               {hasActiveViewFilter
                 ? `Filtered view · Combined total for ${visibleCategoryCount} visible categories`
-                : 'Combined Income, Subsidy, and Amount'}
+                : 'Combined Income and Subsidy'}
             </Typography>
           </Box>
           <Box

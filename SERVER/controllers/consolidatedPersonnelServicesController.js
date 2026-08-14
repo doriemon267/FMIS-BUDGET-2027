@@ -6,6 +6,16 @@ const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const Region = require('../models/Region');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
+const { getFolioPageSize, isAllRegionsSelection } = require('../utils/reportPageLayout');
+const {
+  resolveDraftWatermarkForRecords,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
+const {
+  buildRegionalReportMatrix,
+  chunkRegionalMatrixRegions,
+  needsCleanMatrixSignaturePage,
+} = require('../utils/regionalReportMatrix');
 
 let MuhammaraRecipe;
 try {
@@ -31,6 +41,34 @@ const FULL_ACCESS_ROLES_PS = new Set([
   'BUDGET_ADMIN','BUDGET ADMIN','BUDGET_OFFICER','BUDGET OFFICER'
 ]);
 const normalizeRolePS = (r) => String(r || '').trim().replace(/\s+/g, '_').toUpperCase();
+
+const buildPersonnelServicesRegionMatrix = (grouped = {}) => buildRegionalReportMatrix(
+  Object.values(grouped).flatMap((regionData) => (
+    Object.values(regionData.categories || {}).flatMap((category) => (
+      Object.values(category.items || {}).map((item) => ({
+        region: regionData.region,
+        section: category.name,
+        particulars: item.name,
+        values: { amount: item.amount },
+      }))
+    ))
+  )),
+  ['amount']
+);
+
+const buildPersonnelServicesPdfMatrix = (grouped = {}) => buildRegionalReportMatrix(
+  Object.entries(grouped).flatMap(([region, categories]) => (
+    Object.entries(categories || {}).flatMap(([section, items]) => (
+      Object.values(items || {}).map((item) => ({
+        region,
+        section,
+        particulars: item.name,
+        values: { amount: item.amount },
+      }))
+    ))
+  )),
+  ['amount']
+);
 
 const getVisibleWorkflowIdsPS = async (req, { fiscalYear, budgetType, regions } = {}) => {
   const userRoles = (req.user?.Roles || req.user?.roles || []).map(normalizeRolePS);
@@ -237,6 +275,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         return res.status(200).json({
           success: true,
           data: [],
+          matrix: buildRegionalReportMatrix([], ['amount']),
           summary: { totalRegions: 0, totalEmployees: 0, grandTotal: 0 }
         });
       }
@@ -254,6 +293,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
       return res.status(200).json({
         success: true,
         data: [],
+        matrix: buildRegionalReportMatrix([], ['amount']),
         summary: {
           totalRegions: 0,
           totalEmployees: 0,
@@ -410,6 +450,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
     res.status(200).json({
       success: true,
       data: result,
+      matrix: buildPersonnelServicesRegionMatrix(grouped),
       summary: {
         totalRegions: regionSet.size,
         totalEmployees,
@@ -482,7 +523,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
   }
 
   try {
-    const { regions, region, fiscalYear, budgetType } = req.query;
+    const { regions, region, fiscalYear, budgetType, consolidationType } = req.query;
     let { department, division } = req.query;
 
     // --- SECURITY OVERRIDE: Enforce scope based on user roles and assignments ---
@@ -574,7 +615,15 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       }
     }
 
+    const visibleWorkflowIds = await getVisibleWorkflowIdsPS(req, {
+      fiscalYear,
+      budgetType,
+      regions: regions || region,
+    });
+    if (visibleWorkflowIds !== null) query.workflowRef = { $in: visibleWorkflowIds };
+
     const psData = await PersonnelServices.find(query).lean();
+    const showDraftWatermark = await resolveDraftWatermarkForRecords(psData, NewProposalWorkflow);
 
     // FINAL FALLBACK: Extract from data if still missing
     // Track what to SHOW in the PDF header
@@ -643,13 +692,18 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       });
     });
 
+    const regionMatrix = buildPersonnelServicesPdfMatrix(grouped);
+    const useRegionMatrix = (isAllRegionsSelection({ consolidationType, regions }) || !regionList)
+      && regionMatrix.regions.length > 0;
+
     const tmpFilePath = path.join(os.tmpdir(), `ps_report_${Date.now()}.pdf`);
     const tempSignatureImagePaths = [];
     const recipeOptions = { version: 1.6, author: 'FMIS-BUDGET', title: 'Consolidated Personnel Services Report' };
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
-    const PAGE_WIDTH = 576;
-    const PAGE_HEIGHT = 936;
+    const { width: PAGE_WIDTH, height: PAGE_HEIGHT } = useRegionMatrix
+      ? getFolioPageSize(true)
+      : { width: 576, height: 936 };
     const MARGIN = 18;
     const CONTENT_LEFT = MARGIN;
     const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
@@ -658,8 +712,6 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     let pageNo = 1;
     const textOpt = (o = {}) => ({ color: '#000000', ...o });
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
-    const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.id || 'Authorized User');
-    const watermarkText = `FMIS CONFIDENTIAL • ${requesterLabel}`;
     const formatPhp = (n) => Number(n || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
     const resolveExisting = (...candidates) => {
       for (const c of candidates) { if (c && fs.existsSync(c)) return c; }
@@ -704,10 +756,12 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     const drawPage = (isFirst) => {
       const cx = PAGE_WIDTH / 2;
-      const cy = PAGE_HEIGHT / 2;
       // Border disabled as requested
-      pdfDoc.text(watermarkText, cx, cy - 18, textOpt({ fontSize: 30, color: '#d9d9d9', align: 'center' }));
-      pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, cx, cy + 15, textOpt({ fontSize: 12, color: '#dddddd', align: 'center' }));
+      drawMuhammaraDraftWatermark(pdfDoc, {
+        show: showDraftWatermark,
+        pageWidth: PAGE_WIDTH,
+        pageHeight: PAGE_HEIGHT,
+      });
       pdfDoc.text('Annex B.1.1 (Personnel Services)', CONTENT_LEFT + 10, PAGE_HEIGHT - 22, textOpt({ fontSize: 8 }));
       pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT + 10, PAGE_HEIGHT - 12, textOpt({ fontSize: 8 }));
       pdfDoc.text(`Page ${pageNo}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - 12, textOpt({ fontSize: 8 }));
@@ -739,7 +793,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       }
 
       curY = hy + LINE_H * 1.3;
-      pdfDoc.text('CONSOLIDATED PERSONNEL SERVICES REPORT', cx, curY, textOpt({ fontSize: 14, bold: true, align: 'center' }));
+      pdfDoc.text(`CONSOLIDATED PERSONNEL SERVICES – ${String(budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`, cx, curY, textOpt({ fontSize: 12, bold: true, align: 'center' }));
       curY += LINE_H * 1.2;
       pdfDoc.text(`Fiscal Year: ${safeStr(fiscalYear) || 'All Years'}  |  Budget Type: ${safeStr(budgetType) || 'All'}`, cx, curY, textOpt({ fontSize: 10, align: 'center' }));
       curY += LINE_H * 1.8;
@@ -777,11 +831,118 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       curY += LINE_H + 4;
     };
 
-    pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-    drawPage(true);
-    drawTableHeader();
-
     let grandAmount = 0;
+    if (useRegionMatrix) {
+      const particularsWidth = 250;
+      const minAmountWidth = 80;
+      const capacity = Math.max(1, Math.floor(((CONTENT_RIGHT - CONTENT_LEFT) - particularsWidth) / minAmountWidth) - 1);
+      const chunks = chunkRegionalMatrixRegions(regionMatrix.regions, capacity);
+      const headerHeight = 28;
+      const sectionHeight = 14;
+      const totalHeight = 18;
+      let firstMatrixPage = true;
+
+      const drawMatrixHeader = (chunk) => {
+        const amountWidth = ((CONTENT_RIGHT - CONTENT_LEFT) - particularsWidth) / (chunk.length + 1);
+        const y = curY;
+        pdfDoc.rectangle(CONTENT_LEFT, y, CONTENT_RIGHT - CONTENT_LEFT, headerHeight, { stroke: '#4d4c4c', lineWidth: 0.6 });
+        pdfDoc.text('PARTICULARS', CONTENT_LEFT + 4, y + 7, textOpt({ fontSize: 7, bold: true }));
+        [...chunk, chunks.length > 1 ? 'CHUNK TOTAL' : 'REGIONAL TOTAL'].forEach((label, index) => {
+          const x = CONTENT_LEFT + particularsWidth + (index * amountWidth);
+          pdfDoc.rectangle(x, y, 0.4, headerHeight, { fill: '#9e9e9e', stroke: '#9e9e9e', lineWidth: 0 });
+          wrapText(label, amountWidth - 6, 6).slice(0, 2).forEach((line, lineIndex) => {
+            pdfDoc.text(line, x + (amountWidth / 2), y + 4 + (lineIndex * 7), textOpt({ fontSize: 6, bold: true, align: 'center' }));
+          });
+          pdfDoc.text('AMOUNT', x + (amountWidth / 2), y + 20, textOpt({ fontSize: 5.5, bold: true, align: 'center' }));
+        });
+        curY += headerHeight;
+        return amountWidth;
+      };
+
+      const startMatrixPage = (chunk) => {
+        if (!firstMatrixPage) {
+          pdfDoc.endPage();
+          pageNo += 1;
+        }
+        pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+        curY = MARGIN;
+        drawPage(firstMatrixPage);
+        if (!firstMatrixPage) curY = MARGIN + 25;
+        firstMatrixPage = false;
+        return drawMatrixHeader(chunk);
+      };
+
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+        const chunk = chunks[chunkIndex];
+        let amountWidth = startMatrixPage(chunk);
+        const ensureMatrixSpace = (height) => {
+          if (curY + height <= PAGE_HEIGHT - MARGIN - 25) return;
+          pdfDoc.endPage();
+          pageNo += 1;
+          pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+          curY = MARGIN + 25;
+          drawPage(false);
+          amountWidth = drawMatrixHeader(chunk);
+        };
+
+        regionMatrix.sections.forEach((section) => {
+          const firstLines = wrapText(section.rows[0]?.particulars, particularsWidth - 16, 7);
+          ensureMatrixSpace(sectionHeight + Math.max(17, 6 + firstLines.length * 7.4));
+          pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, sectionHeight, { fill: '#f2f2f2', stroke: '#9e9e9e', lineWidth: 0.4 });
+          pdfDoc.text(section.name, CONTENT_LEFT + 4, curY + 4, textOpt({ fontSize: 6.8, bold: true }));
+          curY += sectionHeight;
+
+          section.rows.forEach((row) => {
+            const titleLines = wrapText(row.particulars, particularsWidth - 16, 7);
+            const rowHeight = Math.max(17, 6 + titleLines.length * 7.4);
+            ensureMatrixSpace(rowHeight);
+            pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, rowHeight, { stroke: '#c0c0c0', lineWidth: 0.3 });
+            titleLines.forEach((line, lineIndex) => pdfDoc.text(line, CONTENT_LEFT + 10, curY + 4 + lineIndex * 7.4, textOpt({ fontSize: 7 })));
+            let chunkTotal = 0;
+            chunk.forEach((regionName, index) => {
+              const x = CONTENT_LEFT + particularsWidth + (index * amountWidth);
+              pdfDoc.rectangle(x, curY, 0.3, rowHeight, { fill: '#c0c0c0', stroke: '#c0c0c0', lineWidth: 0 });
+              const value = Number(row.valuesByRegion?.[regionName]?.amount || 0);
+              chunkTotal += value;
+              pdfDoc.text(formatPhp(value), x + amountWidth - 4, curY + Math.max(4, (rowHeight - 7) / 2), textOpt({ fontSize: 6.5, align: 'right' }));
+            });
+            const totalX = CONTENT_LEFT + particularsWidth + (chunk.length * amountWidth);
+            pdfDoc.rectangle(totalX, curY, 0.4, rowHeight, { fill: '#9e9e9e', stroke: '#9e9e9e', lineWidth: 0 });
+            pdfDoc.text(formatPhp(chunkTotal), totalX + amountWidth - 4, curY + Math.max(4, (rowHeight - 7) / 2), textOpt({ fontSize: 6.5, bold: true, align: 'right' }));
+            curY += rowHeight;
+          });
+        });
+
+        ensureMatrixSpace(totalHeight);
+        pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, totalHeight, { fill: '#ededed', stroke: '#4d4c4c', lineWidth: 0.7 });
+        pdfDoc.text(chunks.length > 1 ? 'CHUNK REGIONAL TOTAL' : 'REGIONAL TOTAL', CONTENT_LEFT + 4, curY + 5, textOpt({ fontSize: 7.5, bold: true }));
+        let chunkGrandTotal = 0;
+        chunk.forEach((regionName, index) => {
+          const x = CONTENT_LEFT + particularsWidth + (index * amountWidth);
+          const value = Number(regionMatrix.totalsByRegion?.[regionName]?.amount || 0);
+          chunkGrandTotal += value;
+          pdfDoc.rectangle(x, curY, 0.4, totalHeight, { fill: '#9e9e9e', stroke: '#9e9e9e', lineWidth: 0 });
+          pdfDoc.text(formatPhp(value), x + amountWidth - 4, curY + 5, textOpt({ fontSize: 6.5, bold: true, align: 'right' }));
+        });
+        const totalX = CONTENT_LEFT + particularsWidth + (chunk.length * amountWidth);
+        pdfDoc.rectangle(totalX, curY, 0.4, totalHeight, { fill: '#4d4c4c', stroke: '#4d4c4c', lineWidth: 0 });
+        pdfDoc.text(formatPhp(chunkGrandTotal), totalX + amountWidth - 4, curY + 5, textOpt({ fontSize: 6.5, bold: true, align: 'right' }));
+        curY += totalHeight + 6;
+
+        if (chunks.length > 1 && chunkIndex === chunks.length - 1) {
+          ensureMatrixSpace(totalHeight);
+          pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, totalHeight, { fill: '#dfe8df', stroke: '#4d4c4c', lineWidth: 0.8 });
+          pdfDoc.text('ALL-REGION TOTAL', CONTENT_LEFT + 4, curY + 5, textOpt({ fontSize: 8, bold: true }));
+          pdfDoc.text(formatPhp(regionMatrix.regionalTotal.amount), CONTENT_RIGHT - 4, curY + 5, textOpt({ fontSize: 7, bold: true, align: 'right' }));
+          curY += totalHeight + 6;
+        }
+      }
+      grandAmount = Number(regionMatrix.regionalTotal.amount || 0);
+    } else {
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+      drawPage(true);
+      drawTableHeader();
+
     for (const [rcName, categories] of Object.entries(grouped)) {
       let regionFirstRow = true;
       for (const [categoryName, itemsMap] of Object.entries(categories)) {
@@ -826,8 +987,24 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     pdfDoc.text('GRAND TOTAL', colX.region + 3, curY, textOpt({ fontSize: 9, bold: true }));
     pdfDoc.text(formatPhp(grandAmount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
     curY += LINE_H + 6;
+    }
 
-    ensureSpace(8);
+    if (useRegionMatrix && needsCleanMatrixSignaturePage({
+      currentY: curY,
+      requiredHeight: 8 * LINE_H,
+      pageHeight: PAGE_HEIGHT,
+      margin: MARGIN,
+    })) {
+      // Signatures continue on clean report chrome; never render the legacy
+      // Responsibility Center table header after an All Regions matrix.
+      pdfDoc.endPage();
+      pageNo += 1;
+      pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+      curY = MARGIN + 20;
+      drawPage(false);
+    } else if (!useRegionMatrix) {
+      ensureSpace(8);
+    }
     curY += LINE_H * 2;
     const sigContext = (regionList && regionList.length === 1) ? { region: regionList[0] } : null;
     signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo, sigContext);
@@ -862,5 +1039,6 @@ module.exports = {
   getConsolidatedPersonnelServicesData,
   getAvailableRegions,
   getStatusOfAppointmentValues,
-  getConsolidatedPersonnelServicesPdf
+  getConsolidatedPersonnelServicesPdf,
+  _private: { buildPersonnelServicesRegionMatrix, buildPersonnelServicesPdfMatrix }
 };

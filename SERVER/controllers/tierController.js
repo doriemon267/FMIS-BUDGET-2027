@@ -9,6 +9,10 @@ const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const {
+  shouldShowDraftWatermark,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
 let MuhammaraRecipe;
 try {
   MuhammaraRecipe = require('muhammara').Recipe;
@@ -260,6 +264,9 @@ const getFinalizedData = async (req, res) => {
     const hasFinalized = proposals.some(
       (proposal) => String(proposal.status || '').trim().toUpperCase() === 'FINALIZED'
     );
+    const allFinalized = proposals.length > 0 && proposals.every(
+      (proposal) => String(proposal.status || '').trim().toUpperCase() === 'FINALIZED'
+    );
 
     const projectedCorporateIncome = proposals.reduce(
       (sum, p) => sum + (Number(p.projectedCorporateIncome) || 0),
@@ -273,6 +280,7 @@ const getFinalizedData = async (req, res) => {
     res.json({
       success: true,
       hasFinalized,
+      allFinalized,
       hasTierData: proposals.length > 0,
       projectedCorporateIncome,
       projectedSubsidy,
@@ -1072,7 +1080,18 @@ const generateTierPDF = async (req, res) => {
       return res.status(500).json({ message: 'PDF generation library (muhammara) is not installed on the server.' });
     }
 
-    const { fiscalYear, region, department, division, regionName, departmentName, divisionName, reportSummary, version: versionFromBody } = req.body || {};
+    const {
+      fiscalYear,
+      region,
+      department,
+      division,
+      regionName,
+      departmentName,
+      divisionName,
+      reportSummary,
+      isFinalized: isFinalizedFromBody,
+      version: versionFromBody,
+    } = req.body || {};
     if (!reportSummary || !fiscalYear) {
       return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
     }
@@ -1142,8 +1161,14 @@ const generateTierPDF = async (req, res) => {
     const TABLE_WIDTH = borderX[borderX.length - 1] - 35;
     const PAGE_WIDTH = Math.max(1008, TABLE_WIDTH + 70); 
     const PAGE_HEIGHT = 612;
+    const showDraftWatermark = shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
 
     recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+    drawMuhammaraDraftWatermark(recipe, {
+      show: showDraftWatermark,
+      pageWidth: PAGE_WIDTH,
+      pageHeight: PAGE_HEIGHT,
+    });
     
     // Header Logo
     const resolveLogoPath = (name) => {
@@ -1267,6 +1292,11 @@ const generateTierPDF = async (req, res) => {
       if (currentRowY + rowHeight > PAGE_HEIGHT - 40) {
         recipe.endPage();
         recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+        drawMuhammaraDraftWatermark(recipe, {
+          show: showDraftWatermark,
+          pageWidth: PAGE_WIDTH,
+          pageHeight: PAGE_HEIGHT,
+        });
         currentRowY = 40;
         drawHeaders(currentRowY);
         currentRowY += 52;

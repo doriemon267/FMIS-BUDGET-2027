@@ -43,12 +43,13 @@ const AddRegionExtensionDialog = ({ open, onClose, settingsRow, onSuccess }) => 
     queryKey: ["regions"],
     queryFn: async () => {
       const response = await api.get("/api/regions");
-      return [
-        ...(response.data || []).map((region) => ({
-          id: region._id || region.Region,
-          name: region.Region
-        }))
-      ];
+      const regions = Array.isArray(response.data)
+        ? response.data
+        : response.data?.regions || [];
+      return regions.map((region) => ({
+        id: region._id || region.id || region.regionId || region.Region || region.regionName || region.name,
+        name: region.regionName || region.Region || region.name
+      }));
     },
     enabled: open
   });
@@ -71,7 +72,7 @@ const AddRegionExtensionDialog = ({ open, onClose, settingsRow, onSuccess }) => 
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["settings"]);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Region due date extension added.");
       reset();
       setSelectedRegions([]);

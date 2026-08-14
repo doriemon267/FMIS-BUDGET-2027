@@ -39,7 +39,7 @@ export default function ViewReportDialog({ open, onClose, data }) {
 
   if (!data) return null;
 
-  const { fiscalYear, psSummary, mooe, co } = data;
+  const { fiscalYear, psSummary, mooe, co, isFinalized } = data;
   
   // Handle PDF loading state
   const handlePDFLoadSuccess = () => {
@@ -67,6 +67,7 @@ export default function ViewReportDialog({ open, onClose, data }) {
                 psSummary={psSummary}
                 mooe={mooe}
                 co={co}
+                isFinalized={isFinalized}
               />
             }
             fileName={`NIA_Budget_Report_FY${fiscalYear}.pdf`}
@@ -116,6 +117,7 @@ export default function ViewReportDialog({ open, onClose, data }) {
             psSummary={psSummary}
             mooe={mooe}
             co={co}
+            isFinalized={isFinalized}
           />
         </PDFViewer>
       </DialogContent>

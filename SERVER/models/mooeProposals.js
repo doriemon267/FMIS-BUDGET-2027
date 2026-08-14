@@ -176,6 +176,8 @@ const mooeProposalSchema = new Schema({
 mooeProposalSchema.index(
   { proposalId: 1, uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 },
   {
+    name: 'proposalId_1_uacsCode_1_fiscalYear_1_region_1_department_1_division_1',
+    background: true,
     partialFilterExpression: {
       proposalId: { $exists: true },
       uacsCode: { $exists: true },
@@ -185,10 +187,5 @@ mooeProposalSchema.index(
   }
 );
 const MooeProposal = mongoose.model('MooeProposal', mooeProposalSchema);
-
-// Automatically drop the unique index if it exists so that duplicate UACS codes can be uploaded
-MooeProposal.collection.dropIndex('proposalId_1_uacsCode_1_fiscalYear_1_region_1_department_1_division_1')
-  .then(() => console.log('Successfully dropped MOOE unique index'))
-  .catch(err => console.log('MOOE Index drop result (may be already dropped):', err.message));
 
 module.exports = MooeProposal;

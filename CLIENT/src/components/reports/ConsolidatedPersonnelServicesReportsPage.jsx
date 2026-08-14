@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
-import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from "../../constants/roles";
+import { isBRDLevelUser } from "../../constants/roles";
 import {
   Box,
   Paper,
@@ -20,14 +20,6 @@ import {
   InputAdornment,
   IconButton,
   Chip,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormGroup,
-  Divider,
-  Alert,
   Fade,
   Card,
   CardContent,
@@ -36,30 +28,28 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Breadcrumbs,
-  Link,
   Skeleton,
 } from "@mui/material";
 import { ToastContainer, toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import ReportPageLayout from "./ReportPageLayout";
+import RegionalComparisonMatrix from "./RegionalComparisonMatrix";
+import { getRegionalMatrixView } from "./regionalMatrixView";
 import GenericPdfPreviewDialog from "../GenericPdfPreviewDialog";
 
 import SearchIcon from "@mui/icons-material/Search";
-import FilterListIcon from "@mui/icons-material/FilterList";
 import ClearIcon from "@mui/icons-material/Clear";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import HomeIcon from "@mui/icons-material/Home";
-import AssessmentIcon from "@mui/icons-material/Assessment";
 import PeopleIcon from "@mui/icons-material/People";
 import CategoryIcon from "@mui/icons-material/Category";
-import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import MapIcon from "@mui/icons-material/Map";
+
+const PS_MATRIX_COLUMNS = [{ key: 'amount', label: 'Amount' }];
 
 const ConsolidatedPersonnelServicesReportsPage = () => {
   const { currentUser } = useUser();
@@ -80,7 +70,6 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   // --- ROLE-BASED SCOPING LOGIC ---
   const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
   const scope = useMemo(() => String(hierarchical.scope || hierarchical.assignmentLevel || "").toUpperCase(), [hierarchical]);
-  const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
   const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
 
   // Enforce restriction: restricted roles (Preparer, Reviewer, Approver) are locked to "Current Region Only".
@@ -173,7 +162,9 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
       try {
         const res = await api.get("/api/hierarchical-rbac/organization-structure", { params: { structure: "old" } });
         setOrganizationStructure(res.data?.data || res.data);
-      } catch (_) {}
+      } catch (_organizationError) {
+        // Organization filters remain empty when the directory is unavailable.
+      }
     };
     fetchOrgStructure();
   }, []);
@@ -257,7 +248,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   }, [selectedDepartment, consolidationType, activeRegion]);
 
   // Fetch consolidated personnel services data
-  const { data: consolidatedData, isLoading: consolidatedLoading } = useQuery({
+  const { data: reportResult, isLoading: consolidatedLoading } = useQuery({
     queryKey: ["consolidatedPersonnelServicesReports", activeRegion?.name, selectedRegions, consolidationType, activeSettings?.fiscalYear, activeSettings?.budgetType, selectedDepartmentName, selectedDivisionName],
     queryFn: async () => {
       let regionsToFetch;
@@ -269,7 +260,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         regionsToFetch = selectedRegions;
       }
       if (consolidationType !== "all" && (!regionsToFetch || regionsToFetch.length === 0)) {
-        return [];
+        return { data: [], matrix: { regions: [], sections: [] } };
       }
       const apiParams = {
         fiscalYear: activeSettings?.fiscalYear || new Date().getFullYear(),
@@ -288,7 +279,10 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         params: apiParams,
         withCredentials: true
       });
-      return response.data?.data || [];
+      return {
+        data: response.data?.data || [],
+        matrix: response.data?.matrix || { regions: [], sections: [] },
+      };
     },
     enabled: Boolean(
       activeSettings && (
@@ -297,10 +291,21 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         (consolidationType === "custom" && selectedRegions.length > 0)
       )
     ),
-    onError: (err) => {
+    onError: (_err) => {
       toast.error("Failed to load consolidated personnel services data");
     },
   });
+  const consolidatedData = useMemo(() => reportResult?.data || [], [reportResult?.data]);
+  const personnelMatrix = useMemo(() => reportResult?.matrix || { regions: [], sections: [] }, [reportResult?.matrix]);
+  const isAllRegionsMatrix = consolidationType === 'all' && (personnelMatrix.sections || []).length > 0;
+  const matrixView = useMemo(
+    () => getRegionalMatrixView(personnelMatrix, PS_MATRIX_COLUMNS, searchTerm),
+    [personnelMatrix, searchTerm]
+  );
+
+  useEffect(() => {
+    if (isAllRegionsMatrix) setExpandedRows((personnelMatrix.sections || []).map((section) => section.id));
+  }, [isAllRegionsMatrix, personnelMatrix.sections]);
 
   // Calculate totals
   const grandTotals = useMemo(() => {
@@ -321,7 +326,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         }
       });
       return { totalEmployees, totalAmount };
-    } catch (error) {
+    } catch (_error) {
       return { totalEmployees: 0, totalAmount: 0 };
     }
   }, [consolidatedData]);
@@ -375,12 +380,22 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   };
 
   const toggleExpandAll = () => {
-    if (expandedRows.length === filteredData.length) {
+    const visibleIds = isAllRegionsMatrix
+      ? matrixView.sections.map((section) => section.id)
+      : filteredData.map((region) => region.id);
+    const allExpanded = visibleIds.length > 0 && visibleIds.every((id) => expandedRows.includes(id));
+    if (allExpanded) {
       setExpandedRows([]);
     } else {
-      setExpandedRows(filteredData.map(region => region.id));
+      setExpandedRows(visibleIds);
     }
   };
+
+  const visibleExpansionIds = isAllRegionsMatrix
+    ? matrixView.sections.map((section) => section.id)
+    : filteredData.map((region) => region.id);
+  const allVisibleExpanded = visibleExpansionIds.length > 0
+    && visibleExpansionIds.every((id) => expandedRows.includes(id));
 
   const isLoading = consolidatedLoading;
   const hasReportData = Array.isArray(consolidatedData) && consolidatedData.length > 0;
@@ -411,6 +426,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
       const bt = activeSettings?.budgetType || "INITIAL";
       if (fy) params.append("fiscalYear", fy);
       if (bt) params.append("budgetType", bt);
+      params.append("consolidationType", consolidationType);
       if (regionsToFetch && regionsToFetch.length) {
         regionsToFetch.forEach((r) => params.append("regions", r));
       }
@@ -442,7 +458,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
       if (pdfPreviewUrl) window.URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(url);
       setPdfDialogOpen(true);
-    } catch (err) {
+    } catch (_err) {
       toast.error("Failed to generate PDF preview.");
     } finally {
       setPdfLoading(false);
@@ -451,7 +467,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
 
   return (
     <ReportPageLayout
-      title="CONSOLIDATED PERSONNEL SERVICES"
+      title={`CONSOLIDATED PERSONNEL SERVICES – ${String(activeSettings?.budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`}
       subtitle={
         consolidationType === "current" && activeRegion
           ? `Personnel Services data for ${activeRegion.name || activeRegion.Region}`
@@ -595,11 +611,11 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
               </Button>
               <Button
                 variant="outlined"
-                startIcon={expandedRows.length === filteredData.length ? <RemoveCircleOutlineIcon /> : <AddCircleOutlineIcon />}
+                startIcon={allVisibleExpanded ? <RemoveCircleOutlineIcon /> : <AddCircleOutlineIcon />}
                 onClick={toggleExpandAll}
                 size="small"
               >
-                {expandedRows.length === filteredData.length ? "Collapse All" : "Expand All"}
+                {allVisibleExpanded ? "Collapse All" : "Expand All"}
               </Button>
             </Box>
           </Grid>
@@ -610,51 +626,48 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         {[
           {
             title: "Total Regions",
-            value: filteredData?.length || 0,
-            icon: <MapIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #4776E6 0%, #8E54E9 100%)",
+            value: isAllRegionsMatrix ? matrixView.regionCount : (filteredData?.length || 0),
+            icon: <MapIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           },
           {
-            title: "Total Employees",
-            value: grandTotals.totalEmployees || 0,
-            icon: <PeopleIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
+            title: isAllRegionsMatrix ? "Visible Line Items" : "Total Employees",
+            value: isAllRegionsMatrix ? matrixView.rowCount : (grandTotals.totalEmployees || 0),
+            icon: <PeopleIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           },
           {
             title: "Total Categories",
-            value: filteredData?.reduce((sum, region) => sum + (region.categories?.length || 0), 0) || 0,
-            icon: <CategoryIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #f2994a 0%, #f2c94c 100%)",
+            value: isAllRegionsMatrix ? matrixView.sectionCount : (filteredData?.reduce((sum, region) => sum + (region.categories?.length || 0), 0) || 0),
+            icon: <CategoryIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           },
           {
             title: "Total Amount",
-            value: `₱${(grandTotals.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <AttachMoneyIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #ee0979 0%, #ff6a00 100%)",
+            value: `₱${(isAllRegionsMatrix ? matrixView.totals.amount : grandTotals.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <AttachMoneyIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           }
         ].map((metric, index) => (
           <Grid item xs={12} md={3} key={index}>
             <Card
               sx={{
-                background: metric.bgColor,
-                color: "#fff",
-                borderRadius: 2,
-                boxShadow: "0 4px 20px 0 rgba(0,0,0,0.1)",
-                transition: "transform 0.2s",
-                "&:hover": { transform: "translateY(-4px)" },
+                bgcolor: "#fbfdfb",
+                color: "text.primary",
+                borderRadius: 1.5,
+                border: "1px solid",
+                borderColor: "divider",
+                boxShadow: "none",
+                borderTop: "3px solid #557c55",
               }}
             >
               <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9, mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 1 }}>
                       {metric.title}
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                       {metric.value}
                     </Typography>
                   </Box>
-                  <Box sx={{ opacity: 0.8 }}>{metric.icon}</Box>
+                  <Box>{metric.icon}</Box>
                 </Box>
               </CardContent>
             </Card>
@@ -669,6 +682,14 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
               <Skeleton key={i} variant="rectangular" height={40} sx={{ mb: 1, borderRadius: 1 }} />
             ))}
           </Box>
+        ) : isAllRegionsMatrix ? (
+          <RegionalComparisonMatrix
+            matrix={personnelMatrix}
+            columns={PS_MATRIX_COLUMNS}
+            searchTerm={searchTerm}
+            expandedSectionIds={expandedRows}
+            onExpandedSectionIdsChange={setExpandedRows}
+          />
         ) : filteredData.length === 0 ? (
           <Box sx={{ p: 4, textAlign: 'center' }}>
             <Typography variant="h6" color="text.secondary">
@@ -717,7 +738,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredData?.map((region, regionIndex) => {
+                {filteredData?.map((region) => {
                   if (!region) return null;
                   return (
                     <React.Fragment key={region.id}>

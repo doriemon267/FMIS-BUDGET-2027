@@ -71,20 +71,32 @@ const COSPersonnelSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    baseAnnualAmount: { type: Number, default: 0 },
+    premiumEnabled: { type: Boolean, default: false },
+    premiumRate: { type: Number, default: 10, min: 0, max: 100 },
+    premiumEffectiveDate: { type: Date, default: () => new Date('2026-07-01T00:00:00.000Z') },
+    premiumAmount: { type: Number, default: 0 },
     createdBy: {
       type: String,
     },
     // Link to proposal (NewProposalWorkflow _id) so list and duplicate check can be per-proposal
     workflowRef: {
-      type: mongoose.Schema.Types.Mixed,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "NewProposalWorkflow",
       default: null,
+      index: true,
     },
   },
   {
     timestamps: true,
   }
 );
-// Prevent duplicate same employee in same fiscal year. Sparse allows multiple docs with null employeeNumber (no E11000 on null).
-// If you had the non-sparse index before: run db.cospersonnels.dropIndex("employeeNumber_1_fiscalYear_1") once, then restart.
-COSPersonnelSchema.index({ employeeNumber: 1, fiscalYear: 1 }, { unique: true, sparse: true });
+// Proposal rows are independent snapshots. The leading workflowRef keeps the
+// same employee/FY unique within a proposal while retaining one safe legacy
+// null-workflow namespace for historical rows. Run the scoped index migration
+// before relying on cross-proposal inserts in an existing database.
+COSPersonnelSchema.index(
+  { workflowRef: 1, employeeNumber: 1, fiscalYear: 1 },
+  { unique: true, sparse: true, name: "workflowRef_1_employeeNumber_1_fiscalYear_1" }
+);
 module.exports = mongoose.model("COSPersonnel", COSPersonnelSchema);

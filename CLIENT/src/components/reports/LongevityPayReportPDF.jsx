@@ -5,8 +5,8 @@ import {
   Text,
   View,
   StyleSheet,
-  Image,
 } from '@react-pdf/renderer';
+import { shouldShowDraftWatermark } from '../../utils/proposalPdfWatermark';
 
 // Styles matching the uploaded image format
 const styles = StyleSheet.create({
@@ -15,6 +15,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 30,
     fontFamily: 'Helvetica',
+  },
+  watermark: {
+    position: 'absolute',
+    top: '42%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 70,
+    fontWeight: 'bold',
+    color: '#e4c8c8',
+    transform: 'rotate(-30deg)',
   },
   headerContainer: {
     flexDirection: 'row',
@@ -143,9 +154,10 @@ const formatCurrency = (amount) => {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-const LongevityPayReportPDF = ({ reportData, fiscalYear, regionName }) => {
+const LongevityPayReportPDF = ({ reportData, fiscalYear, regionName, isFinalized = false }) => {
   // Extract data from props
   const records = reportData || [];
+  const showDraftWatermark = shouldShowDraftWatermark({ isFinalized });
   
   // Calculate Grand Total
   const grandTotal = records.reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
@@ -156,6 +168,7 @@ const LongevityPayReportPDF = ({ reportData, fiscalYear, regionName }) => {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {showDraftWatermark && <Text style={styles.watermark} fixed>DRAFT</Text>}
         
         {/* Header Section */}
         <View style={styles.headerContainer}>

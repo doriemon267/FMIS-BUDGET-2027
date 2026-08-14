@@ -1,24 +1,19 @@
 import {
   Box,
-  Button,
   IconButton,
   MenuItem,
   Paper,
-  Popover,
   Select,
   Table,
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
   TablePagination,
   TableRow,
   TableSortLabel,
   TextField,
-  Tooltip,
   Typography,
-  Zoom,
   Fade,
   CircularProgress,
   useTheme,
@@ -27,11 +22,9 @@ import { blueGrey, green, grey } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import React, { useEffect, useState } from "react";
-import { TiFilter } from "react-icons/ti";
 import api from "../../config/api";
 import { useSearch } from "../../context/SearchContext";
 import { useRegion } from "../../context/RegionContext";
-import TableBodyLoading from "../../global/components/TableBodyLoading";
 import TextSearchable from "../../global/components/TextSearchable";
 import formatCurrency from "../../utils/formatCurrency";
 import { formatDateToMDY, isValidDate } from "../../utils/formatDate";
@@ -43,6 +36,9 @@ const COSCustomTable = ({
   dataListName = "",
   orderByDefault = "updatedAt",
   onDataChange,
+  proposalId = null,
+  fiscalYear = null,
+  region = null,
 }) => {
   const theme = useTheme();
   const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
@@ -55,7 +51,6 @@ const COSCustomTable = ({
   const [regionFilter, setRegionFilter] = useState("");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
-  const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [focusedCell, setFocusedCell] = useState(null);
   const [fieldAndValue, setFieldAndValue] = useState({
     field: "",
@@ -65,16 +60,19 @@ const COSCustomTable = ({
   });
   const [hoveredColumn, setHoveredColumn] = useState(null);
   const [totals, setTotals] = useState({});
- const [grandTotal, setGrandTotal] = useState(0);
 
-  // Update region filter when active region changes
+  const providedRegion = typeof region === "string"
+    ? region
+    : region?.name || region?.regionName || region?.Region || "";
+
+  // Update region filter when the proposal region or active region changes
   useEffect(() => {
-    const regionName = activeRegion?.name || activeRegion?.regionName || "Central Office";
+    const regionName = providedRegion || activeRegion?.name || activeRegion?.regionName || "Central Office";
     setRegionFilter(regionName);
-  }, [activeRegion]);
+  }, [activeRegion, providedRegion]);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, page, regionFilter],
+    queryKey: [dataListName, page, rowsPerPage, orderBy, order, regionFilter, proposalId, fiscalYear, searchValue, fieldAndValue],
     enabled: Boolean(regionFilter),
     queryFn: async () => {
       const params = {
@@ -100,6 +98,8 @@ const COSCustomTable = ({
       if (regionFilter) {
         params.region = regionFilter;
       }
+      if (proposalId) params.proposalId = proposalId;
+      if (fiscalYear) params.fiscalYear = fiscalYear;
       
       const res = await api.get(apiPath, { params });
       return res.data;
@@ -170,41 +170,14 @@ const COSCustomTable = ({
     }
   }, [data, columns, dataListName, onDataChange]);
 
-  useEffect(() => {
-    const fetchGrandTotal = async () => {
-      try {
-        const params = new URLSearchParams();
-        // Always send a region; backend requires it. Default to Central Office.
-        params.append('region', regionFilter || 'Central Office');
-        
-        const response = await api.get(`/grandtotalCOS?${params.toString()}`);
-        setGrandTotal(response.data.grandTotal ?? 0);
-      } catch (error) {
-        console.error("Error fetching grand total:", error);
-        setGrandTotal(0);
-      }
-    };
-    if (regionFilter !== undefined) {
-      fetchGrandTotal();
-    }
-  }, [regionFilter]); // Ensure this effect runs when personnel data changes
-
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
   };
 
-  const handleFilterClick = (event, columnKey, columnLabel) => {
-    setFilterAnchorEl(event.currentTarget);
-    if (fieldAndValue.field !== columnKey)
-      setFieldAndValue({ field: columnKey, value: "", label: columnLabel });
-  };
-
   const handleFilterClearValue = () =>
     setFieldAndValue((prev) => ({ ...prev, value: "" }));
-
-  const handleFilterClose = () => setFilterAnchorEl(null);
 
   const handleCellClick = (rowIndex, columnKey, _id) => {
     setFocusedCell({ rowIndex, columnKey, _id });

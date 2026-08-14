@@ -3,8 +3,14 @@ const fs = require('fs');
 const os = require('os');
 const PersonnelServices = require('../models/PersonnelServices');
 const COSPersonnel = require('../models/COSPersonnel');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const { Recipe: MuhammaraRecipe } = require('muhammara');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
+const { toWorkflowObjectId } = require('../utils/cosPremium');
+const {
+  resolveDraftWatermarkForRecords,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
 
 const globalTempImagePaths = [];
 
@@ -14,7 +20,6 @@ const addSignatoriesToPage = async (pdfDoc, currentPage, currentY, data, pageWid
   let signatoriesInfo = extractSignatoriesFromWorkflow(null);
   const workflowRefId = data.map(m => m.workflowRef).filter(Boolean)[0];
   if (workflowRefId) {
-    const NewProposalWorkflow = require('../models/NewProposalWorkflow');
     const workflow = await NewProposalWorkflow.findById(workflowRefId).lean();
     if (workflow) {
       signatoriesInfo = extractSignatoriesFromWorkflow(workflow);
@@ -63,6 +68,7 @@ const exportPermanentPersonnelPDF = async (req, res) => {
     if (!personnelData || personnelData.length === 0) {
       return res.status(404).json({ message: 'No personnel data found for the specified criteria' });
     }
+    const showDraftWatermark = await resolveDraftWatermarkForRecords(personnelData, NewProposalWorkflow);
 
     // Generate temporary file path
     tmpFilePath = path.join(os.tmpdir(), `personnel_permanent_${Date.now()}.pdf`);
@@ -93,6 +99,11 @@ const exportPermanentPersonnelPDF = async (req, res) => {
      */
     const drawHeader = (page, isContinuation = false) => {
       let y = margin;
+      drawMuhammaraDraftWatermark(page, {
+        show: showDraftWatermark,
+        pageWidth,
+        pageHeight,
+      });
 
       // Draw logos if files exist
       if (fs.existsSync(sealPath)) {
@@ -470,6 +481,7 @@ const exportCasualPersonnelPDF = async (req, res) => {
     if (!casualData || casualData.length === 0) {
       return res.status(404).json({ message: 'No casual personnel data found for the specified criteria' });
     }
+    const showDraftWatermark = await resolveDraftWatermarkForRecords(casualData, NewProposalWorkflow);
 
     // Generate temporary file path
     tmpFilePath = path.join(os.tmpdir(), `personnel_casual_${Date.now()}.pdf`);
@@ -500,6 +512,11 @@ const exportCasualPersonnelPDF = async (req, res) => {
      */
     const drawHeader = (page, isContinuation = false) => {
       let y = margin;
+      drawMuhammaraDraftWatermark(page, {
+        show: showDraftWatermark,
+        pageWidth,
+        pageHeight,
+      });
 
       // Draw logos if files exist
       if (fs.existsSync(sealPath)) {
@@ -851,14 +868,22 @@ const exportCOSPersonnelPDF = async (req, res) => {
   let tmpFilePath = null;
 
   try {
-    const { fiscalYear, region, office, division } = req.body;
+    const { fiscalYear, region, office, division, proposalId } = req.body;
+
+    if (!proposalId) {
+      return res.status(400).json({ message: 'An active proposal is required for COS PDF export.' });
+    }
 
     // Build query filters
-    const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (region) query.region = region;
-    if (office) query.office = office;
-    if (division) query.division = division;
+    const requestedScope = { workflowRef: toWorkflowObjectId(proposalId) };
+    if (fiscalYear) requestedScope.fiscalYear = fiscalYear;
+    if (region) requestedScope.region = region;
+    if (office) requestedScope.office = office;
+    if (division) requestedScope.division = division;
+    const accessScope = req.hierarchicalFilters || {};
+    const query = Object.keys(accessScope).length > 0
+      ? { $and: [accessScope, requestedScope] }
+      : requestedScope;
 
     // Fetch COS personnel from COSPersonnel collection
     const cosData = await COSPersonnel.find(query)
@@ -868,6 +893,7 @@ const exportCOSPersonnelPDF = async (req, res) => {
     if (!cosData || cosData.length === 0) {
       return res.status(404).json({ message: 'No COS personnel data found for the specified criteria' });
     }
+    const showDraftWatermark = await resolveDraftWatermarkForRecords(cosData, NewProposalWorkflow);
 
     // Generate temporary file path
     tmpFilePath = path.join(os.tmpdir(), `personnel_cos_${Date.now()}.pdf`);
@@ -898,6 +924,11 @@ const exportCOSPersonnelPDF = async (req, res) => {
      */
     const drawHeader = (page, isContinuation = false) => {
       let y = margin;
+      drawMuhammaraDraftWatermark(page, {
+        show: showDraftWatermark,
+        pageWidth,
+        pageHeight,
+      });
 
       // Draw logos if files exist
       if (fs.existsSync(sealPath)) {
@@ -977,13 +1008,15 @@ const exportCOSPersonnelPDF = async (req, res) => {
 
       // Define columns for COS - use wider layout for better readability
       const columns = [
-        { field: 'employeeFullName', label: 'Employee Name', width: 180, align: 'left' },
-        { field: 'positionTitle', label: 'Position', width: 150, align: 'left' },
-        { field: 'gradelevel_JG', label: 'JG', width: 45, align: 'center' },
-        { field: 'step', label: 'Step', width: 45, align: 'center' },
-        { field: 'monthlySalary', label: 'Monthly Salary', width: 100, align: 'right' },
-        { field: 'annualSalary', label: 'Annual Salary', width: 100, align: 'right' },
-        { field: 'Total', label: 'Total', width: 100, align: 'right' },
+        { field: 'employeeFullName', label: 'Employee Name', width: 140, align: 'left' },
+        { field: 'positionTitle', label: 'Position', width: 110, align: 'left' },
+        { field: 'gradelevel_JG', label: 'JG', width: 35, align: 'center' },
+        { field: 'step', label: 'Step', width: 35, align: 'center' },
+        { field: 'monthlySalary', label: 'Monthly', width: 80, align: 'right' },
+        { field: 'annualSalary', label: 'Annual Base', width: 90, align: 'right' },
+        { field: 'premiumRate', label: 'Premium %', width: 60, align: 'right' },
+        { field: 'premiumAmount', label: 'Premium', width: 90, align: 'right' },
+        { field: 'Total', label: 'Total', width: 90, align: 'right' },
       ];
 
       const rowHeight = 22;
@@ -1015,13 +1048,11 @@ const exportCOSPersonnelPDF = async (req, res) => {
 
       // Calculate column totals
       const totals = {};
-      const numericFields = ['monthlySalary', 'annualSalary', 'Total'];
+      const numericFields = ['monthlySalary', 'annualSalary', 'premiumRate', 'premiumAmount', 'Total'];
+      const totalFields = ['monthlySalary', 'annualSalary', 'premiumAmount', 'Total'];
       
-      numericFields.forEach(field => {
+      totalFields.forEach(field => {
         totals[field] = data.reduce((sum, row) => {
-          if (field === 'Total') {
-            return sum + (parseFloat(row.monthlySalary) || 0) + (parseFloat(row.annualSalary) || 0);
-          }
           return sum + (parseFloat(row[field]) || 0);
         }, 0);
       });
@@ -1077,9 +1108,6 @@ const exportCOSPersonnelPDF = async (req, res) => {
           
           // Format numeric values
           if (numericFields.includes(col.field) && value !== '') {
-            if (col.field === 'Total') {
-              value = (parseFloat(row.monthlySalary) || 0) + (parseFloat(row.annualSalary) || 0);
-            }
             value = parseFloat(value).toLocaleString('en-US', { 
               minimumFractionDigits: 2, 
               maximumFractionDigits: 2 
@@ -1163,13 +1191,15 @@ const exportCOSPersonnelPDF = async (req, res) => {
 
     // Draw final totals
     const columns = [
-      { field: 'employeeFullName', label: 'Employee Name', width: 180, align: 'left' },
-      { field: 'positionTitle', label: 'Position', width: 150, align: 'left' },
-      { field: 'gradelevel_JG', label: 'JG', width: 45, align: 'center' },
-      { field: 'step', label: 'Step', width: 45, align: 'center' },
-      { field: 'monthlySalary', label: 'Monthly Salary', width: 100, align: 'right' },
-      { field: 'annualSalary', label: 'Annual Salary', width: 100, align: 'right' },
-      { field: 'Total', label: 'Total', width: 100, align: 'right' },
+      { field: 'employeeFullName', label: 'Employee Name', width: 140, align: 'left' },
+      { field: 'positionTitle', label: 'Position', width: 110, align: 'left' },
+      { field: 'gradelevel_JG', label: 'JG', width: 35, align: 'center' },
+      { field: 'step', label: 'Step', width: 35, align: 'center' },
+      { field: 'monthlySalary', label: 'Monthly', width: 80, align: 'right' },
+      { field: 'annualSalary', label: 'Annual Base', width: 90, align: 'right' },
+      { field: 'premiumRate', label: 'Premium %', width: 60, align: 'right' },
+      { field: 'premiumAmount', label: 'Premium', width: 90, align: 'right' },
+      { field: 'Total', label: 'Total', width: 90, align: 'right' },
     ];
     const totalWidth = columns.reduce((sum, col) => sum + col.width, 0);
     const tableX = margin + 10; // Start from left edge with small margin
@@ -1233,7 +1263,7 @@ const exportCOSPersonnelPDF = async (req, res) => {
     }
 
     if (!res.headersSent) {
-      res.status(500).json({ 
+      res.status(error.statusCode || 500).json({
         message: 'Error generating PDF report',
         error: error.message 
       });

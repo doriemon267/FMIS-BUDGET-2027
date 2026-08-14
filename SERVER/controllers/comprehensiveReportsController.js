@@ -15,6 +15,10 @@ const Proposal = require('../models/Proposal');
 const User = require('../models/User');
 const ReportAuditLog = require('../models/ReportAuditLog');
 const formatFullName = require('../utils/formatFullName');
+const {
+  isFinalizedProposalStatus,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
 let MuhammaraRecipe;
 try {
   // Lazy-load muhammara so the rest of the app still works even if it's not installed yet
@@ -707,6 +711,8 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   }
 
   const workflowSignatories = await resolveWorkflowSignatories(releasedProposalScope.workflowDocs);
+  const isFinalizedReport = releasedProposalScope.workflowDocs.length > 0
+    && releasedProposalScope.workflowDocs.every((workflow) => isFinalizedProposalStatus(workflow.status));
 
   // Build base query
   const query = {};
@@ -803,7 +809,8 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
       department: summaryDepartment,
       division: summaryDivision,
       eligibleForGeneration: true,
-      isDraftPreview: releasedProposalScope.workflowDocs.some((workflow) => workflow.status === 'DRAFT'),
+      isFinalized: isFinalizedReport,
+      isDraftPreview: !isFinalizedReport,
       preparedBy: await resolvePreparedByInfo(releasedProposalScope.workflowDocs),
       signatories: workflowSignatories
     },
@@ -1779,26 +1786,12 @@ const getComprehensiveReportPdf = async (req, res) => {
     };
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
-    const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.FirstName || req.user?.id || 'Authorized User');
-    const defaultWatermark = reportData.summary.isDraftPreview
-      ? `DRAFT PREVIEW • FMIS CONFIDENTIAL • ${requesterLabel}`
-      : `FMIS CONFIDENTIAL • ${requesterLabel}`;
-    const watermarkText = process.env.COMPREHENSIVE_PDF_WATERMARK_TEXT || defaultWatermark;
     const drawWatermark = () => {
-      const centerX = PAGE_WIDTH / 2;
-      const centerY = PAGE_HEIGHT / 2;
-
-      pdfDoc.text(watermarkText, centerX, centerY - 20, textOpt({
-        fontSize: 34,
-        color: '#d9d9d9',
-        align: 'center'
-      }));
-
-      pdfDoc.text(`Generated ${new Date().toLocaleString('en-US')}`, centerX, centerY + 18, textOpt({
-        fontSize: 14,
-        color: '#dddddd',
-        align: 'center'
-      }));
+      drawMuhammaraDraftWatermark(pdfDoc, {
+        show: reportData.summary.isFinalized !== true,
+        pageWidth: PAGE_WIDTH,
+        pageHeight: PAGE_HEIGHT,
+      });
     };
     const regionsStr = reportData.summary.regions != null
       ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))

@@ -30,8 +30,8 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
       await mooeCollection.createIndex(
         { proposalId: 1, uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 },
         {
-          unique: true,
           background: true,
+          name: "proposalId_1_uacsCode_1_fiscalYear_1_region_1_department_1_division_1",
           partialFilterExpression: {
             proposalId: { $exists: true },
             uacsCode: { $exists: true },
@@ -41,9 +41,7 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
         }
       );
     } catch (error) {
-      if (error.code !== 85) {
-        log.error?.(`[DB Indexes] Failed ensuring MOOE unique index: ${error.message}`);
-      }
+      log.error?.(`[DB Indexes] Failed ensuring MOOE proposal lookup index: ${error.message}`);
     }
 
     const capitalOutlayCollection = await dropMatchingUniqueIndexes("capitaloutlays", (index) => {

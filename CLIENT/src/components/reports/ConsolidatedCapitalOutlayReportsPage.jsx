@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
-import { isBRDLevelUser, hasApproverRole, isHighLevelAccess } from "../../constants/roles";
+import { isBRDLevelUser } from "../../constants/roles";
 import {
   Box,
   Paper,
@@ -20,8 +20,6 @@ import {
   InputAdornment,
   IconButton,
   Chip,
-  Tooltip,
-  Menu,
   MenuItem,
   Dialog,
   DialogTitle,
@@ -29,8 +27,6 @@ import {
   DialogActions,
   Checkbox,
   FormGroup,
-  Divider,
-  Alert,
   Fade,
   Card,
   CardContent,
@@ -38,29 +34,23 @@ import {
   Select,
   FormControl,
   InputLabel,
-  Breadcrumbs,
-  Link,
   Skeleton,
 } from "@mui/material";
 import { ToastContainer, toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
-import { NumericFormat } from "react-number-format";
 import ReportPageLayout from "./ReportPageLayout";
+import RegionalComparisonMatrix from "./RegionalComparisonMatrix";
+import { getRegionalMatrixView } from "./regionalMatrixView";
 import GenericPdfPreviewDialog from "../GenericPdfPreviewDialog";
 
 import SearchIcon from "@mui/icons-material/Search";
-import FilterListIcon from "@mui/icons-material/FilterList";
 import GetAppIcon from "@mui/icons-material/GetApp";
 import ClearIcon from "@mui/icons-material/Clear";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import PrintIcon from "@mui/icons-material/Print";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import HomeIcon from "@mui/icons-material/Home";
-import AssessmentIcon from "@mui/icons-material/Assessment";
-import CloseIcon from "@mui/icons-material/Close";
 import CategoryIcon from "@mui/icons-material/Category";
 import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
@@ -68,31 +58,11 @@ import SavingsIcon from "@mui/icons-material/Savings";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 // Removed DeleteIcon import - not used in reports
 
-const NumberFormatCustom = React.memo(React.forwardRef(function NumberFormatCustom(props, ref) {
-  const { onChange, ...other } = props;
-  const handleValueChange = React.useCallback((values, sourceInfo) => {
-    if (sourceInfo.source !== 'prop') {
-      const numericValue = values.value === undefined || values.value === "" ? "" : values.value;
-      onChange({
-        target:
-          {
-            value: numericValue,
-          },
-      });
-    }
-  }, [onChange]);
-  return (
-    <NumericFormat
-      {...other}
-      getInputRef={ref}
-      thousandSeparator
-      decimalScale={2}
-      fixedDecimalScale={false}
-      allowNegative={false}
-      onValueChange={handleValueChange}
-    />
-  );
-}));
+const CO_MATRIX_COLUMNS = [
+  { key: 'income', label: 'Income' },
+  { key: 'subsidy', label: 'Subsidy' },
+  { key: 'amount', label: 'Amount' },
+];
 
 const ConsolidatedCapitalOutlayReportsPage = () => {
   const { currentUser } = useUser();
@@ -102,13 +72,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   // State management (Moved up to avoid ReferenceError in hooks below)
   const [expandedRows, setExpandedRows] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterAnchorEl, setFilterAnchorEl] = useState(null);
-  const [selectedFilters, setSelectedFilters] = useState({
-    regions: [],
-    amountRange: { min: "", max: "" },
-    hasValues: false,
-    emptyValues: false
-  });
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState([]);
   const [consolidationType, setConsolidationType] = useState("current");
@@ -123,7 +86,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   // --- ROLE-BASED SCOPING LOGIC ---
   const hierarchical = useMemo(() => currentUser?.hierarchicalAccess || {}, [currentUser?.hierarchicalAccess]);
   const scope = useMemo(() => String(hierarchical.scope || hierarchical.assignmentLevel || "").toUpperCase(), [hierarchical]);
-  const isHighLevel = useMemo(() => isHighLevelAccess(currentUser), [currentUser]);
   const isBRD = useMemo(() => isBRDLevelUser(currentUser), [currentUser]);
 
   // Enforce restriction: restricted roles (Preparer, Reviewer, Approver) are locked to "Current Region Only".
@@ -207,6 +169,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
       const bt = selectedBudgetType || activeSettings?.budgetType;
       if (fy) params.append("fiscalYear", fy);
       if (bt) params.append("budgetType", bt);
+      params.append("consolidationType", consolidationType);
       if (consolidationType === "current" && activeRegion) {
         params.append("regions", activeRegion.name || activeRegion.Region);
       } else if (consolidationType === "custom" && selectedRegions.length > 0) {
@@ -247,7 +210,9 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
           const text = await err.response.data.text();
           const parsed = JSON.parse(text);
           if (parsed?.message) message = parsed.message;
-        } catch (_) {}
+        } catch (_parseError) {
+          // Keep the generic preview error when the response is not JSON.
+        }
       } else if (err?.response?.data?.message) {
         message = err.response.data.message;
       }
@@ -307,7 +272,9 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
       try {
         const res = await api.get("/api/hierarchical-rbac/organization-structure", { params: { structure: "old" } });
         setOrganizationStructure(res.data?.data || res.data);
-      } catch (_) {}
+      } catch (_organizationError) {
+        // Organization filters remain empty when the directory is unavailable.
+      }
     };
     fetchOrgStructure();
   }, []);
@@ -387,7 +354,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   }, [selectedDepartment, activeRegion]);
 
   // Fetch consolidated capital outlay data
-  const { data: consolidatedData, isLoading: consolidatedLoading } = useQuery({
+  const { data: reportResult, isLoading: consolidatedLoading } = useQuery({
     queryKey: ["consolidatedCapitalOutlayReports", activeRegion?.name, selectedRegions, consolidationType, selectedFiscalYear || activeSettings?.fiscalYear, selectedBudgetType || activeSettings?.budgetType, selectedDepartmentName, selectedDivisionName],
     queryFn: async () => {
       let regionsToFetch;
@@ -399,7 +366,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
         regionsToFetch = selectedRegions;
       }
       if (consolidationType !== "all" && (!regionsToFetch || regionsToFetch.length === 0)) {
-        return [];
+        return { data: [], matrix: { regions: [], sections: [] } };
       }
       const apiParams = {
         fiscalYear: selectedFiscalYear || activeSettings?.fiscalYear || new Date().getFullYear(),
@@ -478,7 +445,10 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
           children: Array.isArray(item.items) ? item.items : []
         }));
       }
-      return transformedData;
+      return {
+        data: transformedData,
+        matrix: response.data?.matrix || { regions: [], sections: [] },
+      };
     },
     enabled: Boolean(
       (selectedFiscalYear || activeSettings?.fiscalYear) &&
@@ -489,10 +459,21 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
         (consolidationType === "custom" && selectedRegions.length > 0)
       )
     ),
-    onError: (err) => {
+    onError: (_err) => {
       toast.error("Failed to load consolidated capital outlay data");
     },
   });
+  const consolidatedData = useMemo(() => reportResult?.data || [], [reportResult?.data]);
+  const capitalOutlayMatrix = useMemo(() => reportResult?.matrix || { regions: [], sections: [] }, [reportResult?.matrix]);
+  const isAllRegionsMatrix = consolidationType === 'all' && (capitalOutlayMatrix.sections || []).length > 0;
+  const matrixView = useMemo(
+    () => getRegionalMatrixView(capitalOutlayMatrix, CO_MATRIX_COLUMNS, searchTerm),
+    [capitalOutlayMatrix, searchTerm]
+  );
+
+  useEffect(() => {
+    if (isAllRegionsMatrix) setExpandedRows((capitalOutlayMatrix.sections || []).map((section) => section.id));
+  }, [capitalOutlayMatrix.sections, isAllRegionsMatrix]);
 
   // Calculate totals
   const grandTotals = useMemo(() => {
@@ -515,7 +496,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
         }
       });
       return { income, subsidy, cost, amount: cost }; // amount = cost for backward compatibility
-    } catch (error) {
+    } catch (_error) {
       return { income: 0, subsidy: 0, cost: 0, amount: 0 };
     }
   }, [consolidatedData]);
@@ -583,12 +564,22 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   };
 
   const toggleExpandAll = () => {
-    if (expandedRows.length === filteredData.length) {
+    const visibleIds = isAllRegionsMatrix
+      ? matrixView.sections.map((section) => section.id)
+      : filteredData.map((row) => row.id);
+    const allExpanded = visibleIds.length > 0 && visibleIds.every((id) => expandedRows.includes(id));
+    if (allExpanded) {
       setExpandedRows([]);
     } else {
-      setExpandedRows(filteredData.map(row => row.id));
+      setExpandedRows(visibleIds);
     }
   };
+
+  const visibleExpansionIds = isAllRegionsMatrix
+    ? matrixView.sections.map((section) => section.id)
+    : filteredData.map((row) => row.id);
+  const allVisibleExpanded = visibleExpansionIds.length > 0
+    && visibleExpansionIds.every((id) => expandedRows.includes(id));
 
   const isLoading = consolidatedLoading;
   const hasReportData = Array.isArray(consolidatedData) && consolidatedData.length > 0;
@@ -596,7 +587,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
 
   return (
     <ReportPageLayout
-      title="CONSOLIDATED CAPITAL OUTLAY"
+      title={`CONSOLIDATED CAPITAL OUTLAY – ${String(selectedBudgetType || activeSettings?.budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`}
       subtitle={
         consolidationType === "current" && activeRegion
           ? `Capital Outlay data for ${activeRegion.name || activeRegion.Region}`
@@ -782,10 +773,12 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
               onClick={toggleExpandAll}
               size="small"
             >
-              {expandedRows.length === filteredData.length ? "Collapse All" : "Expand All"}
+              {allVisibleExpanded ? "Collapse All" : "Expand All"}
             </Button>
             <Typography variant="body2" color="text.secondary">
-              Showing {filteredData.length} categories
+              {isAllRegionsMatrix
+                ? `Showing ${matrixView.sectionCount} categories · ${matrixView.rowCount} line items`
+                : `Showing ${filteredData.length} categories`}
             </Typography>
           </Box>
           <Button
@@ -805,57 +798,53 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
         {[
           {
             title: "Total Categories",
-            value: filteredData?.length || 0,
-            icon: <CategoryIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #4776E6 0%, #8E54E9 100%)",
+            value: isAllRegionsMatrix ? matrixView.sectionCount : (filteredData?.length || 0),
+            icon: <CategoryIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           },
           {
             title: "Total Line Items",
-            value: filteredData?.reduce((sum, row) => sum + (row.children?.length || 0), 0) || 0,
-            icon: <FormatListBulletedIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
+            value: isAllRegionsMatrix ? matrixView.rowCount : (filteredData?.reduce((sum, row) => sum + (row.children?.length || 0), 0) || 0),
+            icon: <FormatListBulletedIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           },
           {
             title: "Total Income",
-            value: `₱${(grandTotals?.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <AttachMoneyIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #f2994a 0%, #f2c94c 100%)",
+            value: `₱${(isAllRegionsMatrix ? matrixView.totals.income : grandTotals?.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <AttachMoneyIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           },
           {
             title: "Total Subsidy",
-            value: `₱${(grandTotals?.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <SavingsIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #ee0979 0%, #ff6a00 100%)",
+            value: `₱${(isAllRegionsMatrix ? matrixView.totals.subsidy : grandTotals?.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <SavingsIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           },
           {
             title: "Total Cost",
-            value: `₱${(grandTotals?.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            icon: <ReceiptLongIcon sx={{ fontSize: 40, color: "#e2e8f0" }} />,
-            bgColor: "linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%)",
+            value: `₱${(isAllRegionsMatrix ? matrixView.totals.amount : grandTotals?.cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            icon: <ReceiptLongIcon sx={{ fontSize: 32, color: "#375e38" }} />,
           }
         ].map((metric, index) => (
           <Grid item xs={12} md={2.4} key={index}>
             <Card
               sx={{
-                background: metric.bgColor,
-                color: "#fff",
-                borderRadius: 2,
-                boxShadow: "0 4px 20px 0 rgba(0,0,0,0.1)",
-                transition: "transform 0.2s",
-                "&:hover": { transform: "translateY(-4px)" },
+                bgcolor: "#fbfdfb",
+                color: "text.primary",
+                borderRadius: 1.5,
+                border: "1px solid",
+                borderColor: "divider",
+                boxShadow: "none",
+                borderTop: "3px solid #557c55",
               }}
             >
               <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 500, opacity: 0.9, mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 1 }}>
                       {metric.title}
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
                       {metric.value}
                     </Typography>
                   </Box>
-                  <Box sx={{ opacity: 0.8 }}>{metric.icon}</Box>
+                  <Box>{metric.icon}</Box>
                 </Box>
               </CardContent>
             </Card>
@@ -869,6 +858,14 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
               <Skeleton key={i} variant="rectangular" height={40} sx={{ mb: 1, borderRadius: 1 }} />
             ))}
           </Box>
+        ) : isAllRegionsMatrix ? (
+          <RegionalComparisonMatrix
+            matrix={capitalOutlayMatrix}
+            columns={CO_MATRIX_COLUMNS}
+            searchTerm={searchTerm}
+            expandedSectionIds={expandedRows}
+            onExpandedSectionIdsChange={setExpandedRows}
+          />
         ) : !filteredData || filteredData.length === 0 ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 4 }}>
             <Typography variant="h6" color="text.secondary">
@@ -933,7 +930,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredData?.map((row, index) => {
+                {filteredData?.map((row) => {
                   if (!row) return null;
                   return (
                     <React.Fragment key={row.id}>

@@ -33,14 +33,19 @@ const LongevityPayReportDialog = ({ open, onClose }) => {
   const { activeRegion } = useRegion();
 
   // Fetch all loyalty pay records
-  const { data: records, isLoading: loadingData, error: dataError } = useQuery({
+  const { data: reportPayload, isLoading: loadingData, error: dataError } = useQuery({
     queryKey: ['loyalty-pay', 'report-all'],
     queryFn: async () => {
       const response = await api.get('/loyalty-pay');
-      return response.data.data || [];
+      return {
+        records: response.data.data || [],
+        isFinalized: response.data.isFinalized === true,
+      };
     },
     enabled: open, // Only fetch when dialog is open
   });
+  const records = React.useMemo(() => reportPayload?.records || [], [reportPayload]);
+  const isFinalized = reportPayload?.isFinalized === true;
 
   const generatePDFBlob = async () => {
     if (!records || records.length === 0) return;
@@ -52,6 +57,7 @@ const LongevityPayReportDialog = ({ open, onClose }) => {
       const pdfElement = (
         <LongevityPayReportPDF
           reportData={records}
+          isFinalized={isFinalized}
           fiscalYear={records[0]?.fiscalYear || new Date().getFullYear()}
           regionName={activeRegion?.name || 'REGION/PROJECT'}
         />
@@ -207,6 +213,7 @@ const LongevityPayReportDialog = ({ open, onClose }) => {
                   document={
                     <LongevityPayReportPDF
                       reportData={records}
+                      isFinalized={isFinalized}
                       fiscalYear={records[0]?.fiscalYear || new Date().getFullYear()}
                       regionName={activeRegion?.name || 'REGION/PROJECT'}
                     />

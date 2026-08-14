@@ -279,8 +279,8 @@ const EnhancedPDFPreviewDialog = ({
                 <ListItem>
                   <ListItemIcon><CheckCircleIcon color="success" fontSize="small" /></ListItemIcon>
                   <ListItemText 
-                    primary="Watermarked Document" 
-                    secondary="Official document watermark for authenticity"
+                    primary="Status-Based Watermark"
+                    secondary="DRAFT appears until every included proposal is finalized"
                   />
                 </ListItem>
                 <ListItem>

@@ -2,8 +2,10 @@
 const LoyaltyPay        = require("../models/loyaltyPay");
 const Settings          = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { getActiveSettingsWithCompensation } = require('../utils/settingsUtils');
+const { resolveDraftWatermarkForRecords } = require('../utils/proposalPdfWatermark');
 const {
   calculateLoyaltyPayYearsOfService,
   isEligibleForLoyaltyPay,
@@ -212,8 +214,24 @@ exports.getAllLoyaltyPays = async (req, res) => {
       LoyaltyPay.countDocuments(query),
     ]);
 
+    const employeeNumbers = [...new Set(records.map((record) => record.employeeNumber).filter(Boolean))];
+    const fiscalYears = [...new Set(records.map((record) => String(record.fiscalYear || '')).filter(Boolean))];
+    let proposalRecords = [];
+    if (employeeNumbers.length > 0) {
+      const personnelQuery = { employeeNumber: { $in: employeeNumbers } };
+      if (fiscalYears.length > 0) {
+        personnelQuery.$or = [
+          { fiscalYear: { $in: fiscalYears } },
+          { fiscal_year: { $in: fiscalYears.map(Number).filter(Number.isFinite) } },
+        ];
+      }
+      proposalRecords = await PersonnelService.find(personnelQuery).lean();
+    }
+    const isFinalized = !(await resolveDraftWatermarkForRecords(proposalRecords, NewProposalWorkflow));
+
     return res.status(200).json({ 
       data: records,
+      isFinalized,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       totalRecords: total,

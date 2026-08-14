@@ -359,11 +359,15 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     },
   });
 
-  const cosRegionName = activeRegion?.name || activeRegion?.regionName || 'Central Office';
+  const cosRegionName = typeof activeRegion === 'string'
+    ? activeRegion
+    : activeRegion?.name || activeRegion?.regionName || 'Central Office';
 
   const { data: cosGrandTotalData } = useQuery({
     queryKey: [
       'cosGrandTotal',
+      effectiveProposalId,
+      fiscalYear,
       cosRegionName,
       currentUser?.hierarchicalAccess?.scope,
       currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName,
@@ -371,12 +375,16 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     ],
     queryFn: async () => {
       const response = await api.get('/grandtotalCOS', {
-        params: { region: cosRegionName },
+        params: {
+          region: cosRegionName,
+          proposalId: effectiveProposalId || undefined,
+          fiscalYear: fiscalYear || undefined,
+        },
         withCredentials: true
       });
       return response.data;
     },
-    enabled: Boolean(cosRegionName && currentUser),
+    enabled: Boolean(cosRegionName && currentUser && effectiveProposalId),
     staleTime: 60000,
     refetchInterval: 60000,
     onError: (err) => {

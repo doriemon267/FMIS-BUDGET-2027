@@ -14,6 +14,11 @@ const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const COSPersonnel = require('../models/COSPersonnel');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const {
+  shouldShowDraftWatermark,
+  drawMuhammaraDraftWatermark,
+} = require('./proposalPdfWatermark');
 
 // Helper to format currency
 const formatCurrency = (amount) => {
@@ -134,10 +139,20 @@ const getConsolidatedData = async (fiscalYear) => {
     grandTotal: createCategoryMap(),
     centralOffice: createCategoryMap(),
     totalRegions: createCategoryMap(),
-    regions: {}
+    regions: {},
+    proposalStatuses: [],
   };
 
   if (proposalIds.length === 0) return data;
+
+  try {
+    const workflows = await NewProposalWorkflow.find({ _id: { $in: proposalIds } })
+      .select('status')
+      .lean();
+    data.proposalStatuses = workflows.map((workflow) => workflow.status);
+  } catch (error) {
+    // Missing or unverifiable workflow status intentionally leaves the PDF in DRAFT mode.
+  }
 
   consolidations.forEach(c => {
     if (!c.isCentralOffice) {
@@ -540,6 +555,7 @@ const generateConsoProposalPdf = async (fiscalYear) => {
 
   const data = await getConsolidatedData(fiscalYear);
   const regionNames = Object.keys(data.regions).sort();
+  const showDraftWatermark = shouldShowDraftWatermark(data.proposalStatuses);
 
   const groupNames = ['GRAND TOTAL', 'CENTRAL OFFICE', 'TOTAL REGIONS', ...regionNames.map(r => r.toUpperCase())];
   
@@ -566,6 +582,11 @@ const generateConsoProposalPdf = async (fiscalYear) => {
   const PAGE_HEIGHT = 595;
   
   recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+  drawMuhammaraDraftWatermark(recipe, {
+    show: showDraftWatermark,
+    pageWidth: PAGE_WIDTH,
+    pageHeight: PAGE_HEIGHT,
+  });
   
   // Header Logo
   try {
@@ -640,6 +661,11 @@ const generateConsoProposalPdf = async (fiscalYear) => {
     if (currentRowY + rowHeight > PAGE_HEIGHT - 40) {
       recipe.endPage();
       recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+      drawMuhammaraDraftWatermark(recipe, {
+        show: showDraftWatermark,
+        pageWidth: PAGE_WIDTH,
+        pageHeight: PAGE_HEIGHT,
+      });
       
       currentRowY = 40;
       drawHeaders(currentRowY);

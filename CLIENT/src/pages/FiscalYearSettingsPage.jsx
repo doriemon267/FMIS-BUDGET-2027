@@ -64,7 +64,7 @@ const FiscalYearSettingsPage = () => {
       await api.delete(`/settings/${settingsId}/region-extension/${extensionId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(["settings"]);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("Region extension removed.");
       setExtensionMenuAnchor(null);
       setExtensionMenuRow(null);
@@ -108,9 +108,12 @@ const FiscalYearSettingsPage = () => {
     queryKey: ["regions"],
     queryFn: async () => {
       const response = await api.get("/api/regions");
-      return (response.data || []).map((r) => ({
-        id: r._id || r.Region,
-        name: r.Region
+      const regions = Array.isArray(response.data)
+        ? response.data
+        : response.data?.regions || [];
+      return regions.map((r) => ({
+        id: r._id || r.id || r.regionId || r.Region || r.regionName || r.name,
+        name: r.regionName || r.Region || r.name
       }));
     },
   });
@@ -381,6 +384,12 @@ const FiscalYearSettingsPage = () => {
                 color="secondary"
                 variant="outlined"
                 onClick={(e) => {
+                  if (exts.length === 1 && exts[0]?._id) {
+                    setExtensionToEdit(exts[0]);
+                    setRowForExtension(row);
+                    setEditExtensionDialogOpen(true);
+                    return;
+                  }
                   setExtensionMenuAnchor(e.currentTarget);
                   setExtensionMenuRow(row);
                 }}

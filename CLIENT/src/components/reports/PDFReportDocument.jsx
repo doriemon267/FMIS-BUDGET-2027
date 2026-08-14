@@ -1,12 +1,24 @@
 import React from 'react';
 import { getIndentLevelFromSubline } from '../../utils/uacsDisplayHelper';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { shouldShowDraftWatermark } from '../../utils/proposalPdfWatermark';
 
 // Define styles for PDF
 const styles = StyleSheet.create({
   page: {
     padding: 30,
     fontSize: 10,
+  },
+  watermark: {
+    position: 'absolute',
+    top: '42%',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 70,
+    fontWeight: 'bold',
+    color: '#e4c8c8',
+    transform: 'rotate(-30deg)',
   },
   title: {
     fontSize: 16,
@@ -63,7 +75,8 @@ const styles = StyleSheet.create({
 });
 
 // Main PDF document component
-const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [], preparedByName, notedByName, approvedByName }) => {
+const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [], isFinalized = false, preparedByName, notedByName, approvedByName }) => {
+  const showDraftWatermark = shouldShowDraftWatermark({ isFinalized });
   function formatCurrency(amount, noSign = false) {
     const amountNumber = parseFloat(amount) || 0;
     const formatted = amountNumber.toLocaleString("en-US", {
@@ -129,6 +142,7 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [], pre
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {showDraftWatermark && <Text style={styles.watermark} fixed>DRAFT</Text>}
         <Text style={styles.title}>NATIONAL IRRIGATION ADMINISTRATION</Text>
         <Text style={styles.subtitle}>Budget Proposal for Fiscal Year {fiscalYear}</Text>
         

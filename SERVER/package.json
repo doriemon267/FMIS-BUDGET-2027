@@ -9,6 +9,7 @@
     "test": "jest --runInBand",
     "test:integration": "jest tests/integration --runInBand",
     "migrate:normalize-recipient-ids": "node ./scripts/normalize-recipient-userids.js",
+    "migrate:cos-proposal-index": "node ./migrations/migrate-cos-proposal-index.js",
     "seed:departmentdivisionmappings": "node ./migrations/seed-departmentdivisionmappings.js",
     "encrypt:env": "node ./tools/encryptEnv.js",
     "pnpki:build-bundle:ps": "powershell -ExecutionPolicy Bypass -File ./tools/build-pnpki-bundle.ps1",

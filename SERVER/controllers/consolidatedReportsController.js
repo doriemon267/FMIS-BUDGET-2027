@@ -8,6 +8,10 @@ const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 const { getFolioPageSize, isAllRegionsSelection } = require('../utils/reportPageLayout');
+const {
+  resolveDraftWatermarkForRecords,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
 
 let MuhammaraRecipe;
 try {
@@ -83,10 +87,14 @@ const sumFinancialValues = (values = []) => {
 };
 
 const MATRIX_PDF_PARTICULARS_TARGET_WIDTH = 300;
-const MATRIX_PDF_MIN_SUBCOLUMN_WIDTH = 50;
+const MATRIX_PDF_MIN_SUBCOLUMN_WIDTH = 40;
 const MATRIX_PDF_DETAIL_BASE_HEIGHT = 17;
 const MATRIX_PDF_DETAIL_LINE_HEIGHT = 7.4;
 const MATRIX_PDF_DETAIL_VERTICAL_ALLOWANCE = 6;
+const MATRIX_PDF_SUMMARY_LABELS = Object.freeze({
+  subTotal: 'SUB TOTAL',
+  total: 'TOTAL',
+});
 
 const getMooeMatrixPdfDetailHeight = (wrappedLineCount) => Math.max(
   MATRIX_PDF_DETAIL_BASE_HEIGHT,
@@ -673,6 +681,7 @@ const consolidatedReportsController = {
       }
 
       const mooeData = await MooeProposal.find(mooeQuery).lean();
+      const showDraftWatermark = await resolveDraftWatermarkForRecords(mooeData, NewProposalWorkflow);
 
       // --- Resolve signatories from workflow ---
       let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
@@ -844,7 +853,6 @@ const consolidatedReportsController = {
         return lines;
       };
 
-      const requesterLabel = safeStr(req.user?.name || req.user?.UserName || req.user?.id || 'Authorized User');
       const formatPhp = (n) =>
         Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const resolveExisting = (...candidates) => {
@@ -898,14 +906,10 @@ const consolidatedReportsController = {
       const drawPageChrome = () => {
         // Border disabled as requested
 
-        // Faint confidentiality stamp in center — text only, no box
-        const wmX = PAGE_WIDTH / 2;
-        const wmY = PAGE_HEIGHT / 2;
-        pdfDoc.text('FMIS CONFIDENTIAL', wmX, wmY - 10, {
-          color: '#e0e0e0', fontSize: 28, align: 'center'
-        });
-        pdfDoc.text(requesterLabel, wmX, wmY + 16, {
-          color: '#e8e8e8', fontSize: 11, align: 'center'
+        drawMuhammaraDraftWatermark(pdfDoc, {
+          show: showDraftWatermark,
+          pageWidth: PAGE_WIDTH,
+          pageHeight: PAGE_HEIGHT,
         });
 
         // Footer separator line + text
@@ -1052,7 +1056,10 @@ const consolidatedReportsController = {
         });
 
         const drawMatrixFinancialValues = (values, x, y, rowHeight, subcolumnWidth, options = {}) => {
-          const fontSize = options.bold ? 6.2 : 6;
+          const usesCompactColumns = Number(subcolumnWidth || 0) < 45;
+          const fontSize = options.bold
+            ? (usesCompactColumns ? 5.3 : 6.2)
+            : (usesCompactColumns ? 5.1 : 6);
           const valueY = y + Math.max(4, (rowHeight - fontSize) / 2);
           getMatrixFinancialColumns(values).forEach(({ value }, subcolumnIndex) => {
             pdfDoc.text(
@@ -1124,7 +1131,7 @@ const consolidatedReportsController = {
               });
             });
           });
-          pdfDoc.text(regionChunks.length > 1 ? 'CHUNK TOTAL' : 'REGIONAL TOTAL', columns.total + (columns.financialGroupWidth / 2), y + 5, {
+          pdfDoc.text(MATRIX_PDF_SUMMARY_LABELS.subTotal, columns.total + (columns.financialGroupWidth / 2), y + 5, {
             color: BLACK, fontSize: 5.8, bold: true, align: 'center',
           });
           getMooeMatrixPdfSubheaders(columns.subcolumnWidth).forEach((label, subcolumnIndex) => {
@@ -1152,14 +1159,78 @@ const consolidatedReportsController = {
 
         let isFirstMatrixPage = true;
         let activeColumns = null;
+        let matrixPageHasDetailRows = false;
+        const MATRIX_PAGE_SUMMARY_HEIGHT = (MATRIX_TOTAL_H * 2) + 6;
+
+        const drawMatrixPageSummaries = (chunk) => {
+          if (!matrixPageHasDetailRows || !activeColumns) return;
+
+          const subTotalY = curY;
+          pdfDoc.rectangle(CONTENT_LEFT, subTotalY, activeColumns.right - CONTENT_LEFT, MATRIX_TOTAL_H, {
+            fill: '#ededed', stroke: BLACK, lineWidth: 0.9,
+          });
+          getMatrixFinancialBoundaries(activeColumns)
+            .forEach((x) => pdfDoc.rectangle(x, subTotalY, 0.5, MATRIX_TOTAL_H, {
+              fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0,
+            }));
+          pdfDoc.text(MATRIX_PDF_SUMMARY_LABELS.subTotal, CONTENT_LEFT + 5, subTotalY + 5, {
+            color: BLACK, fontSize: 7.4, bold: true,
+          });
+          activeColumns.regions.forEach(({ regionName, x }) => {
+            drawMatrixFinancialValues(
+              regionMatrix.totalsByRegion[regionName],
+              x,
+              subTotalY,
+              MATRIX_TOTAL_H,
+              activeColumns.subcolumnWidth,
+              { bold: true }
+            );
+          });
+          const chunkSubTotal = sumFinancialValues(
+            chunk.map((regionName) => regionMatrix.totalsByRegion[regionName])
+          );
+          drawMatrixFinancialValues(
+            chunkSubTotal,
+            activeColumns.total,
+            subTotalY,
+            MATRIX_TOTAL_H,
+            activeColumns.subcolumnWidth,
+            { bold: true }
+          );
+          curY += MATRIX_TOTAL_H;
+
+          const totalY = curY;
+          pdfDoc.rectangle(CONTENT_LEFT, totalY, activeColumns.right - CONTENT_LEFT, MATRIX_TOTAL_H, {
+            fill: '#dfe8df', stroke: BLACK, lineWidth: 1,
+          });
+          getMatrixFinancialBoundaries(activeColumns)
+            .forEach((x) => pdfDoc.rectangle(x, totalY, 0.5, MATRIX_TOTAL_H, {
+              fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0,
+            }));
+          pdfDoc.text(MATRIX_PDF_SUMMARY_LABELS.total, CONTENT_LEFT + 5, totalY + 5, {
+            color: BLACK, fontSize: 8, bold: true,
+          });
+          drawMatrixFinancialValues(
+            regionMatrix.regionalTotal,
+            activeColumns.total,
+            totalY,
+            MATRIX_TOTAL_H,
+            activeColumns.subcolumnWidth,
+            { bold: true }
+          );
+          curY += MATRIX_TOTAL_H + 6;
+          matrixPageHasDetailRows = false;
+        };
+
         const ensureMatrixSpace = (height, chunk) => {
-          if (curY + height <= FOOTER_Y - 8) return;
+          if (curY + height <= FOOTER_Y - 8 - MATRIX_PAGE_SUMMARY_HEIGHT) return;
+          if (!matrixPageHasDetailRows) return;
+          drawMatrixPageSummaries(chunk);
           activeColumns = startMatrixPage(chunk, false);
         };
 
         for (let chunkIndex = 0; chunkIndex < regionChunks.length; chunkIndex += 1) {
           const chunk = regionChunks[chunkIndex];
-          const isFinalChunk = chunkIndex === regionChunks.length - 1;
           activeColumns = startMatrixPage(chunk, isFirstMatrixPage);
           isFirstMatrixPage = false;
 
@@ -1202,44 +1273,11 @@ const consolidatedReportsController = {
               );
               drawMatrixFinancialValues(chunkRowTotal, activeColumns.total, rowY, detailRowHeight, activeColumns.subcolumnWidth, { bold: true });
               curY += detailRowHeight;
+              matrixPageHasDetailRows = true;
             }
           }
 
-          ensureMatrixSpace(MATRIX_TOTAL_H, chunk);
-          const totalY = curY;
-          pdfDoc.rectangle(CONTENT_LEFT, totalY, activeColumns.right - CONTENT_LEFT, MATRIX_TOTAL_H, {
-            fill: '#ededed', stroke: BLACK, lineWidth: 0.9,
-          });
-          getMatrixFinancialBoundaries(activeColumns)
-            .forEach((x) => pdfDoc.rectangle(x, totalY, 0.5, MATRIX_TOTAL_H, { fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0 }));
-          pdfDoc.text(regionChunks.length > 1 ? 'CHUNK REGIONAL TOTAL' : 'REGIONAL TOTAL', CONTENT_LEFT + 5, totalY + 5, {
-            color: BLACK, fontSize: 7.4, bold: true,
-          });
-          activeColumns.regions.forEach(({ regionName, x }) => {
-            drawMatrixFinancialValues(regionMatrix.totalsByRegion[regionName], x, totalY, MATRIX_TOTAL_H, activeColumns.subcolumnWidth, { bold: true });
-          });
-          const chunkTotal = sumFinancialValues(
-            chunk.map((regionName) => regionMatrix.totalsByRegion[regionName])
-          );
-          drawMatrixFinancialValues(chunkTotal, activeColumns.total, totalY, MATRIX_TOTAL_H, activeColumns.subcolumnWidth, { bold: true });
-          curY += MATRIX_TOTAL_H + 6;
-
-          if (regionChunks.length > 1 && isFinalChunk) {
-            ensureMatrixSpace(MATRIX_TOTAL_H, chunk);
-            const allRegionTotalY = curY;
-            pdfDoc.rectangle(CONTENT_LEFT, allRegionTotalY, activeColumns.right - CONTENT_LEFT, MATRIX_TOTAL_H, {
-              fill: '#dfe8df', stroke: BLACK, lineWidth: 1,
-            });
-            getMatrixFinancialBoundaries(activeColumns)
-              .forEach((x) => pdfDoc.rectangle(x, allRegionTotalY, 0.5, MATRIX_TOTAL_H, {
-                fill: BORDER_STD, stroke: BORDER_STD, lineWidth: 0,
-              }));
-            pdfDoc.text('ALL-REGION TOTAL', CONTENT_LEFT + 5, allRegionTotalY + 5, {
-              color: BLACK, fontSize: 8, bold: true,
-            });
-            drawMatrixFinancialValues(regionMatrix.regionalTotal, activeColumns.total, allRegionTotalY, MATRIX_TOTAL_H, activeColumns.subcolumnWidth, { bold: true });
-            curY += MATRIX_TOTAL_H + 6;
-          }
+          drawMatrixPageSummaries(chunk);
         }
       } else {
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
@@ -1587,6 +1625,7 @@ consolidatedReportsController._private = {
   getMooeMatrixPdfDetailHeight,
   getMooeMatrixPdfLayout,
   getMooeMatrixRegionsPerPage,
+  MATRIX_PDF_SUMMARY_LABELS,
   getMooeMatrixPdfSubheaders,
   sumFinancialValues,
 };

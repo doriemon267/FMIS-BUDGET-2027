@@ -3,8 +3,15 @@ const ExcelJS = require('exceljs');
 jest.mock('../../models/mooeProposals', () => ({ find: jest.fn() }));
 
 const consolidatedReportsController = require('../../controllers/consolidatedReportsController');
+const consolidatedPersonnelServicesController = require('../../controllers/consolidatedPersonnelServicesController');
+const consolidatedCapitalOutlayController = require('../../controllers/consolidatedCapitalOutlayController');
 const { getFolioPageSize, isAllRegionsSelection } = require('../../utils/reportPageLayout');
 const { getRegionsWithReportEntries } = require('../../utils/reportRegionSelection');
+const {
+  buildRegionalReportMatrix,
+  chunkRegionalMatrixRegions,
+  needsCleanMatrixSignaturePage
+} = require('../../utils/regionalReportMatrix');
 const {
   _private: { buildReportWorkflowVisibilityConditions }
 } = require('../../controllers/comprehensiveReportsController');
@@ -124,6 +131,15 @@ describe('Consolidated MOOE region matrix contract', () => {
     expect(getMooeMatrixPdfSubheaders(40)).toEqual(['I', 'S', 'A']);
   });
 
+  test('uses Sub Total and Total labels instead of chunk terminology', () => {
+    const { MATRIX_PDF_SUMMARY_LABELS } = consolidatedReportsController._private;
+
+    expect(MATRIX_PDF_SUMMARY_LABELS).toEqual({
+      subTotal: 'SUB TOTAL',
+      total: 'TOTAL',
+    });
+  });
+
   test('calculates a continuation chunk total independently from the all-region total', () => {
     const { sumFinancialValues } = consolidatedReportsController._private;
 
@@ -140,7 +156,7 @@ describe('Consolidated MOOE region matrix contract', () => {
     expect(getConsolidatedMooeTitle('NEP')).toBe('Consolidated MOOE – NEP BUDGET PROPOSAL');
   });
 
-  test.each([1, 2, 3])('fills the PDF content width for a %i-region matrix chunk', (regionCount) => {
+  test.each([1, 2, 3, 4])('fills the PDF content width for a %i-region matrix chunk', (regionCount) => {
     const { getMooeMatrixPdfLayout } = consolidatedReportsController._private;
     const contentLeft = 18;
     const contentWidth = 900;
@@ -161,9 +177,9 @@ describe('Consolidated MOOE region matrix contract', () => {
     const regionCount = getMooeMatrixRegionsPerPage(contentWidth);
     const layout = getMooeMatrixPdfLayout({ contentWidth, regionCount });
 
-    expect(regionCount).toBe(3);
+    expect(regionCount).toBe(4);
     expect(layout.particularsWidth).toBe(300);
-    expect(layout.subcolumnWidth).toBeGreaterThanOrEqual(50);
+    expect(layout.subcolumnWidth).toBeGreaterThanOrEqual(40);
   });
 
   test('partitions every dynamic region into the expected PDF page chunks without omission', () => {
@@ -172,8 +188,8 @@ describe('Consolidated MOOE region matrix contract', () => {
     const capacity = getMooeMatrixRegionsPerPage(900);
     const chunks = chunkMooeMatrixRegions(regions, capacity);
 
-    expect(capacity).toBe(3);
-    expect(chunks.map((chunk) => chunk.length)).toEqual([3, 3, 2]);
+    expect(capacity).toBe(4);
+    expect(chunks.map((chunk) => chunk.length)).toEqual([4, 4]);
     expect(chunks).toHaveLength(Math.ceil(regions.length / capacity));
     expect(chunks.flat()).toEqual(regions);
     expect(new Set(chunks.flat()).size).toBe(regions.length);
@@ -289,5 +305,109 @@ describe('Budget Summary draft visibility', () => {
     expect(withoutOwner).toHaveLength(2);
     expect(withoutOwner).not.toContainEqual(expect.objectContaining({ status: 'DRAFT' }));
     expect(withOwner).toContainEqual({ status: 'DRAFT', createdBy: 'preparer-123' });
+  });
+});
+
+describe('PS and CO All Regions matrix contract', () => {
+  test('maps the PS grouped response to its single Amount financial column', () => {
+    const matrix = consolidatedPersonnelServicesController._private.buildPersonnelServicesRegionMatrix({
+      future: {
+        region: 'Future Region XXI',
+        categories: {
+          salaries: {
+            name: 'Salaries',
+            items: { permanent: { name: 'Permanent Personnel', amount: 125 } }
+          }
+        }
+      }
+    });
+
+    expect(matrix.columns).toEqual(['amount']);
+    expect(matrix.regions).toEqual(['Future Region XXI']);
+    expect(matrix.regionalTotal.amount).toBe(125);
+  });
+
+  test('maps CO response items to true Income, Subsidy, and Amount columns', () => {
+    const matrix = consolidatedCapitalOutlayController._private.buildCapitalOutlayRegionMatrix([
+      {
+        category: 'Equipment',
+        items: [{ region: 'Region I', particulars: 'Survey Equipment', income: 40, subsidy: 60, cost: 100 }]
+      }
+    ]);
+
+    expect(matrix.columns).toEqual(['income', 'subsidy', 'amount']);
+    expect(matrix.regionalTotal).toEqual({ income: 40, subsidy: 60, amount: 100 });
+  });
+
+  test('includes only proposal-backed regions and automatically includes future region names', () => {
+    const matrix = buildRegionalReportMatrix([
+      {
+        region: 'Region IV-A',
+        section: 'Salaries',
+        particulars: 'Permanent Personnel',
+        values: { amount: 100 }
+      },
+      {
+        region: 'Future Region XXI',
+        section: 'Salaries',
+        particulars: 'Permanent Personnel',
+        values: { amount: 250 }
+      },
+      {
+        region: 'Empty Master-list Region',
+        section: 'Salaries',
+        particulars: 'Permanent Personnel',
+        values: { amount: 0 }
+      }
+    ], ['amount']);
+
+    expect(matrix.regions).toEqual(['Future Region XXI', 'Region IV-A']);
+    expect(matrix.sections[0].rows[0].valuesByRegion['Future Region XXI'].amount).toBe(250);
+    expect(matrix.regionalTotal.amount).toBe(350);
+  });
+
+  test('preserves CO income, subsidy, and amount semantics with exact totals', () => {
+    const matrix = buildRegionalReportMatrix([
+      {
+        region: 'Region I',
+        section: 'Equipment',
+        particulars: 'Survey Equipment',
+        values: { income: 40, subsidy: 60, amount: 100 }
+      },
+      {
+        region: 'Region II',
+        section: 'Equipment',
+        particulars: 'Survey Equipment',
+        values: { income: 10, subsidy: 20, amount: 30 }
+      }
+    ], ['income', 'subsidy', 'amount']);
+
+    expect(matrix.columns).toEqual(['income', 'subsidy', 'amount']);
+    expect(matrix.sections[0].rows[0].totals).toEqual({ income: 50, subsidy: 80, amount: 130 });
+    expect(matrix.regionalTotal).toEqual({ income: 50, subsidy: 80, amount: 130 });
+  });
+
+  test('chunks any number of regions without omission or duplication', () => {
+    const regions = Array.from({ length: 17 }, (_, index) => `Region ${index + 1}`);
+    const chunks = chunkRegionalMatrixRegions(regions, 4);
+
+    expect(chunks).toHaveLength(5);
+    expect(chunks.flat()).toEqual(regions);
+    expect(new Set(chunks.flat()).size).toBe(regions.length);
+  });
+
+  test('starts a clean continuation page when matrix signatures no longer fit', () => {
+    expect(needsCleanMatrixSignaturePage({
+      currentY: 535,
+      requiredHeight: 104,
+      pageHeight: 612,
+      margin: 18
+    })).toBe(true);
+    expect(needsCleanMatrixSignaturePage({
+      currentY: 400,
+      requiredHeight: 104,
+      pageHeight: 612,
+      margin: 18
+    })).toBe(false);
   });
 });

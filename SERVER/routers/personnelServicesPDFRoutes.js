@@ -70,7 +70,8 @@ router.post(
       format: 'PDF',
       subAction: 'export-cos',
       fiscalYear: req.body.fiscalYear,
-      region: req.body.region
+      region: req.body.region,
+      proposalId: req.body.proposalId
     }) 
   }),
   exportCOSPersonnelPDF

@@ -4,6 +4,12 @@ const fs = require('fs'); // For Streaming
 const fsPromises = require('fs').promises; // For Unlink
 const MuhammaraRecipe = require('muhammara').Recipe;
 const EmployeeCourtAppearance = require('../models/employeeCourtAppearance');
+const PersonnelServices = require('../models/PersonnelServices');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const {
+  resolveDraftWatermarkForRecords,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
 
 /**
  * Export Court Appearance Report as PDF
@@ -45,6 +51,20 @@ exports.exportCourtAppearancePDF = async (req, res) => {
     if (!courtAppearanceData || courtAppearanceData.length === 0) {
       return res.status(404).json({ message: 'No court appearance data found' });
     }
+    const employeeNumbers = [...new Set(courtAppearanceData.map((record) => record.employeeNumber).filter(Boolean))];
+    const fiscalYears = [...new Set(courtAppearanceData.map((record) => String(record.fiscalYear || '')).filter(Boolean))];
+    let proposalRecords = [];
+    if (employeeNumbers.length > 0) {
+      const personnelQuery = { employeeNumber: { $in: employeeNumbers } };
+      if (fiscalYears.length > 0) {
+        personnelQuery.$or = [
+          { fiscalYear: { $in: fiscalYears } },
+          { fiscal_year: { $in: fiscalYears.map(Number).filter(Number.isFinite) } },
+        ];
+      }
+      proposalRecords = await PersonnelServices.find(personnelQuery).lean();
+    }
+    const showDraftWatermark = await resolveDraftWatermarkForRecords(proposalRecords, NewProposalWorkflow);
 
     // 2. Hierarchical Display String
     let hierarchicalDisplay = 'All Data';
@@ -87,6 +107,11 @@ exports.exportCourtAppearancePDF = async (req, res) => {
     // --- Header Function ---
     function createPageHeader(isContinuation = false) {
       currentY = margin;
+      drawMuhammaraDraftWatermark(pdfDoc, {
+        show: showDraftWatermark,
+        pageWidth,
+        pageHeight,
+      });
       const logoPath1 = path.join(__dirname, '../assets/nia_seal.png');
       const logoPath2 = path.join(__dirname, '../assets/nia-logo.png');
       const logoPath3 = path.join(__dirname, '../assets/bagong_pilipinas.png');

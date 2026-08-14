@@ -632,6 +632,7 @@ const TierPage = () => {
         departmentName: getDepartmentDisplayName(),
         divisionName: getDivisionDisplayName(),
         reportSummary: tierData.reportSummary,
+        isFinalized: tierData.isFinalized === true,
         version: currentVersion,
       }, { responseType: 'blob' });
 

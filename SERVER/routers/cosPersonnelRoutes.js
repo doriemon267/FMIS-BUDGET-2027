@@ -4,7 +4,9 @@ const {
   updateCOSPersonnel,
   deleteCOSPersonnel,
   getGrandTotalCOS,
-  getCOSByParams
+  getCOSByParams,
+  getCOSPremiumSettings,
+  updateCOSPremiumSettings
 } = require("../controllers/cospersonnelController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
@@ -23,9 +25,10 @@ cosPersonnelRouter.use(loadHierarchicalAssignment);
 
 cosPersonnelRouter.get("/cosPersonnels", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, getAllCOSPersonnel);
 cosPersonnelRouter.get("/api/cos/getByParams", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, getCOSByParams);
+cosPersonnelRouter.get("/cos-personnel/premium-settings", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, getCOSPremiumSettings);
+cosPersonnelRouter.put("/cos-personnel/premium-settings/:proposalId", checkDueDate, submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, updateCOSPremiumSettings);
 cosPersonnelRouter.post("/cos-personnel/bulk-add", checkDueDate, submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, bulkAddCOSPersonnel);
 cosPersonnelRouter.put("/cos-personnel/:id", checkDueDate, submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, updateCOSPersonnel);
 cosPersonnelRouter.delete("/cos-personnel/:id", checkDueDate, submissionWorkflowControl('delete', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, deleteCOSPersonnel);
 cosPersonnelRouter.get("/grandtotalCOS", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), applyHierarchicalFilters, getGrandTotalCOS);
 module.exports = cosPersonnelRouter;
-

@@ -168,14 +168,6 @@ exports.uploadMooe = async (req, res) => {
       return res.status(400).json({ error: "Empty file", message: "The uploaded Excel file contains no data" });
     }
 
-    // Drop the old index if it exists to prevent duplicate key errors when uploading items with same UACS
-    try {
-      const mongoose = require("mongoose");
-      await mongoose.model("MooeProposal").collection.dropIndex("proposalId_1_uacsCode_1_fiscalYear_1_region_1_department_1_division_1");
-    } catch (idxErr) {
-      // Ignore if index doesn't exist
-    }
-
     const headers = Object.keys(sheetData[0]);
     const sublineCol = findColumn(headers, ["SUBLINE ITEM", "Subline Item", "CATEGORY"]);
     const accountingCol = findColumn(headers, ["ACCOUNTING TITLE", "Accounting Title"]);

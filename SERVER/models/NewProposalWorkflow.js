@@ -205,6 +205,14 @@ const newProposalWorkflowSchema = new mongoose.Schema({
   personnelData: {
     type: mongoose.Schema.Types.Mixed
   },
+  cosJoPremium: {
+    enabled: { type: Boolean, default: false },
+    percentage: { type: Number, default: 10, min: 0, max: 100 },
+    effectiveDate: { type: Date, default: () => new Date('2026-07-01T00:00:00.000Z') },
+    updatedBy: { type: String },
+    updatedByName: { type: String },
+    updatedAt: { type: Date }
+  },
   // Attachments array for storing uploaded files
   attachments: [{
     attachmentId: {

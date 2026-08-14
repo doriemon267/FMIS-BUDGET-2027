@@ -1,7 +1,7 @@
 import React from "react";
 import CustomPageTable from "./PersonnelCustomPageTable";
 
-const COSPersonnelServicesPage = () => {
+const COSPersonnelServicesPage = (props) => {
   // Enhanced table schema with better organization
   const cospersonnelSchema = {
     action: {
@@ -74,6 +74,20 @@ const COSPersonnelServicesPage = () => {
       alignRight: true,
       customRender: (row) => row.annualSalary ? `₱${row.annualSalary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "₱0.00",
     },
+    premiumRate: {
+      type: "number",
+      label: "PREMIUM RATE",
+      show: true,
+      alignRight: true,
+      customRender: (row) => `${Number(row.premiumRate) || 0}%`,
+    },
+    premiumAmount: {
+      type: "number",
+      label: "PREMIUM AMOUNT",
+      show: true,
+      alignRight: true,
+      customRender: (row) => `₱${(Number(row.premiumAmount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    },
     subsidyEligible: {
       type: "text",
       label: "SUBSIDY TAG",
@@ -125,6 +139,7 @@ const COSPersonnelServicesPage = () => {
 
   return (
     <CustomPageTable
+      {...props}
       dataListName="cosPersonnels"
       title="COS Personnel Services"
       description="This is the COS Personnel Services Table"

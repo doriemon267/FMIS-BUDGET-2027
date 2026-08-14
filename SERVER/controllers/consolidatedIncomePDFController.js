@@ -29,6 +29,10 @@ const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
 const { getFolioPageSize, isAllRegionsSelection } = require('../utils/reportPageLayout');
 const { getRegionsWithReportEntries } = require('../utils/reportRegionSelection');
+const {
+  resolveDraftWatermarkForRecords,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
 
 // Constants for PDF styling
 const COLORS = {
@@ -76,27 +80,6 @@ const formatPercentage = (value, total) => {
 const truncateText = (text, maxLength = 40) => {
   if (!text) return '';
   return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
-};
-
-/**
- * Draw watermark on page
- */
-const drawWatermark = (doc, user, pageWidth, pageHeight) => {
-  doc.save();
-  doc.opacity(0.08);
-  doc.fontSize(60);
-  doc.font(FONTS.bold);
-  doc.fillColor('#000000');
-  
-  // Diagonal watermark - use absolute positioning to avoid page overflow
-  doc.rotate(-45, { origin: [pageWidth / 2, pageHeight / 2] });
-  doc.text('OFFICIAL DOCUMENT', pageWidth / 4 - 100, pageHeight / 2 - 30, {
-    align: 'center',
-    width: 400,
-    lineBreak: false  // Prevent line breaks that might cause page overflow
-  });
-  doc.restore();
-  doc.opacity(1); // Reset opacity
 };
 
 /**
@@ -732,6 +715,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     
     // Fetch data using the same query as the screen report (reports.controller.js)
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
+    const showDraftWatermark = await resolveDraftWatermarkForRecords(incomeEntries, NewProposalWorkflow);
     if (!regionFilter) {
       regions = getRegionsWithReportEntries(incomeEntries);
     }
@@ -1142,6 +1126,11 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage += 1;
       drawBorder();
+      drawMuhammaraDraftWatermark(pdfDoc, {
+        show: showDraftWatermark,
+        pageWidth: PAGE_WIDTH,
+        pageHeight: PAGE_HEIGHT,
+      });
 
       const sealPath = resolveLogoPath('Seal.png');
       const logoPath = resolveLogoPath('logo.png');

@@ -1,7 +1,137 @@
 const COSPersonnel = require("../models/COSPersonnel");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
+const NewProposalWorkflow = require("../models/NewProposalWorkflow");
+const MOOE = require("../models/mooeProposals");
 const { searchFilter, textFilter } = require("../utils/controller_get_process");
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const {
+  COS_PREMIUM_EFFECTIVE_DATE,
+  applyCOSPremium,
+  getCOSVacantKey,
+  isVacantCOSEmployee,
+  normalizePremiumConfig,
+  normalizeCOSKeyPart,
+  resolveCOSEmployeeNumber,
+  roundCurrency,
+  toWorkflowObjectId,
+} = require('../utils/cosPremium');
+
+const getUserId = (req) => String(req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId || '');
+const getUserName = (req) => [req.user?.FirstName, req.user?.LastName].filter(Boolean).join(' ') || req.user?.name || req.user?.UserName || '';
+const normalizeRole = (role) => String(role || '').trim().replace(/\s+/g, '_').toUpperCase();
+
+const getWorkflowPremiumConfig = (workflow) => normalizePremiumConfig({
+  enabled: workflow?.cosJoPremium?.enabled ?? false,
+  percentage: workflow?.cosJoPremium?.percentage ?? 10,
+});
+
+const assertActiveWorkflowAccess = async (req, proposalId, { write = false } = {}) => {
+  if (!proposalId) {
+    const error = new Error('An active proposal is required for COS/JO premium settings.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const canonicalProposalId = toWorkflowObjectId(proposalId);
+  const workflow = await NewProposalWorkflow.findById(canonicalProposalId);
+  if (!workflow) {
+    const error = new Error('Active proposal not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const activeHeader = req.get?.('X-Workflow-Ref') || req.headers?.['x-workflow-ref'];
+  if (write && !activeHeader) {
+    const error = new Error('Select this proposal as the active workflow before saving COS/JO changes.');
+    error.statusCode = 403;
+    throw error;
+  }
+  if (write && String(activeHeader) !== String(workflow._id)) {
+    const error = new Error('The requested proposal does not match the active workflow.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const userId = getUserId(req);
+  const roles = (req.user?.Roles || req.user?.roles || []).map(normalizeRole);
+  const fullAccess = roles.some((role) => [
+    'SUPER_ADMIN', 'BUDGET_MANAGER', 'BUDGET_OFFICER',
+    'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
+  ].includes(role));
+  const roleMatchesAssignment = roles.includes(normalizeRole(workflow.currentAssigneeRole));
+  const isOwner = userId && String(workflow.createdBy || '') === userId;
+  if (!isOwner && !fullAccess && !roleMatchesAssignment) {
+    const error = new Error('You are not authorized to update this proposal.');
+    error.statusCode = 403;
+    throw error;
+  }
+  if (write && workflow.isLocked && String(workflow.lockedBy?.userId || '') !== userId) {
+    const error = new Error('This proposal is locked by another user.');
+    error.statusCode = 423;
+    throw error;
+  }
+  return workflow;
+};
+
+const premiumSettingsResponse = (workflow, summary = null) => ({
+  proposalId: String(workflow._id),
+  enabled: Boolean(workflow.cosJoPremium?.enabled),
+  percentage: Number(workflow.cosJoPremium?.percentage ?? 10),
+  effectiveDate: workflow.cosJoPremium?.effectiveDate || COS_PREMIUM_EFFECTIVE_DATE,
+  eligibility: 'Fiscal year 2026 and later; July 2026 is the policy effectivity marker.',
+  calculation: 'Premium = annual salary × percentage; total = annual salary + premium.',
+  updatedByName: workflow.cosJoPremium?.updatedByName || '',
+  updatedAt: workflow.cosJoPremium?.updatedAt || null,
+  ...(summary && { summary }),
+});
+
+const summarizeCOSRows = (rows = []) => rows.reduce((summary, row) => {
+  summary.rowCount += 1;
+  summary.baseAnnualAmount = roundCurrency(summary.baseAnnualAmount + (Number(row.annualSalary) || 0));
+  summary.premiumAmount = roundCurrency(summary.premiumAmount + (Number(row.premiumAmount) || 0));
+  summary.total = roundCurrency(summary.total + (Number(row.Total) || 0));
+  return summary;
+}, { rowCount: 0, baseAnnualAmount: 0, premiumAmount: 0, total: 0 });
+
+const syncCOSGrandTotalToMOOE = async (workflowRef, grandTotal, session = null) => {
+  if (!workflowRef) return;
+  await MOOE.updateMany(
+    { workflowRef, uacsCode: '5-02-99-990-3' },
+    [{
+      $set: {
+        subsidy: roundCurrency(grandTotal),
+        amount: { $add: [{ $convert: { input: { $ifNull: ['$income', 0] }, to: 'double', onError: 0, onNull: 0 } }, roundCurrency(grandTotal)] },
+        lastActionDate: new Date(),
+      },
+    }],
+    session ? { session } : undefined
+  );
+};
+
+const refreshProposalTotals = async (workflowRef) => {
+  if (!workflowRef) return null;
+  try {
+    return await recalculateAndSaveProposalTotals({ workflowRef });
+  } catch (error) {
+    console.warn('[COS PREMIUM] Proposal totals recalculation skipped:', error.message);
+    return null;
+  }
+};
+
+const reapplyPremiumToWorkflow = async (workflow, config, session = null) => {
+  const rows = await COSPersonnel.find({ workflowRef: workflow._id }).session(session || null);
+  const operations = rows.map((row) => ({
+    updateOne: {
+      filter: { _id: row._id, workflowRef: workflow._id },
+      update: { $set: applyCOSPremium(row, config) },
+    },
+  }));
+  if (operations.length > 0) await COSPersonnel.bulkWrite(operations, session ? { session } : undefined);
+  const recalculatedRows = rows.map((row) => ({ ...row.toObject(), ...applyCOSPremium(row, config) }));
+  const summary = summarizeCOSRows(recalculatedRows);
+  await syncCOSGrandTotalToMOOE(workflow._id, summary.total, session);
+  return summary;
+};
 
 /**
  * Filter hierarchical filters to only include relevant fields for COSPersonnel
@@ -185,42 +315,38 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
       });
     }
 
-    // Duplicate check: same employee + fiscal year = skip (DB has unique index on employeeNumber + fiscalYear).
-    // Fetch existing by fiscalYear (+ region) so we don't insert duplicate. Still save workflowRef for per-proposal listing.
+    // Duplicate checks mirror the proposal-aware compound unique index. The
+    // same employee may appear in a different proposal for the same FY.
     const workflowProposalId = req.body.proposalId || null;
+    const workflow = await assertActiveWorkflowAccess(req, workflowProposalId, { write: true });
+    const premiumConfig = getWorkflowPremiumConfig(workflow);
     const fiscalYearNorm = fiscalYear != null ? String(fiscalYear) : undefined;
     const existingQuery = {
-      ...(fiscalYearNorm && { fiscalYear: { $in: [fiscalYearNorm, Number(fiscalYear)] } }),
-      ...(userRegion && { region: userRegion })
+      workflowRef: workflow._id,
+      ...(fiscalYearNorm && { fiscalYear: { $in: [fiscalYearNorm, Number(fiscalYear)] } })
     };
     const existingCOS = await COSPersonnel.find(existingQuery)
       .select('employeeNumber itemNumber positionTitle department division gradelevel_SG employeeFullName').lean();
     const existingByEmployeeNumber = new Map();
     const existingVacantByDetails = new Set();
- existingCOS.forEach((s) => {
-  // 1. Update sa Employee Number check
-  const empNum = String(s.employeeNumber || '').trim().toUpperCase();
-  const isInvalidEmpNum = empNum === '' || empNum === 'VACANT' || empNum === 'TO-BE-FILLED';
+    existingCOS.forEach((row) => {
+      const employeeNumber = normalizeCOSKeyPart(row.employeeNumber);
+      if (employeeNumber && !['VACANT', 'TO-BE-FILLED'].includes(employeeNumber)) {
+        existingByEmployeeNumber.set(employeeNumber, row);
+      }
 
-  if (s.employeeNumber && !isInvalidEmpNum) {
-    existingByEmployeeNumber.set(s.employeeNumber, s);
-  }
+      if (isVacantCOSEmployee(row)) {
+        const itemNumber = normalizeCOSKeyPart(row.itemNumber);
+        if (itemNumber) {
+          // Cover both canonical and legacy VACANT identifiers.
+          existingByEmployeeNumber.set(itemNumber, row);
+          existingByEmployeeNumber.set(`VACANT-${itemNumber}`, row);
+        }
+        existingVacantByDetails.add(getCOSVacantKey(row));
+      }
+    });
 
-  if (s.itemNumber && String(s.itemNumber).trim() !== '') {
-    existingByEmployeeNumber.set(s.itemNumber.trim(), s);
-  }
-
-  // 2. Update sa isVacant logic (Case-insensitive check para sa dalawang terms)
-  const fullName = String(s.employeeFullName || '').trim().toUpperCase();
-  const isVacant = fullName === 'VACANT' || fullName === 'TO-BE-FILLED';
-
-  if (isVacant) {
-    const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.gradelevel_SG || ''}`;
-    existingVacantByDetails.add(vacantKey);
-  }
-});
-
-    const checks = employees.map((employee, idx) => {
+    const checks = employees.map((employee) => {
       // For non-SUPER_ADMIN: Double-check that employee belongs to user's assigned region
       if (!isSuperAdmin && employee.Region !== userRegion) {
         console.error(`SECURITY WARNING: Employee ${employee.EmployeeFullName} has region ${employee.Region} but user's assigned region is ${userRegion}`);
@@ -232,28 +358,15 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
         console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${userDivision})`);
       }
 
-      const fullName = (employee.EmployeeFullName || '').toString().toUpperCase();
+      const isVacant = isVacantCOSEmployee(employee);
+      const employeeNumber = resolveCOSEmployeeNumber(employee);
+      if (!employeeNumber) return null;
 
-const isVacant = fullName === 'VACANT' || fullName === 'TO-BE-FILLED';
-      let isDuplicate = false;
-      if (isVacant) {
-        if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {
-          isDuplicate = existingByEmployeeNumber.has(employee.ItemNumber.trim());
-        }
-        if (!isDuplicate) {
-          const vacantKey = `${employee.PositionTitle}|${employee.Department}|${employee.Division || ''}|${employee.SG?.toString() || ''}`;
-          isDuplicate = existingVacantByDetails.has(vacantKey);
-        }
-      } else {
-        const empId = employee.EmployeeID != null ? String(employee.EmployeeID).trim() : '';
-        isDuplicate = empId ? existingByEmployeeNumber.has(empId) : false;
-        if (!empId) {
-          // Non-VACANT without EmployeeID would get synthetic id and couldn't be matched on next run; skip to avoid duplicates
-          return null;
-        }
-      }
+      const vacantKey = isVacant ? getCOSVacantKey(employee) : '';
+      const isDuplicate = existingByEmployeeNumber.has(employeeNumber)
+        || (isVacant && existingVacantByDetails.has(vacantKey));
       if (isDuplicate) {
-        console.log(`Skipping ${isVacant ? 'VACANT position' : 'employee'} ${employee.EmployeeFullName} - already exists for this fiscal year`);
+        console.log(`Skipping ${isVacant ? 'VACANT position' : 'employee'} ${employee.EmployeeFullName} - already exists in this proposal for fiscal year ${fiscalYear}`);
         return null;
       }
 
@@ -264,13 +377,11 @@ const isVacant = fullName === 'VACANT' || fullName === 'TO-BE-FILLED';
 
       const monthlySalary = employee.Rate;
       const annualSalary = monthlySalary * 12;
-      // Avoid null employeeNumber: unique index would allow only one (null, fiscalYear). Use synthetic id for VACANT/missing.
-      let employeeNumber = employee.EmployeeID != null && String(employee.EmployeeID).trim() !== '' ? employee.EmployeeID : null;
-      if (employeeNumber == null || (typeof employeeNumber === 'string' && employeeNumber.trim() === '')) {
-        const itemNo = (employee.ItemNumber || '').toString().trim();
-        const posKey = [employee.PositionTitle, employee.Department, employee.Division].filter(Boolean).join('|');
-        employeeNumber = isVacant ? `VACANT-${itemNo || `${posKey}-${idx}`}` : `COS-${itemNo || `${posKey}-${idx}`}`;
-      }
+      // Reserve the key immediately so duplicate EmployeeMaster rows in this
+      // same upload batch are skipped before insertMany reaches MongoDB.
+      existingByEmployeeNumber.set(employeeNumber, employee);
+      if (isVacant) existingVacantByDetails.add(vacantKey);
+      const premiumFields = applyCOSPremium({ monthlySalary, annualSalary, fiscalYear }, premiumConfig);
       return {
         department: employee.Department,
         region: employee.Region,
@@ -287,16 +398,26 @@ const isVacant = fullName === 'VACANT' || fullName === 'TO-BE-FILLED';
         employeeNumber,
         division: employee.Division,
         statusOfAppointment: employee.StatusOfAppointment,
-        monthlySalary: monthlySalary,
-        annualSalary: annualSalary,
+        monthlySalary: premiumFields.monthlySalary,
+        annualSalary: premiumFields.annualSalary,
         createdBy: req.user?.id ? String(req.user.id) : undefined,
-        Total: annualSalary,
-        ...(workflowProposalId && { workflowRef: workflowProposalId }),
+        baseAnnualAmount: premiumFields.baseAnnualAmount,
+        premiumEnabled: premiumFields.premiumEnabled,
+        premiumRate: premiumFields.premiumRate,
+        premiumEffectiveDate: premiumFields.premiumEffectiveDate,
+        premiumAmount: premiumFields.premiumAmount,
+        Total: premiumFields.Total,
+        workflowRef: workflow._id,
       };
     });
     const cosPersonnelData = checks.filter((record) => record !== null);
     if (cosPersonnelData.length > 0) {
       const addedRecords = await COSPersonnel.insertMany(cosPersonnelData);
+      if (workflow) {
+        const summary = summarizeCOSRows(await COSPersonnel.find({ workflowRef: workflow._id }).lean());
+        await syncCOSGrandTotalToMOOE(workflow._id, summary.total);
+        await refreshProposalTotals(workflow._id);
+      }
       return res.status(200).json({
         addedRecords,
         region: userRegion,
@@ -327,6 +448,19 @@ const isVacant = fullName === 'VACANT' || fullName === 'TO-BE-FILLED';
     }
   } catch (error) {
     console.error("Error in bulkAddCOSPersonnel:", error);
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    if (error?.code === 11000) {
+      const writeError = error?.writeErrors?.find((entry) => entry?.err?.code === 11000 || entry?.code === 11000);
+      const duplicateKey = error?.keyValue || writeError?.err?.keyValue || writeError?.keyValue || {};
+      const duplicateRow = writeError?.err?.op || writeError?.op || {};
+      const duplicateEmployee = duplicateKey.employeeNumber || duplicateRow.employeeNumber || "An employee";
+      const duplicateFiscalYear = duplicateKey.fiscalYear || duplicateRow.fiscalYear || req.body?.fiscalYear || "the selected fiscal year";
+      return res.status(409).json({
+        message: `${duplicateEmployee} already exists in this COS/JO proposal for fiscal year ${duplicateFiscalYear}. Refresh the list and try again.`
+      });
+    }
     return res.status(500).json({ message: error.message });
   }
 };
@@ -341,6 +475,8 @@ exports.getAllCOSPersonnel = async (req, res) => {
       employeeFullName,
       statusOfAppointment,
       region, // Add region parameter
+      proposalId,
+      fiscalYear,
       operator = "=",
       ...dynamicFilters
     } = req.query;
@@ -422,9 +558,8 @@ exports.getAllCOSPersonnel = async (req, res) => {
       }
     }
 
-    if (activeSettings) {
-      query.fiscalYear = activeSettings.fiscalYear;
-    }
+    if (proposalId) query.workflowRef = toWorkflowObjectId(proposalId);
+    if (fiscalYear || activeSettings?.fiscalYear) query.fiscalYear = fiscalYear || activeSettings.fiscalYear;
     if (search) {
       searchFilter(query, search, [
         "positionTitle",
@@ -493,15 +628,12 @@ exports.getAllCOSPersonnel = async (req, res) => {
       obj.workflowLevel = obj.workflowLevel || derivedLevel;
       obj.originalLevel = obj.originalLevel || derivedLevel;
       
-      // Enforce Total = annualSalary for COS
-      obj.Total = obj.annualSalary;
-      
       return obj;
     });
 
     const grandTotals = {};
     enrichedPersonnel.forEach(ps => {
-      ['monthlySalary', 'annualSalary', 'Total'].forEach(field => {
+      ['monthlySalary', 'annualSalary', 'baseAnnualAmount', 'premiumAmount', 'Total'].forEach(field => {
         grandTotals[field] = (grandTotals[field] || 0) + (Number(ps[field]) || 0);
       });
     });
@@ -518,7 +650,7 @@ exports.getAllCOSPersonnel = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getAllCOSPersonnel:", error);
-    return res.status(500).json({ error: "Something went wrong." });
+    return res.status(error.statusCode || 500).json({ message: error.message || "Something went wrong." });
   }
 };
 exports.updateCOSPersonnel = async (req, res) => {
@@ -530,13 +662,17 @@ exports.updateCOSPersonnel = async (req, res) => {
     const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
     const sanitizedFilters = filterHierarchicalFilters(hierarchicalFilters);
 
-    const allowedFields = [
-      "employeeFullName",
-      "monthlySalary",
-      "annualSalary",
-      "statusOfAppointment",
-      "Total",
-    ];
+    const existing = await COSPersonnel.findOne({ _id: id, ...sanitizedFilters });
+    if (!existing) {
+      return res.status(404).json({
+        message: "COS personnel not found or access denied",
+        error: "RECORD_NOT_FOUND_OR_ACCESS_DENIED"
+      });
+    }
+
+    const workflow = await assertActiveWorkflowAccess(req, existing.workflowRef, { write: true });
+    const premiumConfig = getWorkflowPremiumConfig(workflow);
+    const allowedFields = ["employeeFullName", "monthlySalary", "annualSalary", "statusOfAppointment"];
 
     const filteredUpdateFields = Object.keys(updateFields)
       .filter((key) => allowedFields.includes(key))
@@ -545,13 +681,22 @@ exports.updateCOSPersonnel = async (req, res) => {
         return obj;
       }, {});
 
-    // Enforce Total = annualSalary if annualSalary is updated
-    if (filteredUpdateFields.annualSalary !== undefined) {
-      filteredUpdateFields.Total = filteredUpdateFields.annualSalary;
+    if (filteredUpdateFields.monthlySalary !== undefined && (!Number.isFinite(Number(filteredUpdateFields.monthlySalary)) || Number(filteredUpdateFields.monthlySalary) < 0)) {
+      return res.status(400).json({ message: 'Monthly salary must be a non-negative number.' });
+    }
+    if (filteredUpdateFields.annualSalary !== undefined && (!Number.isFinite(Number(filteredUpdateFields.annualSalary)) || Number(filteredUpdateFields.annualSalary) < 0)) {
+      return res.status(400).json({ message: 'Annual salary must be a non-negative number.' });
     }
 
+    const premiumFields = applyCOSPremium(
+      { ...existing.toObject(), ...filteredUpdateFields },
+      premiumConfig,
+      { monthlySalaryChanged: filteredUpdateFields.monthlySalary !== undefined }
+    );
+    Object.assign(filteredUpdateFields, premiumFields);
+
     const updatedCOSPersonnel = await COSPersonnel.findOneAndUpdate(
-      { _id: id, ...sanitizedFilters },
+      { _id: id, workflowRef: workflow._id, ...sanitizedFilters },
       { $set: filteredUpdateFields },
       { new: true }
     );
@@ -563,9 +708,12 @@ exports.updateCOSPersonnel = async (req, res) => {
       });
     }
 
-    res.status(200).json(updatedCOSPersonnel);
+    const summary = summarizeCOSRows(await COSPersonnel.find({ workflowRef: workflow._id }).lean());
+    await syncCOSGrandTotalToMOOE(workflow._id, summary.total);
+    await refreshProposalTotals(workflow._id);
+    res.status(200).json({ personnel: updatedCOSPersonnel, summary });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 };
 exports.deleteCOSPersonnel = async (req, res) => {
@@ -576,34 +724,40 @@ exports.deleteCOSPersonnel = async (req, res) => {
     const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
     const sanitizedFilters = filterHierarchicalFilters(hierarchicalFilters);
 
-    const deletedCOSPersonnel = await COSPersonnel.findOneAndDelete({
+    const existing = await COSPersonnel.findOne({
       _id: id,
       ...sanitizedFilters
     });
 
-    if (!deletedCOSPersonnel) {
+    if (!existing) {
       return res.status(404).json({ 
         message: "COS personnel not found or access denied",
         error: "RECORD_NOT_FOUND_OR_ACCESS_DENIED"
       });
     }
 
-    res.status(200).json({ message: "COS personnel deleted successfully" });
+    const workflow = await assertActiveWorkflowAccess(req, existing.workflowRef, { write: true });
+    await COSPersonnel.deleteOne({ _id: existing._id, workflowRef: workflow._id });
+    const summary = summarizeCOSRows(await COSPersonnel.find({ workflowRef: workflow._id }).lean());
+    await syncCOSGrandTotalToMOOE(workflow._id, summary.total);
+    await refreshProposalTotals(workflow._id);
+
+    res.status(200).json({ message: "COS personnel deleted successfully", summary });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error.statusCode || 500).json({ message: error.message });
   }
 };
 //GET GRAND TOTAL OF THE COS PERSONNEL - COS statusOfAppointment(FOR TOTAL COLUMN)\
 exports.getGrandTotalCOS = async (req, res) => {
   try {
-    const { region } = req.query;
+    const { region, proposalId, fiscalYear: requestedFiscalYear } = req.query;
 
     // Prefer submission workflow filters; fallback to hierarchical
     const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
     const sanitizedFilters = filterHierarchicalFilters(hierarchicalFilters);
 
     // CRITICAL SECURITY CHECK: Ensure region is provided
-    if (!region) {
+    if (!region && !proposalId) {
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view COS personnel totals"
@@ -619,54 +773,90 @@ exports.getGrandTotalCOS = async (req, res) => {
         .lean();
     }
     // 3. If we still don't have a fiscalYear, error out
-    if (!activeSettings || activeSettings.fiscalYear == null) {
+    if (!requestedFiscalYear && (!activeSettings || activeSettings.fiscalYear == null)) {
       return res.status(400).json({
         message: "Active settings with a fiscalYear not found."
       });
     }
-    const { fiscalYear } = activeSettings;
+    const fiscalYear = requestedFiscalYear || activeSettings.fiscalYear;
 
     // Build query with hierarchical filters
     let query = {
       statusOfAppointment: { $regex: /^COS$/i },
       fiscalYear,
-      region,
       ...sanitizedFilters
     };
+    if (region) query.region = region;
+    if (proposalId) query.workflowRef = toWorkflowObjectId(proposalId);
 
     // 4. Fetch only COS personnel for that fiscal year AND region with hierarchical access
     const cosPersonnels = await COSPersonnel.find(query).lean();
-    // 5. Define exactly which fields to include in the total for COS
-    const fieldsToSum = [
-      "annualSalary",
-    ];
-    // 6. Sum only those fields for each record, then grand‐total them
-    const grandTotal = cosPersonnels.reduce((acc, curr) => {
-      const subtotal = fieldsToSum.reduce(
-        (sum, field) => sum + (Number(curr[field]) || 0),
-        0
-      );
-      return acc + subtotal;
-    }, 0);
+    const grandTotal = roundCurrency(cosPersonnels.reduce((acc, curr) => acc + (Number(curr.Total) || 0), 0));
     // 7. Return fiscalYear + grandTotal + region
-    return res.json({ fiscalYear, grandTotal, region });
+    return res.json({ fiscalYear, grandTotal, region, proposalId: proposalId || null });
   } catch (error) {
     console.error("Error in getGrandTotalCOS:", error);
     return res
-      .status(500)
+      .status(error.statusCode || 500)
       .json({ message: "Server error", error });
+  }
+};
+
+exports.getCOSPremiumSettings = async (req, res) => {
+  try {
+    const workflow = await assertActiveWorkflowAccess(req, req.query.proposalId);
+    return res.status(200).json(premiumSettingsResponse(workflow));
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message });
+  }
+};
+
+exports.updateCOSPremiumSettings = async (req, res) => {
+  try {
+    const workflow = await assertActiveWorkflowAccess(req, req.params.proposalId, { write: true });
+    if (typeof req.body.enabled !== 'boolean') {
+      return res.status(400).json({ message: 'Premium enabled must be true or false.' });
+    }
+
+    const config = normalizePremiumConfig({
+      enabled: req.body.enabled,
+      percentage: req.body.percentage,
+    });
+    const updatedWorkflow = await NewProposalWorkflow.findByIdAndUpdate(
+      workflow._id,
+      {
+        $set: {
+          cosJoPremium: {
+            ...config,
+            updatedBy: getUserId(req),
+            updatedByName: getUserName(req),
+            updatedAt: new Date(),
+          },
+        },
+      },
+      { new: true, runValidators: true }
+    );
+
+    // The proposal configuration is the source of truth. Reapplying it is
+    // deterministic and proposal-scoped, so a retry safely repairs a partial
+    // infrastructure failure without duplicating premium amounts.
+    const summary = await reapplyPremiumToWorkflow(updatedWorkflow, config);
+    await refreshProposalTotals(updatedWorkflow._id);
+    return res.status(200).json(premiumSettingsResponse(updatedWorkflow, summary));
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message });
   }
 };
 
 // Get COS Personnel by Parameters (for proposal workflow)
 exports.getCOSByParams = async (req, res) => {
   try {
-    const { proposalId, region } = req.query;
+    const { proposalId, region, fiscalYear } = req.query;
     const query = {};
 
     // If proposalId is provided, filter by workflowRef (NewProposalWorkflow _id) so list is per-proposal
     if (proposalId) {
-      query.workflowRef = proposalId;
+      query.workflowRef = toWorkflowObjectId(proposalId);
     }
 
     // Apply region filter if provided
@@ -684,8 +874,8 @@ exports.getCOSByParams = async (req, res) => {
     // Get active settings for fiscal year
     const Settings = require('../models/Settings');
     const activeSettings = await Settings.findOne({ isActive: true });
-    if (activeSettings) {
-      query.fiscalYear = activeSettings.fiscalYear;
+    if (fiscalYear || activeSettings) {
+      query.fiscalYear = fiscalYear || activeSettings.fiscalYear;
     }
 
     // Fetch COS personnel
@@ -762,6 +952,6 @@ exports.getCOSByParams = async (req, res) => {
     res.status(200).json(cosList);
   } catch (error) {
     console.error("Error fetching COS personnel by params:", error);
-    res.status(500).json({ message: "Failed to fetch COS data" });
+    res.status(error.statusCode || 500).json({ message: error.message || "Failed to fetch COS data" });
   }
 };

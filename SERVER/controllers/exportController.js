@@ -14,7 +14,12 @@ const COSPersonnel = require('../models/COSPersonnel');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
+const {
+  resolveDraftWatermarkForRecords,
+  drawMuhammaraDraftWatermark,
+} = require('../utils/proposalPdfWatermark');
 // Export Budget Summary as PDF
 const exportBudgetSummaryPDF = async (req, res) => {
   try {
@@ -68,6 +73,10 @@ const exportBudgetSummaryPDF = async (req, res) => {
 
     // Combine personnel data
     const allPersonnelData = [...personnelData, ...cosPersonnelData];
+    const showDraftWatermark = await resolveDraftWatermarkForRecords(
+      [allPersonnelData, mooeData, capitalOutlayData, incomeData],
+      NewProposalWorkflow
+    );
 
     const filename = `Budget_Summary_${fiscalYear}_${region}.pdf`;
 
@@ -112,6 +121,11 @@ const exportBudgetSummaryPDF = async (req, res) => {
         currentPage += 1;
         currentY = MARGIN_TOP;
         drawBorder();
+        drawMuhammaraDraftWatermark(pdfDoc, {
+          show: showDraftWatermark,
+          pageWidth: PAGE_WIDTH,
+          pageHeight: PAGE_HEIGHT,
+        });
       }
     };
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
@@ -157,6 +171,11 @@ const exportBudgetSummaryPDF = async (req, res) => {
 
     pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
     drawBorder();
+    drawMuhammaraDraftWatermark(pdfDoc, {
+      show: showDraftWatermark,
+      pageWidth: PAGE_WIDTH,
+      pageHeight: PAGE_HEIGHT,
+    });
     drawHeader();
 
     // Helper function for clean currency formatting (no +- signs)
@@ -247,6 +266,11 @@ const exportBudgetSummaryPDF = async (req, res) => {
     currentPage += 1;
     currentY = MARGIN_TOP;
     drawBorder();
+    drawMuhammaraDraftWatermark(pdfDoc, {
+      show: showDraftWatermark,
+      pageWidth: PAGE_WIDTH,
+      pageHeight: PAGE_HEIGHT,
+    });
 
     drawSectionTitle('DETAILED BREAKDOWN');
     drawStatusSummary('Personnel Services Summary', allPersonnelData);
@@ -261,7 +285,6 @@ const exportBudgetSummaryPDF = async (req, res) => {
                           (capitalOutlayData.find(c => c.workflowRef)?.workflowRef) || 
                           (personnelData.find(p => p.workflowRef)?.workflowRef);
     if (workflowRefId) {
-      const NewProposalWorkflow = require('../models/NewProposalWorkflow');
       const workflow = await NewProposalWorkflow.findById(workflowRefId).lean();
       if (workflow) {
         signatoriesInfo = extractSignatoriesFromWorkflow(workflow, req.user);

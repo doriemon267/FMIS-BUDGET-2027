@@ -8,7 +8,9 @@ const IncomeCategory = require("../models/IncomeCategory");
 const IncomeSubCategory = require("../models/IncomeSubcategory");
 const IAsOMCost = require("../models/IAsOMCost");
 const DiscountSettings = require("../models/DiscountSettings");
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const { getRegionsWithReportEntries } = require('../utils/reportRegionSelection');
+const { resolveDraftWatermarkForRecords } = require('../utils/proposalPdfWatermark');
 const getConsolidatedSummary = async (req, res) => {
   try {
     let fiscalYear;
@@ -37,6 +39,10 @@ const getConsolidatedSummary = async (req, res) => {
         select: "categoryName _id",
         model: Category
       });
+    const isFinalized = !(await resolveDraftWatermarkForRecords(
+      [psEntries, mooeEntries, coEntries],
+      NewProposalWorkflow
+    ));
     // Fetch IAs O&M Cost data
     let iasOMCostData = await IAsOMCost.findOne(filter);
     if (!iasOMCostData) {
@@ -162,6 +168,7 @@ const getConsolidatedSummary = async (req, res) => {
     // Return consolidated summary with detailed MOOE breakdown
     res.json({ 
       fiscalYear, 
+      isFinalized,
       psSummary, 
       mooe, 
       mooeTotal,
@@ -248,6 +255,7 @@ const getConsolidatedCorporateIncome = async (req, res) => {
       query.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
     }
     const incomeEntries = await Income.find(query).populate('incomecategory');
+    const isFinalized = !(await resolveDraftWatermarkForRecords(incomeEntries, NewProposalWorkflow));
     if (!regionFilter) {
       regions = getRegionsWithReportEntries(incomeEntries);
     }
@@ -290,6 +298,7 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     const result = {
       fiscalYear,
       budgetType,
+      isFinalized,
       regions: regions.map(r => r.Region),
       hierarchicalData: [],
       regionData: {},
