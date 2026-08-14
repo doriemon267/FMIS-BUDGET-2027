@@ -339,6 +339,25 @@ describe('PS and CO All Regions matrix contract', () => {
     expect(matrix.regionalTotal).toEqual({ income: 40, subsidy: 60, amount: 100 });
   });
 
+  test('uses four CO regions per PDF page with Sub Total and Total summaries', () => {
+    const {
+      CAPITAL_OUTLAY_MATRIX_REGIONS_PER_PAGE,
+      CAPITAL_OUTLAY_MATRIX_SUMMARY_LABELS,
+      CAPITAL_OUTLAY_MATRIX_CONTINUATION_LABEL,
+      getCapitalOutlayMatrixRegionGroups,
+    } = consolidatedCapitalOutlayController._private;
+    const regions = Array.from({ length: 9 }, (_, index) => `Region ${index + 1}`);
+
+    expect(CAPITAL_OUTLAY_MATRIX_REGIONS_PER_PAGE).toBe(4);
+    expect(CAPITAL_OUTLAY_MATRIX_SUMMARY_LABELS).toEqual({
+      subTotal: 'SUB TOTAL',
+      total: 'TOTAL',
+    });
+    expect(CAPITAL_OUTLAY_MATRIX_CONTINUATION_LABEL).toBe('CONTINUATION OF:');
+    expect(getCapitalOutlayMatrixRegionGroups(regions).map((group) => group.length)).toEqual([4, 4, 1]);
+    expect(getCapitalOutlayMatrixRegionGroups(regions).flat()).toEqual(regions);
+  });
+
   test('includes only proposal-backed regions and automatically includes future region names', () => {
     const matrix = buildRegionalReportMatrix([
       {

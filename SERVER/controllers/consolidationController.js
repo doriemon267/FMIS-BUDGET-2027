@@ -258,14 +258,24 @@ exports.exportConsoProposalExcel = async (req, res) => {
 
 exports.exportConsoProposalPdf = async (req, res) => {
   try {
-    const { fiscalYear } = req.query;
-    const buffer = await consoProposalExportService.generateConsoProposalPdf(fiscalYear);
+    const { fiscalYear, regions } = req.query;
+    const selectedRegions = consoProposalExportService._private.normalizeSelectedRegions(regions);
+    if (selectedRegions.length > 64 || selectedRegions.some((region) => region.length > 120)) {
+      return res.status(400).json({
+        success: false,
+        message: 'The selected region list is invalid or exceeds the allowed report scope.',
+      });
+    }
+    const buffer = await consoProposalExportService.generateConsoProposalPdf(fiscalYear, {
+      selectedRegions,
+    });
     
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=CONSO_PROPOSAL_${fiscalYear || 'ALL'}.pdf`);
     res.send(buffer);
   } catch (error) {
     console.error('[CONSOLIDATION] Error exporting pdf:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate PDF report', error: error.message });
+    const statusCode = Number(error.statusCode) || 500;
+    res.status(statusCode).json({ success: false, message: 'Failed to generate PDF report', error: error.message });
   }
 };

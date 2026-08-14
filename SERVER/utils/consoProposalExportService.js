@@ -19,6 +19,27 @@ const {
   shouldShowDraftWatermark,
   drawMuhammaraDraftWatermark,
 } = require('./proposalPdfWatermark');
+const { getFolioPageSize } = require('./reportPageLayout');
+const { chunkRegionalMatrixRegions } = require('./regionalReportMatrix');
+
+const CONSO_PDF_REGIONS_PER_PAGE = 4;
+const CONSO_PDF_SUMMARY_LABELS = Object.freeze({
+  subTotal: 'SUB TOTAL',
+  total: 'TOTAL',
+});
+const CONSO_PDF_CONTINUATION_LABEL = 'CONTINUATION OF:';
+
+const normalizeSelectedRegions = (regions) => {
+  const values = Array.isArray(regions) ? regions : [regions];
+  return [...new Set(values
+    .flatMap((value) => String(value || '').split(','))
+    .map((value) => value.trim())
+    .filter((value) => value && value.toLowerCase() !== 'all'))];
+};
+
+const getConsoPdfRegionGroups = (regions = []) => (
+  chunkRegionalMatrixRegions(regions, CONSO_PDF_REGIONS_PER_PAGE)
+);
 
 // Helper to format currency
 const formatCurrency = (amount) => {
@@ -126,11 +147,44 @@ const calculateTotals = (map) => {
   map.surplusDeficit = map.totalSources - map.totalUses;
 };
 
-const getConsolidatedData = async (fiscalYear) => {
+const getConsoPdfFinancialValues = (mapSource, type, subCategory) => {
+  if (!mapSource || (!type && !subCategory)) return { income: 0, subsidy: 0, budget: 0 };
+
+  let income = 0;
+  let subsidy = 0;
+  if (!type && ['totalUses', 'totalCurrent', 'surplusDeficit'].includes(subCategory)) {
+    subsidy = Number(mapSource[subCategory]) || 0;
+  } else if (type === 'income') {
+    income = Number(mapSource.income?.[subCategory]) || 0;
+  } else if (type === 'budgetarySupport') {
+    subsidy = Number(mapSource.budgetarySupport) || 0;
+  } else if (type) {
+    subsidy = Number(mapSource[type]?.[subCategory]) || 0;
+  }
+
+  return { income, subsidy, budget: income + subsidy };
+};
+
+const getConsoPdfSummaryValues = (mapSource) => ({
+  income: Number(mapSource?.income?.total) || 0,
+  subsidy: Number(mapSource?.budgetarySupport) || 0,
+  budget: Number(mapSource?.totalUses) || 0,
+});
+
+const sumConsoPdfValues = (values = []) => values.reduce((totals, value) => ({
+  income: totals.income + (Number(value?.income) || 0),
+  subsidy: totals.subsidy + (Number(value?.subsidy) || 0),
+  budget: totals.budget + (Number(value?.budget) || 0),
+}), { income: 0, subsidy: 0, budget: 0 });
+
+const getConsolidatedData = async (fiscalYear, { selectedRegions = [], regionalOnly = false } = {}) => {
   const query = { status: 'ACTIVE' };
   if (fiscalYear) {
     query.fiscalYear = fiscalYear;
   }
+  const normalizedRegions = normalizeSelectedRegions(selectedRegions);
+  if (regionalOnly) query.isCentralOffice = { $ne: true };
+  if (normalizedRegions.length > 0) query.region = { $in: normalizedRegions };
   
   const consolidations = await BRDConsolidation.find(query).lean();
   const proposalIds = consolidations.map(c => c.proposalId);
@@ -541,292 +595,389 @@ const generateConsoProposalExcel = async (fiscalYear) => {
   return buffer;
 };
 
-const generateConsoProposalPdf = async (fiscalYear) => {
+const generateConsoProposalPdf = async (fiscalYear, { selectedRegions = [] } = {}) => {
   if (!MuhammaraRecipe) {
     throw new Error('PDF generation library (muhammara) is not installed on the server.');
   }
 
-  const tmpFilePath = path.join(require('os').tmpdir(), `conso_proposal_${Date.now()}.pdf`);
-  
-  const recipe = new MuhammaraRecipe('new', tmpFilePath, {
-    author: 'FMIS',
-    title: 'CONSO PROPOSAL'
+  const normalizedRegions = normalizeSelectedRegions(selectedRegions);
+  const data = await getConsolidatedData(fiscalYear, {
+    selectedRegions: normalizedRegions,
+    regionalOnly: true,
   });
-
-  const data = await getConsolidatedData(fiscalYear);
-  const regionNames = Object.keys(data.regions).sort();
-  const showDraftWatermark = shouldShowDraftWatermark(data.proposalStatuses);
-
-  const groupNames = ['GRAND TOTAL', 'CENTRAL OFFICE', 'TOTAL REGIONS', ...regionNames.map(r => r.toUpperCase())];
-  
-  const SUB_COL_WIDTH = 85; 
-  const GROUP_WIDTH = SUB_COL_WIDTH * 3;
-  const colX = [40]; // Particular
-  const borderX = [35, 240]; 
-  const groupStartBorderX = [240]; 
-  
-  groupNames.forEach((g, i) => {
-    const startX = 240 + (i * GROUP_WIDTH);
-    colX.push(startX + 5); // Income
-    colX.push(startX + SUB_COL_WIDTH + 5); // Subsidy
-    colX.push(startX + (SUB_COL_WIDTH * 2) + 5); // Budget
-    
-    borderX.push(startX + SUB_COL_WIDTH);
-    borderX.push(startX + (SUB_COL_WIDTH * 2));
-    borderX.push(startX + GROUP_WIDTH);
-    groupStartBorderX.push(startX + GROUP_WIDTH);
-  });
-  
-  const TABLE_WIDTH = borderX[borderX.length - 1] - 35;
-  const PAGE_WIDTH = Math.max(842, TABLE_WIDTH + 70); 
-  const PAGE_HEIGHT = 595;
-  
-  recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-  drawMuhammaraDraftWatermark(recipe, {
-    show: showDraftWatermark,
-    pageWidth: PAGE_WIDTH,
-    pageHeight: PAGE_HEIGHT,
-  });
-  
-  // Header Logo
-  try {
-    recipe.image(path.join(__dirname, '../assets/logo.png'), 40, 30, { width: 50, height: 50 });
-  } catch (e) {
-    // Ignore if logo is missing
+  const regionNames = Object.keys(data.regions).sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  if (regionNames.length === 0) {
+    const error = new Error('No active regional consolidation data was found for the selected regions.');
+    error.statusCode = 404;
+    throw error;
   }
 
-  const title1 = "NATIONAL IRRIGATION ADMINISTRATION";
-  const title2 = `CONSOLIDATED PROPOSED BUDGET FOR FY ${fiscalYear || 'ALL'}`;
-  const title3 = "BY REGION";
-  
-  recipe.text(title1, (PAGE_WIDTH / 2) - (title1.length * 4), 40, { color: [0, 0, 0], fontSize: 14, bold: true });
-  recipe.text(title2, (PAGE_WIDTH / 2) - (title2.length * 3.5), 58, { color: [0, 0, 0], fontSize: 12, bold: true });
-  recipe.text(title3, (PAGE_WIDTH / 2) - (title3.length * 3.5), 72, { color: [0, 0, 0], fontSize: 12, bold: true });
-  
-  let currentRowY = 100;
+  const reportRows = [
+    ['SOURCES OF FUNDS', null, null, true],
+    ['1. CORPORATE INCOME', null, null, true],
+    ['  Irrigation Service Fees', 'income', 'irrigationServiceFees'],
+    ['  Rent Income', 'income', 'rentIncome'],
+    ['  Water Service Fee', 'income', 'waterServiceFee'],
+    ['  Miscellaneous Income', 'income', 'miscellaneousIncome'],
+    ['TOTAL CORPORATE INCOME', 'income', 'total', true],
+    ['2. BUDGETARY SUPPORT', 'budgetarySupport', 'budgetarySupport'],
+    ['USES OF FUNDS', null, null, true],
+    ['1. PERSONAL SERVICES', null, null, true],
+    ['  1. Salaries and Wages', null, null, true],
+    ['    a. Salaries - Regular (Authorized Positions)', 'ps', 'salariesAndWages'],
+    ['    b. Casual Personnel', 'ps', 'casualPersonnel'],
+    ['  2. Other Compensation', null, null, true],
+    ['    a. PERA', 'ps', 'pera'],
+    ['    b. Representation Allowance', 'ps', 'representationAllowance'],
+    ['    c. Transportation Allowance', 'ps', 'transportationAllowance'],
+    ['    d. Honoraria', 'ps', 'honoraria'],
+    ['    e. Uniform/Clothing Allowance', 'ps', 'uniformAllowance'],
+    ['    f. Children Allowances', 'ps', 'childrenAllowance'],
+    ['    g. Medical Allowances', 'ps', 'medicalAllowance'],
+    ['    h. Meal Allowances', 'ps', 'mealAllowance'],
+    ['    i. Additional Medical Allowance', 'ps', 'additionalMedicalAllowance'],
+    ['    j. Per Diem & Allowance of Board', 'ps', 'perDiem'],
+    ['    k. Subsistence Allowance', 'ps', 'subsistenceAllowance'],
+    ['    l. Longevity Pay (Loyalty Award)', 'ps', 'loyaltyAward'],
+    ['    m. Overtime Services', 'ps', 'overtimeServices'],
+    ['    n. Special Counsel Allowance', 'ps', 'specialCounselAllowance'],
+    ['    o. Productivity Enhancement', 'ps', 'productivityIncentive'],
+    ['    p. Cash Gift', 'ps', 'cashGift'],
+    ['    q. Mid-Year and Year-End Bonus', 'ps', 'midYearAndYearEndBonus'],
+    ['    r. Performance Based Bonus', 'ps', 'performanceBasedBonus'],
+    ['    s. Hazard Pay', 'ps', 'hazardPay'],
+    ['    t. Other Bonuses and Allowances', 'ps', 'otherBonuses'],
+    ['    u. Anniversary Bonus', 'ps', 'anniversaryBonus'],
+    ['  3. Other Benefits', null, null, true],
+    ['    a. Retirement Benefits', 'ps', 'retirementBenefits'],
+    ['    b. Terminal Leave Benefits', 'ps', 'terminalLeave'],
+    ['  4. Fixed Personnel Expenditures', null, null, true],
+    ['    a. GSIS Ret. & Life Ins.', 'ps', 'gsisPremium'],
+    ['    b. PAG-IBIG Contributions', 'ps', 'pagibigPremium'],
+    ['    c. PHILHEALTH Contributions', 'ps', 'philhealthPremium'],
+    ['    d. Employees Compensation Ins.', 'ps', 'employeeCompensation'],
+    ['    e. Provident Fund', 'ps', 'providentFund'],
+    ['  5. Leave Monetization', 'ps', 'leaveMonetization', true],
+    ['TOTAL PERSONAL SERVICES', 'ps', 'total', true],
+    ['2. MAINTENANCE AND OTHER OPERATING EXPENSES (MOOE)', null, null, true],
+    ['  Travelling Expenses', 'mooe', 'travellingExpenses'],
+    ['  Training and Scholarship Expenses', 'mooe', 'trainingAndScholarship'],
+    ['  Supplies and Materials', 'mooe', 'suppliesAndMaterials'],
+    ['  Utility Expenses', 'mooe', 'utilityExpenses'],
+    ['  Communication Expenses', 'mooe', 'communicationExpenses'],
+    ['  Awards/Rewards Expenses', 'mooe', 'awardsRewards'],
+    ['  Professional Services', 'mooe', 'professionalServices'],
+    ['  General Services', 'mooe', 'generalServices'],
+    ['  Repairs & Maintenance', 'mooe', 'repairsMaintenance'],
+    ['  Subsidies and Donations', 'mooe', 'subsidiesDonations'],
+    ['  Extraordinary & Miscellaneous Exp.', 'mooe', 'extraordinaryMiscellaneous'],
+    ['  Taxes, Insurance Premiums', 'mooe', 'taxesInsurance'],
+    ['  Financial Expenses', 'mooe', 'financialExpenses'],
+    ['  Other MOOE', 'mooe', 'otherMooe'],
+    ['TOTAL MOOE', 'mooe', 'total', true],
+    ['3. CAPITAL OUTLAY', null, null, true],
+    ['  Furniture & Fixtures', 'co', 'furnitureFixtures'],
+    ['  Machinery and Equipment', 'co', 'machineryEquipment'],
+    ['  Investment Outlay', 'co', 'investmentOutlay'],
+    ['  Transportation Equipment', 'co', 'transportationEquipment'],
+    ['  Intangible Assets', 'co', 'intangibleAssets'],
+    ['  Acquisition of Land', 'co', 'acquisitionOfLand'],
+    ['  Implementation/Construction', 'co', 'implementationConstruction'],
+    ['TOTAL CAPITAL OUTLAY', 'co', 'total', true],
+    ['TOTAL CURRENT OPERATING EXPENDITURES (PS + MOOE)', null, 'totalCurrent', true],
+    ['TOTAL USES OF FUNDS', null, 'totalUses', true],
+  ].map(([title, type, subCategory, bold = false]) => ({ title, type, subCategory, bold }));
 
-  const drawHeaders = (y) => {
-    recipe.rectangle(35, y, TABLE_WIDTH, 40, { fill: '#eaeaea' });
-    recipe.text("PARTICULAR", 40, y + 16, { bold: true, fontSize: 10, color: [0, 0, 0] });
-    
-    groupNames.forEach((g, i) => {
-      const startX = 240 + (i * GROUP_WIDTH);
-      recipe.text(g, startX + (GROUP_WIDTH / 2) - (g.length * 2.5), y + 6, { bold: true, fontSize: 10, color: [0, 0, 0] });
-      
-      recipe.text("PROJECTED CORPORATE", startX + 5, y + 20, { bold: true, fontSize: 6, color: [0, 0, 0] });
-      recipe.text("INCOME", startX + 5, y + 28, { bold: true, fontSize: 6, color: [0, 0, 0] });
-      
-      recipe.text("PROJECTED", startX + SUB_COL_WIDTH + 5, y + 20, { bold: true, fontSize: 6, color: [0, 0, 0] });
-      recipe.text("SUBSIDY", startX + SUB_COL_WIDTH + 5, y + 28, { bold: true, fontSize: 6, color: [0, 0, 0] });
-      
-      recipe.text("PROPOSED", startX + (SUB_COL_WIDTH * 2) + 5, y + 20, { bold: true, fontSize: 6, color: [0, 0, 0] });
-      recipe.text("BUDGET", startX + (SUB_COL_WIDTH * 2) + 5, y + 28, { bold: true, fontSize: 6, color: [0, 0, 0] });
-    });
+  const tmpFilePath = path.join(require('os').tmpdir(), `conso_proposal_${Date.now()}.pdf`);
+  const recipe = new MuhammaraRecipe('new', tmpFilePath, {
+    author: 'FMIS',
+    title: 'CONSO PROPOSAL',
+    subject: `Selected regional consolidated proposed budget for FY ${fiscalYear || 'ALL'}`,
+  });
+  const showDraftWatermark = shouldShowDraftWatermark(data.proposalStatuses);
+  const { width: PAGE_WIDTH, height: PAGE_HEIGHT } = getFolioPageSize(true);
+  const MARGIN = 18;
+  const CONTENT_LEFT = MARGIN;
+  const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
+  const TABLE_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
+  const PARTICULARS_WIDTH = 300;
+  const HEADER_HEIGHT = 34;
+  const GROUP_HEADER_HEIGHT = 17;
+  const SUMMARY_ROW_HEIGHT = 18;
+  const SUMMARY_GAP = 6;
+  const SUMMARY_BLOCK_HEIGHT = (SUMMARY_ROW_HEIGHT * 2) + SUMMARY_GAP;
+  const PAGE_CONTENT_BOTTOM = PAGE_HEIGHT - MARGIN - 16;
+  const FINANCIAL_COLUMNS = [
+    { key: 'income', label: 'INCOME' },
+    { key: 'subsidy', label: 'SUBSIDY' },
+    { key: 'budget', label: 'BUDGET' },
+  ];
+  const regionGroups = getConsoPdfRegionGroups(regionNames);
+  const overallTotal = getConsoPdfSummaryValues(data.grandTotal);
+  let pageNo = 0;
+  let pageOpen = false;
+  let firstPage = true;
+  let currentY = MARGIN;
 
-    groupStartBorderX.forEach(x => {
-      recipe.rectangle(x, y, 1, 40, { fill: [0, 0, 0] });
-    });
-    borderX.forEach(x => {
-      recipe.rectangle(x, y + 16, 1, 24, { fill: [0, 0, 0] });
-    });
-    recipe.rectangle(35, y, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
-    recipe.rectangle(240, y + 16, TABLE_WIDTH - 205, 1, { fill: [0, 0, 0] });
-    recipe.rectangle(35, y + 40, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
-  };
-
-  drawHeaders(currentRowY);
-  currentRowY += 40;
-
-  const getWrappedText = (text, maxLineLength) => {
-    const words = text.split(' ');
-    let lines = [];
-    let currentLine = '';
-    words.forEach(word => {
-      if ((currentLine + ' ' + word).length > maxLineLength) {
-        if (currentLine) lines.push(currentLine.trim());
-        currentLine = word;
+  const wrapText = (value, maxWidth, fontSize = 7) => {
+    const text = String(value || '').trim();
+    if (!text) return [''];
+    const maxChars = Math.max(8, Math.floor(maxWidth / (fontSize * 0.52)));
+    const lines = [];
+    let line = '';
+    text.split(/\s+/).forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (candidate.length > maxChars && line) {
+        lines.push(line);
+        line = word;
       } else {
-        currentLine += (currentLine ? ' ' : '') + word;
+        line = candidate;
       }
     });
-    if (currentLine) lines.push(currentLine.trim());
+    if (line) lines.push(line);
     return lines;
   };
 
-  const drawRow = (title, type, subCategory, isBold = false) => {
-    const lines = getWrappedText(title, 32);
-    const textHeight = Math.max(lines.length * 10, 10);
-    const rowHeight = textHeight + 4; // 2 padding top/bottom
+  const drawPageChrome = (isFirstPage) => {
+    drawMuhammaraDraftWatermark(recipe, {
+      show: showDraftWatermark,
+      pageWidth: PAGE_WIDTH,
+      pageHeight: PAGE_HEIGHT,
+    });
+    recipe.text('CONSO PROPOSAL - SELECTED REGIONS', CONTENT_LEFT, PAGE_HEIGHT - 17, {
+      fontSize: 6.5,
+      color: '#555555',
+    });
+    recipe.text(`Page ${pageNo}`, CONTENT_RIGHT, PAGE_HEIGHT - 17, {
+      fontSize: 6.5,
+      color: '#555555',
+      align: 'right',
+    });
 
-    if (currentRowY + rowHeight > PAGE_HEIGHT - 40) {
-      recipe.endPage();
-      recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-      drawMuhammaraDraftWatermark(recipe, {
-        show: showDraftWatermark,
-        pageWidth: PAGE_WIDTH,
-        pageHeight: PAGE_HEIGHT,
+    if (isFirstPage) {
+      try {
+        recipe.image(path.join(__dirname, '../assets/logo.png'), CONTENT_LEFT, 24, { width: 48, height: 48 });
+      } catch (error) {
+        // A missing logo must not prevent report generation.
+      }
+      recipe.text('NATIONAL IRRIGATION ADMINISTRATION', PAGE_WIDTH / 2, 29, {
+        color: '#000000', fontSize: 13, bold: true, align: 'center',
       });
-      
-      currentRowY = 40;
-      drawHeaders(currentRowY);
-      currentRowY += 40;
+      recipe.text(`CONSOLIDATED PROPOSED BUDGET FOR FY ${fiscalYear || 'ALL'}`, PAGE_WIDTH / 2, 49, {
+        color: '#000000', fontSize: 11.5, bold: true, align: 'center',
+      });
+      recipe.text(`BY REGION - ${regionNames.length} SELECTED`, PAGE_WIDTH / 2, 66, {
+        color: '#000000', fontSize: 10, bold: true, align: 'center',
+      });
+      currentY = 88;
+      return;
     }
 
-    const rowBot = currentRowY + rowHeight;
-    const textStartY = currentRowY + 2;
-
-    lines.forEach((line, index) => {
-      recipe.text(line, colX[0], textStartY + (index * 10), { bold: isBold, fontSize: 9, color: [0, 0, 0] });
+    currentY = MARGIN + 8;
+    recipe.text(CONSO_PDF_CONTINUATION_LABEL, CONTENT_LEFT, currentY, {
+      color: '#000000', fontSize: 7.5, bold: true,
     });
-    
-    if (type || subCategory) {
-      let colIdx = 1;
-      const populatePDFGroup = (mapSource) => {
-        if (!mapSource) { colIdx += 3; return; }
-        
-        let incomeVal = 0;
-        let subsidyVal = 0;
-        
-        if (!type && subCategory === 'totalUses') subsidyVal = mapSource.totalUses || 0;
-        else if (!type && subCategory === 'totalCurrent') subsidyVal = mapSource.totalCurrent || 0;
-        else if (!type && subCategory === 'surplusDeficit') subsidyVal = mapSource.surplusDeficit || 0;
-        else if (type === 'income') incomeVal = mapSource.income[subCategory] || 0;
-        else if (type === 'budgetarySupport') subsidyVal = mapSource.budgetarySupport || 0;
-        else if (type) subsidyVal = mapSource[type][subCategory] || 0;
-        
-        const bgt = incomeVal + subsidyVal;
-        
-        const incStr = incomeVal ? formatCurrency(incomeVal) : '-';
-        const subStr = subsidyVal ? formatCurrency(subsidyVal) : '-';
-        const bgtStr = bgt ? formatCurrency(bgt) : '-';
-        
-        const getStrWidth = (str) => {
-          let w = 0;
-          for (let i=0; i < str.length; i++) {
-            if (str[i] === ',' || str[i] === '.' || str[i] === '-' || str[i] === ' ') w += 2.5;
-            else w += 4.5;
-          }
-          return w;
-        };
-        
-        recipe.text(incStr, borderX[colIdx + 1] - 5 - getStrWidth(incStr), textStartY, { fontSize: 8, color: [0, 0, 0] }); colIdx++;
-        recipe.text(subStr, borderX[colIdx + 1] - 5 - getStrWidth(subStr), textStartY, { fontSize: 8, color: [0, 0, 0] }); colIdx++;
-        recipe.text(bgtStr, borderX[colIdx + 1] - 5 - getStrWidth(bgtStr), textStartY, { fontSize: 8, color: [0, 0, 0] }); colIdx++;
-      };
-
-      populatePDFGroup(data.grandTotal);
-      populatePDFGroup(data.centralOffice);
-      populatePDFGroup(data.totalRegions);
-      regionNames.forEach(r => populatePDFGroup(data.regions[r]));
-    }
-    
-    // Draw borders
-    recipe.rectangle(35, rowBot, TABLE_WIDTH, 0.5, { fill: [0, 0, 0] });
-    borderX.forEach(x => {
-      recipe.rectangle(x, currentRowY, 0.5, rowBot - currentRowY, { fill: [0, 0, 0] });
+    recipe.text('CONSOLIDATED PROPOSED BUDGET BY REGION', CONTENT_LEFT + 82, currentY, {
+      color: '#000000', fontSize: 7.5, bold: true,
     });
-    
-    currentRowY = rowBot;
+    recipe.text(`FISCAL YEAR ${fiscalYear || 'ALL'}`, CONTENT_RIGHT, currentY, {
+      color: '#000000', fontSize: 7.5, bold: true, align: 'right',
+    });
+    currentY += 12;
+    recipe.rectangle(CONTENT_LEFT, currentY, TABLE_WIDTH, 0.6, {
+      fill: '#555555', stroke: '#555555', lineWidth: 0,
+    });
+    currentY += 6;
   };
 
-  drawRow('SOURCES OF FUNDS', null, null, true);
-  drawRow('1. CORPORATE INCOME', null, null, true);
-  drawRow('  Irrigation Service Fees', 'income', 'irrigationServiceFees');
-  drawRow('  Rent Income', 'income', 'rentIncome');
-  drawRow('  Water Service Fee', 'income', 'waterServiceFee');
-  drawRow('  Miscellaneous Income', 'income', 'miscellaneousIncome');
-  drawRow('TOTAL CORPORATE INCOME', 'income', 'total', true);
-  drawRow('2. BUDGETARY SUPPORT', 'budgetarySupport', 'budgetarySupport');
+  const getLayout = (regions) => {
+    const groupWidth = (TABLE_WIDTH - PARTICULARS_WIDTH) / (regions.length + 1);
+    return { groupWidth, subcolumnWidth: groupWidth / FINANCIAL_COLUMNS.length };
+  };
 
-  
-  drawRow('USES OF FUNDS', null, null, true);
-  drawRow('1. PERSONAL SERVICES', null, null, true);
-  
-  drawRow('  1. Salaries and Wages', null, null, true);
-  drawRow('    a. Salaries - Regular (Authorized Positions)', 'ps', 'salariesAndWages');
-  drawRow('    b. Casual Personnel', 'ps', 'casualPersonnel');
-  
-  drawRow('  2. Other Compensation', null, null, true);
-  drawRow('    a. PERA', 'ps', 'pera');
-  drawRow('    b. Representation Allowance', 'ps', 'representationAllowance');
-  drawRow('    c. Transportation Allowance', 'ps', 'transportationAllowance');
-  drawRow('    d. Honoraria', 'ps', 'honoraria');
-  drawRow('    e. Uniform/Clothing Allowance', 'ps', 'uniformAllowance');
-  drawRow('    f. Children Allowances', 'ps', 'childrenAllowance');
-  drawRow('    g. Medical Allowances', 'ps', 'medicalAllowance');
-  drawRow('    h. Meal Allowances', 'ps', 'mealAllowance');
-  drawRow('    i. Additional Medical Allowance', 'ps', 'additionalMedicalAllowance');
-  drawRow('    j. Per Diem & Allowance of Board', 'ps', 'perDiem');
-  drawRow('    k. Subsistence Allowance', 'ps', 'subsistenceAllowance');
-  drawRow('    l. Longevity Pay (Loyalty Award)', 'ps', 'loyaltyAward');
-  drawRow('    m. Overtime Services', 'ps', 'overtimeServices');
-  drawRow('    n. Special Counsel Allowance', 'ps', 'specialCounselAllowance');
-  drawRow('    o. Productivity Enhancement', 'ps', 'productivityIncentive');
-  drawRow('    p. Cash Gift', 'ps', 'cashGift');
-  drawRow('    q. Mid-Year and Year-End Bonus', 'ps', 'midYearAndYearEndBonus');
-  drawRow('    r. Performance Based Bonus', 'ps', 'performanceBasedBonus');
-  drawRow('    s. Hazard Pay', 'ps', 'hazardPay');
-  drawRow('    t. Other Bonuses and Allowances', 'ps', 'otherBonuses');
-  drawRow('    u. Anniversary Bonus', 'ps', 'anniversaryBonus');
-  
-  drawRow('  3. Other Benefits', null, null, true);
-  drawRow('    a. Retirement Benefits', 'ps', 'retirementBenefits');
-  drawRow('    b. Terminal Leave Benefits', 'ps', 'terminalLeave');
-  
-  drawRow('  4. Fixed Personnel Expenditures', null, null, true);
-  drawRow('    a. GSIS Ret. & Life Ins.', 'ps', 'gsisPremium');
-  drawRow('    b. PAG-IBIG Contributions', 'ps', 'pagibigPremium');
-  drawRow('    c. PHILHEALTH Contributions', 'ps', 'philhealthPremium');
-  drawRow('    d. Employees Compensation Ins.', 'ps', 'employeeCompensation');
-  drawRow('    e. Provident Fund', 'ps', 'providentFund');
+  const drawMatrixHeader = (regions, layout) => {
+    const y = currentY;
+    recipe.rectangle(CONTENT_LEFT, y, PARTICULARS_WIDTH, HEADER_HEIGHT, {
+      fill: '#e5e7eb', stroke: '#555555', lineWidth: 0.4,
+    });
+    recipe.text('PARTICULARS', CONTENT_LEFT + 5, y + 11, {
+      color: '#000000', fontSize: 7, bold: true,
+    });
+    [...regions, CONSO_PDF_SUMMARY_LABELS.subTotal].forEach((label, groupIndex) => {
+      const groupX = CONTENT_LEFT + PARTICULARS_WIDTH + (groupIndex * layout.groupWidth);
+      recipe.rectangle(groupX, y, layout.groupWidth, GROUP_HEADER_HEIGHT, {
+        fill: '#e5e7eb', stroke: '#555555', lineWidth: 0.4,
+      });
+      wrapText(label, layout.groupWidth - 6, 5.8).slice(0, 2).forEach((line, lineIndex) => {
+        recipe.text(line, groupX + (layout.groupWidth / 2), y + 4 + (lineIndex * 6.5), {
+          color: '#000000', fontSize: 5.8, bold: true, align: 'center',
+        });
+      });
+      FINANCIAL_COLUMNS.forEach((column, columnIndex) => {
+        const columnX = groupX + (columnIndex * layout.subcolumnWidth);
+        recipe.rectangle(columnX, y + GROUP_HEADER_HEIGHT, layout.subcolumnWidth, HEADER_HEIGHT - GROUP_HEADER_HEIGHT, {
+          fill: '#f3f4f6', stroke: '#777777', lineWidth: 0.3,
+        });
+        recipe.text(column.label, columnX + (layout.subcolumnWidth / 2), y + GROUP_HEADER_HEIGHT + 5, {
+          color: '#000000', fontSize: 5.1, bold: true, align: 'center',
+        });
+      });
+    });
+    currentY += HEADER_HEIGHT;
+  };
 
-  drawRow('  5. Leave Monetization', 'ps', 'leaveMonetization', true);
+  const startPage = (regions) => {
+    if (pageOpen) recipe.endPage();
+    pageNo += 1;
+    recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+    pageOpen = true;
+    drawPageChrome(firstPage);
+    firstPage = false;
+    const layout = getLayout(regions);
+    drawMatrixHeader(regions, layout);
+    return layout;
+  };
 
-  drawRow('TOTAL PERSONAL SERVICES', 'ps', 'total', true);
-  
+  const drawFinancialValues = (values, groupX, y, height, layout, { bold = false } = {}) => {
+    FINANCIAL_COLUMNS.forEach((column, columnIndex) => {
+      const cellX = groupX + (columnIndex * layout.subcolumnWidth);
+      recipe.rectangle(cellX, y, layout.subcolumnWidth, height, {
+        stroke: '#aaaaaa', lineWidth: 0.25,
+      });
+      const amount = Number(values?.[column.key]) || 0;
+      recipe.text(amount ? formatCurrency(amount) : '-', cellX + layout.subcolumnWidth - 3, y + 4, {
+        color: '#000000', fontSize: 5.4, bold, align: 'right',
+      });
+    });
+  };
 
-  drawRow('2. MAINTENANCE AND OTHER OPERATING EXPENSES (MOOE)', null, null, true);
-  drawRow('  Travelling Expenses', 'mooe', 'travellingExpenses');
-  drawRow('  Training and Scholarship Expenses', 'mooe', 'trainingAndScholarship');
-  drawRow('  Supplies and Materials', 'mooe', 'suppliesAndMaterials');
-  drawRow('  Utility Expenses', 'mooe', 'utilityExpenses');
-  drawRow('  Communication Expenses', 'mooe', 'communicationExpenses');
-  drawRow('  Awards/Rewards Expenses', 'mooe', 'awardsRewards');
-  drawRow('  Professional Services', 'mooe', 'professionalServices');
-  drawRow('  General Services', 'mooe', 'generalServices');
-  drawRow('  Repairs & Maintenance', 'mooe', 'repairsMaintenance');
-  drawRow('  Subsidies and Donations', 'mooe', 'subsidiesDonations');
-  drawRow('  Extraordinary & Miscellaneous Exp.', 'mooe', 'extraordinaryMiscellaneous');
-  drawRow('  Taxes, Insurance Premiums', 'mooe', 'taxesInsurance');
-  drawRow('  Financial Expenses', 'mooe', 'financialExpenses');
-  drawRow('  Other MOOE', 'mooe', 'otherMooe');
-  drawRow('TOTAL MOOE', 'mooe', 'total', true);
+  for (const regions of regionGroups) {
+    let layout = startPage(regions);
+    let pageHasRows = false;
 
+    const drawSummaryRow = (label, valuesByRegion, totalValues, fill, showRegionValues = true) => {
+      recipe.rectangle(CONTENT_LEFT, currentY, PARTICULARS_WIDTH, SUMMARY_ROW_HEIGHT, {
+        fill, stroke: '#555555', lineWidth: 0.4,
+      });
+      recipe.text(label, CONTENT_LEFT + 5, currentY + 5, {
+        color: '#000000', fontSize: 7, bold: true,
+      });
+      regions.forEach((region, index) => {
+        const groupX = CONTENT_LEFT + PARTICULARS_WIDTH + (index * layout.groupWidth);
+        if (showRegionValues) {
+          drawFinancialValues(valuesByRegion?.[region], groupX, currentY, SUMMARY_ROW_HEIGHT, layout, { bold: true });
+        } else {
+          FINANCIAL_COLUMNS.forEach((column, columnIndex) => {
+            recipe.rectangle(groupX + (columnIndex * layout.subcolumnWidth), currentY, layout.subcolumnWidth, SUMMARY_ROW_HEIGHT, {
+              fill, stroke: '#777777', lineWidth: 0.3,
+            });
+          });
+        }
+      });
+      const totalX = CONTENT_LEFT + PARTICULARS_WIDTH + (regions.length * layout.groupWidth);
+      drawFinancialValues(totalValues, totalX, currentY, SUMMARY_ROW_HEIGHT, layout, { bold: true });
+      currentY += SUMMARY_ROW_HEIGHT;
+    };
 
-  drawRow('3. CAPITAL OUTLAY', null, null, true);
-  drawRow('  Furniture & Fixtures', 'co', 'furnitureFixtures');
-  drawRow('  Machinery and Equipment', 'co', 'machineryEquipment');
-  drawRow('  Investment Outlay', 'co', 'investmentOutlay');
-  drawRow('  Transportation Equipment', 'co', 'transportationEquipment');
-  drawRow('  Intangible Assets', 'co', 'intangibleAssets');
-  drawRow('  Acquisition of Land', 'co', 'acquisitionOfLand');
-  drawRow('  Implementation/Construction', 'co', 'implementationConstruction');
-  drawRow('TOTAL CAPITAL OUTLAY', 'co', 'total', true);
+    const drawPageSummaries = () => {
+      if (!pageHasRows) return;
+      const valuesByRegion = Object.fromEntries(regions.map((region) => [
+        region,
+        getConsoPdfSummaryValues(data.regions[region]),
+      ]));
+      drawSummaryRow(
+        CONSO_PDF_SUMMARY_LABELS.subTotal,
+        valuesByRegion,
+        sumConsoPdfValues(Object.values(valuesByRegion)),
+        '#ededed'
+      );
+      drawSummaryRow(
+        CONSO_PDF_SUMMARY_LABELS.total,
+        null,
+        overallTotal,
+        '#dfe8df',
+        false
+      );
+      currentY += SUMMARY_GAP;
+      pageHasRows = false;
+    };
 
+    const ensureSpace = (height) => {
+      if (currentY + height <= PAGE_CONTENT_BOTTOM - SUMMARY_BLOCK_HEIGHT) return;
+      if (!pageHasRows) return;
+      drawPageSummaries();
+      layout = startPage(regions);
+    };
 
-  drawRow('TOTAL CURRENT OPERATING EXPENDITURES (PS + MOOE)', null, 'totalCurrent', true);
-  drawRow('TOTAL USES OF FUNDS', null, 'totalUses', true);
+    reportRows.forEach((row) => {
+      const lines = wrapText(row.title, PARTICULARS_WIDTH - 10, 6.5);
+      const rowHeight = Math.max(15, (Math.max(1, lines.length) * 7.2) + 5);
+      ensureSpace(rowHeight);
+      const rowY = currentY;
+      recipe.rectangle(CONTENT_LEFT, rowY, PARTICULARS_WIDTH, rowHeight, {
+        fill: row.bold && !row.type && !row.subCategory ? '#f3f4f6' : undefined,
+        stroke: '#aaaaaa',
+        lineWidth: 0.25,
+      });
+      lines.forEach((line, lineIndex) => {
+        recipe.text(line, CONTENT_LEFT + 5, rowY + 4 + (lineIndex * 7.2), {
+          color: '#000000', fontSize: 6.5, bold: row.bold,
+        });
+      });
+
+      const hasValues = Boolean(row.type || row.subCategory);
+      const rowValues = regions.map((region, regionIndex) => {
+        const groupX = CONTENT_LEFT + PARTICULARS_WIDTH + (regionIndex * layout.groupWidth);
+        const values = getConsoPdfFinancialValues(data.regions[region], row.type, row.subCategory);
+        if (hasValues) {
+          drawFinancialValues(values, groupX, rowY, rowHeight, layout, { bold: row.bold });
+        } else {
+          FINANCIAL_COLUMNS.forEach((column, columnIndex) => {
+            recipe.rectangle(groupX + (columnIndex * layout.subcolumnWidth), rowY, layout.subcolumnWidth, rowHeight, {
+              fill: '#f3f4f6', stroke: '#aaaaaa', lineWidth: 0.25,
+            });
+          });
+        }
+        return values;
+      });
+      const subTotalX = CONTENT_LEFT + PARTICULARS_WIDTH + (regions.length * layout.groupWidth);
+      if (hasValues) {
+        drawFinancialValues(sumConsoPdfValues(rowValues), subTotalX, rowY, rowHeight, layout, { bold: true });
+      } else {
+        FINANCIAL_COLUMNS.forEach((column, columnIndex) => {
+          recipe.rectangle(subTotalX + (columnIndex * layout.subcolumnWidth), rowY, layout.subcolumnWidth, rowHeight, {
+            fill: '#f3f4f6', stroke: '#aaaaaa', lineWidth: 0.25,
+          });
+        });
+      }
+      currentY += rowHeight;
+      pageHasRows = true;
+    });
+
+    drawPageSummaries();
+  }
 
   recipe.endPage();
   recipe.endPDF();
-
-  const buffer = fs.readFileSync(tmpFilePath);
-  fs.unlinkSync(tmpFilePath);
-  
-  return buffer;
+  try {
+    return fs.readFileSync(tmpFilePath);
+  } finally {
+    if (fs.existsSync(tmpFilePath)) fs.unlinkSync(tmpFilePath);
+  }
 };
 
 module.exports = {
   generateConsoProposalExcel,
-  generateConsoProposalPdf
+  generateConsoProposalPdf,
+  _private: {
+    CONSO_PDF_REGIONS_PER_PAGE,
+    CONSO_PDF_SUMMARY_LABELS,
+    CONSO_PDF_CONTINUATION_LABEL,
+    normalizeSelectedRegions,
+    getConsoPdfRegionGroups,
+    getConsoPdfFinancialValues,
+    getConsoPdfSummaryValues,
+    sumConsoPdfValues,
+    getConsolidatedData,
+  },
 };

@@ -53,6 +53,16 @@ const buildCapitalOutlayRegionMatrix = (groups = []) => buildRegionalReportMatri
   ['income', 'subsidy', 'amount']
 );
 
+const CAPITAL_OUTLAY_MATRIX_REGIONS_PER_PAGE = 4;
+const CAPITAL_OUTLAY_MATRIX_SUMMARY_LABELS = Object.freeze({
+  subTotal: 'SUB TOTAL',
+  total: 'TOTAL',
+});
+const CAPITAL_OUTLAY_MATRIX_CONTINUATION_LABEL = 'CONTINUATION OF:';
+const getCapitalOutlayMatrixRegionGroups = (regions = []) => (
+  chunkRegionalMatrixRegions(regions, CAPITAL_OUTLAY_MATRIX_REGIONS_PER_PAGE)
+);
+
 const getVisibleWorkflowIdsCO = async (req, { fiscalYear, budgetType, regions } = {}) => {
   const userRoles = (req.user?.Roles || req.user?.roles || []).map(normalizeRoleCO);
   if (userRoles.some(r => FULL_ACCESS_ROLES_CO.has(r))) return null;
@@ -784,20 +794,58 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       const matrixColumns = ['income', 'subsidy', 'amount'];
       const matrixColumnLabels = { income: 'INCOME', subsidy: 'SUBSIDY', amount: 'AMOUNT' };
       const particularsWidth = 250;
-      const minimumFinancialWidth = 52;
-      const regionCapacity = Math.max(1, Math.floor((TBL_W - particularsWidth) / (matrixColumns.length * minimumFinancialWidth)) - 1);
-      const regionChunks = chunkRegionalMatrixRegions(pdfMatrix.regions, regionCapacity);
+      const regionGroups = getCapitalOutlayMatrixRegionGroups(pdfMatrix.regions);
       let hasOpenMatrixPage = false;
+      let isFirstMatrixPage = true;
+      const summaryRowHeight = 18;
+      const summaryGap = 10;
+      const summaryBlockHeight = (summaryRowHeight * 2) + summaryGap;
+      const matrixBottomY = PAGE_HEIGHT - MARGIN - 24;
 
-      const drawMatrixPage = (chunk, chunkIndex, continuation = false) => {
+      const getRegionGroupTotal = (regions) => Object.fromEntries(matrixColumns.map((column) => [
+        column,
+        regions.reduce((sum, region) => sum + (Number(pdfMatrix.totalsByRegion?.[region]?.[column]) || 0), 0),
+      ]));
+
+      const drawMatrixContinuationHeader = () => {
+        curY = MARGIN + 9;
+        pdfDoc.text(CAPITAL_OUTLAY_MATRIX_CONTINUATION_LABEL, CONTENT_LEFT, curY, textOpt({
+          fontSize: 7.5,
+          bold: true,
+          font: F_CAMBRIA_B,
+        }));
+        pdfDoc.text(
+          `CAPITAL OUTLAY - ${String(budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`,
+          CONTENT_LEFT + 82,
+          curY,
+          textOpt({ fontSize: 7.5, bold: true, font: F_CAMBRIA_B })
+        );
+        pdfDoc.text(
+          `FISCAL YEAR ${safeStr(fiscalYear) || 'ALL YEARS'}`,
+          CONTENT_RIGHT,
+          curY,
+          textOpt({ fontSize: 7.5, bold: true, align: 'right', font: F_CAMBRIA_B })
+        );
+        curY += 12;
+        pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, 0.6, {
+          fill: '#555555',
+          stroke: '#555555',
+          lineWidth: 0,
+        });
+        curY += 6;
+      };
+
+      const drawMatrixPage = (regions) => {
         if (hasOpenMatrixPage) {
           pdfDoc.endPage();
           pageNo += 1;
         }
         pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
         hasOpenMatrixPage = true;
-        drawPage(true);
-        const groupCount = chunk.length + 1;
+        drawPage(isFirstMatrixPage);
+        if (!isFirstMatrixPage) drawMatrixContinuationHeader();
+        isFirstMatrixPage = false;
+        const groupCount = regions.length + 1;
         const financialWidth = (TBL_W - particularsWidth) / (groupCount * matrixColumns.length);
         const groupWidth = financialWidth * matrixColumns.length;
         const headerY = curY;
@@ -806,7 +854,7 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
 
         pdfDoc.rectangle(CONTENT_LEFT, headerY, particularsWidth, firstHeaderHeight + secondHeaderHeight, { fill: '#e5e7eb', stroke: '#555555', lineWidth: 0.35 });
         pdfDoc.text('PARTICULARS', CONTENT_LEFT + 5, headerY + 10, textOpt({ fontSize: 6.5, bold: true }));
-        [...chunk, regionChunks.length > 1 ? 'CHUNK TOTAL' : 'REGIONAL TOTAL'].forEach((label, groupIndex) => {
+        [...regions, CAPITAL_OUTLAY_MATRIX_SUMMARY_LABELS.subTotal].forEach((label, groupIndex) => {
           const groupX = CONTENT_LEFT + particularsWidth + (groupIndex * groupWidth);
           pdfDoc.rectangle(groupX, headerY, groupWidth, firstHeaderHeight, { fill: '#e5e7eb', stroke: '#555555', lineWidth: 0.35 });
           pdfDoc.text(label, groupX + (groupWidth / 2), headerY + 5, textOpt({ fontSize: 6.2, bold: true, align: 'center' }));
@@ -817,35 +865,68 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
           });
         });
         curY = headerY + firstHeaderHeight + secondHeaderHeight;
-        pdfDoc.text(
-          `REGION GROUP ${chunkIndex + 1} OF ${regionChunks.length}${continuation ? ' • CONTINUED' : ''}`,
-          CONTENT_LEFT,
-          curY + 3,
-          textOpt({ fontSize: 5.5, color: '#555555' })
-        );
-        curY += 11;
         return { financialWidth, groupWidth };
       };
 
-      regionChunks.forEach((chunk, chunkIndex) => {
-        let dimensions = drawMatrixPage(chunk, chunkIndex);
-        const drawMatrixTotalRow = (label, valuesByRegion, totalValues, fill = '#f3f4f6') => {
-          const height = 18;
-          pdfDoc.rectangle(CONTENT_LEFT, curY, particularsWidth, height, { fill, stroke: '#555555', lineWidth: 0.35 });
+      regionGroups.forEach((regions) => {
+        let dimensions = drawMatrixPage(regions);
+        let pageHasDetailRows = false;
+
+        const drawMatrixTotalRow = (
+          label,
+          valuesByRegion,
+          totalValues,
+          fill = '#f3f4f6',
+          showRegionValues = true
+        ) => {
+          pdfDoc.rectangle(CONTENT_LEFT, curY, particularsWidth, summaryRowHeight, { fill, stroke: '#555555', lineWidth: 0.35 });
           pdfDoc.text(label, CONTENT_LEFT + 5, curY + 5, textOpt({ fontSize: 6.2, bold: true }));
-          [...chunk, '__total__'].forEach((region, groupIndex) => {
+          [...regions, '__total__'].forEach((region, groupIndex) => {
             matrixColumns.forEach((column, columnIndex) => {
               const cellX = CONTENT_LEFT + particularsWidth + (groupIndex * dimensions.groupWidth) + (columnIndex * dimensions.financialWidth);
-              const value = region === '__total__' ? totalValues?.[column] : valuesByRegion?.[region]?.[column];
-              pdfDoc.rectangle(cellX, curY, dimensions.financialWidth, height, { fill, stroke: '#777777', lineWidth: 0.3 });
-              pdfDoc.text(formatPhp(value), cellX + dimensions.financialWidth - 2, curY + 5, textOpt({ fontSize: 5.1, bold: true, align: 'right' }));
+              const value = region === '__total__'
+                ? totalValues?.[column]
+                : showRegionValues
+                  ? valuesByRegion?.[region]?.[column]
+                  : null;
+              pdfDoc.rectangle(cellX, curY, dimensions.financialWidth, summaryRowHeight, { fill, stroke: '#777777', lineWidth: 0.3 });
+              if (value !== null && value !== undefined) {
+                pdfDoc.text(formatPhp(value), cellX + dimensions.financialWidth - 2, curY + 5, textOpt({ fontSize: 5.1, bold: true, align: 'right' }));
+              }
             });
           });
-          curY += height;
+          curY += summaryRowHeight;
+        };
+
+        const drawMatrixPageSummaries = () => {
+          if (!pageHasDetailRows) return;
+          drawMatrixTotalRow(
+            CAPITAL_OUTLAY_MATRIX_SUMMARY_LABELS.subTotal,
+            pdfMatrix.totalsByRegion,
+            getRegionGroupTotal(regions)
+          );
+          drawMatrixTotalRow(
+            CAPITAL_OUTLAY_MATRIX_SUMMARY_LABELS.total,
+            null,
+            pdfMatrix.regionalTotal,
+            '#dfe8df',
+            false
+          );
+          curY += summaryGap;
+          pageHasDetailRows = false;
+        };
+
+        const ensureMatrixSpace = (height) => {
+          if (curY + height <= matrixBottomY - summaryBlockHeight) return;
+          if (!pageHasDetailRows) return;
+          drawMatrixPageSummaries();
+          dimensions = drawMatrixPage(regions);
         };
 
         pdfMatrix.sections.forEach((section) => {
-          if (curY + 34 > PAGE_HEIGHT - MARGIN - 24) dimensions = drawMatrixPage(chunk, chunkIndex, true);
+          const firstParticularLines = wrapText(section.rows[0]?.particulars, particularsWidth - 10, 6.1, F_CAMBRIA);
+          const firstRowHeight = Math.max(16, (Math.max(1, firstParticularLines.length) * 7) + 5);
+          ensureMatrixSpace(16 + firstRowHeight);
           pdfDoc.rectangle(CONTENT_LEFT, curY, TBL_W, 16, { fill: '#e5e7eb', stroke: '#777777', lineWidth: 0.3 });
           pdfDoc.text(section.name, CONTENT_LEFT + 5, curY + 4, textOpt({ fontSize: 6.5, bold: true }));
           curY += 16;
@@ -853,33 +934,25 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
           section.rows.forEach((row) => {
             const particularsLines = wrapText(row.particulars, particularsWidth - 10, 6.1, F_CAMBRIA);
             const rowHeight = Math.max(16, (Math.max(1, particularsLines.length) * 7) + 5);
-            if (curY + rowHeight > PAGE_HEIGHT - MARGIN - 24) dimensions = drawMatrixPage(chunk, chunkIndex, true);
+            ensureMatrixSpace(rowHeight);
             pdfDoc.rectangle(CONTENT_LEFT, curY, particularsWidth, rowHeight, { stroke: '#aaaaaa', lineWidth: 0.25 });
             particularsLines.forEach((line, lineIndex) => pdfDoc.text(line, CONTENT_LEFT + 5, curY + 4 + (lineIndex * 7), textOpt({ fontSize: 6.1 })));
-            [...chunk, '__total__'].forEach((region, groupIndex) => {
+            [...regions, '__total__'].forEach((region, groupIndex) => {
               matrixColumns.forEach((column, columnIndex) => {
                 const cellX = CONTENT_LEFT + particularsWidth + (groupIndex * dimensions.groupWidth) + (columnIndex * dimensions.financialWidth);
                 const value = region === '__total__'
-                  ? chunk.reduce((sum, regionName) => sum + (Number(row.valuesByRegion?.[regionName]?.[column]) || 0), 0)
+                  ? regions.reduce((sum, regionName) => sum + (Number(row.valuesByRegion?.[regionName]?.[column]) || 0), 0)
                   : row.valuesByRegion?.[region]?.[column];
                 pdfDoc.rectangle(cellX, curY, dimensions.financialWidth, rowHeight, { stroke: '#aaaaaa', lineWidth: 0.25 });
                 pdfDoc.text(formatPhp(value), cellX + dimensions.financialWidth - 2, curY + 5, textOpt({ fontSize: 5, align: 'right' }));
               });
             });
             curY += rowHeight;
+            pageHasDetailRows = true;
           });
         });
 
-        const chunkTotal = Object.fromEntries(matrixColumns.map((column) => [
-          column,
-          chunk.reduce((sum, region) => sum + (Number(pdfMatrix.totalsByRegion?.[region]?.[column]) || 0), 0),
-        ]));
-        if (curY + 42 > PAGE_HEIGHT - MARGIN - 24) dimensions = drawMatrixPage(chunk, chunkIndex, true);
-        drawMatrixTotalRow(`CHUNK TOTAL — ${chunk.join(', ')}`, pdfMatrix.totalsByRegion, chunkTotal);
-        if (chunkIndex === regionChunks.length - 1) {
-          drawMatrixTotalRow('ALL-REGION TOTAL', pdfMatrix.totalsByRegion, pdfMatrix.regionalTotal, '#d1d5db');
-        }
-        curY += 10;
+        drawMatrixPageSummaries();
       });
     } else {
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
@@ -1100,6 +1173,12 @@ const getAvailableRegionsCapitalOutlay = async (req, res) => {
   }
 };
 consolidatedCapitalOutlayController.getAvailableRegionsCapitalOutlay = getAvailableRegionsCapitalOutlay;
-consolidatedCapitalOutlayController._private = { buildCapitalOutlayRegionMatrix };
+consolidatedCapitalOutlayController._private = {
+  buildCapitalOutlayRegionMatrix,
+  CAPITAL_OUTLAY_MATRIX_REGIONS_PER_PAGE,
+  CAPITAL_OUTLAY_MATRIX_SUMMARY_LABELS,
+  CAPITAL_OUTLAY_MATRIX_CONTINUATION_LABEL,
+  getCapitalOutlayMatrixRegionGroups,
+};
 
 module.exports = consolidatedCapitalOutlayController;
