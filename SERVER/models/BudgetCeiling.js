@@ -57,6 +57,10 @@ const budgetCeilingSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'NewProposalWorkflow'
     },
+    initialProposalIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'NewProposalWorkflow'
+    }],
     
     // Initial proposal amounts (reference/read-only)
     initialRequestAmount: {
@@ -130,6 +134,18 @@ const budgetCeilingSchema = new mongoose.Schema({
       type: String,
       trim: true
     },
+    nepLegacyProposalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Proposal'
+    },
+    assignedPreparerUserIds: [{
+      type: String,
+      trim: true
+    }],
+    assignedPreparerNames: [{
+      type: String,
+      trim: true
+    }],
     
     // Allocation status
     allocationStatus: {
@@ -238,6 +254,8 @@ budgetCeilingSchema.index({ fiscalYear: 1, region: 1, budgetPhase: 1 }, { unique
 budgetCeilingSchema.index({ status: 1, fiscalYear: 1 });
 budgetCeilingSchema.index({ 'allocations.division': 1 });
 budgetCeilingSchema.index({ 'allocations.initialProposalId': 1 });
+budgetCeilingSchema.index({ 'allocations.nepProposalId': 1 });
+budgetCeilingSchema.index({ 'allocations.assignedPreparerUserIds': 1 });
 
 // Virtual for calculating remaining budget
 budgetCeilingSchema.virtual('calculatedRemaining').get(function() {

@@ -38,6 +38,10 @@ const TierSchema = new mongoose.Schema({
   division: {
     type: String,
   },
+  proposalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NewProposalWorkflow',
+  },
   items: [TierItemSchema],
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -53,5 +57,13 @@ const TierSchema = new mongoose.Schema({
   timestamps: true,
   strict: false
 });
+
+TierSchema.index(
+  { proposalId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { proposalId: { $type: 'objectId' } },
+  }
+);
 
 module.exports = mongoose.model('Tier', TierSchema);

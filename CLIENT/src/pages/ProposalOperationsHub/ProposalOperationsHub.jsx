@@ -1047,23 +1047,31 @@ const ProposalOperationsHub = () => {
         );
       }
 
-      try {
-        await api.put(`/api/allproposal/proposals/${selectedProposal._id}`, {
-          projectedSubsidy: calculatedSubsidy,
-          __v: selectedProposal.__v,
-        });
-      } catch (error) {
-        if (error?.response?.status === 409) {
-          toast.warning("Proposal was modified by another user. Refreshing...");
-          const refreshed = await api.get(`${WORKFLOW_API_BASE}/${selectedProposal._id}`);
-          if (refreshed?.data?.proposal) setSelectedProposal(refreshed.data.proposal);
-        } else {
-          logger.warn("Failed to update projected subsidy", error);
+      const isNepProposal =
+        String(selectedProposal?.modelType || selectedProposal?.budgetType || "").toUpperCase() ===
+        "NEP";
+      if (!isNepProposal) {
+        try {
+          await api.put(`/api/allproposal/proposals/${selectedProposal._id}`, {
+            projectedSubsidy: calculatedSubsidy,
+            __v: selectedProposal.__v,
+          });
+        } catch (error) {
+          if (error?.response?.status === 409) {
+            toast.warning("Proposal was modified by another user. Refreshing...");
+            const refreshed = await api.get(`${WORKFLOW_API_BASE}/${selectedProposal._id}`);
+            if (refreshed?.data?.proposal) setSelectedProposal(refreshed.data.proposal);
+          } else {
+            logger.warn("Failed to update projected subsidy", error);
+          }
         }
       }
 
       await fetchProposals({ forceAllRegions: showAllRegions });
       queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
+      queryClient.invalidateQueries({
+        queryKey: ["nepCeilingContext", String(selectedProposal._id)],
+      });
 
       const updatedProposalRes = await api.get(
         `${WORKFLOW_API_BASE}/${selectedProposal._id}`
@@ -2036,7 +2044,24 @@ const ProposalOperationsHub = () => {
                 const params = new URLSearchParams();
                 if (selectedProposal.fiscalYear != null)
                   params.set("fiscalYear", String(selectedProposal.fiscalYear));
-                if (selectedProposal.region) params.set("region", String(selectedProposal.region));
+                const proposalRegion =
+                  selectedProposal.region ||
+                  selectedProposal.regionName ||
+                  selectedProposal.Region ||
+                  resolvedRegion;
+                if (proposalRegion) {
+                  const region = proposalRegion;
+                  const regionValue =
+                    region && typeof region === "object"
+                      ? region.RegionName ||
+                        region.Region ||
+                        region.regionName ||
+                        region.region ||
+                        region.name ||
+                        ""
+                      : String(region);
+                  if (regionValue) params.set("region", regionValue);
+                }
                 if (selectedProposal.department)
                   params.set("department", String(selectedProposal.department));
                 if (selectedProposal.division || selectedProposal.responsibilityCenter)
@@ -2044,6 +2069,9 @@ const ProposalOperationsHub = () => {
                     "division",
                     String(selectedProposal.division || selectedProposal.responsibilityCenter)
                   );
+                if (selectedProposal._id)
+                  params.set("proposalId", String(selectedProposal._id));
+                params.set("budgetType", "NEP");
                 navigate(`/tier?${params.toString()}`);
               } else if (action.value === "unconsolidate") {
                 setUnconsolidateDialogOpen(true);

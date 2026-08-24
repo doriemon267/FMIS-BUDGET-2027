@@ -60,7 +60,7 @@ const DEFAULT_ROUTE_PERMISSIONS = [
     label: "Tier Management",
     group: "Tier",
     requiredPermissions: [],
-    requiredWorkflowRoles: ["superAdmin"],
+    requiredWorkflowRoles: ["superAdmin", "preparer", "budgetAnalyst", "budgetOfficer", "budgetManager"],
     excludeRoles: [],
   },
   {
@@ -493,12 +493,12 @@ exports.getAllAdmin = async (req, res) => {
  */
 exports.update = async (req, res) => {
   const { id } = req.params;
-  const { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, isActive } =
+  const { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, applicableProposalTypes, isActive } =
     req.body;
   try {
     const updated = await RoutePermission.findByIdAndUpdate(
       id,
-      { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, isActive },
+      { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, applicableProposalTypes, isActive },
       { new: true, runValidators: true }
     );
     if (!updated) {
@@ -521,12 +521,12 @@ exports.updateByPath = async (req, res) => {
   const { path } = req.body;
   if (!path) return res.status(400).json({ error: "path is required." });
 
-  const { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, isActive } =
+  const { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, applicableProposalTypes, isActive } =
     req.body;
   try {
     const updated = await RoutePermission.findOneAndUpdate(
       { path },
-      { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, isActive },
+      { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, applicableProposalTypes, isActive },
       { new: true, runValidators: true }
     );
     if (!updated) {
@@ -602,10 +602,17 @@ exports.sync = async (req, res) => {
           existing.label = route.label;
           updated = true;
         }
+        // Also update roles if they differ and it's a seeded route
+        if (JSON.stringify(existing.requiredWorkflowRoles) !== JSON.stringify(route.requiredWorkflowRoles)) {
+          existing.requiredWorkflowRoles = route.requiredWorkflowRoles;
+          updated = true;
+        }
         if (updated) {
           await existing.save();
+          results.inserted.push(route.path + " (updated)");
+        } else {
+          results.skipped.push(route.path);
         }
-        results.skipped.push(route.path);
       } else {
         await RoutePermission.create({
           path: route.path,
@@ -614,6 +621,7 @@ exports.sync = async (req, res) => {
           requiredPermissions: [],
           requiredWorkflowRoles: [],
           excludeRoles: [],
+          applicableProposalTypes: ["Initial", "NEP", "GAA"],
           isActive: true,
           isSeeded: true
         });
@@ -687,6 +695,7 @@ exports.resetToDefault = async (req, res) => {
         requiredPermissions: defaultEntry.requiredPermissions,
         requiredWorkflowRoles: defaultEntry.requiredWorkflowRoles,
         excludeRoles: defaultEntry.excludeRoles,
+        applicableProposalTypes: defaultEntry.applicableProposalTypes || ["Initial", "NEP", "GAA"],
         isActive: true,
       },
       { new: true }
@@ -706,7 +715,7 @@ exports.resetToDefault = async (req, res) => {
  * Create a new route permission config.
  */
 exports.create = async (req, res) => {
-  const { path, label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, isActive } =
+  const { path, label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, applicableProposalTypes, isActive } =
     req.body;
   
   if (!path) return res.status(400).json({ error: "path is required." });
@@ -725,6 +734,7 @@ exports.create = async (req, res) => {
       requiredPermissions: requiredPermissions || [],
       requiredWorkflowRoles: requiredWorkflowRoles || [],
       excludeRoles: excludeRoles || [],
+      applicableProposalTypes: applicableProposalTypes || ["Initial", "NEP", "GAA"],
       isActive: isActive !== undefined ? isActive : true,
       isSeeded: false,
     });
@@ -769,6 +779,7 @@ exports.saveDefaults = async (req, res) => {
     
     for (const route of routes) {
       route.customDefaultRoles = [...route.requiredWorkflowRoles];
+      route.customDefaultProposalTypes = [...route.applicableProposalTypes];
       await route.save();
       updatedCount++;
     }
@@ -793,9 +804,14 @@ exports.restoreDefaults = async (req, res) => {
     let updatedCount = 0;
 
     for (const route of routes) {
-      if (route.customDefaultRoles !== null) {
+      if (route.customDefaultRoles !== null || route.customDefaultProposalTypes !== null) {
         // Restore from custom default
-        route.requiredWorkflowRoles = [...route.customDefaultRoles];
+        if (route.customDefaultRoles !== null) {
+          route.requiredWorkflowRoles = [...route.customDefaultRoles];
+        }
+        if (route.customDefaultProposalTypes !== null) {
+          route.applicableProposalTypes = [...route.customDefaultProposalTypes];
+        }
         await route.save();
         updatedCount++;
       } else {
@@ -803,6 +819,7 @@ exports.restoreDefaults = async (req, res) => {
         const defaultEntry = DEFAULT_ROUTE_PERMISSIONS.find((d) => d.path === route.path);
         if (defaultEntry) {
           route.requiredWorkflowRoles = [...defaultEntry.requiredWorkflowRoles];
+          route.applicableProposalTypes = defaultEntry.applicableProposalTypes || ["Initial", "NEP", "GAA"];
           await route.save();
           updatedCount++;
         }

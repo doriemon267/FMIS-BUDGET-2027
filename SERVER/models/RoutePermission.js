@@ -42,8 +42,19 @@ const routePermissionSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    /** Proposal types this route is applicable to. e.g. ["Initial", "NEP", "GAA"]. Empty = All */
+    applicableProposalTypes: {
+      type: [String],
+      enum: ["Initial", "NEP", "GAA"],
+      default: ["Initial", "NEP", "GAA"],
+    },
     /** Stores the user-defined default roles to restore to */
     customDefaultRoles: {
+      type: [String],
+      default: null,
+    },
+    /** Stores the user-defined default proposal types to restore to */
+    customDefaultProposalTypes: {
       type: [String],
       default: null,
     },

@@ -1,13 +1,11 @@
 import React, { useCallback, useMemo } from "react";
 import { useUser } from "../../../context/UserContext";
-import { useRegion } from "../../../context/RegionContext";
 import {
   Send as SendIcon,
   CallSplit as UnconsolidateIcon,
   ThumbUp as ApproveIcon,
   Visibility as ViewIcon,
   TableChart as TableChartIcon,
-  ExpandMore as ExpandMoreIcon,
   History as HistoryIcon,
   ListAlt as LogsIcon,
   ForwardToInbox as ApproveForwardIcon,
@@ -16,7 +14,6 @@ import {
 
 export const useProposalPermissions = () => {
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
 
   // Check if user is BRD (Budget Revenue Division) level or SUPER ADMIN
   const isBRDUser = useMemo(() => currentUser?.Roles?.some((role) =>
@@ -125,10 +122,28 @@ export const useProposalPermissions = () => {
         selectedProposal?.processBy && currentUserId
           ? String(selectedProposal.processBy) === String(currentUserId)
           : false;
+      const isAssignedById =
+        currentUserId && Array.isArray(selectedProposal?.assignedPreparerUserIds)
+          ? selectedProposal.assignedPreparerUserIds.some(
+              (assignedId) => String(assignedId) === String(currentUserId)
+            )
+          : false;
+      const isAssignedByName =
+        userName && Array.isArray(selectedProposal?.assignedPreparerNames)
+          ? selectedProposal.assignedPreparerNames.some(
+              (assignedName) =>
+                String(assignedName || "").trim().toLowerCase() ===
+                String(userName).trim().toLowerCase()
+            )
+          : false;
 
       if (
         draftStatuses.includes(status) &&
-        (isOwnerByName || isOwnerByCreatedId || isOwnerByProcessId)
+        (isOwnerByName ||
+          isOwnerByCreatedId ||
+          isOwnerByProcessId ||
+          isAssignedById ||
+          isAssignedByName)
       ) {
         return true;
       }
@@ -242,6 +257,39 @@ export const useProposalPermissions = () => {
     const allowedRoles = statusToRoleMap[currentStatus] || [];
     const userHasRole = userRoles.some((role) => allowedRoles.includes(role));
 
+    const preparerStatuses = [
+      "DRAFT",
+      "Draft",
+      "RETURNED_TO_PREPARER",
+      "Returned to Preparer",
+    ];
+    if (preparerStatuses.includes(currentStatus)) {
+      const currentUserId =
+        currentUser?.id || currentUser?._id || currentUser?.UserId || currentUser?.Id;
+      const userName =
+        currentUser?.name ||
+        `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`.trim();
+
+      const createdById = proposal?.createdBy?._id || proposal?.createdBy;
+      const processById = proposal?.processBy?._id || proposal?.processBy;
+
+      const isOwner =
+        (createdById && currentUserId && String(createdById) === String(currentUserId)) ||
+        (processById && currentUserId && String(processById) === String(currentUserId)) ||
+        (Array.isArray(proposal?.assignedPreparerUserIds) &&
+          proposal.assignedPreparerUserIds.some(
+            (assignedId) => String(assignedId) === String(currentUserId || "")
+          )) ||
+        (userName &&
+          Array.isArray(proposal?.assignedPreparerNames) &&
+          proposal.assignedPreparerNames.some(
+            (assignedName) =>
+              String(assignedName || "").trim().toLowerCase() ===
+              String(userName).trim().toLowerCase()
+          ));
+      return userHasRole && isOwner;
+    }
+
     return userHasRole;
   }, [currentUser]);
 
@@ -277,7 +325,8 @@ export const useProposalPermissions = () => {
       color: "#d97706",
     });
 
-    // OPEN TIER: for BRD-level users when proposal is at BRD or finalized
+    // OPEN TIER: for BRD-level users when proposal is at BRD or finalized.
+    // Also available for Budget Preparers for NEP proposals in draft/returned status.
     const brdOrFinalizedStatuses = [
       "FORWARDED_TO_BRD_ANALYST",
       "Forwarded to Budget Planning Analyst",
@@ -302,7 +351,21 @@ export const useProposalPermissions = () => {
         "SUPER ADMIN",
       ].includes(String(r))
     );
-    if (isBRDStaffForTier && isBRDOrFinalized) {
+
+    const isNep =
+      String(proposal.modelType || proposal.budgetType || "")
+        .trim()
+        .toUpperCase() === "NEP";
+    const isPreparerStatus = ["DRAFT", "Draft", "RETURNED_TO_PREPARER", "Returned to Preparer"].includes(
+      currentStatus
+    );
+    const isPreparerForTier = isBudgetPreparer && isNep && isPreparerStatus;
+
+    if (
+      (isBRDStaffForTier && isBRDOrFinalized) ||
+      isPreparerForTier ||
+      (isBudgetPreparer && isBRDOrFinalized)
+    ) {
       actions.push({
         label: "Open Tier",
         value: "open-tier",

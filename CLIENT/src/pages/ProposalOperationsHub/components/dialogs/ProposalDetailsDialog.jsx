@@ -20,9 +20,6 @@ import {
   History as HistoryIcon,
 } from "@mui/icons-material";
 import {
-  FiLayers,
-  FiUser,
-  FiActivity,
   FiTrendingUp,
   FiUserCheck,
   FiUsers,
@@ -44,6 +41,9 @@ import IncomeTable from "../tables/IncomeTable";
 import PersonnelServicesTable from "../tables/PersonnelServicesTable";
 import MooeTable from "../tables/MooeTable";
 import CapitalOutlayTable from "../tables/CapitalOutlayTable";
+import NEPCeilingSummary from "../NEPCeilingSummary";
+
+const WORKFLOW_API_BASE = "/api/allproposal/proposals";
 
 const renderStatusChip = (status) => {
   const statusColorMap = {
@@ -86,7 +86,7 @@ const ProposalDetailsDialog = ({
   selectedProposal,
   setSelectedProposal,
   proposalDetails,
-  setProposalDetails,
+  setProposalDetails: _setProposalDetails,
   detailsLoading,
   canUserEdit,
   canViewVersionHistory,
@@ -451,8 +451,16 @@ const ProposalDetailsDialog = ({
                   </Box>
                 </Grid>
 
+                <Grid item xs={12}>
+                  <NEPCeilingSummary proposal={selectedProposal} />
+                </Grid>
+
                 {(() => {
                   const st = selectedProposal?.status;
+                  const isNep =
+                    String(selectedProposal?.modelType || selectedProposal?.budgetType || "")
+                      .trim()
+                      .toUpperCase() === "NEP";
                   const brdOrFinal = [
                     "FORWARDED_TO_BRD_ANALYST",
                     "Forwarded to Budget/Planning Analyst",
@@ -476,7 +484,15 @@ const ProposalDetailsDialog = ({
                       "SUPER ADMIN",
                     ].includes(String(r))
                   );
-                  if (!brdOrFinal || !isBRD) return null;
+
+                  const isPreparer = currentUser?.Roles?.some((r) =>
+                    ["BUDGET PREPARER", "BUDGET_PREPARER"].includes(String(r).toUpperCase())
+                  );
+
+                  const showTierButton =
+                    (brdOrFinal && (isBRD || isPreparer)) || (isNep && isPreparer);
+
+                  if (!showTierButton) return null;
                   const tierParams = new URLSearchParams();
                   if (selectedProposal?.fiscalYear != null)
                     tierParams.set("fiscalYear", String(selectedProposal.fiscalYear));
@@ -500,12 +516,26 @@ const ProposalDetailsDialog = ({
                       "division",
                       String(selectedProposal.division || selectedProposal.responsibilityCenter)
                     );
+                  if (selectedProposal?._id)
+                    tierParams.set("proposalId", String(selectedProposal._id));
+                  if (isNep || brdOrFinal) tierParams.set("budgetType", "NEP");
                   return (
                     <Grid item xs={12}>
                       <Alert severity="info" sx={{ mt: 1 }}>
-                        For this proposal&apos;s scope, you can fill or update{" "}
-                        <strong>Tier</strong> (Tier 1 / Tier 2). The Tier you save is what
-                        gets passed to Budget Officer until Budget Manager finalizes.
+                        {isNep ? (
+                          <>
+                            This is an <strong>NEP proposal</strong>. You can adjust the{" "}
+                            <strong>Tier</strong> (Tier 1 / Tier 2) to match the BRD ceiling
+                            before submitting.
+                          </>
+                        ) : (
+                          <>
+                            For this proposal&apos;s scope, you can fill or update{" "}
+                            <strong>Tier</strong> (Tier 1 / Tier 2). The Tier you save is
+                            what gets passed to Budget Officer until Budget Manager
+                            finalizes.
+                          </>
+                        )}
                         <Button
                           size="small"
                           variant="contained"
@@ -558,8 +588,10 @@ const ProposalDetailsDialog = ({
                   "RETURNED_TO_PREPARER",
                 ];
                 const canEditMeta =
-                  (isPreparer || isSuperAdmin) &&
-                  draftStatuses.includes(selectedProposal.status);
+                  isSuperAdmin ||
+                  (isPreparer &&
+                    canUserEdit() &&
+                    draftStatuses.includes(selectedProposal.status));
                 if (!canEditMeta) return null;
                 return (
                   <Box sx={{ mt: 4, pt: 3, borderTop: "2px dashed #d0d0d0" }}>

@@ -22,7 +22,7 @@ const {
 const { getFolioPageSize } = require('./reportPageLayout');
 const { chunkRegionalMatrixRegions } = require('./regionalReportMatrix');
 
-const CONSO_PDF_REGIONS_PER_PAGE = 4;
+const CONSO_PDF_REGIONS_PER_PAGE = 3;
 const CONSO_PDF_SUMMARY_LABELS = Object.freeze({
   subTotal: 'SUB TOTAL',
   total: 'TOTAL',
@@ -449,9 +449,9 @@ const generateConsoProposalExcel = async (fiscalYear) => {
         subsidyVal = mapSource[categoryType][subCategory] || 0;
       }
       
-      rowObj[`${prefix}_income`] = incomeVal ? incomeVal : '-';
-      rowObj[`${prefix}_subsidy`] = subsidyVal ? subsidyVal : '-';
-      rowObj[`${prefix}_budget`] = (incomeVal + subsidyVal) || '-';
+      rowObj[`${prefix}_income`] = incomeVal || '';
+      rowObj[`${prefix}_subsidy`] = subsidyVal || '';
+      rowObj[`${prefix}_budget`] = (incomeVal + subsidyVal) || '';
     };
 
     populateGroup('grandTotal', data.grandTotal);
@@ -468,7 +468,7 @@ const generateConsoProposalExcel = async (fiscalYear) => {
     }
     
     row.eachCell((cell, colNumber) => {
-      if (colNumber > 1 && cell.value !== '-' && typeof cell.value === 'number') {
+      if (colNumber > 1 && typeof cell.value === 'number') {
         cell.numFmt = '#,##0.00';
       }
     });
@@ -838,6 +838,39 @@ const generateConsoProposalPdf = async (fiscalYear, { selectedRegions = [] } = {
     return layout;
   };
 
+  const getFittedAmountFontSize = (text, maxWidth, bold = false) => {
+    const defaultFontSize = 5.2;
+    const minimumFontSize = 1;
+    let measuredWidth = 0;
+
+    try {
+      const dimensions = recipe.textDimensions(text, {
+        font: bold ? 'Helvetica-Bold' : 'Helvetica',
+        size: defaultFontSize,
+      });
+      measuredWidth = Math.max(
+        Number(dimensions?.width) || 0,
+        Number(dimensions?.xMax) || 0
+      );
+    } catch (error) {
+      // Keep PDF generation compatible with Muhammara versions without textDimensions.
+    }
+
+    if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+      measuredWidth = [...text].reduce((width, character) => {
+        if (character === ',' || character === '.') return width + (defaultFontSize * 0.28);
+        if (character === '-' || character === '(' || character === ')') return width + (defaultFontSize * 0.34);
+        return width + (defaultFontSize * 0.56);
+      }, 0);
+    }
+
+    if (measuredWidth <= maxWidth) return defaultFontSize;
+    return Math.max(
+      minimumFontSize,
+      Math.min(defaultFontSize, defaultFontSize * (maxWidth / measuredWidth) * 0.92)
+    );
+  };
+
   const drawFinancialValues = (values, groupX, y, height, layout, { bold = false } = {}) => {
     FINANCIAL_COLUMNS.forEach((column, columnIndex) => {
       const cellX = groupX + (columnIndex * layout.subcolumnWidth);
@@ -845,8 +878,18 @@ const generateConsoProposalPdf = async (fiscalYear, { selectedRegions = [] } = {
         stroke: '#aaaaaa', lineWidth: 0.25,
       });
       const amount = Number(values?.[column.key]) || 0;
-      recipe.text(amount ? formatCurrency(amount) : '-', cellX + layout.subcolumnWidth - 3, y + 4, {
-        color: '#000000', fontSize: 5.4, bold, align: 'right',
+      if (!amount) return;
+
+      const amountText = formatCurrency(amount);
+      const horizontalPadding = 4;
+      const availableWidth = Math.max(1, layout.subcolumnWidth - (horizontalPadding * 2));
+      const fontSize = getFittedAmountFontSize(amountText, availableWidth, bold);
+      recipe.text(amountText, cellX + layout.subcolumnWidth - horizontalPadding, y + (height / 2), {
+        color: '#000000',
+        size: fontSize,
+        fontSize,
+        bold,
+        align: 'right center',
       });
     });
   };

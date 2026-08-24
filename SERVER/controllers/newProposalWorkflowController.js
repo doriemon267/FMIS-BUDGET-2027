@@ -21,6 +21,10 @@ const { verifyWorkflowDigitalSignature } = require('../utils/digitalSignatureSer
 const { encryptESignatureDataUrl } = require('../utils/eSignatureCrypto');
 const { sanitizeWorkflowQuery, resolveRegionToObjectId } = require('../utils/regionUtils');
 const { getRoleQueueStatuses } = require('../utils/proposalQueueVisibility');
+const {
+  assertNepCeilingCompliance,
+  syncNepCeilingWorkflowStatus
+} = require('../services/nepCeilingService');
 
 const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
   'submit-to-reviewer',
@@ -315,6 +319,34 @@ const canPerformAction = (userRole, proposal, action) => {
   return canDo;
 };
 
+const isProposalPreparerOwner = (proposal, userId, userName = '') => {
+  const normalizedUserId = String(userId || '');
+  const normalizedUserName = String(userName || '').trim().toLowerCase();
+  const assignedIds = Array.isArray(proposal?.assignedPreparerUserIds)
+    ? proposal.assignedPreparerUserIds.map(value => String(value || ''))
+    : [];
+  const assignedNames = Array.isArray(proposal?.assignedPreparerNames)
+    ? proposal.assignedPreparerNames.map(value => String(value || '').trim().toLowerCase())
+    : [];
+
+  return (
+    String(proposal?.createdBy || '') === normalizedUserId ||
+    assignedIds.includes(normalizedUserId) ||
+    (normalizedUserName && (
+      String(proposal?.createdByName || '').trim().toLowerCase() === normalizedUserName ||
+      assignedNames.includes(normalizedUserName)
+    ))
+  );
+};
+
+const getAssignedPreparerRecipientIds = proposal => {
+  const assignedIds = Array.isArray(proposal?.assignedPreparerUserIds)
+    ? proposal.assignedPreparerUserIds.map(value => String(value || '')).filter(Boolean)
+    : [];
+  const fallbackCreator = String(proposal?.createdBy || '').trim();
+  return Array.from(new Set(assignedIds.length ? assignedIds : [fallbackCreator].filter(Boolean)));
+};
+
 /**
  * Helper function to determine notification recipients based on workflow action
  * @param {string} action - The workflow action performed
@@ -512,16 +544,17 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
       console.log('[getNotificationRecipients] Found', filteredManagers.length, 'managers for forward-to-manager');
       recipients.push(...filteredManagers.map(u => String(u.userId)));
     } else if (action === 'finalize') {
-      // Notify the proposal creator (Budget Preparer)
-      console.log('[getNotificationRecipients] Notifying creator:', proposal.createdBy);
-      recipients.push(proposal.createdBy.toString());
+      // Notify every explicitly assigned Budget Preparer. Legacy proposals
+      // without assignment metadata still fall back to the creator.
+      const preparerRecipients = getAssignedPreparerRecipientIds(proposal);
+      console.log('[getNotificationRecipients] Notifying preparers:', preparerRecipients);
+      recipients.push(...preparerRecipients);
     } else if (action.includes('return')) {
       // For return actions, notify based on previous status
       const prevStatus = proposal.workflowHistory?.[proposal.workflowHistory.length - 1]?.fromStatus;
       
       if (action === 'return-to-preparer') {
-        // Notify the proposal creator
-        recipients.push(proposal.createdBy.toString());
+        recipients.push(...getAssignedPreparerRecipientIds(proposal));
       } else if (action === 'return-to-reviewer') {
         // Notify Budget Reviewers
         const reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER', 'divisionReviewer'], proposalRegionId);
@@ -2147,7 +2180,7 @@ const checkProposalOrgAccess = async (proposal, userId, userRole) => {
   if (userRole === 'SUPER ADMIN') return true;
   
   // Ownership always grants access
-  if (String(proposal.createdBy) === String(userId)) return true;
+  if (isProposalPreparerOwner(proposal, userId)) return true;
 
   try {
     const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId), isActive: true })
@@ -2305,20 +2338,40 @@ exports.getProposals = async (req, res) => {
           if (strictIdentityCandidates.length > 0) {
             query.$or = [
               { createdBy: { $in: strictIdentityCandidates } },
-              { createdByName: { $in: strictIdentityCandidates } }
+              { createdByName: { $in: strictIdentityCandidates } },
+              { assignedPreparerUserIds: { $in: strictIdentityCandidates } },
+              { assignedPreparerNames: { $in: strictIdentityCandidates } }
             ];
           } else {
-            query.$or = [{ createdByName: userName }];
+            query.$or = [
+              { createdByName: userName },
+              { assignedPreparerNames: userName }
+            ];
           }
         } else {
           // Allow co-editing: Users with the EXACT same organizational scope share the same drafts
           if (Object.keys(orgScope).length > 0) {
             const { region, ...orgScopeWithoutRegion } = orgScope;
-            query = { ...query, ...orgScopeWithoutRegion };
             
-            // Strict exact level matching to prevent seeing lower-level drafts
-            if (!orgScope.division) query.division = { $in: [null, ""] };
-            if (!orgScope.department) query.department = { $in: [null, ""] };
+            // For My Proposals, we also want to include items EXPLICITLY assigned to this user,
+            // even if the organizational scope doesn't match perfectly (e.g. delegated tasks).
+            query.$or = [
+              {
+                $and: [
+                  orgScopeWithoutRegion,
+                  {
+                    $or: [
+                      { division: orgScope.division || { $in: [null, ""] } },
+                      { department: orgScope.department || { $in: [null, ""] } }
+                    ]
+                  }
+                ]
+              },
+              { createdBy: userIdString },
+              { createdByName: userName },
+              { assignedPreparerUserIds: userIdString },
+              { assignedPreparerNames: userName }
+            ];
             
             if (region) {
               const mongoose = require('mongoose');
@@ -2488,7 +2541,9 @@ exports.getProposals = async (req, res) => {
                   $or: [
                     { createdBy: userIdString },
                     { createdBy: userName },
-                    { createdByName: userName }
+                    { createdByName: userName },
+                    { assignedPreparerUserIds: userIdString },
+                    { assignedPreparerNames: userName }
                   ]
                 }
               ]
@@ -2800,7 +2855,17 @@ exports.getProposals = async (req, res) => {
             const isOwnProposal =
               String(p?.createdBy || '') === String(userIdString || '') ||
               String(p?.createdBy || '').toLowerCase() === String(userName || '').toLowerCase() ||
-              String(p?.createdByName || '').toLowerCase() === String(userName || '').toLowerCase();
+              String(p?.createdByName || '').toLowerCase() === String(userName || '').toLowerCase() ||
+              (Array.isArray(p?.assignedPreparerUserIds) &&
+                p.assignedPreparerUserIds.some(
+                  assignedId => String(assignedId) === String(userIdString || '')
+                )) ||
+              (Array.isArray(p?.assignedPreparerNames) &&
+                p.assignedPreparerNames.some(
+                  assignedName =>
+                    String(assignedName || '').trim().toLowerCase() ===
+                    String(userName || '').trim().toLowerCase()
+                ));
             if (isOwnProposal) {
               console.log('[ORG_FILTER] ✓ ALLOWED (own proposal)');
               return true;
@@ -3002,6 +3067,11 @@ exports.getProposals = async (req, res) => {
         status: p.status,
         createdBy: p.createdBy,
         createdByName: p.createdByName,
+        assignedPreparerUserIds: p.assignedPreparerUserIds || [],
+        assignedPreparerNames: p.assignedPreparerNames || [],
+        sourceInitialProposalIds: p.sourceInitialProposalIds || [],
+        budgetCeilingId: p.budgetCeilingId,
+        budgetCeilingAllocationId: p.budgetCeilingAllocationId,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
         amount: Number(p.amount || 0),
@@ -3101,7 +3171,12 @@ exports.getMyProposals = async (req, res) => {
       ]
     };
 
-    const result = await NewProposalWorkflow.paginate({ createdBy: userId }, options);
+    const result = await NewProposalWorkflow.paginate({
+      $or: [
+        { createdBy: userId },
+        { assignedPreparerUserIds: String(userId) }
+      ]
+    }, options);
 
     res.json({
       success: true,
@@ -3222,14 +3297,16 @@ exports.getProposalById = async (req, res) => {
     }
 
     // Check if user can access this proposal based on role/status
-    if (userRole !== 'SUPER ADMIN' && userRole === 'BUDGET PREPARER' && proposal.createdBy !== userId) {
-      const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole] || []);
-      if (!allowedStatuses.includes(proposal.status)) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied'
-        });
-      }
+    if (
+      userRole !== 'SUPER ADMIN' &&
+      userRole === 'BUDGET PREPARER' &&
+      String(proposal.modelType || '').toUpperCase() === 'NEP' &&
+      !isProposalPreparerOwner(proposal, userId, req.user?.name || req.user?.email)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'This NEP proposal is assigned to a different Budget Preparer'
+      });
     }
 
     // Map to same format as getProposals so Responsibility Center and Budget Type display correctly
@@ -3383,6 +3460,17 @@ exports.performAction = async (req, res) => {
       });
     }
 
+    if (
+      userRole === 'BUDGET PREPARER' &&
+      String(proposal.modelType || '').toUpperCase() === 'NEP' &&
+      !isProposalPreparerOwner(proposal, userIdString, userName)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'This proposal is assigned to a different Budget Preparer'
+      });
+    }
+
     // NOTE: The following check is redundant with canPerformAction, but kept for safety
     const transitions = WORKFLOW_TRANSITIONS[userRole];
     if (!transitions) {
@@ -3467,6 +3555,19 @@ exports.performAction = async (req, res) => {
       }
     }
 
+    const isNepProposal = String(proposal.modelType || '').toUpperCase() === 'NEP';
+    const nepProgressionActions = new Set([
+      'submit-to-reviewer',
+      'submit-to-approver',
+      'submit-to-analyst',
+      'forward-to-officer',
+      'forward-to-manager',
+      'finalize'
+    ]);
+    if (isNepProposal && nepProgressionActions.has(action)) {
+      await assertNepCeilingCompliance(proposal._id);
+    }
+
     // Map workflow status to legacy Proposal format
     const workflowToProposalStatus = {
       'DRAFT': 'Draft',
@@ -3504,7 +3605,7 @@ exports.performAction = async (req, res) => {
     proposal.status = newWorkflowStatus;
     
     // Update projectedSubsidy if provided by frontend
-    if (req.body.projectedSubsidy !== undefined) {
+    if (!isNepProposal && req.body.projectedSubsidy !== undefined) {
       proposal.projectedSubsidy = Number(req.body.projectedSubsidy) || 0;
     }
     
@@ -3569,6 +3670,23 @@ exports.performAction = async (req, res) => {
 
     await proposal.save();
 
+    // Keep the generated NEP and its BRD allocation lifecycle together. If
+    // the ceiling update fails, restore the workflow status/history before
+    // any legacy collection is advanced.
+    if (isNepProposal) {
+      try {
+        await syncNepCeilingWorkflowStatus({
+          proposalId: proposal._id,
+          status: newWorkflowStatus
+        });
+      } catch (ceilingSyncError) {
+        proposal.status = oldStatus;
+        proposal.workflowHistory.pop();
+        await proposal.save();
+        throw ceilingSyncError;
+      }
+    }
+
     // Trigger BRD Consolidation when proposal reaches BRD Analyst level
     if (newWorkflowStatus === 'FORWARDED_TO_BRD_ANALYST' && oldStatus !== 'FORWARDED_TO_BRD_ANALYST') {
       try {
@@ -3598,7 +3716,7 @@ exports.performAction = async (req, res) => {
       };
       
       // Include projectedSubsidy if it was provided
-      if (req.body.projectedSubsidy !== undefined) {
+      if (!isNepProposal && req.body.projectedSubsidy !== undefined) {
         updateData.projectedSubsidy = Number(req.body.projectedSubsidy) || 0;
       }
       
@@ -3710,9 +3828,11 @@ exports.performAction = async (req, res) => {
     });
   } catch (error) {
     console.error('Error performing action:', error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
-      message: 'Failed to perform action',
+      message: error.message || 'Failed to perform action',
+      code: error.code,
+      compliance: error.compliance,
       error: error.message
     });
   }
@@ -3743,7 +3863,9 @@ exports.updateProposal = async (req, res) => {
     const isSuperAdmin = userRole === 'SUPER ADMIN';
     
     // Normalize to string to avoid ObjectId vs string mismatch
-    const isCreatorEditingDraft = String(proposal.createdBy) === String(userId) && proposal.status === 'DRAFT';
+    const isCreatorEditingDraft =
+      isProposalPreparerOwner(proposal, userId, userName) &&
+      ['DRAFT', 'RETURNED_TO_PREPARER'].includes(proposal.status);
     
     if (!isCreatorEditingDraft && !isBRDStaff && !isSuperAdmin) {
       return res.status(403).json({
@@ -3772,7 +3894,10 @@ exports.updateProposal = async (req, res) => {
       });
     }
 
-    const allowedFields = ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay', 'division', 'department', 'office', 'isCentralOffice', 'projectedCorporateIncome', 'projectedSubsidy'];
+    const isNepProposal = String(proposal.modelType || '').toUpperCase() === 'NEP';
+    const allowedFields = isNepProposal
+      ? ['title', 'description']
+      : ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay', 'division', 'department', 'office', 'isCentralOffice', 'projectedCorporateIncome', 'projectedSubsidy'];
     const updates = {};
     const changes = {}; // Track what changed
 
@@ -4178,9 +4303,7 @@ exports.uploadAttachment = async (req, res) => {
     }
 
     const normalizedStatus = normalizeAttachmentWorkflowStatus(proposal.status);
-    const isProposalOwnerById = String(proposal.createdBy || '') === requesterUserId;
-    const isProposalOwnerByName = requesterName && String(proposal.createdByName || '').toLowerCase() === requesterName.toLowerCase();
-    const isProposalOwner = isProposalOwnerById || isProposalOwnerByName;
+    const isProposalOwner = isProposalPreparerOwner(proposal, requesterUserId, requesterName);
 
     const canUpload = canUploadAttachmentByRoleFlags({
       roleFlags,
@@ -4269,9 +4392,7 @@ exports.deleteAttachment = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Deletion of attachments is not allowed for finalized proposals.' });
     }
 
-    const isProposalOwnerById = String(proposal.createdBy || '') === requesterUserId;
-    const isProposalOwnerByName = requesterName && String(proposal.createdByName || '').toLowerCase() === requesterName.toLowerCase();
-    const isProposalOwner = isProposalOwnerById || isProposalOwnerByName;
+    const isProposalOwner = isProposalPreparerOwner(proposal, requesterUserId, requesterName);
 
     const canDeleteByStatus = canUploadAttachmentByRoleFlags({
       roleFlags,

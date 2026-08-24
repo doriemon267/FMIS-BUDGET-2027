@@ -72,6 +72,9 @@ __tests__/
 *.spec.*
 *.test.*
 
+# Keep the focused NEP report readiness regression suite under version control.
+!CLIENT/src/utils/nepReportStatus.spec.js
+
 # Temporary test files and scripts (not part of runtime)
 TEMP_FILES/
 SCRIPTS/test*

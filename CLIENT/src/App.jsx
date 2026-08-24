@@ -94,8 +94,7 @@ const App = () => {
           path="/tier"
           element={
             <ProtectedRoute
-              routeKey="/tier"
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["superAdmin", "preparer", "budgetAnalyst", "budgetOfficer", "budgetManager"]}
             >
               <TierPage />
             </ProtectedRoute>

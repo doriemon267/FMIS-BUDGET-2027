@@ -61,6 +61,12 @@ const roleOptions = [
   { id: "BUDGET_MANAGER", label: "Budget Manager", color: "primary" },
 ];
 
+const proposalTypeOptions = [
+  { id: "Initial", label: "Initial", color: "primary" },
+  { id: "NEP", label: "NEP", color: "warning" },
+  { id: "GAA", label: "GAA", color: "success" },
+];
+
 const RoutePermissionManagementPage = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
@@ -69,7 +75,12 @@ const RoutePermissionManagementPage = () => {
   
   // States for Add Route Dialog
   const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [newRoute, setNewRoute] = useState({ path: "", label: "", group: "General" });
+  const [newRoute, setNewRoute] = useState({
+    path: "",
+    label: "",
+    group: "General",
+    applicableProposalTypes: ["Initial", "NEP", "GAA"]
+  });
 
   const [activeTab, setActiveTab] = useState(0);
   const [selectedRoleForView, setSelectedRoleForView] = useState(roleOptions[0].id);
@@ -184,7 +195,12 @@ const RoutePermissionManagementPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
       setOpenAddDialog(false);
-      setNewRoute({ path: "", label: "", group: "General" });
+      setNewRoute({
+        path: "",
+        label: "",
+        group: "General",
+        applicableProposalTypes: ["Initial", "NEP", "GAA"]
+      });
       setSnackbar({ open: true, message: "New route added successfully!", severity: "success" });
     },
     onError: (err) => {
@@ -307,7 +323,31 @@ const RoutePermissionManagementPage = () => {
         requiredPermissions: route.requiredPermissions,
         excludeRoles: route.excludeRoles,
         isActive: route.isActive,
+        applicableProposalTypes: route.applicableProposalTypes,
         requiredWorkflowRoles: newRoles,
+      },
+    });
+  };
+
+  const handleToggleProposalType = (route, typeId) => {
+    const isAssigned = route.applicableProposalTypes?.includes(typeId);
+    let newTypes = [];
+    if (isAssigned) {
+      newTypes = route.applicableProposalTypes.filter((t) => t !== typeId);
+    } else {
+      newTypes = [...(route.applicableProposalTypes || []), typeId];
+    }
+
+    updateMutation.mutate({
+      id: route._id,
+      updatedData: {
+        label: route.label,
+        group: route.group,
+        requiredPermissions: route.requiredPermissions,
+        excludeRoles: route.excludeRoles,
+        isActive: route.isActive,
+        requiredWorkflowRoles: route.requiredWorkflowRoles,
+        applicableProposalTypes: newTypes,
       },
     });
   };
@@ -320,6 +360,7 @@ const RoutePermissionManagementPage = () => {
         group: route.group,
         requiredPermissions: route.requiredPermissions,
         requiredWorkflowRoles: route.requiredWorkflowRoles,
+        applicableProposalTypes: route.applicableProposalTypes,
         excludeRoles: route.excludeRoles,
         isActive: !route.isActive,
       },
@@ -661,6 +702,32 @@ const RoutePermissionManagementPage = () => {
                   <TableCell align="center" sx={{ fontWeight: "700", minWidth: 100, backgroundColor: "background.paper", zIndex: 3 }}>
                     Active Status
                   </TableCell>
+                  {proposalTypeOptions.map((type) => (
+                    <TableCell
+                      key={type.id}
+                      align="center"
+                      sx={{
+                        fontWeight: "700",
+                        minWidth: 80,
+                        backgroundColor: "background.paper",
+                        zIndex: 3,
+                        p: 1,
+                        borderLeft: type.id === "Initial" ? "1px solid" : "none",
+                        borderLeftColor: "divider",
+                      }}
+                    >
+                      <Tooltip title={`${type.label} Proposal Type`}>
+                        <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center">
+                          <Typography variant="caption" sx={{ fontSize: "0.75rem", fontWeight: 700, textAlign: "center", lineHeight: 1.2, color: type.color + ".main" }}>
+                            {type.label}
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "text.disabled", mt: -0.5 }}>
+                            TYPE
+                          </Typography>
+                        </Box>
+                      </Tooltip>
+                    </TableCell>
+                  ))}
                   {roleOptions.map((role) => {
                     const allInRoleAssigned = filteredRoutes.length > 0 && filteredRoutes.every(r => r.requiredWorkflowRoles?.includes(role.id));
                     const someInRoleAssigned = filteredRoutes.some(r => r.requiredWorkflowRoles?.includes(role.id));
@@ -753,6 +820,30 @@ const RoutePermissionManagementPage = () => {
                           />
                         </Tooltip>
                       </TableCell>
+
+                      {/* Proposal Type Checkboxes */}
+                      {proposalTypeOptions.map((type) => {
+                        const isAssigned = route.applicableProposalTypes?.includes(type.id);
+                        return (
+                          <TableCell
+                            key={type.id}
+                            align="center"
+                            sx={{
+                              borderLeft: type.id === "Initial" ? "1px solid" : "none",
+                              borderLeftColor: "divider",
+                              backgroundColor: isAssigned ? "rgba(0, 0, 0, 0.02)" : "transparent",
+                            }}
+                          >
+                            <Checkbox
+                              checked={isAssigned || false}
+                              disabled={!route.isActive}
+                              onChange={() => handleToggleProposalType(route, type.id)}
+                              color={type.color}
+                              size="small"
+                            />
+                          </TableCell>
+                        );
+                      })}
 
                       {/* Role Checkboxes */}
                       {roleOptions.map((role) => {

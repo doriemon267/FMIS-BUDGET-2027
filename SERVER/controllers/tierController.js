@@ -6,6 +6,7 @@ const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const BudgetCeiling = require('../models/BudgetCeiling');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,6 +14,20 @@ const {
   shouldShowDraftWatermark,
   drawMuhammaraDraftWatermark,
 } = require('../utils/proposalPdfWatermark');
+const {
+  sanitizeReportFilenamePart,
+} = require('../utils/nepReportStatus');
+const {
+  getNepCeilingContext,
+  getTierCategoryIncome,
+  serializeNepCeilingContext,
+} = require('../services/nepCeilingService');
+const {
+  assertNepReportAccess,
+  buildAuthoritativeNepReport,
+  getTierReportLineItemLabel,
+  nepReportScopesMatch,
+} = require('../services/nepReportService');
 let MuhammaraRecipe;
 try {
   MuhammaraRecipe = require('muhammara').Recipe;
@@ -417,11 +432,12 @@ const getTierSavedItems = async (req, res) => {
     }
     const items = Array.isArray(tierDoc?.items) ? tierDoc.items : [];
     // Find the version number of the data currently in Tier (latest TierRevision for this scope)
-    let version = 0;
+    let version = null;
     if (tierDoc) {
       try {
         const latestRev = await TierRevision.findOne(queryConditions).sort({ version: -1 }).select('version').lean();
-        if (latestRev) version = latestRev.version || 0;
+        const latestVersion = Number(latestRev?.version);
+        if (Number.isFinite(latestVersion) && latestVersion > 0) version = latestVersion;
       } catch (e) { /* ignore */ }
     }
     res.json({ items, version });
@@ -433,7 +449,16 @@ const getTierSavedItems = async (req, res) => {
 
 const saveTierData = async (req, res) => {
   try {
-    const { fiscalYear, region, department, division, items, revisionComment, createNewVersion } = req.body;
+    const {
+      fiscalYear,
+      region,
+      department,
+      division,
+      proposalId,
+      items,
+      revisionComment,
+      createNewVersion
+    } = req.body;
 
     // Use broad query (matches region stored as name OR ObjectId) to find existing revisions.
     // Use normalizedScope for creating new documents so future lookups are consistent.
@@ -442,10 +467,79 @@ const saveTierData = async (req, res) => {
 
     const { createdBy: userObjectId, createdByName } = await resolveCreatedBy(req);
 
-    let tierDoc = await Tier.findOne(broadQuery);
+    let linkedNepProposal = null;
+    if (proposalId) {
+      if (!mongoose.Types.ObjectId.isValid(String(proposalId))) {
+        return res.status(400).json({ message: 'Invalid NEP proposal link' });
+      }
+      linkedNepProposal = await NewProposalWorkflow.findById(proposalId);
+      if (!linkedNepProposal || String(linkedNepProposal.modelType).toUpperCase() !== 'NEP') {
+        return res.status(400).json({ message: 'Tier can only be linked to a valid NEP proposal' });
+      }
+
+      const linkedCeiling = linkedNepProposal.budgetCeilingId
+        ? await BudgetCeiling.findById(linkedNepProposal.budgetCeilingId)
+        : await BudgetCeiling.findOne({ 'allocations.nepProposalId': linkedNepProposal._id });
+      const linkedAllocation = linkedCeiling?.allocations?.find(allocation =>
+        String(allocation._id) === String(linkedNepProposal.budgetCeilingAllocationId || '') ||
+        String(allocation.nepProposalId || '') === String(linkedNepProposal._id)
+      );
+      if (!linkedCeiling || !linkedAllocation) {
+        return res.status(409).json({ message: 'No BRD ceiling allocation is linked to this NEP proposal' });
+      }
+
+      const expectedScope = await normalizeTierScope(
+        linkedNepProposal.fiscalYear,
+        linkedCeiling.region,
+        linkedAllocation.department || linkedNepProposal.department,
+        linkedAllocation.division || linkedNepProposal.division
+      );
+      const normalizeScopeValue = value => String(value || '').trim().toUpperCase();
+      const scopeMatches =
+        normalizeScopeValue(normalizedScope.fiscalYear) === normalizeScopeValue(expectedScope.fiscalYear) &&
+        normalizeScopeValue(normalizedScope.region) === normalizeScopeValue(expectedScope.region) &&
+        normalizeScopeValue(normalizedScope.department) === normalizeScopeValue(expectedScope.department) &&
+        normalizeScopeValue(normalizedScope.division) === normalizeScopeValue(expectedScope.division);
+      if (!scopeMatches) {
+        return res.status(409).json({
+          message: 'The selected Tier scope does not match the linked NEP ceiling allocation'
+        });
+      }
+
+      const requesterId = String(req.user?.id || req.user?._id || req.user?.UserId || '');
+      const requesterRoles = Array.isArray(req.user?.Roles)
+        ? req.user.Roles
+        : [req.user?.Roles].filter(Boolean);
+      const isBudgetPreparer = requesterRoles.some(
+        role => String(role || '').toUpperCase().replace(/\s+/g, '_') === 'BUDGET_PREPARER'
+      );
+      const isAssignedPreparer = (linkedNepProposal.assignedPreparerUserIds || []).some(
+        assignedId => String(assignedId) === requesterId
+      );
+      const isCreator = String(linkedNepProposal.createdBy || '') === requesterId;
+      if (isBudgetPreparer && !isAssignedPreparer && !isCreator) {
+        return res.status(403).json({
+          message: 'This NEP Tier is assigned to a different Budget Preparer'
+        });
+      }
+    }
+
+    let tierDoc = linkedNepProposal
+      ? await Tier.findOne({ proposalId: linkedNepProposal._id })
+      : null;
+    if (!tierDoc) tierDoc = await Tier.findOne(broadQuery);
 
     const VALID_CATEGORIES = ['Personnel', 'MOOE', 'Capital Outlay'];
     const itemsToSave = Array.isArray(items) ? items : [];
+    const hasInvalidAmount = itemsToSave.some(item =>
+      !Number.isFinite(Number(item?.tier1 ?? 0)) ||
+      !Number.isFinite(Number(item?.tier2 ?? 0)) ||
+      Number(item?.tier1 ?? 0) < 0 ||
+      Number(item?.tier2 ?? 0) < 0
+    );
+    if (hasInvalidAmount) {
+      return res.status(400).json({ message: 'Tier amounts must be finite, non-negative numbers' });
+    }
     const revisionItems = itemsToSave.map((item) => {
       let cat = item.category;
       if (!VALID_CATEGORIES.includes(cat)) cat = 'MOOE';
@@ -497,26 +591,16 @@ const saveTierData = async (req, res) => {
     }
 
     if (tierDoc) {
-      itemsToSave.forEach((newItem) => {
-        const existingItem = tierDoc.items.find((i) => String(i.lineItemId) === String(newItem.lineItemId));
-        if (existingItem) {
-          existingItem.tier1 = newItem.tier1;
-          existingItem.tier2 = newItem.tier2;
-          if (newItem.description) existingItem.description = newItem.description;
-        } else {
-          tierDoc.items.push({
-            lineItemId: newItem.lineItemId,
-            category: newItem.category,
-            tier1: newItem.tier1 || 0,
-            tier2: newItem.tier2 || 0,
-            description: newItem.description || '',
-          });
-        }
-      });
+      // The submitted table is the complete current Tier state. Replace the
+      // array so rows cleared to zero do not retain stale values from an older
+      // save.
+      tierDoc.items = revisionItems;
       if (userObjectId) tierDoc.updatedBy = userObjectId;
+      if (linkedNepProposal) tierDoc.proposalId = linkedNepProposal._id;
     } else {
       tierDoc = new Tier({
         ...queryConditions,
+        ...(linkedNepProposal && { proposalId: linkedNepProposal._id }),
         items: itemsToSave.map((item) => ({
           lineItemId: item.lineItemId,
           category: item.category,
@@ -529,7 +613,25 @@ const saveTierData = async (req, res) => {
     }
 
     const savedTier = await tierDoc.save();
-    res.status(200).json({ ...savedTier.toObject(), version: savedVersion });
+
+    let ceilingCompliance = null;
+    if (linkedNepProposal) {
+      const {
+        getNepCeilingContext,
+        serializeNepCeilingContext
+      } = require('../services/nepCeilingService');
+      const context = await getNepCeilingContext({
+        proposalId: linkedNepProposal._id,
+        recalculate: true
+      });
+      ceilingCompliance = serializeNepCeilingContext(context);
+    }
+
+    res.status(200).json({
+      ...savedTier.toObject(),
+      version: savedVersion,
+      ceilingCompliance
+    });
   } catch (error) {
     console.error('Error in saveTierData:', error);
     res.status(500).json({ message: error.message });
@@ -539,7 +641,7 @@ const saveTierData = async (req, res) => {
 const MAX_REVISIONS_TO_KEEP = 3;
 
 /**
- * Get current (latest) version number for a scope. Returns 0 if no revisions.
+ * Get current (latest) version number for a scope. Returns null if no revisions.
  * Uses same region-matching as getRevisions (ID + name) so we find docs stored with either.
  */
 const getCurrentVersionForScope = async (fiscalYear, region, department, division) => {
@@ -590,10 +692,8 @@ const getCurrentVersionForScope = async (fiscalYear, region, department, divisio
       }).sort({ version: -1 }).select('version').lean();
     }
   }
-  if (!latest) {
-    latest = await TierRevision.findOne(regionFilter).sort({ version: -1 }).select('version').lean();
-  }
-  return latest ? (latest.version || 0) : 0;
+  const version = Number(latest?.version);
+  return Number.isFinite(version) && version > 0 ? version : null;
 };
 
 /**
@@ -614,7 +714,7 @@ const pruneRevisionsForScope = async (fiscalYear, region, department, division) 
 
 /**
  * GET /api/tier/current-version?fiscalYear=&region=&department=&division=
- * Returns { version: N } for the given scope (latest revision number, or 0).
+ * Returns { version: N|null } for the given scope.
  */
 const getCurrentVersion = async (req, res) => {
   try {
@@ -1069,6 +1169,82 @@ const getRegionalTierBreakdown = async (fiscalYear, department, division) => {
   return { regions, data, summaryTotals };
 };
 
+const normalizeVersion = value => {
+  const version = Number(value);
+  return Number.isFinite(version) && version > 0 ? version : null;
+};
+
+const resolveNepAlignmentReportRequest = async (req, body) => {
+  if (!body.proposalId || !mongoose.Types.ObjectId.isValid(String(body.proposalId))) {
+    const error = new Error('A valid proposalId is required for an NEP alignment report');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const ceilingContext = await getNepCeilingContext({
+    proposalId: body.proposalId,
+    recalculate: false,
+  });
+  if (!ceilingContext) {
+    const error = new Error('The selected proposal is not an NEP proposal');
+    error.statusCode = 400;
+    throw error;
+  }
+  assertNepReportAccess(ceilingContext, req.user);
+
+  const expectedScope = await normalizeTierScope(
+    ceilingContext.proposal.fiscalYear || ceilingContext.ceiling.fiscalYear,
+    ceilingContext.ceiling.region || ceilingContext.proposal.region,
+    ceilingContext.allocation.department || ceilingContext.proposal.department,
+    ceilingContext.allocation.division || ceilingContext.proposal.division
+  );
+  const requestedScope = await normalizeTierScope(
+    body.fiscalYear,
+    body.region,
+    body.department,
+    body.division
+  );
+  if (!nepReportScopesMatch(expectedScope, requestedScope)) {
+    const error = new Error('The requested report scope does not match the linked NEP ceiling allocation');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  let savedTier = await Tier.findOne({ proposalId: ceilingContext.proposal._id }).lean();
+  if (!savedTier) {
+    savedTier = await Tier.findOne(expectedScope).sort({ updatedAt: -1 }).lean();
+  }
+  const [categoryIncome, version] = await Promise.all([
+    getTierCategoryIncome(ceilingContext.proposal),
+    getCurrentVersionForScope(
+      expectedScope.fiscalYear,
+      expectedScope.region,
+      expectedScope.department,
+      expectedScope.division
+    ),
+  ]);
+  const authoritative = buildAuthoritativeNepReport({
+    reportSummary: body.reportSummary,
+    allocation: ceilingContext.allocation,
+    serializedContext: serializeNepCeilingContext(ceilingContext),
+    categoryIncome,
+    savedTier,
+    clientClaimsDirty: body.hasUnsavedChanges === true,
+  });
+
+  return {
+    ...authoritative,
+    version: normalizeVersion(version),
+    fiscalYear: expectedScope.fiscalYear,
+    region: expectedScope.region,
+    department: expectedScope.department,
+    division: expectedScope.division,
+    regionDisplay: expectedScope.region || 'All',
+    departmentDisplay: expectedScope.department || 'All',
+    divisionDisplay: expectedScope.division || 'All',
+  };
+};
+
 /**
  * Generate Tier Report PDF from reportSummary (view-only; inline disposition).
  * Accepts POST body: { fiscalYear, region, department, division, reportSummary }.
@@ -1080,6 +1256,7 @@ const generateTierPDF = async (req, res) => {
       return res.status(500).json({ message: 'PDF generation library (muhammara) is not installed on the server.' });
     }
 
+    const body = req.body || {};
     const {
       fiscalYear,
       region,
@@ -1088,22 +1265,49 @@ const generateTierPDF = async (req, res) => {
       regionName,
       departmentName,
       divisionName,
-      reportSummary,
+      reportSummary: submittedReportSummary,
       isFinalized: isFinalizedFromBody,
       version: versionFromBody,
-    } = req.body || {};
-    if (!reportSummary || !fiscalYear) {
+      reportType = 'TIER',
+      proposalId,
+    } = body;
+    if (!submittedReportSummary || !fiscalYear) {
       return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
     }
-    const regionDisplay = regionName || (region && typeof region === 'object' ? (region.RegionName || region.Region || region.regionName || region.name || 'All') : (region === 'ALL' || !region ? 'All' : region));
-    const departmentDisplay = departmentName || (department && typeof department === 'object' ? (department.DepartmentName || department.name || 'All') : (department === 'ALL' || !department ? 'All' : department));
-    const divisionDisplay = divisionName || (division && typeof division === 'object' ? (division.DivisionName || division.name || 'All') : (division === 'ALL' || !division ? 'All' : division));
-    const version = versionFromBody != null ? Number(versionFromBody) : (await getCurrentVersionForScope(fiscalYear, region, department, division));
+    const isNepAlignment = String(reportType).toUpperCase() === 'NEP_ALIGNMENT';
+    let effectiveFiscalYear = fiscalYear;
+    let effectiveDepartment = department;
+    let effectiveDivision = division;
+    let reportSummary = submittedReportSummary;
+    let reportContext = null;
+    let hasUnsavedChanges = false;
+    let nepReportStatus = null;
+    let version = normalizeVersion(versionFromBody != null
+      ? versionFromBody
+      : await getCurrentVersionForScope(fiscalYear, region, department, division));
+    let regionDisplay = regionName || (region && typeof region === 'object' ? (region.RegionName || region.Region || region.regionName || region.name || 'All') : (region === 'ALL' || !region ? 'All' : region));
+    let departmentDisplay = departmentName || (department && typeof department === 'object' ? (department.DepartmentName || department.name || 'All') : (department === 'ALL' || !department ? 'All' : department));
+    let divisionDisplay = divisionName || (division && typeof division === 'object' ? (division.DivisionName || division.name || 'All') : (division === 'ALL' || !division ? 'All' : division));
+
+    if (isNepAlignment) {
+      const authoritative = await resolveNepAlignmentReportRequest(req, body);
+      effectiveFiscalYear = authoritative.fiscalYear;
+      effectiveDepartment = authoritative.department;
+      effectiveDivision = authoritative.division;
+      reportSummary = authoritative.reportSummary;
+      reportContext = authoritative.reportContext;
+      hasUnsavedChanges = authoritative.hasUnsavedChanges;
+      nepReportStatus = authoritative.status;
+      version = authoritative.version;
+      regionDisplay = authoritative.regionDisplay;
+      departmentDisplay = authoritative.departmentDisplay;
+      divisionDisplay = authoritative.divisionDisplay;
+    }
 
     const isAllRegions = regionDisplay.toLowerCase() === 'all';
     let regionalBreakdown = { regions: [], data: {}, summaryTotals: {} };
     if (isAllRegions) {
-      regionalBreakdown = await getRegionalTierBreakdown(fiscalYear, department, division);
+      regionalBreakdown = await getRegionalTierBreakdown(effectiveFiscalYear, effectiveDepartment, effectiveDivision);
     }
     
     // Group logic
@@ -1126,14 +1330,20 @@ const generateTierPDF = async (req, res) => {
     };
     const documentId = generateDocumentId();
 
-    const filename = `Tier_Report_${fiscalYear}_${regionDisplay}_${departmentDisplay}_${divisionDisplay}.pdf`;
+    const filenamePrefix = isNepAlignment ? 'NEP_Budget_Alignment' : 'Tier_Budget_Proposal';
+    const filename = [
+      filenamePrefix,
+      sanitizeReportFilenamePart(effectiveFiscalYear),
+      sanitizeReportFilenamePart(regionDisplay),
+      sanitizeReportFilenamePart(version == null ? 'Unversioned' : `V${version}`)
+    ].join('_') + '.pdf';
     const tmpFilePath = path.join(os.tmpdir(), `tier_report_${Date.now()}.pdf`);
     
     const recipe = new MuhammaraRecipe('new', tmpFilePath, {
       version: 1.6,
       author: 'FMIS-BUDGET',
-      title: 'Tier Budget Report',
-      subject: 'Tier Budget Report',
+      title: isNepAlignment ? 'NEP Budget Alignment Report' : 'Tier Budget Proposal Report',
+      subject: isNepAlignment ? 'NEP Budget Alignment Report' : 'Tier Budget Proposal Report',
     });
 
     const SUB_COL_WIDTH = 78; 
@@ -1159,16 +1369,43 @@ const generateTierPDF = async (req, res) => {
     });
     
     const TABLE_WIDTH = borderX[borderX.length - 1] - 35;
-    const PAGE_WIDTH = Math.max(1008, TABLE_WIDTH + 70); 
+    // A proposal-linked NEP report has one data group. Size the page to that
+    // content so the decision summary and allocation table remain centered.
+    const PAGE_WIDTH = isNepAlignment && groups.length === 1
+      ? TABLE_WIDTH + 70
+      : Math.max(1008, TABLE_WIDTH + 70);
     const PAGE_HEIGHT = 612;
-    const showDraftWatermark = shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
+    const showDraftWatermark = !isNepAlignment && shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
+    const drawReportWatermark = () => {
+      drawMuhammaraDraftWatermark(recipe, {
+        show: showDraftWatermark,
+        pageWidth: PAGE_WIDTH,
+        pageHeight: PAGE_HEIGHT,
+      });
+      if (!isNepAlignment) return;
+      if (nepReportStatus === 'WORKING COPY – OVER CEILING') {
+        drawMuhammaraDraftWatermark(recipe, {
+          show: true,
+          text: 'WORKING COPY - OVER CEILING',
+          fontSize: 35,
+          color: '#efcccc',
+          pageWidth: PAGE_WIDTH,
+          pageHeight: PAGE_HEIGHT,
+        });
+      } else if (nepReportStatus === 'DRAFT – UNSAVED CHANGES') {
+        drawMuhammaraDraftWatermark(recipe, {
+          show: true,
+          text: 'DRAFT - UNSAVED CHANGES',
+          fontSize: 38,
+          color: '#ead9b8',
+          pageWidth: PAGE_WIDTH,
+          pageHeight: PAGE_HEIGHT,
+        });
+      }
+    };
 
     recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-    drawMuhammaraDraftWatermark(recipe, {
-      show: showDraftWatermark,
-      pageWidth: PAGE_WIDTH,
-      pageHeight: PAGE_HEIGHT,
-    });
+    drawReportWatermark();
     
     // Header Logo
     const resolveLogoPath = (name) => {
@@ -1184,14 +1421,108 @@ const generateTierPDF = async (req, res) => {
     } catch (e) {}
 
     const title1 = "NATIONAL IRRIGATION ADMINISTRATION";
-    const title2 = `TIER BUDGET REPORT FOR FY ${fiscalYear || 'ALL'}`;
-    const title3 = `REGION: ${regionDisplay} | VERSION: ${version}`;
+    const title2 = isNepAlignment
+      ? `NEP BUDGET ALIGNMENT REPORT FOR FY ${effectiveFiscalYear || 'ALL'}`
+      : `TIER BUDGET PROPOSAL REPORT FOR FY ${effectiveFiscalYear || 'ALL'}`;
+    const versionDisplay = version == null || Number.isNaN(version) ? '—' : version;
+    const title3 = `REGION: ${regionDisplay} | VERSION: ${versionDisplay}`;
     
     recipe.text(title1, (PAGE_WIDTH / 2) - (title1.length * 4), 40, { color: [0, 0, 0], fontSize: 14, bold: true });
     recipe.text(title2, (PAGE_WIDTH / 2) - (title2.length * 3.5), 58, { color: [0, 0, 0], fontSize: 12, bold: true });
     recipe.text(title3, (PAGE_WIDTH / 2) - (title3.length * 3.5), 72, { color: [0, 0, 0], fontSize: 12, bold: true });
     
-    let currentRowY = 100;
+    if (isNepAlignment) {
+      const compliance = reportContext.compliance || {};
+      const actual = compliance.actual || {};
+      const caps = compliance.caps || {};
+      const initialAmount = Number(reportContext.initial?.amount || 0);
+      const approvedCeiling = Number(caps.totalExpenses || reportContext.ceiling?.amount || 0);
+      const currentAllocation = Number(actual.totalExpenses || 0);
+      const reduction = initialAmount - currentAllocation;
+      const totalVariance = approvedCeiling - currentAllocation;
+      const statusColor = nepReportStatus.startsWith('WORKING')
+        ? '#b42318'
+        : nepReportStatus.startsWith('DRAFT')
+          ? '#9a6700'
+          : nepReportStatus.startsWith('READY')
+            ? '#1b5e20'
+            : '#175cd3';
+
+      recipe.rectangle(35, 91, TABLE_WIDTH, 23, { fill: '#f3f6f2' });
+      recipe.text(`REPORT STATUS: ${nepReportStatus}`, 44, 98, {
+        bold: true, fontSize: 10, color: statusColor
+      });
+      recipe.text(`Scope: ${regionDisplay} / ${departmentDisplay} / ${divisionDisplay}`, 44, 118, {
+        fontSize: 8, color: '#344054'
+      });
+      recipe.text(
+        `Proposal: ${proposalId}  |  Generated: ${new Date().toLocaleString('en-PH')}`,
+        44, 130, { fontSize: 8, color: '#344054' }
+      );
+
+      const metrics = [
+        ['INITIAL', 'REQUEST', initialAmount],
+        ['APPROVED BRD', 'NEP CEILING', approvedCeiling],
+        ['CURRENT NEP', 'ALLOCATION', currentAllocation],
+        ['REDUCTION FROM', 'INITIAL REQUEST', reduction],
+        [totalVariance < -0.009 ? 'AMOUNT TO' : 'REMAINING', totalVariance < -0.009 ? 'REDUCE' : 'CAPACITY', Math.abs(totalVariance)],
+      ];
+      const metricWidth = TABLE_WIDTH / metrics.length;
+      metrics.forEach(([label, secondLine, value], index) => {
+        const x = 35 + (index * metricWidth);
+        recipe.rectangle(x, 145, metricWidth, 52, { fill: index === 1 ? '#eef6ed' : '#fafafa' });
+        recipe.rectangle(x, 145, 0.5, 52, { fill: '#98a2b3' });
+        recipe.text(label, x + 7, 152, { bold: true, fontSize: 8, color: '#475467' });
+        recipe.text(secondLine, x + 7, 162, { bold: true, fontSize: 8, color: '#475467' });
+        recipe.text(formatTierCurrency(value), x + 7, 178, {
+          bold: true, fontSize: 10, color: value < 0 ? '#b42318' : '#101828'
+        });
+      });
+      recipe.rectangle(35 + TABLE_WIDTH, 145, 0.5, 52, { fill: '#98a2b3' });
+      recipe.text('CATEGORY COMPLIANCE', 35, 207, { bold: true, fontSize: 9, color: '#1a472a' });
+      const categoryRows = [
+        ['Personnel Services', 'personnelServices'],
+        ['MOOE', 'mooe'],
+        ['Capital Outlay', 'capitalOutlay'],
+      ];
+      const categoryWidth = TABLE_WIDTH / 3;
+      if (compliance.hasDetailedCeiling) {
+        categoryRows.forEach(([label, key], index) => {
+          const x = 35 + (index * categoryWidth);
+          const categoryActual = Number(actual[key] || 0);
+          const categoryCap = Number(caps[key] || 0);
+          const variance = categoryCap - categoryActual;
+          const isOver = compliance.violations?.some(violation => violation.field === key);
+          recipe.rectangle(x, 219, categoryWidth, 39, { fill: isOver ? '#fef3f2' : '#ffffff' });
+          recipe.text(label, x + 7, 225, { bold: true, fontSize: 8, color: '#101828' });
+          recipe.text(`Actual ${formatTierCurrency(categoryActual)} | Cap ${formatTierCurrency(categoryCap)}`, x + 7, 237, {
+            fontSize: 8, color: '#344054'
+          });
+          recipe.text(`Variance ${formatTierCurrency(variance)} | ${isOver ? 'OVER CEILING' : 'WITHIN CEILING'}`, x + 7, 248, {
+            bold: true, fontSize: 8, color: isOver ? '#b42318' : '#1b5e20'
+          });
+        });
+      } else {
+        recipe.rectangle(35, 219, TABLE_WIDTH, 39, { fill: '#f8f9fa' });
+        recipe.text('PS, MOOE, and Capital Outlay caps were not provided by BRD.', 44, 228, {
+          bold: true, fontSize: 8.5, color: '#344054'
+        });
+        recipe.text('Category limits are shown as Not provided / Not enforced; total ceiling compliance still applies.', 44, 243, {
+          fontSize: 8, color: '#475467'
+        });
+      }
+      const source = reportSummary.sourcesOfFunds || {};
+      const support = source.budgetarySupport || {};
+      recipe.text(
+        `FUNDING MIX  |  Tier 1 ${formatTierCurrency(support.tier1)}  |  Tier 2 ${formatTierCurrency(support.tier2)}  |  Corporate Income ${formatTierCurrency(source.corporateIncome)}  |  Proposed Budget ${formatTierCurrency(source.proposedBudget || source.total)}`,
+        35,
+        270,
+        { bold: true, fontSize: 8, color: '#1a472a' }
+      );
+      recipe.text('ALLOCATION DETAIL', 35, 289, { bold: true, fontSize: 9, color: '#1a472a' });
+    }
+
+    let currentRowY = isNepAlignment ? 302 : 100;
 
     const drawHeaders = (y) => {
       // Draw background for entire header (height 50)
@@ -1292,11 +1623,7 @@ const generateTierPDF = async (req, res) => {
       if (currentRowY + rowHeight > PAGE_HEIGHT - 40) {
         recipe.endPage();
         recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-        drawMuhammaraDraftWatermark(recipe, {
-          show: showDraftWatermark,
-          pageWidth: PAGE_WIDTH,
-          pageHeight: PAGE_HEIGHT,
-        });
+        drawReportWatermark();
         currentRowY = 40;
         drawHeaders(currentRowY);
         currentRowY += 52;
@@ -1505,7 +1832,9 @@ const generateTierPDF = async (req, res) => {
        const catTotal = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
        if ((cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') && catTotal <= 0) return;
        
-       drawRow('  ' + (item.description || '—'), getRowDataMapForLineItem(item));
+       const itemLabel = getTierReportLineItemLabel(item, isNepAlignment);
+       const referenceNote = isNepAlignment && item.referenceNote ? ` — ${item.referenceNote}` : '';
+       drawRow(`  ${itemLabel}${referenceNote}`, getRowDataMapForLineItem(item));
     });
     
     drawRow('TOTAL PERSONNEL SERVICES', getRowDataMapForSummary('PS'), true);
@@ -1534,25 +1863,61 @@ const generateTierPDF = async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating tier PDF:', error?.message || error, error?.stack);
-    if (!res.headersSent) res.status(500).json({ message: error.message || 'Error generating PDF' });
+    if (!res.headersSent) res.status(error.statusCode || 500).json({ message: error.message || 'Error generating PDF' });
   }
 };
 
 const generateTierExcel = async (req, res) => {
   try {
     const ExcelJS = require('exceljs');
-    const { fiscalYear, region, department, division, regionName, departmentName, divisionName, reportSummary, version: versionFromBody } = req.body || {};
-    if (!reportSummary || !fiscalYear) return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
-    
-    const regionDisplay = regionName || (region === 'ALL' || !region ? 'All' : region);
-    const departmentDisplay = departmentName || (!department ? 'All' : department);
-    const divisionDisplay = divisionName || (!division ? 'All' : division);
-    const version = versionFromBody != null ? Number(versionFromBody) : (await getCurrentVersionForScope(fiscalYear, region, department, division));
+    const body = req.body || {};
+    const {
+      fiscalYear,
+      region,
+      department,
+      division,
+      regionName,
+      departmentName,
+      divisionName,
+      reportSummary: submittedReportSummary,
+      version: versionFromBody,
+      reportType = 'TIER',
+      proposalId,
+    } = body;
+    if (!submittedReportSummary || !fiscalYear) return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
+
+    const isNepAlignment = String(reportType).toUpperCase() === 'NEP_ALIGNMENT';
+    let effectiveFiscalYear = fiscalYear;
+    let effectiveDepartment = department;
+    let effectiveDivision = division;
+    let reportSummary = submittedReportSummary;
+    let reportContext = null;
+    let nepReportStatus = null;
+    let version = normalizeVersion(versionFromBody != null
+      ? versionFromBody
+      : await getCurrentVersionForScope(fiscalYear, region, department, division));
+    let regionDisplay = regionName || (region === 'ALL' || !region ? 'All' : region);
+    let departmentDisplay = departmentName || (!department ? 'All' : department);
+    let divisionDisplay = divisionName || (!division ? 'All' : division);
+
+    if (isNepAlignment) {
+      const authoritative = await resolveNepAlignmentReportRequest(req, body);
+      effectiveFiscalYear = authoritative.fiscalYear;
+      effectiveDepartment = authoritative.department;
+      effectiveDivision = authoritative.division;
+      reportSummary = authoritative.reportSummary;
+      reportContext = authoritative.reportContext;
+      nepReportStatus = authoritative.status;
+      version = authoritative.version;
+      regionDisplay = authoritative.regionDisplay;
+      departmentDisplay = authoritative.departmentDisplay;
+      divisionDisplay = authoritative.divisionDisplay;
+    }
 
     const isAllRegions = regionDisplay.toLowerCase() === 'all';
     let regionalBreakdown = { regions: [], data: {} };
     if (isAllRegions) {
-      regionalBreakdown = await getRegionalTierBreakdown(fiscalYear, department, division);
+      regionalBreakdown = await getRegionalTierBreakdown(effectiveFiscalYear, effectiveDepartment, effectiveDivision);
     }
     
     const groups = ['GRAND TOTAL'];
@@ -1568,7 +1933,137 @@ const generateTierExcel = async (req, res) => {
     workbook.creator = 'FMIS Budget System';
     workbook.created = new Date();
 
-    const sheet = workbook.addWorksheet('Tier Report', { views: [{ state: 'frozen', ySplit: 5 }] });
+    const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E6338' } };
+    const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+    const titleFont = { bold: true, size: 14, color: { argb: 'FF1A472A' } };
+    const numFormat = '#,##0.00';
+
+    if (isNepAlignment) {
+      const alignmentSheet = workbook.addWorksheet('NEP Alignment', {
+        views: [{ state: 'frozen', ySplit: 8 }]
+      });
+      alignmentSheet.columns = [
+        { width: 28 }, { width: 24 }, { width: 24 }, { width: 24 }, { width: 28 }
+      ];
+      alignmentSheet.mergeCells('A1:E1');
+      alignmentSheet.getCell('A1').value = `NEP BUDGET ALIGNMENT REPORT FOR FY ${effectiveFiscalYear}`;
+      alignmentSheet.getCell('A1').font = titleFont;
+      alignmentSheet.getCell('A1').alignment = { horizontal: 'center' };
+      alignmentSheet.mergeCells('A2:E2');
+      alignmentSheet.getCell('A2').value = 'NATIONAL IRRIGATION ADMINISTRATION';
+      alignmentSheet.getCell('A2').font = { bold: true, size: 11 };
+      alignmentSheet.getCell('A2').alignment = { horizontal: 'center' };
+      alignmentSheet.mergeCells('A3:E3');
+      alignmentSheet.getCell('A3').value = `Scope: ${regionDisplay} / ${departmentDisplay} / ${divisionDisplay}`;
+      alignmentSheet.mergeCells('A4:E4');
+      alignmentSheet.getCell('A4').value = `Proposal: ${proposalId}  |  Version: ${version == null || Number.isNaN(version) ? '—' : version}  |  Generated: ${new Date().toLocaleString('en-PH')}`;
+      alignmentSheet.mergeCells('A5:E5');
+      alignmentSheet.getCell('A5').value = `REPORT STATUS: ${nepReportStatus}`;
+      alignmentSheet.getCell('A5').font = {
+        bold: true,
+        color: {
+          argb: nepReportStatus.startsWith('WORKING')
+            ? 'FFB42318'
+            : nepReportStatus.startsWith('DRAFT')
+              ? 'FF9A6700'
+              : nepReportStatus.startsWith('READY')
+                ? 'FF1B5E20'
+                : 'FF175CD3'
+        }
+      };
+      alignmentSheet.getCell('A5').alignment = { horizontal: 'center' };
+      alignmentSheet.addRow([]);
+
+      const compliance = reportContext.compliance || {};
+      const actual = compliance.actual || {};
+      const caps = compliance.caps || {};
+      const initialAmount = Number(reportContext.initial?.amount || 0);
+      const approvedCeiling = Number(caps.totalExpenses || reportContext.ceiling?.amount || 0);
+      const currentAllocation = Number(actual.totalExpenses || 0);
+      const totalVariance = approvedCeiling - currentAllocation;
+      const metricHeader = alignmentSheet.addRow([
+        'Initial Request',
+        'Approved BRD NEP Ceiling',
+        'Current NEP Allocation',
+        'Reduction from Initial',
+        totalVariance < -0.009 ? 'Amount to Reduce' : 'Remaining Capacity'
+      ]);
+      metricHeader.eachCell(cell => { cell.fill = headerFill; cell.font = headerFont; cell.alignment = { wrapText: true, horizontal: 'center' }; });
+      const metricValues = alignmentSheet.addRow([
+        initialAmount,
+        approvedCeiling,
+        currentAllocation,
+        initialAmount - currentAllocation,
+        Math.abs(totalVariance)
+      ]);
+      metricValues.eachCell(cell => {
+        cell.numFmt = numFormat;
+        cell.font = { bold: true, size: 11 };
+        cell.alignment = { horizontal: 'right' };
+      });
+      alignmentSheet.addRow([]);
+      alignmentSheet.mergeCells(`A${alignmentSheet.rowCount}:E${alignmentSheet.rowCount}`);
+      alignmentSheet.getCell(`A${alignmentSheet.rowCount}`).value = 'CATEGORY COMPLIANCE';
+      alignmentSheet.getCell(`A${alignmentSheet.rowCount}`).font = { bold: true, color: { argb: 'FF1A472A' } };
+      const categoryHeader = alignmentSheet.addRow(['Category', 'Actual', 'Approved Cap', 'Variance', 'Status']);
+      categoryHeader.eachCell(cell => { cell.fill = headerFill; cell.font = headerFont; });
+      const expenseCategories = [
+        ['Personnel Services', 'personnelServices'],
+        ['MOOE', 'mooe'],
+        ['Capital Outlay', 'capitalOutlay']
+      ];
+      expenseCategories.forEach(([label, key]) => {
+        const categoryActual = Number(actual[key] || 0);
+        if (!compliance.hasDetailedCeiling) {
+          const row = alignmentSheet.addRow([
+            label,
+            categoryActual,
+            'Not provided',
+            '—',
+            'NOT ENFORCED'
+          ]);
+          row.getCell(2).numFmt = numFormat;
+          row.getCell(5).font = { bold: true, color: { argb: 'FF475467' } };
+          return;
+        }
+        const categoryCap = Number(caps[key] || 0);
+        const isOver = compliance.violations?.some(violation => violation.field === key);
+        const row = alignmentSheet.addRow([
+          label,
+          categoryActual,
+          categoryCap,
+          categoryCap - categoryActual,
+          isOver ? 'OVER CEILING' : 'WITHIN CEILING'
+        ]);
+        [2, 3, 4].forEach(column => { row.getCell(column).numFmt = numFormat; });
+        row.getCell(5).font = { bold: true, color: { argb: isOver ? 'FFB42318' : 'FF1B5E20' } };
+      });
+      alignmentSheet.addRow([]);
+      const source = reportSummary.sourcesOfFunds || {};
+      const support = source.budgetarySupport || {};
+      const fundingHeader = alignmentSheet.addRow([
+        'Funding Mix', 'Tier 1', 'Tier 2', 'Corporate Income', 'Proposed Budget'
+      ]);
+      fundingHeader.eachCell(cell => { cell.fill = headerFill; cell.font = headerFont; });
+      const fundingValues = alignmentSheet.addRow([
+        'Current live values',
+        Number(support.tier1 || 0),
+        Number(support.tier2 || 0),
+        Number(source.corporateIncome || 0),
+        Number(source.proposedBudget || source.total || 0)
+      ]);
+      [2, 3, 4, 5].forEach(column => { fundingValues.getCell(column).numFmt = numFormat; });
+      alignmentSheet.eachRow(row => {
+        row.eachCell(cell => {
+          cell.border = {
+            bottom: { style: 'hair', color: { argb: 'FFD0D5DD' } }
+          };
+          cell.alignment = { vertical: 'middle', ...cell.alignment };
+        });
+      });
+    }
+
+    const sheet = workbook.addWorksheet(isNepAlignment ? 'Allocation Detail' : 'Tier Report', { views: [{ state: 'frozen', ySplit: 5 }] });
     
     const cols = [{ width: 42 }];
     groups.forEach(() => {
@@ -1582,19 +2077,14 @@ const generateTierExcel = async (req, res) => {
     const maxCols = 1 + (groups.length * 5);
     const maxColLetter = sheet.getColumn(maxCols).letter;
 
-    const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2e7d32' } };
-    const headerFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
-    const titleFont = { bold: true, size: 14, color: { argb: 'FF1a472a' } };
-    const numFormat = '#,##0.00';
-
     sheet.mergeCells(`A1:${maxColLetter}1`);
-    sheet.getCell('A1').value = 'TIER BUDGET REPORT';
+    sheet.getCell('A1').value = isNepAlignment ? 'ALLOCATION DETAIL' : 'TIER BUDGET PROPOSAL REPORT';
     sheet.getCell('A1').font = titleFont;
     sheet.getCell('A1').alignment = { horizontal: 'center' };
-    sheet.addRow([`Fiscal Year: ${fiscalYear}  |  Region: ${regionDisplay}  |  Department: ${departmentDisplay}  |  Division: ${divisionDisplay}`]);
+    sheet.addRow([`Fiscal Year: ${effectiveFiscalYear}  |  Region: ${regionDisplay}  |  Department: ${departmentDisplay}  |  Division: ${divisionDisplay}`]);
     sheet.mergeCells(`A2:${maxColLetter}2`);
     sheet.getCell('A2').alignment = { horizontal: 'center' };
-    sheet.addRow([`Version ${version}`]);
+    sheet.addRow([`Version ${version == null ? '—' : version}`]);
     sheet.mergeCells(`A3:${maxColLetter}3`);
     sheet.getCell('A3').alignment = { horizontal: 'center' };
     sheet.getCell('A3').font = { italic: true, size: 9 };
@@ -1649,6 +2139,7 @@ const generateTierExcel = async (req, res) => {
            right: {style:'thin'}
          };
        });
+       row.getCell(1).alignment = { vertical: 'middle', wrapText: true };
        if (isBold) {
          row.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } }; });
        }
@@ -1785,7 +2276,9 @@ const generateTierExcel = async (req, res) => {
        const catTotal = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
        if ((cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') && catTotal <= 0) return;
        
-       addDataRow('  ' + (item.description || '—'), getRowDataMapForLineItem(item));
+       const itemLabel = getTierReportLineItemLabel(item, isNepAlignment);
+       const referenceNote = isNepAlignment && item.referenceNote ? `\n${item.referenceNote}` : '';
+       addDataRow(`  ${itemLabel}${referenceNote}`, getRowDataMapForLineItem(item));
     });
     
     addDataRow('TOTAL PERSONNEL SERVICES', getRowDataMapForSummary('PS'), true);
@@ -1793,7 +2286,13 @@ const generateTierExcel = async (req, res) => {
     addDataRow('TOTAL CAPITAL OUTLAY', getRowDataMapForSummary('CO'), true);
     addDataRow('TOTAL USES OF FUNDS', getRowDataMapForSummary('TotalUses'), true);
 
-    const filename = `Tier_Report_${fiscalYear}_${regionDisplay}_${departmentDisplay}_${divisionDisplay}.xlsx`;
+    const filenamePrefix = isNepAlignment ? 'NEP_Budget_Alignment' : 'Tier_Budget_Proposal';
+    const filename = [
+      filenamePrefix,
+      sanitizeReportFilenamePart(effectiveFiscalYear),
+      sanitizeReportFilenamePart(regionDisplay),
+      sanitizeReportFilenamePart(version == null ? 'Unversioned' : `V${version}`)
+    ].join('_') + '.xlsx';
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
 
@@ -1801,7 +2300,7 @@ const generateTierExcel = async (req, res) => {
     res.end();
   } catch (error) {
     console.error('Error generating tier Excel:', error);
-    if (!res.headersSent) res.status(500).json({ message: error.message || 'Error generating Excel' });
+    if (!res.headersSent) res.status(error.statusCode || 500).json({ message: error.message || 'Error generating Excel' });
   }
 };
 module.exports = {

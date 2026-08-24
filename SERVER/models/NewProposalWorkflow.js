@@ -57,6 +57,30 @@ const newProposalWorkflowSchema = new mongoose.Schema({
   createdByName: {
     type: String
   },
+  // Explicit ownership for system-generated NEP drafts. `createdBy` remains the
+  // audit actor that generated the record, while these fields identify the
+  // Budget Preparer(s) allowed to work on the draft.
+  assignedPreparerUserIds: [{
+    type: String,
+    trim: true
+  }],
+  assignedPreparerNames: [{
+    type: String,
+    trim: true
+  }],
+  sourceInitialProposalIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NewProposalWorkflow'
+  }],
+  budgetCeilingId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BudgetCeiling',
+    index: true
+  },
+  budgetCeilingAllocationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    index: true
+  },
   region: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'region' // Align with actual model name export in models/Region.js
@@ -315,6 +339,16 @@ newProposalWorkflowSchema.index({ createdBy: 1, status: 1 });
 newProposalWorkflowSchema.index({ status: 1, region: 1 });
 newProposalWorkflowSchema.index({ fiscalYear: 1 });
 newProposalWorkflowSchema.index({ modelType: 1 });
+newProposalWorkflowSchema.index(
+  { budgetCeilingId: 1, budgetCeilingAllocationId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      budgetCeilingId: { $exists: true },
+      budgetCeilingAllocationId: { $exists: true }
+    }
+  }
+);
 
 // Pre-save middleware to set currentAssigneeRole based on status
 newProposalWorkflowSchema.pre('save', function(next) {

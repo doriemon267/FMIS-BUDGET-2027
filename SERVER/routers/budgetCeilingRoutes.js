@@ -10,6 +10,16 @@ const Income = require('../models/Income');
 const isAuth = require('../middleware/is_auth');
 const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 const mongoose = require('mongoose');
+const {
+  resolvePreparerAssignments,
+  cloneProposalLineItems,
+  cleanupGeneratedNepData
+} = require('../services/nepProposalService');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const {
+  getNepCeilingContext,
+  serializeNepCeilingContext
+} = require('../services/nepCeilingService');
 /**
  * Budget Ceiling Management Routes
  * 
@@ -46,7 +56,7 @@ const isBRDStaff = (req, res, next) => {
 router.get('/finalized-initial', isAuth, isBRDStaff, async (req, res) => {
   try {
     const { region, fiscalYear } = req.query;
-    
+
     if (!region) {
       return res.status(400).json({
         success: false,
@@ -125,6 +135,70 @@ router.get('/finalized-initial', isAuth, isBRDStaff, async (req, res) => {
       success: false,
       message: 'Failed to fetch finalized proposals',
       error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/budget-ceiling/proposal/:proposalId
+ * Return only the allocation linked to a specific NEP proposal. This avoids
+ * exposing the other divisions' ceilings to the proposal workbench.
+ */
+router.get('/proposal/:proposalId', isAuth, async (req, res) => {
+  try {
+    const context = await getNepCeilingContext({
+      proposalId: req.params.proposalId,
+      recalculate: true
+    });
+
+    if (!context) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ceiling context is only available for NEP proposals'
+      });
+    }
+
+    const userId = String(req.user?.id || req.user?._id || req.user?.UserId || '');
+    const rawRoles = Array.isArray(req.user?.Roles)
+      ? req.user.Roles
+      : [req.user?.Roles].filter(Boolean);
+
+    // Normalize roles to handle variations (e.g. "Budget Preparer" -> "BUDGET_PREPARER")
+    const normalizedRoles = rawRoles.map(role =>
+      String(role).toUpperCase().trim().replace(/\s+/g, '_')
+    );
+
+    const isPrivilegedWorkflowUser = normalizedRoles.some(role => [
+      'PREPARER',
+      'BUDGET_PREPARER',
+      'BUDGET_REVIEWER',
+      'BUDGET_APPROVER',
+      'BUDGET_PLANNING_ANALYST',
+      'BUDGET_OFFICER',
+      'BUDGET_MANAGER',
+      'OVERALL_BUDGET_APPROVER',
+      'SUPER_ADMIN'
+    ].includes(role));
+    const isAssignedPreparer = (context.proposal.assignedPreparerUserIds || [])
+      .some(assignedId => String(assignedId) === userId);
+    const isCreator = String(context.proposal.createdBy || '') === userId;
+
+    if (!isPrivilegedWorkflowUser && !isAssignedPreparer && !isCreator) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied for this NEP ceiling allocation'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: serializeNepCeilingContext(context)
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code,
+      message: error.message
     });
   }
 });
@@ -230,12 +304,31 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
     }
 
     const proposalIds = proposals.map(p => p._id);
+    const legacyInitialProposals = await Proposal.find({
+      $or: [
+        { workflowRef: { $in: proposalIds } },
+        { proposalId: { $in: proposalIds } }
+      ]
+    }).select('_id workflowRef proposalId').lean();
+    const sourceLineProposalIds = [
+      ...proposalIds,
+      ...legacyInitialProposals.map(proposal => proposal._id)
+    ];
+    const sourceWorkflowIdByAnyId = new Map(
+      proposalIds.map(proposalId => [String(proposalId), String(proposalId)])
+    );
+    legacyInitialProposals.forEach(legacyProposal => {
+      const workflowId = legacyProposal.workflowRef || legacyProposal.proposalId;
+      if (workflowId) {
+        sourceWorkflowIdByAnyId.set(String(legacyProposal._id), String(workflowId));
+      }
+    });
     
     // Fetch breakdown data using both proposalId (legacy) and workflowRef (new)
     const [personnelData, mooeData, capitalData] = await Promise.all([
-      PersonnelService.find({ $or: [{ proposalId: { $in: proposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean(),
-      MooeProposal.find({ $or: [{ proposalId: { $in: proposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean(),
-      CapitalOutlay.find({ $or: [{ proposalId: { $in: proposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean()
+      PersonnelService.find({ $or: [{ proposalId: { $in: sourceLineProposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean(),
+      MooeProposal.find({ $or: [{ proposalId: { $in: sourceLineProposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean(),
+      CapitalOutlay.find({ $or: [{ proposalId: { $in: sourceLineProposalIds } }, { workflowRef: { $in: proposalIds } }] }).lean()
     ]);
 
     // Group proposals by division
@@ -265,49 +358,69 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       divisionMap[key].totalSubsidy += p.projectedSubsidy || 0;
       divisionMap[key].totalIncome += p.projectedCorporateIncome || 0;
 
-      // Add from embedded arrays (for consolidated proposals)
-      if (p.personnelData && Array.isArray(p.personnelData)) {
-        divisionMap[key].totalPS += p.personnelData.reduce((sum, item) => sum + (Number(item.Total) || 0), 0);
-      }
-      if (p.mooeData && Array.isArray(p.mooeData)) {
-        divisionMap[key].totalMOOE += p.mooeData.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-      }
-      if (p.capitalData && Array.isArray(p.capitalData)) {
-        divisionMap[key].totalCO += p.capitalData.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-      }
     });
 
     // Aggregate expense class breakdowns from linked collections
+    const linkedPersonnelWorkflowIds = new Set();
+    const linkedMooeWorkflowIds = new Set();
+    const linkedCapitalWorkflowIds = new Set();
+    const resolveSourceProposal = item => {
+      const rawId = item.workflowRef || item.proposalId;
+      if (!rawId) return null;
+      const workflowId = sourceWorkflowIdByAnyId.get(String(rawId)) || String(rawId);
+      return proposals.find(proposal => String(proposal._id) === workflowId) || null;
+    };
+
     personnelData.forEach(item => {
-      const pId = item.workflowRef || item.proposalId;
-      if (pId) {
-        const p = proposals.find(prop => prop._id.toString() === pId.toString());
-        if (p) {
-          const key = p.division || p.department || 'Unassigned';
-          divisionMap[key].totalPS += Number(item.Total) || 0;
-        }
+      const p = resolveSourceProposal(item);
+      if (p) {
+        const key = p.division || p.department || 'Unassigned';
+        divisionMap[key].totalPS += Number(item.Total ?? item.total) || 0;
+        linkedPersonnelWorkflowIds.add(String(p._id));
       }
     });
 
     mooeData.forEach(item => {
-      const pId = item.workflowRef || item.proposalId;
-      if (pId) {
-        const p = proposals.find(prop => prop._id.toString() === pId.toString());
-        if (p) {
-          const key = p.division || p.department || 'Unassigned';
-          divisionMap[key].totalMOOE += Number(item.amount) || 0;
-        }
+      const p = resolveSourceProposal(item);
+      if (p) {
+        const key = p.division || p.department || 'Unassigned';
+        divisionMap[key].totalMOOE += Number(item.amount) || 0;
+        linkedMooeWorkflowIds.add(String(p._id));
       }
     });
 
     capitalData.forEach(item => {
-      const pId = item.workflowRef || item.proposalId;
-      if (pId) {
-        const p = proposals.find(prop => prop._id.toString() === pId.toString());
-        if (p) {
-          const key = p.division || p.department || 'Unassigned';
-          divisionMap[key].totalCO += Number(item.cost) || 0;
-        }
+      const p = resolveSourceProposal(item);
+      if (p) {
+        const key = p.division || p.department || 'Unassigned';
+        divisionMap[key].totalCO += Number(item.cost ?? item.total) || 0;
+        linkedCapitalWorkflowIds.add(String(p._id));
+      }
+    });
+
+    // Consolidated/legacy workflows can store line items only in embedded
+    // arrays. Use those as a fallback per proposal and expense class so linked
+    // records are never counted twice.
+    proposals.forEach(proposal => {
+      const workflowId = String(proposal._id);
+      const key = proposal.division || proposal.department || 'Unassigned';
+      if (!linkedPersonnelWorkflowIds.has(workflowId) && Array.isArray(proposal.personnelData)) {
+        divisionMap[key].totalPS += proposal.personnelData.reduce(
+          (sum, item) => sum + (Number(item.Total ?? item.total) || 0),
+          0
+        );
+      }
+      if (!linkedMooeWorkflowIds.has(workflowId) && Array.isArray(proposal.mooeData)) {
+        divisionMap[key].totalMOOE += proposal.mooeData.reduce(
+          (sum, item) => sum + (Number(item.amount) || 0),
+          0
+        );
+      }
+      if (!linkedCapitalWorkflowIds.has(workflowId) && Array.isArray(proposal.capitalData)) {
+        divisionMap[key].totalCO += proposal.capitalData.reduce(
+          (sum, item) => sum + (Number(item.cost ?? item.total) || 0),
+          0
+        );
       }
     });
 
@@ -316,6 +429,7 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       division: div.division,
       department: div.department,
       initialProposalId: div.proposals[0]?._id, // Reference first proposal
+      initialProposalIds: div.proposals.map(proposal => proposal._id),
       initialRequestAmount: div.totalAmount,
       initialSubsidy: div.totalSubsidy,
       initialIncome: div.totalIncome,
@@ -594,7 +708,7 @@ router.post('/:id/generate-nep', isAuth, isBRDStaff, requireDynamicPermission('/
       });
     }
 
-    if (ceiling.status === 'Draft') {
+    if (!['Published', 'Locked'].includes(ceiling.status)) {
       return res.status(400).json({
         success: false,
         message: 'Ceiling must be published before generating NEP proposals'
@@ -617,155 +731,174 @@ router.post('/:id/generate-nep', isAuth, isBRDStaff, requireDynamicPermission('/
         continue;
       }
 
-      // Find the original Initial proposal(s) for this division
-      let initialProposals = [];
+      const sourceProposalIds = [
+        ...(allocation.initialProposalIds || []),
+        allocation.initialProposalId
+      ].filter(Boolean);
 
-      // 1. Try finding by direct initialProposalId reference if present
-      if (allocation.initialProposalId) {
-        const found = await NewProposalWorkflow.findOne({
-          _id: allocation.initialProposalId,
-          modelType: 'Initial',
-          status: { $in: ['FINALIZED', 'Finalized'] }
-        }).lean();
-        if (found) {
-          initialProposals.push(found);
-        }
-      }
-
-      // 2. Fallback to querying by division or region if initialProposalId not found
-      if (initialProposals.length === 0) {
-        const baseQuery = {
+      const initialProposals = sourceProposalIds.length
+        ? await NewProposalWorkflow.find({
+          _id: { $in: sourceProposalIds },
           modelType: 'Initial',
           status: { $in: ['FINALIZED', 'Finalized'] },
           fiscalYear: ceiling.fiscalYear
-        };
-
-        if (allocation.division && !allocation.division.includes('(Consolidated)')) {
-          initialProposals = await NewProposalWorkflow.find({
-            ...baseQuery,
-            division: allocation.division
-          }).lean();
-        }
-
-        if (initialProposals.length === 0) {
-          const Region = require('../models/Region');
-          let regionFilter = ceiling.region;
-          if (mongoose.Types.ObjectId.isValid(ceiling.region)) {
-            regionFilter = new mongoose.Types.ObjectId(ceiling.region);
-          } else {
-            const rDoc = await Region.findOne({
-              $or: [
-                { regionName: ceiling.region },
-                { Region: ceiling.region },
-                { name: ceiling.region }
-              ]
-            });
-            if (rDoc) regionFilter = rDoc._id;
-          }
-
-          const query = {
-            ...baseQuery,
-            $or: [
-              { division: allocation.division },
-              { division: { $in: [null, '', 'Unassigned'] } },
-              { division: { $exists: false } }
-            ]
-          };
-          if (regionFilter) {
-            query.region = regionFilter;
-          }
-
-          initialProposals = await NewProposalWorkflow.find(query).lean();
-        }
-      }
+        }).lean()
+        : [];
 
       if (initialProposals.length === 0) {
         errors.push(`No finalized Initial proposal found for ${allocation.division}`);
         continue;
       }
 
-      // Use the first proposal as template
+      // Use the first proposal for shared header/org metadata, while every
+      // source proposal contributes its independently cloned line items.
       const template = initialProposals[0];
+      let nepProposal = null;
+      let legacyProposal = null;
 
-      // Create NEP proposal
-      const nepProposal = new NewProposalWorkflow({
-        title: `NEP - ${template.title || allocation.division}`,
-        description: `NEP proposal for ${allocation.division}. Ceiling: ₱${allocation.ceilingAmount?.toLocaleString()}`,
-        modelType: 'NEP',
-        fiscalYear: ceiling.fiscalYear,
-        status: 'DRAFT',
-        amount: allocation.ceilingAmount,
-        projectedSubsidy: allocation.ceilingSubsidy,
-        projectedCorporateIncome: allocation.ceilingIncome,
-        region: template.region,
-        division: allocation.division,
-        department: allocation.department,
-        // Clone granular data from template
-        mooeData: template.mooeData,
-        capitalData: template.capitalData,
-        personnelData: template.personnelData,
-        incomeData: template.incomeData,
-        createdBy: userId,
-        createdByName: userName,
-        currentAssigneeRole: 'BUDGET PREPARER',
-        workflowHistory: [{
-          action: 'NEP_CREATED_FROM_INITIAL',
-          fromStatus: 'N/A',
-          toStatus: 'DRAFT',
-          performedBy: userId,
-          performedByName: userName,
-          performedAt: new Date(),
-          comment: `NEP proposal created from Initial. Ceiling set by BRD: ₱${allocation.ceilingAmount?.toLocaleString()}`
-        }]
-      });
-
-      await nepProposal.save();
-      nepProposals.push(nepProposal);
-
-      // Create a Proposal document for legacy compatibility
-      const legacyProposal = new Proposal({
-        title: nepProposal.title,
-        description: nepProposal.description,
-        fiscalYear: String(nepProposal.fiscalYear),
-        budgetType: 'NEP',
-        region: ceiling.region,
-        department: nepProposal.department,
-        division: nepProposal.division,
-        processBy: userName,
-        status: 'Draft',
-        workflowLevel: 'BUDGET PREPARER',
-        currentStep: 'PREPARER_DRAFT',
-        workflowRef: nepProposal._id,
-        proposalId: nepProposal._id,
-        createdBy: userId,
-        createdByName: userName
-      });
-      await legacyProposal.save();
-
-      // Recalculate totals to sync legacy Proposal with cloned granular data
       try {
-        const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
-        await recalculateAndSaveProposalTotals({ proposalId: legacyProposal._id });
-      } catch (calcErr) {
-        console.error(`Warning: Failed to recalculate totals for NEP proposal ${nepProposal._id}:`, calcErr.message);
-      }
+        const alreadyGenerated = await NewProposalWorkflow.findOne({
+          budgetCeilingId: ceiling._id,
+          budgetCeilingAllocationId: allocation._id
+        });
+        if (alreadyGenerated) {
+          allocation.nepProposalId = alreadyGenerated._id;
+          allocation.nepProposalStatus = alreadyGenerated.status;
+          allocation.allocationStatus = 'NEP_Created';
+          errors.push(`Recovered existing NEP reference for ${allocation.division}`);
+          continue;
+        }
 
-      // Update allocation with NEP reference
-      allocation.nepProposalId = nepProposal._id;
-      allocation.nepProposalStatus = 'DRAFT';
-      allocation.allocationStatus = 'NEP_Created';
+        const preparers = await resolvePreparerAssignments({
+          initialProposals,
+          allocation,
+          ceilingRegion: ceiling.region
+        });
+        const primaryPreparer = preparers[0];
+
+        nepProposal = new NewProposalWorkflow({
+          title: `NEP - ${template.title || allocation.division}`,
+          description: `NEP proposal for ${allocation.division}. Ceiling: ₱${allocation.ceilingAmount?.toLocaleString()}`,
+          modelType: 'NEP',
+          fiscalYear: ceiling.fiscalYear,
+          status: 'DRAFT',
+          amount: allocation.ceilingAmount,
+          projectedSubsidy: allocation.ceilingSubsidy,
+          projectedCorporateIncome: allocation.ceilingIncome,
+          region: template.region,
+          division: allocation.division,
+          department: allocation.department,
+          assignmentLevel: template.assignmentLevel,
+          office: template.office,
+          isCentralOffice: template.isCentralOffice,
+          createdBy: userId,
+          createdByName: userName,
+          assignedPreparerUserIds: preparers.map(preparer => preparer.userId),
+          assignedPreparerNames: preparers.map(preparer => preparer.userName),
+          sourceInitialProposalIds: initialProposals.map(proposal => proposal._id),
+          budgetCeilingId: ceiling._id,
+          budgetCeilingAllocationId: allocation._id,
+          currentAssigneeRole: 'BUDGET PREPARER',
+          workflowHistory: [{
+            action: 'NEP_CREATED_FROM_INITIAL',
+            fromStatus: 'N/A',
+            toStatus: 'DRAFT',
+            performedBy: userId,
+            performedByName: userName,
+            performedAt: new Date(),
+            comment: `NEP proposal generated by BRD and assigned to ${preparers.map(preparer => preparer.userName).join(', ')}. Ceiling: ₱${allocation.ceilingAmount?.toLocaleString()}`
+          }]
+        });
+        await nepProposal.save();
+
+        legacyProposal = new Proposal({
+          title: nepProposal.title,
+          description: nepProposal.description,
+          fiscalYear: String(nepProposal.fiscalYear),
+          budgetType: 'NEP',
+          region: ceiling.region,
+          department: nepProposal.department,
+          division: nepProposal.division,
+          processBy: primaryPreparer.userName,
+          status: 'Draft',
+          workflowLevel: 'BUDGET PREPARER',
+          currentStep: 'PREPARER_DRAFT',
+          workflowRef: nepProposal._id,
+          proposalId: nepProposal._id,
+          createdBy: primaryPreparer.userId,
+          createdByName: primaryPreparer.userName,
+          createdByUserId: primaryPreparer.userId
+        });
+        await legacyProposal.save();
+
+        const Region = require('../models/Region');
+        const regionDoc = mongoose.Types.ObjectId.isValid(String(template.region || ''))
+          ? await Region.findById(template.region).lean()
+          : await Region.findOne({
+            $or: [
+              { Region: ceiling.region },
+              { regionName: ceiling.region },
+              { RegionName: ceiling.region },
+              { name: ceiling.region }
+            ]
+          }).lean();
+        const regionName = regionDoc?.Region || regionDoc?.regionName || regionDoc?.RegionName || ceiling.region;
+
+        const cloneCounts = await cloneProposalLineItems({
+          initialProposals,
+          targetWorkflowId: nepProposal._id,
+          targetLegacyProposalId: legacyProposal._id,
+          fiscalYear: ceiling.fiscalYear,
+          regionName,
+          department: allocation.department,
+          division: allocation.division,
+          preparer: primaryPreparer
+        });
+
+        const clonedLineCount = cloneCounts.income + cloneCounts.personnel +
+          cloneCounts.mooe + cloneCounts.capitalOutlay;
+        if (clonedLineCount === 0) {
+          throw new Error('The finalized Initial proposal has no line items to clone');
+        }
+
+        await recalculateAndSaveProposalTotals({ workflowRef: nepProposal._id });
+        nepProposal = await NewProposalWorkflow.findById(nepProposal._id);
+
+        allocation.nepProposalId = nepProposal._id;
+        allocation.nepLegacyProposalId = legacyProposal._id;
+        allocation.nepProposalStatus = 'DRAFT';
+        allocation.allocationStatus = 'NEP_Created';
+        allocation.assignedPreparerUserIds = preparers.map(preparer => preparer.userId);
+        allocation.assignedPreparerNames = preparers.map(preparer => preparer.userName);
+        nepProposals.push(nepProposal);
+      } catch (allocationError) {
+        if (nepProposal?._id) {
+          await cleanupGeneratedNepData({
+            workflowId: nepProposal._id,
+            legacyProposalId: legacyProposal?._id
+          }).catch(cleanupError => {
+            console.error('Failed to clean up partial NEP line-item clone:', cleanupError.message);
+          });
+          if (legacyProposal?._id) await Proposal.findByIdAndDelete(legacyProposal._id);
+          await NewProposalWorkflow.findByIdAndDelete(nepProposal._id);
+        }
+        errors.push(`${allocation.division}: ${allocationError.message}`);
+      }
     }
 
     // Lock the ceiling after generating NEP proposals
-    if (nepProposals.length > 0) {
+    const hasGeneratedNep = ceiling.allocations.some(allocation => allocation.nepProposalId);
+    if (hasGeneratedNep) {
       ceiling.status = 'Locked';
-      ceiling.lockedAt = new Date();
-      ceiling.lockedBy = userId;
-      ceiling.addChangeHistory('NEP_GENERATED', {
-        changedBy: userId,
-        changedByName: userName,
-        remarks: `Generated ${nepProposals.length} NEP proposal(s)`
-      });
+      ceiling.lockedAt = ceiling.lockedAt || new Date();
+      ceiling.lockedBy = ceiling.lockedBy || userId;
+      if (nepProposals.length > 0) {
+        ceiling.addChangeHistory('NEP_GENERATED', {
+          changedBy: userId,
+          changedByName: userName,
+          remarks: `Generated ${nepProposals.length} NEP proposal(s)`
+        });
+      }
     }
 
     await ceiling.save();
@@ -875,4 +1008,3 @@ router.get('/comparison/:fiscalYear/:region', isAuth, async (req, res) => {
 });
 
 module.exports = router;
-

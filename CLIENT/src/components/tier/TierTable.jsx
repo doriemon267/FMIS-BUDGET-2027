@@ -30,6 +30,59 @@ const COL = {
   proposedBudget: 150,
 };
 
+const EMPTY_LIST = Object.freeze([]);
+const MOOE_CATEGORY = 'Maintenance and Other Operating Expenses';
+const getMooeChildLineItemId = (item, rowIndex) =>
+  `${MOOE_CATEGORY}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
+const getMooeParentItemCode = (parentTitle) => `parent-${parentTitle}`;
+const getMooeParentLineItemId = (parentTitle) =>
+  `${MOOE_CATEGORY}-${getMooeParentItemCode(parentTitle)}`;
+
+const getMooeSourceTiers = (item) => {
+  const tier1Properties = [
+    'tier1',
+    'tier_1',
+    'tierOne',
+    'tier_one',
+    't1',
+    'tier1Amount',
+    'tier_1_amount',
+    'subsidyTier1',
+    'subsidy_tier1',
+  ];
+  const tier2Properties = [
+    'tier2',
+    'tier_2',
+    'tierTwo',
+    'tier_two',
+    't2',
+    'tier2Amount',
+    'tier_2_amount',
+    'subsidyTier2',
+    'subsidy_tier2',
+  ];
+  let tier1;
+  let tier2;
+
+  for (const property of tier1Properties) {
+    if (Object.prototype.hasOwnProperty.call(item, property)) {
+      tier1 = Number(item[property]) || 0;
+      break;
+    }
+  }
+  for (const property of tier2Properties) {
+    if (Object.prototype.hasOwnProperty.call(item, property)) {
+      tier2 = Number(item[property]) || 0;
+      break;
+    }
+  }
+
+  return {
+    tier1: tier1 !== undefined ? tier1 : Number(item?.subsidy) || 0,
+    tier2: tier2 !== undefined ? tier2 : 0,
+  };
+};
+
 const formatCurrency = (value) => {
   const num = Number(value);
   if (isNaN(num)) return '₱0.00';
@@ -58,7 +111,7 @@ const sanitizeNumericInput = (str) => {
   return s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '');
 };
 
-const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, descriptionKey, secondaryDescriptionKey, itemTier1 = 0, itemCorporateIncome = 0, disableTier2Balance = false, readOnly = false }) => {
+const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, descriptionKey, secondaryDescriptionKey, descriptionHelper, itemTier1 = 0, itemCorporateIncome = 0, disableTier2Balance = false, independentTierEditing = false, readOnly = false }) => {
   const lineItemId = `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
 
   // While focused: show raw string (no format) so cursor doesn't jump and user can clear to empty
@@ -81,22 +134,26 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
 
   const entered = allTierInputs[lineItemId] || {};
   const orig = getOriginalTiersLocal(item);
-  const baseTier1 = entered.hasOwnProperty('tier1') ? (entered.tier1 === '' ? 0 : Number(entered.tier1)) : (orig.tier1 !== undefined ? orig.tier1 : Number(itemTier1) || 0);
-  const baseTier2 = entered.hasOwnProperty('tier2') ? (entered.tier2 === '' ? 0 : Number(entered.tier2)) : (orig.tier2 !== undefined ? orig.tier2 : 0);
+  const baseTier1 = Object.prototype.hasOwnProperty.call(entered, 'tier1') ? (entered.tier1 === '' ? 0 : Number(entered.tier1)) : (orig.tier1 !== undefined ? orig.tier1 : Number(itemTier1) || 0);
+  const baseTier2 = Object.prototype.hasOwnProperty.call(entered, 'tier2') ? (entered.tier2 === '' ? 0 : Number(entered.tier2)) : (orig.tier2 !== undefined ? orig.tier2 : 0);
   const rowTotal = (orig.total !== undefined && orig.total > 0) ? orig.total : (baseTier1 + baseTier2) || (Number(itemTier1) || 0);
   const displayTier1 = baseTier1;
   const displayTier2 = baseTier2;
 
-  const tier1DisplayFormatted = entered.hasOwnProperty('tier1')
+  const tier1DisplayFormatted = Object.prototype.hasOwnProperty.call(entered, 'tier1')
     ? (entered.tier1 === '' ? '' : formatAmountForInput(entered.tier1))
     : formatAmountForInput(displayTier1) || '0.00';
-  const tier2DisplayFormatted = entered.hasOwnProperty('tier2')
+  const tier2DisplayFormatted = Object.prototype.hasOwnProperty.call(entered, 'tier2')
     ? (entered.tier2 === '' ? '' : formatAmountForInput(entered.tier2))
     : (orig.tier2 !== undefined && orig.tier2 !== '' ? formatAmountForInput(orig.tier2) : '');
 
   const handleTier1Change = (value) => {
     if (readOnly) return;
     const num = value === '' ? 0 : Number(value);
+    if (independentTierEditing) {
+      handleTierInputChange(lineItemId, { tier1: value === '' ? '' : num }, name);
+      return;
+    }
     // When clearing (''), only update that field so user can set back to 0 without value jumping to other field
     if (value === '') {
       handleTierInputChange(lineItemId, { tier1: '' }, name);
@@ -108,7 +165,7 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   const handleTier2Change = (value) => {
     if (readOnly) return;
     const num = value === '' ? 0 : Number(value);
-    if (disableTier2Balance) {
+    if (independentTierEditing || disableTier2Balance) {
       handleTierInputChange(lineItemId, { tier2: value === '' ? '' : num }, name);
       return;
     }
@@ -127,13 +184,13 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   const parsedT2Raw = tier2Focused ? parseAmountFromInput(tier2Raw) : null;
   const t1ForTotal = tier1Focused ? (parsedT1Raw === '' ? 0 : Number(parsedT1Raw)) : displayTier1;
   const t2ForTotal = tier2Focused ? (parsedT2Raw === '' ? 0 : Number(parsedT2Raw)) : displayTier2;
-  const totalValueLive = (entered.hasOwnProperty('tier1') || entered.hasOwnProperty('tier2')) 
+  const totalValueLive = (Object.prototype.hasOwnProperty.call(entered, 'tier1') || Object.prototype.hasOwnProperty.call(entered, 'tier2'))
     ? (t1ForTotal + t2ForTotal) 
     : (orig.total !== undefined && orig.total !== 0 ? orig.total : t1ForTotal + t2ForTotal);
 
   const onTier1Focus = () => {
     setTier1Focused(true);
-    const fromEntered = entered.hasOwnProperty('tier1');
+    const fromEntered = Object.prototype.hasOwnProperty.call(entered, 'tier1');
     const raw = fromEntered
       ? (entered.tier1 === '' ? '' : String(entered.tier1))
       : (displayTier1 === 0 ? '' : String(displayTier1));
@@ -141,7 +198,7 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   };
   const onTier2Focus = () => {
     setTier2Focused(true);
-    const fromEntered = entered.hasOwnProperty('tier2');
+    const fromEntered = Object.prototype.hasOwnProperty.call(entered, 'tier2');
     const raw = fromEntered
       ? (entered.tier2 === '' ? '' : String(entered.tier2))
       : (displayTier2 === 0 ? '' : String(displayTier2));
@@ -167,7 +224,7 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   // Highlight row when current values differ from original (indicator for "changed")
   const origT1 = orig.tier1 !== undefined ? Number(orig.tier1) : (Number(itemTier1) || 0);
   const origT2 = orig.tier2 !== undefined ? Number(orig.tier2) : 0;
-  const hasEntry = entered.hasOwnProperty('tier1') || entered.hasOwnProperty('tier2');
+  const hasEntry = Object.prototype.hasOwnProperty.call(entered, 'tier1') || Object.prototype.hasOwnProperty.call(entered, 'tier2');
   const differs = (a, b) => Math.round((Number(a) || 0) * 100) !== Math.round((Number(b) || 0) * 100);
   const isChanged = hasEntry && (differs(baseTier1, origT1) || differs(baseTier2, origT2));
 
@@ -176,7 +233,14 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
       sx={isChanged ? { backgroundColor: 'warning.light' } : undefined}
       title={isChanged ? 'Modified from original' : undefined}
     >
-      <TableCell sx={{ paddingLeft: '32px', pl: 4, verticalAlign: 'middle' }}>{item[descriptionKey] || item[secondaryDescriptionKey] || 'No Description'}</TableCell>
+      <TableCell sx={{ paddingLeft: '32px', pl: 4, verticalAlign: 'middle' }}>
+        {item[descriptionKey] || item[secondaryDescriptionKey] || 'No Description'}
+        {descriptionHelper && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+            {descriptionHelper}
+          </Typography>
+        )}
+      </TableCell>
       <TableCell align="right" sx={{ width: COL.corporateIncome, minWidth: COL.corporateIncome }}>{formatCurrency(Number(itemCorporateIncome) || 0)}</TableCell>
       <TableCell align="right" sx={cellSx}>
         <TextField
@@ -191,6 +255,8 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
           onChange={readOnly ? undefined : (e) => {
             const v = sanitizeNumericInput(e.target.value);
             setTier1Raw(v);
+            const parsed = parseAmountFromInput(v);
+            handleTier1Change(parsed === '' ? '' : parsed);
           }}
           sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
         />
@@ -208,6 +274,8 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
           onChange={readOnly ? undefined : (e) => {
             const v = sanitizeNumericInput(e.target.value);
             setTier2Raw(v);
+            const parsed = parseAmountFromInput(v);
+            handleTier2Change(parsed === '' ? '' : parsed);
           }}
           sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
         />
@@ -218,7 +286,7 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   );
 };
 
-const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange, totals, descriptionKey, secondaryDescriptionKey, itemTier1Map = {}, corporateIncome = 0, getItemCorporateIncome, readOnly = false }) => {
+const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange, totals, descriptionKey, secondaryDescriptionKey, itemTier1Map = {}, corporateIncome = 0, getItemCorporateIncome, independentTierEditing = false, readOnly = false }) => {
   const [open, setOpen] = useState(false);
   const getLineItemId = (n, i, idx) => `${n}-${i.uacsCode || i._id || i.key || i.name || idx}`;
 
@@ -264,6 +332,7 @@ const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange,
                       itemTier1={itemTier1Map[getLineItemId(name, item, idx)] ?? 0}
                       itemCorporateIncome={getItemCorporateIncome ? getItemCorporateIncome(item) : 0}
                       disableTier2Balance={name === 'Personnel Services'}
+                      independentTierEditing={independentTierEditing}
                       readOnly={readOnly}
                     />
                   ))}
@@ -277,7 +346,7 @@ const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange,
   );
 };
 
-function TierTable({ fiscalYear, region, regionName, department, division, departmentName, divisionName, onTierDataChange, onVersionChange, readOnly = false }) {
+function TierTable({ fiscalYear, region, regionName, department, division, departmentName, divisionName, onTierDataChange, onVersionChange, independentTierEditing = false, readOnly = false }) {
   const [tierInputs, setTierInputs] = useState({});
   const [mooeOpen, setMooeOpen] = useState(false);
   const [incomeOpen, setIncomeOpen] = useState(false);
@@ -331,7 +400,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     const version = savedItemsQuery.data?.version;
     // Report version to parent so it can display which version's data is currently loaded
     if (onVersionChange && version != null) {
-      onVersionChange(version);
+      const normalizedVersion = Number(version);
+      onVersionChange(Number.isFinite(normalizedVersion) && normalizedVersion > 0 ? normalizedVersion : null);
     }
     if (!Array.isArray(items) || items.length === 0) {
       if (savedItemsQuery.isFetched) {
@@ -340,7 +410,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
           lastSyncedItemsRef.current = emptySig;
           initializedScopeRef.current = scopeKey;
           setTierInputs({});
-          if (onVersionChange) onVersionChange(0);
+          if (onVersionChange) onVersionChange(null);
         }
       }
       return;
@@ -449,10 +519,9 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
   // Tier data is available once proposal is at BRD level (Analyst/Officer/Manager) or finalized
   const hasTierData = finalizedData?.hasTierData === true || finalizedData?.hasFinalized === true;
   const projectedCorporateIncome = Number(finalizedData?.projectedCorporateIncome) || 0;
-  const projectedSubsidyTier1 = Number(finalizedData?.projectedSubsidy) || 0;
 
-  const personnelData = results[0].data || [];
-  const rawMooeData = results[1].data || [];
+  const personnelData = results[0].data || EMPTY_LIST;
+  const rawMooeData = results[1].data || EMPTY_LIST;
   const mooeData = useMemo(() => {
     const map = new Map();
     rawMooeData.forEach(item => {
@@ -474,7 +543,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     return Array.from(map.values());
   }, [rawMooeData]);
 
-  const rawCapitalOutlayData = results[2].data || [];
+  const rawCapitalOutlayData = results[2].data || EMPTY_LIST;
   const capitalOutlayData = useMemo(() => {
     const map = new Map();
     rawCapitalOutlayData.forEach(item => {
@@ -510,8 +579,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     });
     return Array.from(map.values());
   }, [rawCapitalOutlayData]);
-  const incomeData = results[3].data || [];
-  const chargedToIncomePersonnel = results[4].data || [];
+  const incomeData = results[3].data || EMPTY_LIST;
+  const chargedToIncomePersonnel = results[4].data || EMPTY_LIST;
 
   // Group income by category for Projected Corporate Income sub-list
   const groupedIncomeData = useMemo(() => {
@@ -529,7 +598,9 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
 
   const groupedMooeData = useMemo(() => {
     return mooeData.reduce((acc, item) => {
-      const key = item.sublineItem;
+      const key = String(
+        item.sublineItem || item.parentAccount || item.accountingTitle || 'Other MOOE'
+      ).trim();
       if (!acc[key]) {
         acc[key] = [];
       }
@@ -537,6 +608,80 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       return acc;
     }, {});
   }, [mooeData]);
+
+  const mooeParentSummaries = useMemo(() => {
+    return Object.entries(groupedMooeData).map(([parentTitle, childItems]) => {
+      let originalTier1 = 0;
+      let originalTier2 = 0;
+      let legacyTier1 = 0;
+      let legacyTier2 = 0;
+      let corporateIncome = 0;
+
+      childItems.forEach((item, rowIndex) => {
+        const source = getMooeSourceTiers(item);
+        const childInput = tierInputs[getMooeChildLineItemId(item, rowIndex)] || {};
+        const childTier1 = Object.prototype.hasOwnProperty.call(childInput, 'tier1')
+          ? childInput.tier1 === ''
+            ? 0
+            : Number(childInput.tier1) || 0
+          : source.tier1;
+        const childTier2 = Object.prototype.hasOwnProperty.call(childInput, 'tier2')
+          ? childInput.tier2 === ''
+            ? 0
+            : Number(childInput.tier2) || 0
+          : source.tier2;
+
+        originalTier1 += source.tier1;
+        originalTier2 += source.tier2;
+        legacyTier1 += childTier1;
+        legacyTier2 += childTier2;
+        corporateIncome += Number(item?.income) || 0;
+      });
+
+      const lineItemId = getMooeParentLineItemId(parentTitle);
+      const parentInput = tierInputs[lineItemId] || {};
+      const tier1 = Object.prototype.hasOwnProperty.call(parentInput, 'tier1')
+        ? parentInput.tier1 === ''
+          ? 0
+          : Number(parentInput.tier1) || 0
+        : legacyTier1;
+      const tier2 = Object.prototype.hasOwnProperty.call(parentInput, 'tier2')
+        ? parentInput.tier2 === ''
+          ? 0
+          : Number(parentInput.tier2) || 0
+        : legacyTier2;
+
+      return {
+        parentTitle,
+        childItems,
+        lineItemId,
+        originalTier1,
+        originalTier2,
+        tier1,
+        tier2,
+        corporateIncome,
+        parentItem: {
+          uacsCode: getMooeParentItemCode(parentTitle),
+          accountingTitle: parentTitle,
+          tier1: originalTier1,
+          tier2: originalTier2,
+        },
+      };
+    });
+  }, [groupedMooeData, tierInputs]);
+
+  const mooeParentTierInputs = useMemo(() => {
+    const parentInputs = { ...tierInputs };
+    mooeParentSummaries.forEach((summary) => {
+      parentInputs[summary.lineItemId] = {
+        ...parentInputs[summary.lineItemId],
+        tier1: summary.tier1,
+        tier2: summary.tier2,
+        category: MOOE_CATEGORY,
+      };
+    });
+    return parentInputs;
+  }, [tierInputs, mooeParentSummaries]);
 
   // All MOOE items for expand content (so expand always shows rows; user can edit zero values too).
   const groupedMooeDataForExpand = useMemo(() => {
@@ -546,35 +691,6 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     });
     return result;
   }, [groupedMooeData]);
-
-  // MOOE: only items with value (tier1 + tier2 > 0) for display — "huwag isali ang mga walang value". Keeps { item, originalIdx } so lineItemId matches tierInputs.
-  const filteredGroupedMooeData = useMemo(() => {
-    const getLineItemId = (name, item, rowIndex) => `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
-    const getOrig = (i) => {
-      const t1Props = ['tier1','tier_1','tierOne','t1'];
-      const t2Props = ['tier2','tier_2','tierTwo','t2'];
-      let o1, o2;
-      for (const p of t1Props) if (Object.prototype.hasOwnProperty.call(i, p)) { o1 = Number(i[p]) || 0; break; }
-      for (const p of t2Props) if (Object.prototype.hasOwnProperty.call(i, p)) { o2 = Number(i[p]) || 0; break; }
-      if (o1 !== undefined || o2 !== undefined) return { tier1: o1 || 0, tier2: o2 || 0 };
-      return { tier1: 0, tier2: 0 };
-    };
-    const result = {};
-    Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
-      const kept = sublineItems
-        .map((item, idx) => ({ item, originalIdx: idx }))
-        .filter(({ item, originalIdx }) => {
-          const id = getLineItemId('Maintenance and Other Operating Expenses', item, originalIdx);
-          const entered = tierInputs[id] || {};
-          const orig = getOrig(item);
-          const t1 = entered.hasOwnProperty('tier1') ? (entered.tier1 === '' ? 0 : Number(entered.tier1)) : orig.tier1;
-          const t2 = entered.hasOwnProperty('tier2') ? (entered.tier2 === '' ? 0 : Number(entered.tier2)) : orig.tier2;
-          return (Number(t1) || 0) + (Number(t2) || 0) > 0;
-        });
-      if (kept.length > 0) result[subline] = kept;
-    });
-    return result;
-  }, [groupedMooeData, tierInputs]);
 
   // Capital Outlay: group by category (parent section, e.g. "Websites"); under it show subline rows (Websites, Operating System)
   const groupedCapitalOutlayByCategory = useMemo(() => {
@@ -629,7 +745,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     }));
   }, []);
 
-  const { sourcesOfFunds, usesOfFunds, surplusDeficit, itemTier1Map, usesCorporateIncome, totalUsesCorporateIncome, categoryTotalsCapitalOutlay = {} } = useMemo(() => {
+  const { sourcesOfFunds, usesOfFunds, surplusDeficit, itemTier1Map, usesCorporateIncome } = useMemo(() => {
     const uses = {
       'Personnel Services': { tier1: 0, tier2: 0, total: 0 },
       'Maintenance and Other Operating Expenses': { tier1: 0, tier2: 0, total: 0 },
@@ -700,8 +816,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       const entered = tierInputs[id] || {};
       const orig = getOriginalTiers(item);
 
-      const enteredTier1 = entered.hasOwnProperty('tier1') ? entered.tier1 : undefined;
-      const enteredTier2 = entered.hasOwnProperty('tier2') ? entered.tier2 : undefined;
+      const enteredTier1 = Object.prototype.hasOwnProperty.call(entered, 'tier1') ? entered.tier1 : undefined;
+      const enteredTier2 = Object.prototype.hasOwnProperty.call(entered, 'tier2') ? entered.tier2 : undefined;
 
       // When item has no tier1/tier2 in API, use itemTier1Map (subsidy / proportional) so Tier 1 is not 0
       const fallbackTier1 = itemTier1Map[id] ?? 0;
@@ -747,18 +863,27 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       uses['Personnel Services'].total += displayTotal;
     });
 
-    // MOOE - only include items with value (tier1 + tier2 > 0) in totals
-    const mooeParent = 'Maintenance and Other Operating Expenses';
+    // NEP uses one editable aggregate per MOOE parent account. Regular Tier keeps
+    // the existing accounting-title-level calculation.
+    const mooeParent = MOOE_CATEGORY;
     if (!uses[mooeParent]) uses[mooeParent] = { tier1: 0, tier2: 0, total: 0 };
-    Object.values(groupedMooeData).forEach(group => {
-      group.forEach(item => {
-        const { displayTier1, displayTier2, displayTotal } = processItem(mooeParent, item);
-        if (displayTotal <= 0) return;
-        uses[mooeParent].tier1 += displayTier1;
-        uses[mooeParent].tier2 += displayTier2;
-        uses[mooeParent].total += displayTotal;
+    if (independentTierEditing) {
+      mooeParentSummaries.forEach((summary) => {
+        uses[mooeParent].tier1 += summary.tier1;
+        uses[mooeParent].tier2 += summary.tier2;
+        uses[mooeParent].total += summary.tier1 + summary.tier2;
       });
-    });
+    } else {
+      Object.values(groupedMooeData).forEach(group => {
+        group.forEach(item => {
+          const { displayTier1, displayTier2, displayTotal } = processItem(mooeParent, item);
+          if (displayTotal <= 0) return;
+          uses[mooeParent].tier1 += displayTier1;
+          uses[mooeParent].tier2 += displayTier2;
+          uses[mooeParent].total += displayTotal;
+        });
+      });
+    }
 
     // Capital Outlay (and per-category totals for itemized display)
     const capitalParent = 'Capital Outlay';
@@ -778,13 +903,11 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
 
     const totalUsesTier1 = Object.values(uses).reduce((s, u) => s + (u.tier1 || 0), 0);
     const totalUsesTier2 = Object.values(uses).reduce((s, u) => s + (u.tier2 || 0), 0);
-    const totalUses = Object.values(uses).reduce((s, u) => s + (u.total || 0), 0);
     const subsidyTotal = totalUsesTier1 + totalUsesTier2;
     // PROJECTED CORPORATE INCOME from finalized (read-only). PROPOSED BUDGET = PROJECTED CORPORATE INCOME + TOTAL.
     const corporateIncome = projectedCorporateIncome;
     const totalSources = corporateIncome + subsidyTotal;
     const proposedBudget = totalSources;
-    const surplus = totalSources - totalUses;
 
     return {
       itemTier1Map,
@@ -813,7 +936,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       surplusDeficit: totalSources - (totalUsesCorporateIncome + subsidyTotal),
       categoryTotalsCapitalOutlay,
     };
-  }, [tierInputs, projectedCorporateIncome, personnelData, mooeData, capitalOutlayData, groupedMooeData, chargedToIncomePersonnel]);
+  }, [tierInputs, projectedCorporateIncome, personnelItems, mooeData, capitalOutlayData, groupedMooeData, chargedToIncomePersonnel, independentTierEditing, mooeParentSummaries]);
 
   const allData = useMemo(() => {
     const displayedItems = {};
@@ -835,8 +958,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
         return { tier1: undefined, tier2: undefined, total: 0 };
       })(item);
 
-      const enteredTier1 = entered.hasOwnProperty('tier1') ? entered.tier1 : undefined;
-      const enteredTier2 = entered.hasOwnProperty('tier2') ? entered.tier2 : undefined;
+      const enteredTier1 = Object.prototype.hasOwnProperty.call(entered, 'tier1') ? entered.tier1 : undefined;
+      const enteredTier2 = Object.prototype.hasOwnProperty.call(entered, 'tier2') ? entered.tier2 : undefined;
 
       const fallbackTier1 = itemTier1Map[id] ?? 0;
       const displayTier1 = enteredTier1 !== undefined ? (enteredTier1 === '' ? 0 : Number(enteredTier1)) : (orig.tier1 !== undefined ? orig.tier1 : fallbackTier1);
@@ -849,10 +972,24 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     // Personnel: same order as CollapsibleUsesRow (personnelItems.map) so lineItemId matches
     personnelItems.forEach((item, idx) => processAndCollect('Personnel Services', item, idx));
 
-    // MOOE: only include items with value (huwag isali ang mga walang value)
-    Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
-      sublineItems.forEach((item, idx) => processAndCollect('Maintenance and Other Operating Expenses', item, idx, { onlyIfHasValue: true }));
-    });
+    if (independentTierEditing) {
+      // In NEP mode save only the parent-account aggregates. Keep zero-value
+      // parents so a preparer can intentionally clear a former allocation.
+      mooeParentSummaries.forEach((summary) => {
+        displayedItems[summary.lineItemId] = {
+          tier1: summary.tier1,
+          tier2: summary.tier2,
+          category: MOOE_CATEGORY,
+        };
+      });
+    } else {
+      // Regular Tier keeps accounting-title-level entries with a positive value.
+      Object.entries(groupedMooeData).forEach(([, sublineItems]) => {
+        sublineItems.forEach((item, idx) =>
+          processAndCollect(MOOE_CATEGORY, item, idx, { onlyIfHasValue: true })
+        );
+      });
+    }
 
     // Capital Outlay: same as table (capitalOutlayData.map(item, idx))
     capitalOutlayData.forEach((item, idx) => processAndCollect('Capital Outlay', item, idx));
@@ -861,7 +998,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
         items: tierInputs,
         displayedItems,
     };
-  }, [tierInputs, personnelItems, groupedMooeData, capitalOutlayData, itemTier1Map]);
+  }, [tierInputs, personnelItems, groupedMooeData, capitalOutlayData, itemTier1Map, independentTierEditing, mooeParentSummaries]);
 
   // Build line items for report (PDF/Excel): use same getLineItemId(name, item, rowIndex) as allData so keys match
   const reportLineItems = useMemo(() => {
@@ -872,8 +1009,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     personnelItems.forEach((item, idx) => {
       const id = getLineItemId('Personnel Services', item, idx);
       const d = disp[id] || {};
-      const tier1 = Number(d.tier1) ?? 0;
-      const tier2 = Number(d.tier2) ?? 0;
+      const tier1 = Number(d.tier1) || 0;
+      const tier2 = Number(d.tier2) || 0;
       const total = tier1 + tier2;
       const totalPS = usesOfFunds['Personnel Services']?.total || 0;
       const corpPS = usesCorporateIncome?.['Personnel Services'] || 0;
@@ -881,6 +1018,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       const corporateIncome = totalPS > 0 ? (itemAmount / totalPS) * corpPS : 0;
       const catName = item.categoryName || item.category?.name || 'Personnel Services';
       rows.push({
+        lineItemId: id,
         category: 'Personnel Services',
         subCategory: catName,
         description: item.name || item.employeeFullName || '—',
@@ -891,26 +1029,44 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       });
     });
 
-    // MOOE: only include line items with total value > 0; same iteration as table (per-group idx)
-    Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
-      sublineItems.forEach((item, idx) => {
-        const id = getLineItemId('Maintenance and Other Operating Expenses', item, idx);
-        const d = disp[id] || {};
-        const tier1 = Number(d.tier1) || 0;
-        const tier2 = Number(d.tier2) || 0;
-        const total = tier1 + tier2;
-        if (total <= 0) return;
+    if (independentTierEditing) {
+      mooeParentSummaries.forEach((summary) => {
+        if (summary.tier1 + summary.tier2 <= 0) return;
         rows.push({
-          category: 'Maintenance and Other Operating Expenses',
-          subCategory: item.sublineItem || subline || '—',
-          description: item.accountingTitle || item.sublineItem || item.uacsCode || '—',
-          corporateIncome: Number(item?.income) || 0,
-          tier1,
-          tier2,
-          total,
+          lineItemId: summary.lineItemId,
+          category: MOOE_CATEGORY,
+          subCategory: summary.parentTitle,
+          description: summary.parentTitle,
+          referenceNote: `${summary.childItems.length} accounting title${summary.childItems.length === 1 ? '' : 's'} consolidated`,
+          corporateIncome: summary.corporateIncome,
+          tier1: summary.tier1,
+          tier2: summary.tier2,
+          total: summary.tier1 + summary.tier2,
         });
       });
-    });
+    } else {
+      // Regular Tier reports the accounting-title-level MOOE rows.
+      Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
+        sublineItems.forEach((item, idx) => {
+          const id = getLineItemId(MOOE_CATEGORY, item, idx);
+          const d = disp[id] || {};
+          const tier1 = Number(d.tier1) || 0;
+          const tier2 = Number(d.tier2) || 0;
+          const total = tier1 + tier2;
+          if (total <= 0) return;
+          rows.push({
+            lineItemId: id,
+            category: MOOE_CATEGORY,
+            subCategory: item.sublineItem || subline || '—',
+            description: item.accountingTitle || item.sublineItem || item.uacsCode || '—',
+            corporateIncome: Number(item?.income) || 0,
+            tier1,
+            tier2,
+            total,
+          });
+        });
+      });
+    }
 
     // Capital Outlay: only include line items with total value > 0
     capitalOutlayData.forEach((item, idx) => {
@@ -922,6 +1078,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       if (total <= 0) return;
       const catTitle = item.categoryTitleFromGroup || item.category?.categoryName || item.sublineItem || '—';
       rows.push({
+        lineItemId: id,
         category: 'Capital Outlay',
         subCategory: catTitle,
         description: catTitle,
@@ -933,7 +1090,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     });
 
     return rows;
-  }, [personnelItems, groupedMooeData, capitalOutlayData, usesCorporateIncome, usesOfFunds, allData.displayedItems]);
+  }, [personnelItems, groupedMooeData, capitalOutlayData, usesCorporateIncome, usesOfFunds, allData.displayedItems, independentTierEditing, mooeParentSummaries]);
 
   const lastTierDataJsonRef = useRef(null);
   useEffect(() => {
@@ -1120,6 +1277,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
               descriptionKey="name"
               itemTier1Map={itemTier1Map || {}}
               corporateIncome={usesCorporateIncome?.['Personnel Services'] ?? 0}
+              independentTierEditing={independentTierEditing}
               readOnly={readOnly}
               getItemCorporateIncome={(item) => {
                 // Distribute corporate income proportionally based on item amount
@@ -1169,27 +1327,59 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
                             <col style={{ width: COL.proposedBudget }} />
                           </colgroup>
                           <TableBody>
-                            {Object.entries(groupedMooeDataForExpand).map(([subline, entries]) => (
-                              <React.Fragment key={subline}>
+                            {independentTierEditing ? (
+                              <>
                                 <TableRow>
-                                  <TableCell colSpan={6} style={{ fontWeight: 'bold' }}>{subline}</TableCell>
+                                  <TableCell colSpan={6}>
+                                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.5 }}>
+                                      <InfoOutlinedIcon color="primary" fontSize="small" sx={{ mt: 0.2 }} />
+                                      <Typography variant="body2" color="text.secondary">
+                                        NEP adjustment uses parent MOOE accounts. Each amount below already
+                                        consolidates all accounting titles under that parent.
+                                      </Typography>
+                                    </Box>
+                                  </TableCell>
                                 </TableRow>
-                                {entries.map(({ item, originalIdx }) => (
+                                {mooeParentSummaries.map((summary, parentIndex) => (
                                   <SubRow
-                                    key={item.uacsCode || item._id || originalIdx}
-                                    rowIndex={originalIdx}
-                                    item={item}
-                                    name="Maintenance and Other Operating Expenses"
-                                    allTierInputs={tierInputs}
+                                    key={summary.lineItemId}
+                                    rowIndex={parentIndex}
+                                    item={summary.parentItem}
+                                    name={MOOE_CATEGORY}
+                                    allTierInputs={mooeParentTierInputs}
                                     handleTierInputChange={handleTierInputChange}
                                     descriptionKey="accountingTitle"
-                                    itemTier1={(itemTier1Map || {})[`Maintenance and Other Operating Expenses-${item.uacsCode || item._id || item.key || item.name || originalIdx}`] ?? 0}
-                                    itemCorporateIncome={Number(item?.income) || 0}
+                                    descriptionHelper={`${summary.childItems.length} accounting title${summary.childItems.length === 1 ? '' : 's'} consolidated`}
+                                    itemCorporateIncome={summary.corporateIncome}
+                                    independentTierEditing
                                     readOnly={readOnly}
                                   />
                                 ))}
-                              </React.Fragment>
-                            ))}
+                              </>
+                            ) : (
+                              Object.entries(groupedMooeDataForExpand).map(([subline, entries]) => (
+                                <React.Fragment key={subline}>
+                                  <TableRow>
+                                    <TableCell colSpan={6} style={{ fontWeight: 'bold' }}>{subline}</TableCell>
+                                  </TableRow>
+                                  {entries.map(({ item, originalIdx }) => (
+                                    <SubRow
+                                      key={item.uacsCode || item._id || originalIdx}
+                                      rowIndex={originalIdx}
+                                      item={item}
+                                      name={MOOE_CATEGORY}
+                                      allTierInputs={tierInputs}
+                                      handleTierInputChange={handleTierInputChange}
+                                      descriptionKey="accountingTitle"
+                                      itemTier1={(itemTier1Map || {})[getMooeChildLineItemId(item, originalIdx)] ?? 0}
+                                      itemCorporateIncome={Number(item?.income) || 0}
+                                      independentTierEditing={independentTierEditing}
+                                      readOnly={readOnly}
+                                    />
+                                  ))}
+                                </React.Fragment>
+                              ))
+                            )}
                           </TableBody>
                         </Table>
                       )}
@@ -1245,6 +1435,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
                                       secondaryDescriptionKey="accountingTitle"
                                       itemTier1={itemTier1Map[`Capital Outlay-${item.uacsCode || item._id || item.key || item.name || originalIdx}`] ?? 0}
                                       itemCorporateIncome={Number(item?.income) || 0}
+                                      independentTierEditing={independentTierEditing}
                                       readOnly={readOnly}
                                     />
                                   ))}
