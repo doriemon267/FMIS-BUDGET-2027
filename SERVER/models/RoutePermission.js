@@ -32,7 +32,7 @@ const routePermissionSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-    /** Array of workflow role strings. User must have AT LEAST ONE. Empty = no role check */
+    /** Array of workflow role strings. User must have AT LEAST ONE. Protected Settings routes fail closed when empty. */
     requiredWorkflowRoles: {
       type: [String],
       default: [],

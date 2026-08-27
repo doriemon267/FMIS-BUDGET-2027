@@ -35,6 +35,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useProposalCalculations } from "../../hooks/useProposalCalculations";
 import ProposalVersionHistoryDialog from "../../../../components/myproposal/ProposalVersionHistoryDialog";
 import { WORKFLOW_STATUS_UI_METADATA } from "../../../../constants/workflowConstants";
+import {
+  canAccessNepTierAdjustment,
+  getProposalBudgetType,
+  isProposalInActiveCycle,
+} from "../../hooks/useProposalPermissions";
 
 // Lazy-loaded or imported table components
 import IncomeTable from "../tables/IncomeTable";
@@ -109,6 +114,8 @@ const ProposalDetailsDialog = ({
   hasLock,
   showAllRegions,
   fetchProposals,
+  activeSettings,
+  ensureProposalMatchesActiveCycle,
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -122,6 +129,56 @@ const ProposalDetailsDialog = ({
 
   const headerBg = theme.palette.mode === "dark" ? "#0b2413" : "#2d5016";
   const titleColor = theme.palette.mode === "dark" ? "#a5d6a7" : "#2d5016";
+  const isNepProposal = getProposalBudgetType(selectedProposal) === "NEP";
+  const isActiveProposalCycle = isProposalInActiveCycle(
+    selectedProposal,
+    activeSettings
+  );
+  const canOpenNepTier = canAccessNepTierAdjustment(
+    selectedProposal,
+    activeSettings,
+    currentUser?.Roles
+  );
+
+  const handleOpenNepTierAdjustment = async () => {
+    if (!canOpenNepTier || !selectedProposal) return;
+
+    // Revalidate immediately before navigation so a dialog that was left open
+    // cannot enter Tier after the active model/FY has changed.
+    if (!(await ensureProposalMatchesActiveCycle(selectedProposal))) return;
+
+    const tierParams = new URLSearchParams();
+    if (selectedProposal.fiscalYear != null) {
+      tierParams.set("fiscalYear", String(selectedProposal.fiscalYear));
+    }
+    if (selectedProposal.region) {
+      const region = selectedProposal.region;
+      const regionValue =
+        region && typeof region === "object"
+          ? region.RegionName ||
+            region.Region ||
+            region.regionName ||
+            region.region ||
+            region.name ||
+            ""
+          : String(region || "");
+      tierParams.set("region", regionValue);
+    }
+    if (selectedProposal.department) {
+      tierParams.set("department", String(selectedProposal.department));
+    }
+    if (selectedProposal.division || selectedProposal.responsibilityCenter) {
+      tierParams.set(
+        "division",
+        String(selectedProposal.division || selectedProposal.responsibilityCenter)
+      );
+    }
+    if (selectedProposal._id) {
+      tierParams.set("proposalId", String(selectedProposal._id));
+    }
+    tierParams.set("budgetType", "NEP");
+    navigate(`/tier?${tierParams.toString()}`);
+  };
 
   const handleDialogClose = () => {
     if (changedItems.size > 0) {
@@ -452,102 +509,51 @@ const ProposalDetailsDialog = ({
                 </Grid>
 
                 <Grid item xs={12}>
-                  <NEPCeilingSummary proposal={selectedProposal} />
+                  <NEPCeilingSummary
+                    proposal={selectedProposal}
+                    readOnly
+                    isActiveCycle={isActiveProposalCycle}
+                  />
                 </Grid>
 
-                {(() => {
-                  const st = selectedProposal?.status;
-                  const isNep =
-                    String(selectedProposal?.modelType || selectedProposal?.budgetType || "")
-                      .trim()
-                      .toUpperCase() === "NEP";
-                  const brdOrFinal = [
-                    "FORWARDED_TO_BRD_ANALYST",
-                    "Forwarded to Budget/Planning Analyst",
-                    "FORWARDED_TO_BRD_OFFICER",
-                    "Forwarded to Budget Officer",
-                    "FORWARDED_TO_BRD_MANAGER",
-                    "Forwarded to Overall Budget Approver",
-                    "Forwarded to Manager",
-                    "FINALIZED",
-                    "Finalized",
-                  ].some((s) => String(st) === s);
-                  const isBRD = currentUser?.Roles?.some((r) =>
-                    [
-                      "BUDGET_PLANNING_ANALYST",
-                      "BUDGET PLANNING ANALYST",
-                      "BUDGET_OFFICER",
-                      "BUDGET OFFICER",
-                      "BUDGET_MANAGER",
-                      "BUDGET MANAGER",
-                      "SUPER_ADMIN",
-                      "SUPER ADMIN",
-                    ].includes(String(r))
-                  );
-
-                  const isPreparer = currentUser?.Roles?.some((r) =>
-                    ["BUDGET PREPARER", "BUDGET_PREPARER"].includes(String(r).toUpperCase())
-                  );
-
-                  const showTierButton =
-                    (brdOrFinal && (isBRD || isPreparer)) || (isNep && isPreparer);
-
-                  if (!showTierButton) return null;
-                  const tierParams = new URLSearchParams();
-                  if (selectedProposal?.fiscalYear != null)
-                    tierParams.set("fiscalYear", String(selectedProposal.fiscalYear));
-                  if (selectedProposal?.region) {
-                    const regRaw = selectedProposal.region;
-                    const regStr =
-                      regRaw && typeof regRaw === "object"
-                        ? regRaw.RegionName ||
-                          regRaw.Region ||
-                          regRaw.regionName ||
-                          regRaw.region ||
-                          regRaw.name ||
-                          ""
-                        : String(regRaw || "");
-                    tierParams.set("region", regStr);
-                  }
-                  if (selectedProposal?.department)
-                    tierParams.set("department", String(selectedProposal.department));
-                  if (selectedProposal?.division || selectedProposal?.responsibilityCenter)
-                    tierParams.set(
-                      "division",
-                      String(selectedProposal.division || selectedProposal.responsibilityCenter)
-                    );
-                  if (selectedProposal?._id)
-                    tierParams.set("proposalId", String(selectedProposal._id));
-                  if (isNep || brdOrFinal) tierParams.set("budgetType", "NEP");
-                  return (
-                    <Grid item xs={12}>
-                      <Alert severity="info" sx={{ mt: 1 }}>
-                        {isNep ? (
-                          <>
-                            This is an <strong>NEP proposal</strong>. You can adjust the{" "}
-                            <strong>Tier</strong> (Tier 1 / Tier 2) to match the BRD ceiling
-                            before submitting.
-                          </>
-                        ) : (
-                          <>
-                            For this proposal&apos;s scope, you can fill or update{" "}
-                            <strong>Tier</strong> (Tier 1 / Tier 2). The Tier you save is
-                            what gets passed to Budget Officer until Budget Manager
-                            finalizes.
-                          </>
-                        )}
+                {canOpenNepTier && (
+                  <Grid item xs={12}>
+                    <Alert
+                      severity="info"
+                      action={
                         <Button
                           size="small"
                           variant="contained"
-                          sx={{ ml: 2, mt: 0.5 }}
-                          onClick={() => navigate(`/tier?${tierParams.toString()}`)}
+                          onClick={handleOpenNepTierAdjustment}
+                          sx={{
+                            bgcolor: headerBg,
+                            whiteSpace: "nowrap",
+                            "&:hover": {
+                              bgcolor:
+                                theme.palette.mode === "dark" ? "#14331d" : "#1e3a0f",
+                            },
+                          }}
                         >
-                          Open Tier
+                          NEP Tier Adjustment
                         </Button>
-                      </Alert>
-                    </Grid>
-                  );
-                })()}
+                      }
+                      sx={{ mt: 1, alignItems: "center" }}
+                    >
+                      Adjust the Tier 1 and Tier 2 allocation to match the approved BRD
+                      ceiling before submitting this NEP proposal.
+                    </Alert>
+                  </Grid>
+                )}
+
+                {isNepProposal && !isActiveProposalCycle && (
+                  <Grid item xs={12}>
+                    <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
+                      NEP Tier Adjustment is read-only for this proposal. It becomes
+                      available when NEP FY {selectedProposal?.fiscalYear || "—"} is the
+                      active budget cycle.
+                    </Alert>
+                  </Grid>
+                )}
 
                 <Grid item xs={12} md={6}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>

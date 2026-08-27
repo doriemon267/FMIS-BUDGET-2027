@@ -10,6 +10,9 @@ const Income = require('../models/Income');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const Notification = require('../models/Notification');
 const Settings = require('../models/Settings');
+const {
+  assertProposalInActiveCycleForProgression,
+} = require('../utils/proposalActiveCycle');
 const notificationController = require('./notificationController');
 const consolidationService = require('../utils/consolidationService');
 const { sendNotificationEmail } = require('../utils/emailNotification');
@@ -3392,7 +3395,7 @@ exports.performAction = async (req, res) => {
     const allUserRoles = getUserRolesList(req);
     const userId = req.user.id;
     const userIdString = String(userId);
-    const userName = await resolveUserDisplayName(req, userIdString);
+    let userName = req.user?.name || req.user?.email || userIdString;
 
     console.log('[PERFORM_ACTION] User:', { allUserRoles, primaryRole: userRole, userId, userName });
     console.log('[PERFORM_ACTION] Request:', { proposalId: id, action, comment });
@@ -3406,6 +3409,15 @@ exports.performAction = async (req, res) => {
         message: 'Proposal not found'
       });
     }
+
+    // The proposal document and the authoritative active Settings record must
+    // describe the same model/FY before any forward workflow progression.
+    // Return actions intentionally remain available for correction routing.
+    await assertProposalInActiveCycleForProgression(proposal, action);
+
+    // Resolve the display name only after the active-cycle boundary accepts the
+    // request. This keeps stale direct progression attempts side-effect free.
+    userName = await resolveUserDisplayName(req, userIdString);
 
     console.log('[PERFORM_ACTION] ========== START ACTION PROCESSING ==========');
     console.log('[PERFORM_ACTION] Proposal ID:', id);

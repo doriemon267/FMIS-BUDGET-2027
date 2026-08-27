@@ -1,6 +1,7 @@
 const express = require('express');
 const positionrouter = express.Router();
 const isAuth = require('../middleware/is_auth');
+const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 
 const { 
   getAllPositionTitles, 
@@ -13,7 +14,7 @@ const {
 positionrouter.use(isAuth);
 positionrouter.get('/positions', getAllPositionTitles);
 positionrouter.get('/positions/:id', getPositionTitleById);
-positionrouter.post('/positions', createPositionTitle);
-positionrouter.put('/positions/:id', updatePositionTitle);
-positionrouter.delete('/positions/:id', deletePositionTitle);
+positionrouter.post('/positions', requireDynamicPermission('/position-titles'), createPositionTitle);
+positionrouter.put('/positions/:id', requireDynamicPermission('/position-titles'), updatePositionTitle);
+positionrouter.delete('/positions/:id', requireDynamicPermission('/position-titles'), deletePositionTitle);
 module.exports = positionrouter;

@@ -312,9 +312,11 @@ const TierPage = () => {
   const isManager = roleList.some((r) => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(norm(r)));
   const isSuperAdmin = roleList.some((r) => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(norm(r)));
   const isPreparer = roleList.some((r) => ['BUDGET_PREPARER', 'BUDGET PREPARER'].includes(norm(r)));
+  const isReviewer = roleList.some((r) => ['BUDGET_REVIEWER', 'REVIEWER'].includes(norm(r)));
+  const isApprover = roleList.some((r) => ['BUDGET_APPROVER', 'APPROVER'].includes(norm(r)));
 
   // Guard: If not a budget user, redirect to not-authorized
-  const isAnyBudgetUser = isAnalyst || isOfficer || isManager || isSuperAdmin || isPreparer;
+  const isAnyBudgetUser = isAnalyst || isOfficer || isManager || isSuperAdmin || isPreparer || isReviewer || isApprover;
 
   useEffect(() => {
     if (currentUser && !isAnyBudgetUser) {
@@ -322,7 +324,11 @@ const TierPage = () => {
     }
   }, [currentUser, isAnyBudgetUser, navigate]);
 
-  const isTierViewOnly = (isOfficer || isManager) && !isAnalyst && !isSuperAdmin && !isPreparer;
+  const isTierViewOnly =
+    (isOfficer || isManager || isReviewer || isApprover) &&
+    !isAnalyst &&
+    !isSuperAdmin &&
+    !isPreparer;
   const isFinalized = tierData?.isFinalized === true;
   const isNepContext = Boolean(proposalForCeiling || isNepFromUrl);
   const reportContextAvailable = !isNepContext || Boolean(nepReportContext?.compliance);

@@ -12,6 +12,110 @@ import {
   KeyboardReturn as ReturnIcon,
 } from "@mui/icons-material";
 
+const normalizeBudgetType = (value) => {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+
+  if (normalized.includes("NEP")) return "NEP";
+  if (normalized.includes("INITIAL")) return "INITIAL";
+  return normalized;
+};
+
+const normalizeFiscalYear = (value) => String(value ?? "").trim();
+
+export const getProposalBudgetType = (proposal) =>
+  normalizeBudgetType(proposal?.modelType || proposal?.budgetType);
+
+export const isProposalInActiveCycle = (proposal, activeSettings) => {
+  const proposalBudgetType = getProposalBudgetType(proposal);
+  const activeBudgetType = normalizeBudgetType(
+    activeSettings?.budgetType || activeSettings?.modelType
+  );
+  const proposalFiscalYear = normalizeFiscalYear(
+    proposal?.fiscalYear ?? proposal?.FiscalYear ?? proposal?.fy
+  );
+  const activeFiscalYear = normalizeFiscalYear(
+    activeSettings?.fiscalYear ?? activeSettings?.FiscalYear ?? activeSettings?.fy
+  );
+
+  return Boolean(
+    proposalBudgetType &&
+      activeBudgetType &&
+      proposalFiscalYear &&
+      activeFiscalYear &&
+      proposalBudgetType === activeBudgetType &&
+      proposalFiscalYear === activeFiscalYear
+  );
+};
+
+const normalizePermissionToken = (value) =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+
+const TIER_PREPARER_ROLES = new Set(["BUDGETPREPARER"]);
+const TIER_BRD_ROLES = new Set([
+  "BUDGETPLANNINGANALYST",
+  "BUDGETOFFICER",
+  "BUDGETMANAGER",
+  "SUPERADMIN",
+]);
+const TIER_PREPARER_STATUSES = new Set(["DRAFT", "RETURNEDTOPREPARER"]);
+const TIER_BRD_STATUSES = new Set([
+  "FORWARDEDTOBRDANALYST",
+  "FORWARDEDTOBUDGETPLANNINGANALYST",
+  "FORWARDEDTOBRDOFFICER",
+  "FORWARDEDTOBUDGETOFFICER",
+  "FORWARDEDTOBRDMANAGER",
+  "FORWARDEDTOOVERALLBUDGETAPPROVER",
+  "FORWARDEDTOMANAGER",
+  "FINALIZED",
+]);
+
+/**
+ * Authoritative UI boundary for NEP Tier Adjustment.
+ *
+ * Both the proposal action menu and details dialog must use this policy so
+ * proposal type, active model/FY, role, and workflow status cannot diverge.
+ */
+export const canAccessNepTierAdjustment = (
+  proposal,
+  activeSettings,
+  userRoles = []
+) => {
+  if (
+    getProposalBudgetType(proposal) !== "NEP" ||
+    !isProposalInActiveCycle(proposal, activeSettings)
+  ) {
+    return false;
+  }
+
+  const normalizedRoles = (Array.isArray(userRoles) ? userRoles : []).map(
+    normalizePermissionToken
+  );
+  const normalizedStatus = normalizePermissionToken(proposal?.status);
+  const isBudgetPreparer = normalizedRoles.some((role) =>
+    TIER_PREPARER_ROLES.has(role)
+  );
+  const isBRDStaff = normalizedRoles.some((role) => TIER_BRD_ROLES.has(role));
+
+  return Boolean(
+    (isBudgetPreparer && TIER_PREPARER_STATUSES.has(normalizedStatus)) ||
+      (isBRDStaff && TIER_BRD_STATUSES.has(normalizedStatus))
+  );
+};
+
+export const isReadOnlyProposalAction = (actionValue) =>
+  ["view-details", "view-history", "view-audit-trail"].includes(actionValue);
+
+export const isProposalReturnAction = (actionValue) =>
+  String(actionValue || "").endsWith("-return");
+
+export const requiresActiveProposalCycle = (actionValue) =>
+  !isReadOnlyProposalAction(actionValue) && !isProposalReturnAction(actionValue);
+
 export const useProposalPermissions = () => {
   const { currentUser } = useUser();
 
@@ -294,7 +398,12 @@ export const useProposalPermissions = () => {
   }, [currentUser]);
 
   // Get available actions based on user role and proposal status
-  const getAvailableActions = useCallback((proposal, analystsForMenu = [], headerBg = "#2d5016") => {
+  const getAvailableActions = useCallback((
+    proposal,
+    analystsForMenu = [],
+    headerBg = "#2d5016",
+    activeSettings = null
+  ) => {
     if (!proposal || !currentUser) return [];
 
     const userRoles = currentUser?.Roles || [];
@@ -325,49 +434,16 @@ export const useProposalPermissions = () => {
       color: "#d97706",
     });
 
-    // OPEN TIER: for BRD-level users when proposal is at BRD or finalized.
-    // Also available for Budget Preparers for NEP proposals in draft/returned status.
-    const brdOrFinalizedStatuses = [
-      "FORWARDED_TO_BRD_ANALYST",
-      "Forwarded to Budget Planning Analyst",
-      "FORWARDED_TO_BRD_OFFICER",
-      "Forwarded to Budget Officer",
-      "FORWARDED_TO_BRD_MANAGER",
-      "Forwarded to Overall Budget Approver",
-      "Forwarded to Manager",
-      "FINALIZED",
-      "Finalized",
-    ];
-    const isBRDOrFinalized = brdOrFinalizedStatuses.some((s) => String(currentStatus) === s);
-    const isBRDStaffForTier = userRoles.some((r) =>
-      [
-        "BUDGET_PLANNING_ANALYST",
-        "BUDGET PLANNING ANALYST",
-        "BUDGET_OFFICER",
-        "BUDGET OFFICER",
-        "BUDGET_MANAGER",
-        "BUDGET MANAGER",
-        "SUPER_ADMIN",
-        "SUPER ADMIN",
-      ].includes(String(r))
-    );
+    // Forward progression, Tier, consolidation and finalization are valid only
+    // for the active model/FY. Authorized return actions remain available so an
+    // inactive proposal can still be routed back for correction.
+    const isActiveCycle = isProposalInActiveCycle(proposal, activeSettings);
 
-    const isNep =
-      String(proposal.modelType || proposal.budgetType || "")
-        .trim()
-        .toUpperCase() === "NEP";
-    const isPreparerStatus = ["DRAFT", "Draft", "RETURNED_TO_PREPARER", "Returned to Preparer"].includes(
-      currentStatus
-    );
-    const isPreparerForTier = isBudgetPreparer && isNep && isPreparerStatus;
+    const proposalBudgetType = getProposalBudgetType(proposal);
 
-    if (
-      (isBRDStaffForTier && isBRDOrFinalized) ||
-      isPreparerForTier ||
-      (isBudgetPreparer && isBRDOrFinalized)
-    ) {
+    if (canAccessNepTierAdjustment(proposal, activeSettings, userRoles)) {
       actions.push({
-        label: "Open Tier",
+        label: "NEP Tier Adjustment",
         value: "open-tier",
         icon: React.createElement(TableChartIcon),
         color: headerBg,
@@ -386,9 +462,9 @@ export const useProposalPermissions = () => {
       ];
 
       // Super admin can create/submit if in draft
-      if (draftStatusVariants.includes(currentStatus)) {
+      if (isActiveCycle && draftStatusVariants.includes(currentStatus)) {
         actions.push({
-          label: "Submit to Budget Reviewer",
+          label: `Submit ${proposalBudgetType === "NEP" ? "NEP" : "Initial"} Proposal to Budget Reviewer`,
           value: "submit-to-reviewer",
           icon: React.createElement(SendIcon),
           color: "primary",
@@ -404,20 +480,20 @@ export const useProposalPermissions = () => {
           "RETURNED_TO_REVIEWER",
         ].includes(currentStatus)
       ) {
-        actions.push(
-          {
+        if (isActiveCycle) {
+          actions.push({
             label: "Approve & Forward to Budget Approver",
             value: "reviewer-approve-forward-approver",
             icon: React.createElement(ApproveForwardIcon),
             color: "primary",
-          },
-          {
-            label: "Return to Budget Preparer",
-            value: "reviewer-return",
-            icon: React.createElement(ReturnIcon),
-            color: "warning",
-          }
-        );
+          });
+        }
+        actions.push({
+          label: "Return to Budget Preparer",
+          value: "reviewer-return",
+          icon: React.createElement(ReturnIcon),
+          color: "warning",
+        });
       }
 
       // Super admin can approve
@@ -435,20 +511,20 @@ export const useProposalPermissions = () => {
                 analystsForMenu[0]?.userId
               })`
             : "Approve & Forward to Budget/Planning Analyst";
-        actions.push(
-          {
+        if (isActiveCycle) {
+          actions.push({
             label: analystLabelAdmin,
             value: "approver-approve-forward-analyst",
             icon: React.createElement(ApproveForwardIcon),
             color: "primary",
-          },
-          {
-            label: "Return to Budget Reviewer",
-            value: "approver-return",
-            icon: React.createElement(ReturnIcon),
-            color: "warning",
-          }
-        );
+          });
+        }
+        actions.push({
+          label: "Return to Budget Reviewer",
+          value: "approver-return",
+          icon: React.createElement(ReturnIcon),
+          color: "warning",
+        });
       }
 
       // Super admin can do analyst actions
@@ -461,20 +537,20 @@ export const useProposalPermissions = () => {
           "RETURNED_TO_PLANNING_ANALYST",
         ].includes(currentStatus)
       ) {
-        actions.push(
-          {
+        if (isActiveCycle) {
+          actions.push({
             label: "Submit to Budget Officer",
             value: "analyst-submit-to-officer",
             icon: React.createElement(SendIcon),
             color: "primary",
-          },
-          {
-            label: "Return to Budget Preparer",
-            value: "analyst-return",
-            icon: React.createElement(ReturnIcon),
-            color: "warning",
-          }
-        );
+          });
+        }
+        actions.push({
+          label: "Return to Budget Preparer",
+          value: "analyst-return",
+          icon: React.createElement(ReturnIcon),
+          color: "warning",
+        });
       }
 
       // Super admin can do officer actions
@@ -487,20 +563,20 @@ export const useProposalPermissions = () => {
           "RETURNED_TO_OFFICER",
         ].includes(currentStatus)
       ) {
-        actions.push(
-          {
+        if (isActiveCycle) {
+          actions.push({
             label: "Submit to Budget Manager",
             value: "officer-submit-to-manager",
             icon: React.createElement(SendIcon),
             color: "primary",
-          },
-          {
-            label: "Return to Budget Preparer",
-            value: "officer-return",
-            icon: React.createElement(ReturnIcon),
-            color: "warning",
-          }
-        );
+          });
+        }
+        actions.push({
+          label: "Return to Budget Preparer",
+          value: "officer-return",
+          icon: React.createElement(ReturnIcon),
+          color: "warning",
+        });
       }
 
       // Super admin can finalize
@@ -515,20 +591,20 @@ export const useProposalPermissions = () => {
           proposal?.currentAssigneeRole === "BUDGET_MANAGER") ||
         (currentStatus === "RETURNED" && proposal?.currentAssigneeRole === "BUDGET_MANAGER")
       ) {
-        actions.push(
-          {
+        if (isActiveCycle) {
+          actions.push({
             label: "Finalize Proposal",
             value: "manager-approve",
             icon: React.createElement(ApproveIcon),
             color: "success",
-          },
-          {
-            label: "Return to Budget Preparer",
-            value: "manager-return",
-            icon: React.createElement(ReturnIcon),
-            color: "warning",
-          }
-        );
+          });
+        }
+        actions.push({
+          label: "Return to Budget Preparer",
+          value: "manager-return",
+          icon: React.createElement(ReturnIcon),
+          color: "warning",
+        });
       }
 
       return actions;
@@ -545,9 +621,9 @@ export const useProposalPermissions = () => {
         "Returned",
       ];
 
-      if (draftStatusVariants.includes(currentStatus)) {
+      if (isActiveCycle && draftStatusVariants.includes(currentStatus)) {
         actions.push({
-          label: "Submit to Budget Reviewer",
+          label: `Submit ${proposalBudgetType === "NEP" ? "NEP" : "Initial"} Proposal to Budget Reviewer`,
           value: "submit-to-reviewer",
           icon: React.createElement(SendIcon),
           color: "primary",
@@ -563,31 +639,33 @@ export const useProposalPermissions = () => {
         currentStatus === "FORWARDED_TO_REVIEWER" ||
         currentStatus === "RETURNED_TO_REVIEWER")
     ) {
-      actions.push(
-        {
+      if (isActiveCycle) {
+        actions.push(
+          {
           label: "Approve & Forward to Budget Approver",
           value: "reviewer-approve-forward-approver",
           icon: React.createElement(ApproveForwardIcon),
           color: "primary",
-        },
-        {
-          label:
-            analystsForMenu.length === 1
-              ? `Send to ${analystsForMenu[0]?.userName || analystsForMenu[0]?.userId} (${
-                  analystsForMenu[0]?.userId
-                })`
-              : "Forward to Budget/Planning Analyst (IMO path)",
-          value: "reviewer-approve-forward-analyst",
-          icon: React.createElement(SendIcon),
-          color: "primary",
-        },
-        {
-          label: "Return to Budget Preparer",
-          value: "reviewer-return",
-          icon: React.createElement(ReturnIcon),
-          color: "warning",
-        }
-      );
+          },
+          {
+            label:
+              analystsForMenu.length === 1
+                ? `Send to ${analystsForMenu[0]?.userName || analystsForMenu[0]?.userId} (${
+                    analystsForMenu[0]?.userId
+                  })`
+                : "Forward to Budget/Planning Analyst (IMO path)",
+            value: "reviewer-approve-forward-analyst",
+            icon: React.createElement(SendIcon),
+            color: "primary",
+          }
+        );
+      }
+      actions.push({
+        label: "Return to Budget Preparer",
+        value: "reviewer-return",
+        icon: React.createElement(ReturnIcon),
+        color: "warning",
+      });
     }
 
     // BUDGET APPROVER
@@ -604,12 +682,14 @@ export const useProposalPermissions = () => {
                 analystsForMenu[0]?.userId
               })`
             : "Approve & Forward to Budget/Planning Analyst";
-        actions.push({
-          label: analystLabel,
-          value: "approver-approve-forward-analyst",
-          icon: React.createElement(ApproveForwardIcon),
-          color: "primary",
-        });
+        if (isActiveCycle) {
+          actions.push({
+            label: analystLabel,
+            value: "approver-approve-forward-analyst",
+            icon: React.createElement(ApproveForwardIcon),
+            color: "primary",
+          });
+        }
 
         if (!proposal.isConsolidated) {
           actions.push({
@@ -622,7 +702,7 @@ export const useProposalPermissions = () => {
       }
     }
 
-    if (proposal.isConsolidated && (isBudgetApprover || isSuperAdmin)) {
+    if (isActiveCycle && proposal.isConsolidated && (isBudgetApprover || isSuperAdmin)) {
       actions.push({
         label: "Un-consolidate Proposal",
         value: "unconsolidate",
@@ -642,20 +722,20 @@ export const useProposalPermissions = () => {
         currentStatus === "FORWARDED_TO_BRD_ANALYST" ||
         currentStatus === "RETURNED_TO_PLANNING_ANALYST")
     ) {
-      actions.push(
-        {
+      if (isActiveCycle) {
+        actions.push({
           label: "Submit to Budget Officer",
           value: "analyst-submit-to-officer",
           icon: React.createElement(SendIcon),
           color: "primary",
-        },
-        {
-          label: "Return to Budget Preparer",
-          value: "analyst-return",
-          icon: React.createElement(ReturnIcon),
-          color: "warning",
-        }
-      );
+        });
+      }
+      actions.push({
+        label: "Return to Budget Preparer",
+        value: "analyst-return",
+        icon: React.createElement(ReturnIcon),
+        color: "warning",
+      });
     }
 
     // BUDGET OFFICER
@@ -667,20 +747,20 @@ export const useProposalPermissions = () => {
         currentStatus === "FORWARDED_TO_BRD_OFFICER" ||
         currentStatus === "RETURNED_TO_OFFICER")
     ) {
-      actions.push(
-        {
+      if (isActiveCycle) {
+        actions.push({
           label: "Submit to Budget Manager",
           value: "officer-submit-to-manager",
           icon: React.createElement(SendIcon),
           color: "primary",
-        },
-        {
-          label: "Return to Budget Preparer",
-          value: "officer-return",
-          icon: React.createElement(ReturnIcon),
-          color: "warning",
-        }
-      );
+        });
+      }
+      actions.push({
+        label: "Return to Budget Preparer",
+        value: "officer-return",
+        icon: React.createElement(ReturnIcon),
+        color: "warning",
+      });
     }
 
     // BUDGET MANAGER
@@ -699,20 +779,20 @@ export const useProposalPermissions = () => {
           proposal?.currentAssigneeRole === "BUDGET_MANAGER") ||
         (currentStatus === "RETURNED" && proposal?.currentAssigneeRole === "BUDGET_MANAGER"))
     ) {
-      actions.push(
-        {
+      if (isActiveCycle) {
+        actions.push({
           label: "Finalize Proposal",
           value: "manager-approve",
           icon: React.createElement(ApproveIcon),
           color: "success",
-        },
-        {
-          label: "Return to Budget Preparer",
-          value: "manager-return",
-          icon: React.createElement(ReturnIcon),
-          color: "warning",
-        }
-      );
+        });
+      }
+      actions.push({
+        label: "Return to Budget Preparer",
+        value: "manager-return",
+        icon: React.createElement(ReturnIcon),
+        color: "warning",
+      });
     }
 
     return actions;

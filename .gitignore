@@ -72,8 +72,10 @@ __tests__/
 *.spec.*
 *.test.*
 
-# Keep the focused NEP report readiness regression suite under version control.
+# Keep focused client regression suites under version control.
 !CLIENT/src/utils/nepReportStatus.spec.js
+!CLIENT/src/pages/ProposalOperationsHub/hooks/useProposalPermissions.test.js
+!CLIENT/src/pages/ProposalOperationsHub/ProposalOperationsHub.test.jsx
 
 # Temporary test files and scripts (not part of runtime)
 TEMP_FILES/

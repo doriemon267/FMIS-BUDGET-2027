@@ -8,9 +8,7 @@ import {
   Avatar,
   useMediaQuery,
   useTheme,
-  alpha,
 } from '@mui/material';
-import { keyframes } from '@mui/system';
 import {
   LuLayoutDashboard,
   LuFileText,
@@ -29,10 +27,7 @@ import {
   LuBriefcase,
   LuReceipt,
   LuBanknote,
-  LuArrowLeftRight,
   LuWallet,
-  LuCoins,
-  LuPenTool,
   LuClock,
   LuTrendingUp,
   LuCar,
@@ -55,16 +50,17 @@ import {
 import { useUser } from '../context/UserContext';
 import { useDrawer } from '../context/DrawerContext';
 import { useRoutePermissions } from '../context/RoutePermissionContext';
+import { canAccessRoutePermission } from '../utils/routePermissionAccess';
+import { canAccessTierPage } from '../utils/tierAccess';
 import IS_PRODUCTION from '../utils/IS_PRODUCTION';
 import api from '../config/api';
 import logger from '../utils/logger';
 import { toast } from 'react-toastify';
 import Swal from 'sweetalert2';
-import env from '../utils/env';
 
 const CustomDrawer = () => {
   const { currentUser, logout } = useUser();
-  const { open, collapsed: isCollapsed, toggleDrawer, toggleCollapsed } = useDrawer();
+  const { open, collapsed: isCollapsed, toggleCollapsed } = useDrawer();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
@@ -105,12 +101,12 @@ const CustomDrawer = () => {
 
   const [hasFinalizedProposals, setHasFinalizedProposals] = useState(false);
   const [canAccessCreateProposal, setCanAccessCreateProposal] = useState(false);
+  const [activeBudgetType, setActiveBudgetType] = useState(null);
 
   const roles = (currentUser?.Roles || []).map(String);
   const workflowRoles = (currentUser?.workflowRoles || currentUser?.hierarchicalAccess?.workflowRoles || []).map(String);
 
   const isOverallApprover = roles.some(r => String(r) === JOB_ROLES.BUDGET_MANAGER);
-  const isBudgetAdmin = roles.some(r => String(r) === JOB_ROLES.BUDGET_ADMIN);
   const isBudgetOfficer = roles.some(r => String(r) === JOB_ROLES.BUDGET_OFFICER);
   const isApprover = checkHasApproverRole(roles, workflowRoles);
   const isReviewer = roles.some(r => String(r) === JOB_ROLES.BUDGET_REVIEWER);
@@ -159,28 +155,19 @@ const CustomDrawer = () => {
     isBudgetOfficer ||
     isOverallApprover ||
     isSuperAdmin(currentUser);
-
-  const canSeeReports =
-    canSeeBRDOnlyMenus ||
-    roles.some(r => [JOB_ROLES.BUDGET_PREPARER, JOB_ROLES.BUDGET_REVIEWER, JOB_ROLES.BUDGET_APPROVER].includes(String(r)));
+  const canSeeTierMenu = canAccessTierPage(currentUser, activeBudgetType);
 
   const { getRoutePermission, isLoading: permissionsLoading } = useRoutePermissions();
 
   const checkAccess = (path, fallbackAllow) => {
-    if (permissionsLoading) return true; 
     const perm = getRoutePermission(path);
-    if (!perm) return fallbackAllow;
-    if (!perm.isActive) return false;
-    if (!perm.requiredWorkflowRoles || perm.requiredWorkflowRoles.length === 0) return true;
-    
-    const required = perm.requiredWorkflowRoles.map(r => r.toUpperCase());
-    const userRoles = (currentUser?.Roles || []).map(r => String(r).toUpperCase().trim());
-    const userWfRoles = (currentUser?.workflowRoles || currentUser?.hierarchicalAccess?.workflowRoles || []).map(r => String(r).toUpperCase().trim());
-    
-    const isSuper = userRoles.some(r => r === 'SUPER_ADMIN' || r === 'SUPERADMIN');
-    if (isSuper) return true; 
-
-    return required.some(r => userRoles.includes(r) || userWfRoles.includes(r));
+    return canAccessRoutePermission({
+      currentUser,
+      path,
+      routePermission: perm,
+      fallbackAllow,
+      isLoading: permissionsLoading,
+    });
   };
 
   useEffect(() => {
@@ -189,6 +176,9 @@ const CustomDrawer = () => {
       try {
         const settingsRes = await api.get('/settings/active');
         const fiscalYear = settingsRes?.data?.fiscalYear;
+        if (isMounted) {
+          setActiveBudgetType(settingsRes?.data?.budgetType || null);
+        }
         const params = fiscalYear ? { fiscalYear } : {};
         const res = await api.get('/allproposal/proposals/has-finalized', { params });
         if (isMounted && res?.data?.success) {
@@ -196,7 +186,10 @@ const CustomDrawer = () => {
         }
       } catch (err) {
         logger.error('Failed to check finalized proposals', err);
-        if (isMounted) setHasFinalizedProposals(false);
+        if (isMounted) {
+          setHasFinalizedProposals(false);
+          setActiveBudgetType(null);
+        }
       }
     };
     fetchHasFinalized();
@@ -517,7 +510,7 @@ const CustomDrawer = () => {
               {
                 link: '/tier',
                 name: 'Tier',
-                isAllow: checkAccess('/tier', canSeeBRDOnlyMenus),
+                isAllow: canSeeTierMenu && checkAccess('/tier', canSeeTierMenu),
                 icon: <LuLayers size={18} />,
               },
             ]}
@@ -592,58 +585,58 @@ const CustomDrawer = () => {
               {
                 link: '/fysettings',
                 name: 'Set Cut-Off',
-                isAllow: checkAccess('/fysettings', true),
+                isAllow: checkAccess('/fysettings', false),
                 icon: <LuClock size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/compensation-management',
                 name: 'Compensation Management Settings',
-                isAllow: checkAccess('/compensation-management', true),
+                isAllow: checkAccess('/compensation-management', false),
                 icon: <LuTrendingUp size={18} strokeWidth={1.5} />,
               },
-              { link: '/rata', name: 'RATA', isAllow: checkAccess('/rata', true), icon: <LuCar size={18} strokeWidth={1.5} /> },
+              { link: '/rata', name: 'RATA', isAllow: checkAccess('/rata', false), icon: <LuCar size={18} strokeWidth={1.5} /> },
               {
                 link: '/categories',
                 name: 'Capital Outlay',
-                isAllow: checkAccess('/categories', true),
+                isAllow: checkAccess('/categories', false),
                 icon: <LuBuilding size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/income-management',
                 name: 'Income Management',
-                isAllow: checkAccess('/income-management', true),
+                isAllow: checkAccess('/income-management', false),
                 icon: <LuWallet size={18} strokeWidth={1.5} />,
               },
               { isDivider: true },
               {
                 link: '/salary-table',
                 name: 'Permanent & Casual Salary Table',
-                isAllow: checkAccess('/salary-table', true),
+                isAllow: checkAccess('/salary-table', false),
                 icon: <LuBanknote size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/cos-salary-table',
                 name: 'COS Salary Table',
-                isAllow: checkAccess('/cos-salary-table', true),
+                isAllow: checkAccess('/cos-salary-table', false),
                 icon: <LuBanknote size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/position-titles',
                 name: 'Position Titles',
-                isAllow: checkAccess('/position-titles', true),
+                isAllow: checkAccess('/position-titles', false),
                 icon: <LuBriefcase size={18} strokeWidth={1.5} />,
               },
               { isDivider: true },
               {
                 link: '/setup/organization',
                 name: 'Organization Structure Setup',
-                isAllow: checkAccess('/setup/organization', true),
+                isAllow: checkAccess('/setup/organization', false),
                 icon: <LuNetwork size={18} strokeWidth={1.5} />,
               },
               {
                 link: '/hierarchical-user-assignments',
                 name: 'Hierarchical User Assignments',
-                isAllow: checkAccess('/hierarchical-user-assignments', true),
+                isAllow: checkAccess('/hierarchical-user-assignments', false),
                 icon: <LuUserCog size={18} strokeWidth={1.5} />,
               },
               {

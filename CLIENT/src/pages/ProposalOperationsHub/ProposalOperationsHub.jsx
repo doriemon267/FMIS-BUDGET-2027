@@ -58,7 +58,12 @@ import { WORKFLOW_STATUS_UI_METADATA } from "../../constants/workflowConstants";
 
 // Standing custom hooks created in Step 1
 import { useProposalCalculations } from "./hooks/useProposalCalculations";
-import { useProposalPermissions } from "./hooks/useProposalPermissions";
+import {
+  getProposalBudgetType,
+  isProposalInActiveCycle,
+  requiresActiveProposalCycle,
+  useProposalPermissions,
+} from "./hooks/useProposalPermissions";
 
 // Extracted UI dialogs from Step 2 - Lazily loaded for bundle efficiency
 const ActionConfirmDialog = React.lazy(() => import("./components/dialogs/ActionConfirmDialog"));
@@ -140,6 +145,18 @@ const ProposalOperationsHub = () => {
     canUserEditProposal,
     getAvailableActions: fetchAvailableActions,
   } = useProposalPermissions();
+
+  const {
+    data: activeSettings,
+  } = useQuery({
+    queryKey: ["activeSettings"],
+    queryFn: async () => {
+      const response = await api.get("/settings/active", { hideErrorToast: true });
+      return response.data;
+    },
+    staleTime: 30000,
+    refetchOnWindowFocus: true,
+  });
 
   // State management
   const [activeTab, setActiveTab] = useState(0);
@@ -336,10 +353,22 @@ const ProposalOperationsHub = () => {
   useEffect(() => {
     if (actionMenuAnchor && selectedProposal) {
       setAvailableActionsForMenu(
-        fetchAvailableActions(selectedProposal, analystsForMenuProposal, headerBg)
+        fetchAvailableActions(
+          selectedProposal,
+          analystsForMenuProposal,
+          headerBg,
+          activeSettings
+        )
       );
     }
-  }, [analystsForMenuProposal, actionMenuAnchor, selectedProposal, fetchAvailableActions, headerBg]);
+  }, [
+    activeSettings,
+    analystsForMenuProposal,
+    actionMenuAnchor,
+    selectedProposal,
+    fetchAvailableActions,
+    headerBg,
+  ]);
 
   // Fetch analysts for target assignment dialog
   const isSubmitToAnalystAction = [
@@ -394,6 +423,43 @@ const ProposalOperationsHub = () => {
         activeRegion.regionName ||
         activeRegion.name
       : activeRegion;
+
+  const ensureProposalMatchesActiveCycle = useCallback(
+    async (proposal) => {
+      if (!proposal) return false;
+
+      try {
+        // Re-read Settings at the moment of action so an already-open menu or
+        // confirmation dialog cannot use a budget cycle that has since changed.
+        const response = await api.get("/settings/active", { hideErrorToast: true });
+        const authoritativeSettings = response.data;
+        queryClient.setQueryData(["activeSettings"], authoritativeSettings);
+
+        if (isProposalInActiveCycle(proposal, authoritativeSettings)) {
+          return true;
+        }
+
+        const proposalType = getProposalBudgetType(proposal) || "Unknown";
+        const proposalYear = proposal.fiscalYear ?? "Unknown";
+        const activeType = String(
+          authoritativeSettings?.budgetType || authoritativeSettings?.modelType || "Unknown"
+        ).toUpperCase();
+        const activeYear = authoritativeSettings?.fiscalYear ?? "Unknown";
+
+        toast.warning(
+          `Action unavailable: this is a ${proposalType} FY ${proposalYear} proposal, while the active budget cycle is ${activeType} FY ${activeYear}.`
+        );
+        return false;
+      } catch (error) {
+        logger.warn("Failed to verify the active budget cycle", error);
+        toast.error(
+          "Action unavailable because the active budget cycle could not be verified. Please refresh and try again."
+        );
+        return false;
+      }
+    },
+    [queryClient]
+  );
 
   const activeTabView = tabs[activeTab]?.value || "all-proposals";
 
@@ -781,6 +847,14 @@ const ProposalOperationsHub = () => {
 
     setActionLoading(true);
     try {
+      if (
+        requiresActiveProposalCycle(actionType) &&
+        !(await ensureProposalMatchesActiveCycle(selectedProposal))
+      ) {
+        setActionDialogOpen(false);
+        return;
+      }
+
       const projectedSubsidy = getAuthoritativeProjectedSubsidy(
         selectedProposal,
         proposalDetails
@@ -1343,6 +1417,11 @@ const ProposalOperationsHub = () => {
   const handleUnconsolidate = async () => {
     setUnconsolidateLoading(true);
     try {
+      if (!(await ensureProposalMatchesActiveCycle(selectedProposal))) {
+        setUnconsolidateDialogOpen(false);
+        return;
+      }
+
       const response = await api.post(
         `${WORKFLOW_API_BASE}/${selectedProposal._id}/unconsolidate`
       );
@@ -1398,7 +1477,12 @@ const ProposalOperationsHub = () => {
   };
 
   const getAvailableActions = (proposal) => {
-    return fetchAvailableActions(proposal, analystsForMenuProposal, headerBg);
+    return fetchAvailableActions(
+      proposal,
+      analystsForMenuProposal,
+      headerBg,
+      activeSettings
+    );
   };
 
   return (
@@ -2033,6 +2117,14 @@ const ProposalOperationsHub = () => {
             onClick={async () => {
               setActionType(action.value);
               setActionMenuAnchor(null);
+
+              if (
+                requiresActiveProposalCycle(action.value) &&
+                !(await ensureProposalMatchesActiveCycle(selectedProposal))
+              ) {
+                return;
+              }
+
               if (action.value === "view-details") {
                 await handleViewDetails(selectedProposal);
               } else if (action.value === "view-history") {
@@ -2041,6 +2133,11 @@ const ProposalOperationsHub = () => {
               } else if (action.value === "view-audit-trail") {
                 await handleViewAuditTrail(selectedProposal);
               } else if (action.value === "open-tier") {
+                if (getProposalBudgetType(selectedProposal) !== "NEP") {
+                  toast.warning("NEP Tier Adjustment is available only for NEP proposals.");
+                  return;
+                }
+
                 const params = new URLSearchParams();
                 if (selectedProposal.fiscalYear != null)
                   params.set("fiscalYear", String(selectedProposal.fiscalYear));
@@ -2179,6 +2276,8 @@ const ProposalOperationsHub = () => {
           hasLock={hasLock}
           showAllRegions={showAllRegions}
           fetchProposals={fetchProposals}
+          activeSettings={activeSettings}
+          ensureProposalMatchesActiveCycle={ensureProposalMatchesActiveCycle}
         />
 
         <ActionConfirmDialog

@@ -25,6 +25,7 @@ import LoyaltyPayPage from "./pages/LoyaltyPayPage";
 import AppearancePage from "./pages/AppearancePage";
 import AllProposalsPage from "./pages/AllProposalsPage";
 import ProtectedRoute from "./middleware/ProtectedRoute";
+import TierAccessGuard from "./middleware/TierAccessGuard";
 import NotAuthorized from "./pages/NotAuthorizedPage";
 import ProposalSummaryPage from "./pages/ProposalSummaryPage";
 import FiscalYearSettingsPage from "./pages/FiscalYearSettingsPage";
@@ -94,9 +95,20 @@ const App = () => {
           path="/tier"
           element={
             <ProtectedRoute
-              requiredWorkflowRoles={["superAdmin", "preparer", "budgetAnalyst", "budgetOfficer", "budgetManager"]}
+              routeKey="/tier"
+              requiredWorkflowRoles={[
+                "superAdmin",
+                "preparer",
+                "reviewer",
+                "approver",
+                "budgetAnalyst",
+                "budgetOfficer",
+                "budgetManager",
+              ]}
             >
-              <TierPage />
+              <TierAccessGuard>
+                <TierPage />
+              </TierAccessGuard>
             </ProtectedRoute>
           }
         />

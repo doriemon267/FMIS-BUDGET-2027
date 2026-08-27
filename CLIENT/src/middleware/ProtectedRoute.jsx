@@ -1,8 +1,8 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import { hasPermission } from "../utils/permissions";
 import { useRoutePermissions } from "../context/RoutePermissionContext";
+import { canAccessRoutePermission } from "../utils/routePermissionAccess";
 
 /**
  * ProtectedRoute
@@ -63,36 +63,12 @@ const ProtectedRoute = ({
     return <Navigate to="/not-authorized" />;
   }
 
-  // ── Permission check ──────────────────────────────────────────────────────
-  const hasRequiredPermissions =
-    requiredPermissions.length === 0 ||
-    requiredPermissions.every((permission) => hasPermission(currentUser, permission));
-
   // ── Workflow role resolution ───────────────────────────────────────────────
   const userWorkflowRoles =
     hierarchicalAccess?.workflowRoles ||
     hierarchicalAccess?.roles ||
     hierarchicalAccess?.userRoles ||
     [];
-
-  const normalizedJobRoles = (userJobRoles || []).map((role) =>
-    String(role || "").toUpperCase().trim()
-  );
-
-  const isBrdCoreRole = normalizedJobRoles.some((role) =>
-    [
-      "BUDGET PLANNING ANALYST",
-      "BUDGET_PLANNING_ANALYST",
-      "BUDGET OFFICER",
-      "BUDGET_OFFICER",
-      "BUDGET MANAGER",
-      "BUDGET_MANAGER",
-      "OVERALL BUDGET APPROVER",
-      "OVERALL_BUDGET_APPROVER",
-      "SUPER ADMIN",
-      "SUPER_ADMIN",
-    ].includes(role)
-  );
 
   // Special handling for FULL access users – ensure they have regionCreator role
   let effectiveWorkflowRoles = [...userWorkflowRoles];
@@ -103,30 +79,10 @@ const ProtectedRoute = ({
     effectiveWorkflowRoles.push("regionCreator");
   }
 
-  // Ensure BRD-level users have access to global pages like Employee List
-  if (
-    (hierarchicalAccess?.scope === "BUDGET_AND_REVENUE_DIVISION" ||
-      hierarchicalAccess?.assignmentLevel === "BUDGET_AND_REVENUE_DIVISION") &&
-    isBrdCoreRole &&
-    !effectiveWorkflowRoles.includes("superAdmin")
-  ) {
-    effectiveWorkflowRoles.push("superAdmin");
-  }
-
   // ── Job-role → workflow-role mapping ──────────────────────────────────────
-  const isBudgetAdmin = userJobRoles.some((role) => role === "SUPER_ADMIN");
-  const isBudgetStaff = userJobRoles.some((role) =>
-    ["BUDGET_PLANNING_ANALYST", "BUDGET_MANAGER", "BUDGET_OFFICER"].includes(role)
-  );
-
-  if (isBudgetAdmin && !effectiveWorkflowRoles.includes("superAdmin")) {
-    effectiveWorkflowRoles.push("superAdmin");
-  }
-  if (isBudgetStaff && !effectiveWorkflowRoles.includes("superAdmin")) {
-    effectiveWorkflowRoles.push("superAdmin");
-  }
-
   const workflowRolesFromJobRoles = {
+    SUPER_ADMIN: "superAdmin",
+    "SUPER ADMIN": "superAdmin",
     BUDGET_PREPARER: "preparer",
     "BUDGET PREPARER": "preparer",
     BUDGET_REVIEWER: "reviewer",
@@ -134,6 +90,13 @@ const ProtectedRoute = ({
     BUDGET_APPROVER: "approver",
     "BUDGET APPROVER": "approver",
     OVERALL_BUDGET_APPROVER: "overallBudgetApprover",
+    "OVERALL BUDGET APPROVER": "overallBudgetApprover",
+    BUDGET_PLANNING_ANALYST: "budgetAnalyst",
+    "BUDGET PLANNING ANALYST": "budgetAnalyst",
+    BUDGET_OFFICER: "budgetOfficer",
+    "BUDGET OFFICER": "budgetOfficer",
+    BUDGET_MANAGER: "budgetManager",
+    "BUDGET MANAGER": "budgetManager",
   };
 
   userJobRoles.forEach((jobRole) => {
@@ -143,25 +106,21 @@ const ProtectedRoute = ({
     }
   });
 
-  if (
-    userJobRoles.includes("OVERALL_BUDGET_APPROVER") &&
-    !effectiveWorkflowRoles.includes("superAdmin")
-  ) {
-    effectiveWorkflowRoles.push("superAdmin");
-  }
-
   // ── Final access decision ─────────────────────────────────────────────────
-  const hasExcludedRoles =
-    excludeRoles.length > 0 &&
-    !effectiveWorkflowRoles.includes("superAdmin") &&
-    !normalizedJobRoles.includes("SUPER_ADMIN") &&
-    excludeRoles.some((role) => effectiveWorkflowRoles.includes(role) || normalizedJobRoles.includes(role.toUpperCase()));
+  const hasRouteAccess = canAccessRoutePermission({
+    currentUser,
+    path: routeKey,
+    routePermission: {
+      path: routeKey,
+      isActive: true,
+      requiredPermissions,
+      requiredWorkflowRoles,
+      excludeRoles,
+    },
+    additionalRoles: effectiveWorkflowRoles,
+  });
 
-  const hasRequiredWorkflowRoles =
-    requiredWorkflowRoles.length === 0 ||
-    requiredWorkflowRoles.some((role) => effectiveWorkflowRoles.includes(role) || normalizedJobRoles.includes(role.toUpperCase()));
-
-  if (!hasRequiredPermissions || !hasRequiredWorkflowRoles || hasExcludedRoles) {
+  if (!hasRouteAccess) {
     return <Navigate to="/not-authorized" />;
   }
 

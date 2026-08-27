@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const isAuth = require('../middleware/is_auth');
 const requireDynamicPermission = require('../middleware/requireDynamicPermission');
+const { requireTierAccess } = require('../middleware/tierAccessControl');
 const { logUserActivity } = require('../middleware/userLogs');
 
 const {
@@ -18,44 +19,40 @@ const {
 } = require('../controllers/tierController');
 
 router.use(isAuth);
+router.use(requireTierAccess);
+router.use(requireDynamicPermission('/tier'));
 
 router.get('/finalized-data', getFinalizedData);
 router.get('/data', getTierData);
 router.get('/saved-items', getTierSavedItems);
 router.post('/data', (req, res, next) => {
-  // Bypass dynamic permission for valid budget roles who need to save NEP adjustments
-  const rawRoles = Array.isArray(req.user?.Roles)
-    ? req.user.Roles
-    : [req.user?.Roles].filter(Boolean);
-  const userRoles = rawRoles.map(r => String(r).toUpperCase().replace(/\s+/g, '_'));
-  const allowedRoles = ['BUDGET_PLANNING_ANALYST', 'SUPER_ADMIN'];
-  if (userRoles.includes('BUDGET_PREPARER') && !req.body?.proposalId) {
+  const profile = req.tierAccessProfile || {};
+  if (profile.isPreparer && !req.body?.proposalId) {
     return res.status(403).json({
       success: false,
       message: 'Budget Preparers can save Tier only from a linked NEP proposal'
     });
   }
-  if (userRoles.includes('BUDGET_PREPARER')) {
+  if (profile.isPreparer || profile.isAnalyst || profile.isSuperAdmin) {
     return next();
   }
-  if (userRoles.some(role => allowedRoles.includes(role))) {
-    return next();
-  }
-  return requireDynamicPermission('/tier')(req, res, next);
+  return res.status(403).json({
+    success: false,
+    message: 'Tier adjustments can only be saved by the linked Budget Preparer, Budget Planning Analyst, or Super Admin.'
+  });
 }, logUserActivity({ action: 'UPDATE', resource: 'Tier', getDetails: (req) => ({ subAction: 'save' }) }), saveTierData);
 router.get('/current-version', getCurrentVersion);
 router.get('/revisions', getRevisions);
 router.get('/revisions/:id', getRevisionById);
 router.post('/revisions/:id/restore', (req, res, next) => {
-  const rawRoles = Array.isArray(req.user?.Roles)
-    ? req.user.Roles
-    : [req.user?.Roles].filter(Boolean);
-  const userRoles = rawRoles.map(r => String(r).toUpperCase().replace(/\s+/g, '_'));
-  const allowedRoles = ['BUDGET_PLANNING_ANALYST', 'SUPER_ADMIN'];
-  if (userRoles.some(role => allowedRoles.includes(role))) {
+  const profile = req.tierAccessProfile || {};
+  if (profile.isAnalyst || profile.isSuperAdmin) {
     return next();
   }
-  return requireDynamicPermission('/tier')(req, res, next);
+  return res.status(403).json({
+    success: false,
+    message: 'Only the Budget Planning Analyst or Super Admin can restore a Tier revision.'
+  });
 }, logUserActivity({ action: 'UPDATE', resource: 'Tier', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'restore-revision' }) }), restoreRevision);
 router.post('/generate-pdf', logUserActivity({ action: 'EXPORT', resource: 'Tier', getDetails: () => ({ format: 'PDF' }) }), generateTierPDF);
 router.post('/export-excel', logUserActivity({ action: 'EXPORT', resource: 'Tier', getDetails: () => ({ format: 'Excel' }) }), generateTierExcel);

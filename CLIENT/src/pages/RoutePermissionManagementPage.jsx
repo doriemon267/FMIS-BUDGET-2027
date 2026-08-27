@@ -50,6 +50,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../config/api";
 import { PAGE_TITLES } from "../layout/Dashboard";
 import { useRoutePermissions } from "../context/RoutePermissionContext";
+import {
+  isFailClosedRoute,
+  isRoleOptionAssigned,
+  removeRoleOptionAliases,
+} from "../utils/routePermissionAccess";
 
 const roleOptions = [
   { id: "SUPER_ADMIN", label: "Admin", color: "error" },
@@ -99,8 +104,9 @@ const RoutePermissionManagementPage = () => {
     maintenanceMessage,
     maintenanceUpdatedAt,
     maintenanceUpdatedBy,
+    refetch: refetchRoutePermissions,
     updateMaintenanceStatus,
-    refetchMaintenanceStatus,
+    refetchMaintenanceStatus: _refetchMaintenanceStatus,
   } = useRoutePermissions();
 
   const [maintModeActive, setMaintModeActive] = useState(isMaintenanceMode);
@@ -175,6 +181,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
+      refetchRoutePermissions();
       setSnackbar({ open: true, message: "Permission updated successfully!", severity: "success" });
     },
     onError: (err) => {
@@ -194,6 +201,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
+      refetchRoutePermissions();
       setOpenAddDialog(false);
       setNewRoute({
         path: "",
@@ -220,6 +228,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
+      refetchRoutePermissions();
       setSnackbar({ open: true, message: "Bulk update successful!", severity: "success" });
     },
     onError: (err) => {
@@ -239,6 +248,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries(["route-permissions-all"]);
+      refetchRoutePermissions();
       setSnackbar({ open: true, message: `Routes synced successfully! Inserted: ${data.inserted?.length}, Skipped: ${data.skipped?.length}`, severity: "success" });
     },
     onError: (err) => {
@@ -276,6 +286,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries(["route-permissions-all"]);
+      refetchRoutePermissions();
       setSnackbar({ open: true, message: data.message || "Defaults restored successfully!", severity: "success" });
     },
     onError: (err) => {
@@ -295,6 +306,7 @@ const RoutePermissionManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["route-permissions-all"]);
+      refetchRoutePermissions();
       setSnackbar({ open: true, message: "Route deleted successfully!", severity: "success" });
     },
     onError: (err) => {
@@ -307,10 +319,10 @@ const RoutePermissionManagementPage = () => {
   });
 
   const handleToggleRole = (route, roleId) => {
-    const isAssigned = route.requiredWorkflowRoles?.includes(roleId);
+    const isAssigned = isRoleOptionAssigned(route.requiredWorkflowRoles, roleId);
     let newRoles = [];
     if (isAssigned) {
-      newRoles = route.requiredWorkflowRoles.filter((r) => r !== roleId);
+      newRoles = removeRoleOptionAliases(route.requiredWorkflowRoles, roleId);
     } else {
       newRoles = [...(route.requiredWorkflowRoles || []), roleId];
     }
@@ -411,7 +423,7 @@ const RoutePermissionManagementPage = () => {
           else if (['/consolidated-corporate-income', '/consolidated-reports', '/consolidated-capital-outlay-reports', '/consolidated-personnel-services-reports', '/comparative-report', '/comprehensive-reports'].includes(path)) group = "Reports & Analytics";
           else if (['/employee'].includes(path)) group = "Employees";
           else if (['/employeeBenefits', '/courtAppearance', '/overTime', '/subsistenceAllowanceMDS', '/subsistenceAllowanceST', '/subsistenceAllowance', '/loyaltyPay', '/mealallowance', '/medicalAllowance', '/childrenAllowance', '/retirees'].includes(path)) group = "Benefits";
-          else if (['/fysettings', '/compensation-management', '/rata', '/categories', '/income-management', '/salary-table', '/cos-salary-table', '/employee-salary-table', '/salary-management', '/setup/organization', '/hierarchical-user-assignments', '/user-activity-logs', '/bulk-upload-management', '/route-permissions', '/settings', '/fiscalYear', '/audit-logs'].includes(path)) group = "Settings";
+          else if (['/fysettings', '/compensation-management', '/rata', '/categories', '/income-management', '/salary-table', '/cos-salary-table', '/employee-salary-table', '/salary-management', '/position-titles', '/setup/organization', '/hierarchical-user-assignments', '/user-activity-logs', '/bulk-upload-management', '/route-permissions', '/settings', '/fiscalYear', '/audit-logs'].includes(path)) group = "Settings";
           else if (['/subsidy-monitoring', '/corporate-income-upload', '/mooe-upload', '/database-backup', '/grouped-income-categories', '/region-selection'].includes(path)) group = "System / Utility";
           else if (path.includes("report")) group = "Reports & Analytics";
           else if (path.includes("proposal")) group = "Proposal Management";
@@ -691,6 +703,12 @@ const RoutePermissionManagementPage = () => {
             <Tab label="Role Management (By Role)" sx={{ fontWeight: 600, textTransform: "none" }} />
           </Tabs>
 
+          <Alert severity="info" sx={{ mb: 2 }}>
+            For protected Settings pages, an active route with no selected role is
+            restricted to Super Admin. Select only the roles that should see and
+            open the page.
+          </Alert>
+
           {activeTab === 0 && (
             <TableContainer component={Paper} sx={{ borderRadius: "8px", border: "1px solid", borderColor: "divider", maxHeight: "65vh" }}>
             <Table stickyHeader size="small">
@@ -729,8 +747,8 @@ const RoutePermissionManagementPage = () => {
                     </TableCell>
                   ))}
                   {roleOptions.map((role) => {
-                    const allInRoleAssigned = filteredRoutes.length > 0 && filteredRoutes.every(r => r.requiredWorkflowRoles?.includes(role.id));
-                    const someInRoleAssigned = filteredRoutes.some(r => r.requiredWorkflowRoles?.includes(role.id));
+                    const allInRoleAssigned = filteredRoutes.length > 0 && filteredRoutes.every(r => isRoleOptionAssigned(r.requiredWorkflowRoles, role.id));
+                    const someInRoleAssigned = filteredRoutes.some(r => isRoleOptionAssigned(r.requiredWorkflowRoles, role.id));
                     return (
                     <TableCell
                       key={role.id}
@@ -792,6 +810,17 @@ const RoutePermissionManagementPage = () => {
                                   sx={{ height: "16px", fontSize: "9px" }}
                                 />
                               )}
+                              {route.isActive &&
+                                isFailClosedRoute(route.path) &&
+                                (route.requiredWorkflowRoles || []).length === 0 && (
+                                  <Chip
+                                    label="Super Admin only"
+                                    size="small"
+                                    color="error"
+                                    variant="outlined"
+                                    sx={{ height: "16px", fontSize: "9px" }}
+                                  />
+                                )}
                             </Box>
                           </Box>
                           {!route.isSeeded && (
@@ -847,7 +876,7 @@ const RoutePermissionManagementPage = () => {
 
                       {/* Role Checkboxes */}
                       {roleOptions.map((role) => {
-                        const isAssigned = route.requiredWorkflowRoles?.includes(role.id);
+                        const isAssigned = isRoleOptionAssigned(route.requiredWorkflowRoles, role.id);
                         return (
                           <TableCell key={role.id} align="center">
                             <Checkbox
@@ -901,20 +930,20 @@ const RoutePermissionManagementPage = () => {
                         size="small"
                         variant="outlined"
                         onClick={() => {
-                          const allAssigned = routesInGroup.every(r => r.requiredWorkflowRoles?.includes(selectedRoleForView));
+                          const allAssigned = routesInGroup.every(r => isRoleOptionAssigned(r.requiredWorkflowRoles, selectedRoleForView));
                           handleBulkToggle(routesInGroup, selectedRoleForView, !allAssigned);
                         }}
                         disabled={bulkUpdateMutation.isPending}
                         sx={{ fontSize: '0.7rem', height: 24, textTransform: "none" }}
                       >
-                        {routesInGroup.every(r => r.requiredWorkflowRoles?.includes(selectedRoleForView)) ? "Deselect All" : "Select All"}
+                        {routesInGroup.every(r => isRoleOptionAssigned(r.requiredWorkflowRoles, selectedRoleForView)) ? "Deselect All" : "Select All"}
                       </Button>
                     </Box>
                     <Paper variant="outlined" sx={{ borderRadius: "8px", overflow: "hidden" }}>
                       <Table size="small">
                         <TableBody>
                           {routesInGroup.map(route => {
-                            const isAssigned = route.requiredWorkflowRoles?.includes(selectedRoleForView);
+                            const isAssigned = isRoleOptionAssigned(route.requiredWorkflowRoles, selectedRoleForView);
                             return (
                               <TableRow key={route._id} hover>
                                 <TableCell sx={{ width: 60, borderRight: '1px solid', borderColor: 'divider', textAlign: 'center' }}>

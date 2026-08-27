@@ -2,6 +2,7 @@ const RoutePermission = require("../models/RoutePermission");
 const UserActivityLog = require("../models/UserActivityLog");
 const routePermissionCache = require("../utils/routePermissionCache");
 const SystemSetting = require("../models/SystemSetting");
+const { getRoleAliases } = require("../constants/routePermissionPolicy");
 
 const logActivity = (req, action, details) => {
   if (!req.user) return;
@@ -20,6 +21,13 @@ const logActivity = (req, action, details) => {
 // ─── DEFAULT SEED DATA ────────────────────────────────────────────────────────
 // These mirror the hard-coded values from CLIENT/src/App.jsx.
 // Run POST /api/route-permissions/seed to insert any missing entries.
+const SETTINGS_MANAGEMENT_ROLES = [
+  "SUPER_ADMIN",
+  "BUDGET_PLANNING_ANALYST",
+  "BUDGET_OFFICER",
+  "BUDGET_MANAGER",
+];
+
 const DEFAULT_ROUTE_PERMISSIONS = [
   // ── General / Dashboard ───────────────────────────────────────────────────
   {
@@ -60,8 +68,17 @@ const DEFAULT_ROUTE_PERMISSIONS = [
     label: "Tier Management",
     group: "Tier",
     requiredPermissions: [],
-    requiredWorkflowRoles: ["superAdmin", "preparer", "budgetAnalyst", "budgetOfficer", "budgetManager"],
+    requiredWorkflowRoles: [
+      "superAdmin",
+      "preparer",
+      "reviewer",
+      "approver",
+      "budgetAnalyst",
+      "budgetOfficer",
+      "budgetManager",
+    ],
     excludeRoles: [],
+    applicableProposalTypes: ["NEP"],
   },
   {
     path: "/tier-comparison",
@@ -365,11 +382,19 @@ const DEFAULT_ROUTE_PERMISSIONS = [
     excludeRoles: [],
   },
   {
+    path: "/position-titles",
+    label: "Position Titles",
+    group: "Settings",
+    requiredPermissions: ["ManageSettings"],
+    requiredWorkflowRoles: SETTINGS_MANAGEMENT_ROLES,
+    excludeRoles: ["preparer", "reviewer", "approver"],
+  },
+  {
     path: "/hierarchical-user-assignments",
     label: "Hierarchical User Assignments",
     group: "Settings",
     requiredPermissions: ["ManageSettings"],
-    requiredWorkflowRoles: [],
+    requiredWorkflowRoles: SETTINGS_MANAGEMENT_ROLES,
     excludeRoles: ["preparer", "reviewer", "approver"],
   },
   {
@@ -377,7 +402,7 @@ const DEFAULT_ROUTE_PERMISSIONS = [
     label: "Organization Setup",
     group: "Settings",
     requiredPermissions: ["ManageSettings"],
-    requiredWorkflowRoles: [],
+    requiredWorkflowRoles: SETTINGS_MANAGEMENT_ROLES,
     excludeRoles: ["preparer", "reviewer", "approver"],
   },
   {
@@ -602,8 +627,11 @@ exports.sync = async (req, res) => {
           existing.label = route.label;
           updated = true;
         }
-        // Also update roles if they differ and it's a seeded route
-        if (JSON.stringify(existing.requiredWorkflowRoles) !== JSON.stringify(route.requiredWorkflowRoles)) {
+        // Route discovery must never erase assignments when roles were not supplied.
+        if (
+          Array.isArray(route.requiredWorkflowRoles) &&
+          JSON.stringify(existing.requiredWorkflowRoles) !== JSON.stringify(route.requiredWorkflowRoles)
+        ) {
           existing.requiredWorkflowRoles = route.requiredWorkflowRoles;
           updated = true;
         }
@@ -614,14 +642,18 @@ exports.sync = async (req, res) => {
           results.skipped.push(route.path);
         }
       } else {
+        const defaultEntry = DEFAULT_ROUTE_PERMISSIONS.find(
+          (entry) => entry.path === route.path
+        );
         await RoutePermission.create({
           path: route.path,
           label: route.label,
-          group: route.group || "General",
-          requiredPermissions: [],
-          requiredWorkflowRoles: [],
-          excludeRoles: [],
-          applicableProposalTypes: ["Initial", "NEP", "GAA"],
+          group: defaultEntry?.group || route.group || "General",
+          requiredPermissions: defaultEntry?.requiredPermissions || [],
+          requiredWorkflowRoles: defaultEntry?.requiredWorkflowRoles || [],
+          excludeRoles: defaultEntry?.excludeRoles || [],
+          applicableProposalTypes:
+            defaultEntry?.applicableProposalTypes || ["Initial", "NEP", "GAA"],
           isActive: true,
           isSeeded: true
         });
@@ -660,9 +692,10 @@ exports.bulkUpdateRole = async (req, res) => {
         { $addToSet: { requiredWorkflowRoles: roleId } }
       );
     } else if (action === "remove") {
+      const aliases = getRoleAliases(roleId);
       await RoutePermission.updateMany(
         { _id: { $in: routeIds } },
-        { $pull: { requiredWorkflowRoles: roleId } }
+        { $pull: { requiredWorkflowRoles: { $in: aliases } } }
       );
     }
     routePermissionCache.invalidate();

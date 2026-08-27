@@ -324,6 +324,8 @@ const NEPCeilingSummary = ({
   hasUnsavedChanges = false,
   showStickyTracker = false,
   onReportContextChange,
+  readOnly = false,
+  isActiveCycle = true,
 }) => {
   const proposalId = proposal?._id;
   const isNep = String(proposal?.modelType || proposal?.budgetType || "").toUpperCase() === "NEP";
@@ -446,7 +448,11 @@ const NEPCeilingSummary = ({
             NEP Ceiling Alignment
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-            {liveTotals
+            {readOnly
+              ? isActiveCycle
+                ? "Review the approved BRD ceiling and saved Tier allocation. Use NEP Tier Adjustment when the action is available to make changes."
+                : "Review the approved BRD ceiling and saved Tier allocation. This proposal is outside the active NEP cycle, so its Tier values are read-only."
+              : liveTotals
               ? "Edit the Tier rows below. Unsaved edits are a live preview; save the Tier values to use them for submission validation."
               : "Load or edit the Tier rows below, then save once the total and category ceilings are aligned."}
           </Typography>
@@ -571,9 +577,14 @@ const NEPCeilingSummary = ({
 
       {hasAnyViolation ? (
         <Alert severity="error" sx={{ mt: 2 }}>
-          <AlertTitle>Submission remains blocked</AlertTitle>
-          Reduce the allocation until the total and every expense category are within their
-          approved ceilings.
+          <AlertTitle>
+            {readOnly ? "Saved allocation exceeds the approved ceiling" : "Submission remains blocked"}
+          </AlertTitle>
+          {readOnly
+            ? isActiveCycle
+              ? "Use NEP Tier Adjustment when the action is available to correct the saved allocation."
+              : "The saved allocation is shown for reference. Adjustment becomes available when this proposal's NEP fiscal year is the active budget cycle."
+            : "Reduce the allocation until the total and every expense category are within their approved ceilings."}
           {compliance.violations?.length > 0 && (
             <Box component="ul" sx={{ mt: 0.75, mb: 0, pl: 2.25 }}>
               {compliance.violations.map((violation) => (
@@ -589,7 +600,11 @@ const NEPCeilingSummary = ({
       ) : (
         <Alert severity={isAligned ? "success" : "info"} sx={{ mt: 2 }}>
           <AlertTitle>{isAligned ? "Allocation matches the approved ceiling" : "Allocation is within ceiling"}</AlertTitle>
-          {hasUnsavedChanges
+          {readOnly
+            ? isActiveCycle
+              ? "Saved Tier values are shown for reference. Use NEP Tier Adjustment when the action is available for your role and workflow stage."
+              : "Saved Tier values are shown for reference. Adjustment becomes available only when this proposal's NEP fiscal year is the active budget cycle."
+            : hasUnsavedChanges
             ? "This is a live preview. Save the Tier values before returning to the proposal for submission."
             : "The saved Tier values will be used when this proposal is checked for submission."}
         </Alert>
