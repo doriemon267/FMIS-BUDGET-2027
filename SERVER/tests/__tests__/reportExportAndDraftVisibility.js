@@ -203,6 +203,25 @@ describe('Consolidated MOOE region matrix contract', () => {
     expect(getMooeMatrixPdfDetailHeight(4)).toBeCloseTo(35.6, 8);
     expect(getMooeMatrixPdfDetailHeight(4)).toBeGreaterThan(getMooeMatrixPdfDetailHeight(2));
   });
+
+  test('keeps signatories on the current matrix page when the rendered section fits', () => {
+    const {
+      getMooeSignatureSectionHeight,
+      hasSpaceForMooeSignatureSection,
+    } = consolidatedReportsController._private;
+
+    expect(getMooeSignatureSectionHeight(14)).toBe(114);
+    expect(hasSpaceForMooeSignatureSection({
+      currentY: 470,
+      footerY: 598,
+      rowHeight: 14,
+    })).toBe(true);
+    expect(hasSpaceForMooeSignatureSection({
+      currentY: 477,
+      footerY: 598,
+      rowHeight: 14,
+    })).toBe(false);
+  });
 });
 
 describe('Consolidated Corporate Income region selection', () => {

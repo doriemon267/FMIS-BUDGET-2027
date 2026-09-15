@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import CustomTable from '../pspermanent/PersonnelCustomTable';
 import CustomMenu from '../pspermanent/PersonnelCustomMenu';
 import PropTypes from 'prop-types';
 import {
@@ -18,11 +17,12 @@ import {
   TableHead,
   TablePagination,
   TableRow,
-  CircularProgress,
   Checkbox,
   Paper,
   Card,
   CardContent,
+  TextField,
+  InputAdornment,
   useTheme,
 } from '@mui/material';
 import { toast, ToastContainer } from 'react-toastify';
@@ -30,7 +30,6 @@ import 'react-toastify/dist/ReactToastify.css';
 import api from '../../config/api';
 import { useRegion } from '../../context/RegionContext';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { invalidateDataList } from '../../utils/queryClientHelpers';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { updatePersonnelChargedToIncome } from '../../services/personnelSubsidyService';
 import { useSearch } from '../../context/SearchContext';
@@ -40,8 +39,6 @@ import formatCurrency from '../../utils/formatCurrency';
 const PersonnelChargedToIncomeTable = ({
   dataListName,
   schema,
-  title = '',
-  description = '',
   hasEdit = true,
   hasDelete = true,
   customEditElement = null,
@@ -58,32 +55,19 @@ const PersonnelChargedToIncomeTable = ({
   const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({
     open: false,
     mode: 'remove',
+    amount: '',
+    notes: '',
   });
   const [chargedToIncomeLoading, setChargedToIncomeLoading] = useState(false);
-  const [order, setOrder] = useState('desc');
-  const [orderBy, setOrderBy] = useState('createdAt');
+  const [order] = useState('desc');
+  const [orderBy] = useState('createdAt');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
   const { searchValue } = useSearch();
 
-  const pageTitle = useMemo(() => title || 'Personnel Services - Charged to Income', [title]);
-  const pageDescription = useMemo(
-    () => description || 'Personnel tagged as Charged to Income',
-    [description]
-  );
   const apiPath = useMemo(() => '/personnelServices', []);
-
-  // DEBUG: Log what we're receiving
-  useEffect(() => {
-    // console.log("DEBUG PersonnelChargedToIncomeTable:", {
-    //   dataListName,
-    //   schemaKeys: Object.keys(schema).length,
-    //   title,
-    //   apiPath,
-    // });
-  }, [dataListName, schema, title, apiPath]);
 
   // Initialize column visibility
   useEffect(() => {
@@ -93,16 +77,6 @@ const PersonnelChargedToIncomeTable = ({
     });
     setColumnVisibility(initialVisibility);
   }, [schema]);
-
-  const refreshPersonnelData = useCallback(async () => {
-    try {
-      await invalidateDataList(queryClient, dataListName);
-      await queryClient.invalidateQueries({ queryKey: [dataListName, 'chargedToIncome'] });
-      await queryClient.invalidateQueries({ queryKey: ['chargedToIncomeList'] });
-    } catch (error) {
-      toast.error('Error refreshing data.');
-    }
-  }, [queryClient, dataListName]);
 
   // Active settings for fiscal year (for list/reset scope)
   const { data: activeSettings } = useQuery({
@@ -216,11 +190,67 @@ const PersonnelChargedToIncomeTable = ({
       toast.error('No personnel selected.');
       return;
     }
-    setChargedToIncomeDialog({ open: true, mode: 'remove' });
+    setChargedToIncomeDialog({ open: true, mode: 'remove', amount: '', notes: '' });
   }, [selectedRows]);
 
+  const handleOpenAllocationDialog = useCallback(() => {
+    if (!selectedRows.length) {
+      toast.error('No personnel selected.');
+      return;
+    }
+    const selectedAmounts = filteredRows
+      .filter((row) => selectedRows.includes(row._id))
+      .map((row) => Number(row.chargedToIncomeMonthlyAmount) || 0)
+      .filter((amount) => amount > 0);
+    const uniqueAmounts = [...new Set(selectedAmounts)];
+
+    setChargedToIncomeDialog({
+      open: true,
+      mode: 'update',
+      amount: uniqueAmounts.length === 1 ? String(uniqueAmounts[0]) : '',
+      notes: '',
+    });
+  }, [filteredRows, selectedRows]);
+
   const handleCloseRemoveDialog = () => {
-    setChargedToIncomeDialog({ open: false, mode: 'remove' });
+    setChargedToIncomeDialog({ open: false, mode: 'remove', amount: '', notes: '' });
+  };
+
+  const handleConfirmAllocation = async () => {
+    const monthlyAllocation = Number(chargedToIncomeDialog.amount);
+    if (!Number.isFinite(monthlyAllocation) || monthlyAllocation <= 0) {
+      toast.error('Enter a valid monthly Income allocation greater than zero.');
+      return;
+    }
+
+    setChargedToIncomeLoading(true);
+    try {
+      const response = await updatePersonnelChargedToIncome({
+        items: selectedRows.map((id) => ({
+          _id: id,
+          chargedToIncomeMonthlyAmount: monthlyAllocation,
+          chargedToIncomeAmount: monthlyAllocation * 12,
+        })),
+        chargedToIncomeEligible: true,
+        notes: chargedToIncomeDialog.notes.trim() || undefined,
+      });
+
+      const skipped = response?.data?.skipped || [];
+      if (skipped.length) {
+        toast.warning(`${response.data.updatedCount} updated, ${skipped.length} skipped: ${skipped[0].reason}`);
+      } else {
+        toast.success(`Income allocation updated for ${selectedRows.length} employee(s)`);
+      }
+      setSelectedRows([]);
+      handleCloseRemoveDialog();
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      await queryClient.invalidateQueries({ queryKey: ['calculated-budgetary-support'] });
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update Income allocation');
+    } finally {
+      setChargedToIncomeLoading(false);
+    }
   };
 
   const handleConfirmRemove = async () => {
@@ -331,6 +361,14 @@ const PersonnelChargedToIncomeTable = ({
       <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         <Button
           variant="contained"
+          color="primary"
+          onClick={handleOpenAllocationDialog}
+          disabled={selectedRows.length === 0 || locked}
+        >
+          UPDATE INCOME ALLOCATION
+        </Button>
+        <Button
+          variant="contained"
           color="error"
           startIcon={<RefreshIcon />}
           onClick={handleOpenRemoveDialog}
@@ -356,23 +394,65 @@ const PersonnelChargedToIncomeTable = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Remove Charged to Income Tag</DialogTitle>
+        <DialogTitle>
+          {chargedToIncomeDialog.mode === 'update'
+            ? 'Update CPCS2 Income Allocation'
+            : 'Remove Charged to Income Tag'}
+        </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            Remove ${selectedRows.length.toLocaleString('en-US')} personnel from Charged to Income?
+            {chargedToIncomeDialog.mode === 'update'
+              ? `Set the monthly Income-funded salary for ${selectedRows.length.toLocaleString('en-US')} selected personnel. The remaining Personnel Services cost stays under Subsidy.`
+              : `Remove ${selectedRows.length.toLocaleString('en-US')} personnel from Charged to Income?`}
           </Typography>
+          {chargedToIncomeDialog.mode === 'update' && (
+            <>
+              <TextField
+                autoFocus
+                required
+                fullWidth
+                type="number"
+                label="Monthly Income Allocation"
+                value={chargedToIncomeDialog.amount}
+                onChange={(event) => setChargedToIncomeDialog((previous) => ({
+                  ...previous,
+                  amount: event.target.value,
+                }))}
+                inputProps={{ min: 0, step: '0.01' }}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                }}
+                helperText={`Annual Income charge: ${formatCurrency((Number(chargedToIncomeDialog.amount) || 0) * 12)}`}
+              />
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Notes (optional)"
+                value={chargedToIncomeDialog.notes}
+                onChange={(event) => setChargedToIncomeDialog((previous) => ({
+                  ...previous,
+                  notes: event.target.value,
+                }))}
+              />
+            </>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseRemoveDialog} disabled={chargedToIncomeLoading}>
             Cancel
           </Button>
           <Button
-            onClick={handleConfirmRemove}
+            onClick={chargedToIncomeDialog.mode === 'update' ? handleConfirmAllocation : handleConfirmRemove}
             variant="contained"
-            color="error"
+            color={chargedToIncomeDialog.mode === 'update' ? 'primary' : 'error'}
             disabled={chargedToIncomeLoading}
           >
-            {chargedToIncomeLoading ? 'Processing...' : 'Confirm Remove'}
+            {chargedToIncomeLoading
+              ? 'Processing...'
+              : chargedToIncomeDialog.mode === 'update'
+                ? 'Save Allocation'
+                : 'Confirm Remove'}
           </Button>
         </DialogActions>
       </Dialog>

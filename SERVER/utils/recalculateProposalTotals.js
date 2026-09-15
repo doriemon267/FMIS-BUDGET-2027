@@ -21,6 +21,7 @@
  *      If proposalId NOT provided → search by org keys (legacy fallback)
  */
 const mongoose = require('mongoose');
+const { splitPersonnelFunding } = require('./personnelIncomeAllocation');
 const Proposal = require('../models/Proposal');
 const Income = require('../models/Income');
 const PersonnelServices = require('../models/PersonnelServices');
@@ -535,29 +536,29 @@ async function persistProposalTotals(proposal) {
     chargedToIncomeSubsidyTotal
   } = await computeModuleTotals(filterKeys, proposal._id, proposal.workflowRef);
 
-  // ADJUSTED TOTALS FOR CHARGED-TO-INCOME:
-  // Logic: When personnel are marked as "charged to income", their chargedToIncomeAmount
-  // moves from expenses (totalExpenses) to income (totalIncome), but the remainder stays as expenses
-  // 
-  // Example: Personnel with Total=₱100,000, chargedToIncomeAmount=₱40,000
-  //   - OLD: Full ₱100,000 was in expenses
-  //   - NEW: ₱40,000 moves to income, ₱60,000 stays in expenses
+  // FUNDING SPLIT FOR PERSONNEL CHARGED TO INCOME:
+  // Personnel cost remains an expense in full. The configured amount is funded
+  // by Income, while the remainder is funded by Subsidy.
   //
-  // 1. psTotal includes ALL PersonnelServices (including charged-to-income)
-  // 2. Subtract chargedToIncomeTotal from psTotal to get the remaining expenses
-  // 3. Add chargedToIncomeTotal to income
-  // 4. Subsidy: deduct the subsidy of charged-to-income personnel
+  // Example: Personnel with Total=₱100,000, chargedToIncomeAmount=₱40,000
+  //   - Expense: ₱100,000
+  //   - Income funding: ₱40,000
+  //   - Subsidy funding: ₱60,000
   
   // PROJECTED INCOME = Income model (Corporate Income) + Personnelservices(charged to income total) + mooe(income) + capitaloutlay(income)
   // Corporate Income (Income model) is now INCLUDED in Projected Income
-  const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0) + (mooeIncomeTotal || 0) + (coIncomeTotal || 0);
+  const personnelFunding = splitPersonnelFunding(psSubsidyTotal, chargedToIncomeTotal);
+  const effectiveChargedToIncomeTotal = personnelFunding.incomeAmount;
+  const adjustedIncomeTotal = (incomeTotal || 0) + effectiveChargedToIncomeTotal + (mooeIncomeTotal || 0) + (coIncomeTotal || 0);
   
   // Keep Corporate Income amount for reference
   const corporateIncomeTotal = incomeTotal || 0;
   
   const adjustedPsTotal = (psTotal || 0);
-  // NOTE: psSubsidyTotal now correctly calculates subsidy based on charged-to-income status
-  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0));
+  // Personnel costs are funded by two sources: the configured Income allocation
+  // and Subsidy for the balance. Do not count the Income-funded part twice.
+  const adjustedPersonnelSubsidy = personnelFunding.subsidyAmount;
+  const adjustedSubsidyTotal = adjustedPersonnelSubsidy + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0);
 
   const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
   const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
@@ -566,9 +567,10 @@ async function persistProposalTotals(proposal) {
 
   console.log('[recalculate] FINAL CALCULATION:', {
     proposalId: String(proposal._id),
-    corporateIncomeTotal: parseFloat(corporateIncomeTotal).toFixed(2) + ' (NOT included in projectedIncome)',
-    chargedToIncomeTotal: parseFloat(chargedToIncomeTotal).toFixed(2),
+    corporateIncomeTotal: parseFloat(corporateIncomeTotal).toFixed(2) + ' (included in projected income)',
+    chargedToIncomeTotal: parseFloat(effectiveChargedToIncomeTotal).toFixed(2),
     psSubsidyTotal: parseFloat(psSubsidyTotal).toFixed(2),
+    adjustedPersonnelSubsidy: parseFloat(adjustedPersonnelSubsidy).toFixed(2),
     mooeSubsidyTotal: parseFloat(mooeSubsidyTotal).toFixed(2),
     coSubsidyTotal: parseFloat(coSubsidyTotal).toFixed(2),
     mooeIncomeTotal: parseFloat(mooeIncomeTotal).toFixed(2),
@@ -629,7 +631,7 @@ async function persistProposalTotals(proposal) {
     proposalId: proposal._id,
     totals: {
       income: adjustedIncomeTotal,
-      chargedToIncome: chargedToIncomeTotal,
+      chargedToIncome: effectiveChargedToIncomeTotal,
       personnel: adjustedPsTotal,
       mooe: mooeAmountTotal,
       capitalOutlay: coAmountTotal,

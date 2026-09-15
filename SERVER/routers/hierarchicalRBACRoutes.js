@@ -24,6 +24,7 @@ const {
   updateAssignmentStatus
 } = require('../controllers/HierarchicalUserAssignmentController');
 const requireDynamicPermission = require('../middleware/requireDynamicPermission');
+const { buildResponsibilityCenterId } = require('../utils/responsibilityCenterId');
 
 // NEW: Import new organizational assignment controller
 let newOrgAssignmentController = null;
@@ -907,7 +908,7 @@ router.get(
                           mapping.divisions.forEach((division, divIndex) => {
                             if (!officeForRC || !officeForRC.name) return;
 
-                            const rcId = `rc_${mapping._id || mapping.regionId}_${divIndex}`;
+                            const rcId = buildResponsibilityCenterId(mapping, divIndex);
                             const rcData = {
                               id: rcId,
                               name: division.name || `Responsibility Center ${divIndex + 1}`,
@@ -964,7 +965,9 @@ router.get(
                             }
                           }
 
-                          const rcId = `rc_${mapping._id || mappingIndex}_${divIndex}`;
+                          // The same structure mapping can serve multiple regions. Include
+                          // regionId so one region's RCs cannot overwrite another's in the Map.
+                          const rcId = buildResponsibilityCenterId(mapping, divIndex);
 
                           const rcData = {
                             id: rcId,

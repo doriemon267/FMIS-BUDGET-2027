@@ -2,6 +2,8 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
+const WORKFLOW_SIGNATURE_BLOCK_HEIGHT = 45;
+
 /**
  * Extracts standard signatories from a workflow object
  */
@@ -100,7 +102,7 @@ const drawWorkflowSignatureBlock = (context, signatories, currentY, startX, tota
   renderBlock(sig2X, signatories.reviewer);
   renderBlock(sig3X, signatories.approver);
 
-  return currentY + 45;
+  return currentY + WORKFLOW_SIGNATURE_BLOCK_HEIGHT;
 };
 
 /**
@@ -182,6 +184,7 @@ const enrichSignatoriesWithPositionTitle = async (signatoriesInfo, context = nul
 };
 
 module.exports = {
+  WORKFLOW_SIGNATURE_BLOCK_HEIGHT,
   extractSignatoriesFromWorkflow,
   drawWorkflowSignatureBlock,
   cleanupTempImages,

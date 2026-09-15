@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import {
   Dialog,
@@ -80,6 +80,8 @@ const CapitalOutlayDetailsModal = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+  const [rowToFocusId, setRowToFocusId] = useState(null);
+  const newParticularsInputRef = useRef(null);
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const { workflowRef, headerConfig } = useWorkflowRef();
@@ -116,6 +118,9 @@ const CapitalOutlayDetailsModal = ({
     isNew: true,
   });
 
+  const getRowId = (detail) => detail.id || detail._id;
+  const getErrorKey = (detail, field) => `${field}_${getRowId(detail)}`;
+
   const loadDetails = useCallback(async () => {
     setLoading(true);
     try {
@@ -123,6 +128,7 @@ const CapitalOutlayDetailsModal = ({
       if (response.data.success) {
         const loadedDetails = response.data.details.map((detail) => ({
           ...detail,
+          id: detail.id || detail._id || initializeEmptyRow().id,
           isNew: false,
         }));
         // If no details exist, start with one empty row
@@ -151,35 +157,48 @@ const CapitalOutlayDetailsModal = ({
     }
   }, [open, capitalOutlayId, temporaryItem, loadDetails]);
 
+  useEffect(() => {
+    if (!rowToFocusId) {
+      return;
+    }
+
+    newParticularsInputRef.current?.focus();
+    setRowToFocusId(null);
+  }, [details, rowToFocusId]);
+
   const handleAddRow = () => {
-    setDetails((prev) => [...prev, initializeEmptyRow()]);
+    const newRow = initializeEmptyRow();
+    setRowToFocusId(newRow.id);
+    setDetails((prev) => [newRow, ...prev]);
   };
 
-  const handleRemoveRow = (index) => {
+  const handleRemoveRow = (rowId) => {
     if (details.length === 1) {
       toast.warning("At least one row is required");
       return;
     }
-    setDetails((prev) => prev.filter((_, i) => i !== index));
+    setDetails((prev) =>
+      prev.filter((detail) => getRowId(detail) !== rowId)
+    );
     // Clear any errors for the removed row
     setErrors((prev) => {
       const newErrors = { ...prev };
-      delete newErrors[`particulars_${index}`];
-      delete newErrors[`income_amount_${index}`];
-      delete newErrors[`subsidy_amount_${index}`];
+      delete newErrors[`particulars_${rowId}`];
+      delete newErrors[`income_amount_${rowId}`];
+      delete newErrors[`subsidy_amount_${rowId}`];
       return newErrors;
     });
   };
 
-  const handleInputChange = (index, field, value) => {
+  const handleInputChange = (rowId, field, value) => {
     setDetails((prev) =>
-      prev.map((detail, i) =>
-        i === index ? { ...detail, [field]: value } : detail
+      prev.map((detail) =>
+        getRowId(detail) === rowId ? { ...detail, [field]: value } : detail
       )
     );
 
     // Clear error for this field
-    const errorKey = `${field}_${index}`;
+    const errorKey = `${field}_${rowId}`;
     if (errors[errorKey]) {
       setErrors((prev) => {
         const newErrors = { ...prev };
@@ -194,13 +213,14 @@ const CapitalOutlayDetailsModal = ({
     let isValid = true;
     const MINIMUM_AMOUNT = 50000; // ₱50,000 minimum requirement
 
-    details.forEach((detail, index) => {
+    details.forEach((detail) => {
+      const rowId = getRowId(detail);
       // console.log(`--- Validating detail ${index} ---`);
       // console.log("Raw detail:", detail);
       
       // Validate particulars
       if (!detail.particulars || detail.particulars.trim() === "") {
-        newErrors[`particulars_${index}`] = "Particulars is required";
+        newErrors[`particulars_${rowId}`] = "Particulars is required";
         isValid = false;
       }
 
@@ -210,31 +230,31 @@ const CapitalOutlayDetailsModal = ({
       // console.log(`Parsed amounts - Income: ${incomeAmount}, Subsidy: ${subsidyAmount}`);
 
       if (incomeAmount < 0) {
-        newErrors[`income_amount_${index}`] = "Income amount cannot be negative";
+        newErrors[`income_amount_${rowId}`] = "Income amount cannot be negative";
         isValid = false;
       }
 
       if (subsidyAmount < 0) {
-        newErrors[`subsidy_amount_${index}`] = "Subsidy amount cannot be negative";
+        newErrors[`subsidy_amount_${rowId}`] = "Subsidy amount cannot be negative";
         isValid = false;
       }
 
       // At least one amount should be greater than 0
       if (incomeAmount === 0 && subsidyAmount === 0) {
-        newErrors[`income_amount_${index}`] = "At least one amount must be greater than 0";
-        newErrors[`subsidy_amount_${index}`] = "At least one amount must be greater than 0";
+        newErrors[`income_amount_${rowId}`] = "At least one amount must be greater than 0";
+        newErrors[`subsidy_amount_${rowId}`] = "At least one amount must be greater than 0";
         isValid = false;
       }
 
       // Validate minimum amount requirement (₱50,000), except for Intangible Assets
       if (!isIntangibleAssetsItem) {
         if (incomeAmount > 0 && incomeAmount < MINIMUM_AMOUNT) {
-          newErrors[`income_amount_${index}`] = `Income amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
+          newErrors[`income_amount_${rowId}`] = `Income amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
           isValid = false;
         }
 
         if (subsidyAmount > 0 && subsidyAmount < MINIMUM_AMOUNT) {
-          newErrors[`subsidy_amount_${index}`] = `Subsidy amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
+          newErrors[`subsidy_amount_${rowId}`] = `Subsidy amount must be at least ₱${MINIMUM_AMOUNT.toLocaleString()}`;
           isValid = false;
         }
       }
@@ -500,10 +520,18 @@ const CapitalOutlayDetailsModal = ({
     }).format(amount);
   };
 
+  const handleDialogClose = (event, reason) => {
+    if (reason === "backdropClick") {
+      return;
+    }
+
+    onClose();
+  };
+
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleDialogClose}
       maxWidth="lg"
       fullWidth
       PaperProps={{
@@ -573,78 +601,103 @@ const CapitalOutlayDetailsModal = ({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {details.map((detail, index) => (
-                    <TableRow key={detail.id || index}>
-                      <TableCell>
-                        <TextField
-                          fullWidth
-                          multiline
-                          rows={2}
-                          value={detail.particulars}
-                          onChange={(e) =>
-                            handleInputChange(index, "particulars", e.target.value)
-                          }
-                          placeholder="Enter description (e.g., Construction of Operation Room)"
-                          error={!!errors[`particulars_${index}`]}
-                          helperText={errors[`particulars_${index}`]}
-                          size="small"
-                          disabled={editingDisabled}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          fullWidth
-                          value={detail.income_amount}
-                          onChange={(e) =>
-                            handleInputChange(index, "income_amount", e.target.value)
-                          }
-                          InputProps={{
-                            inputComponent: NumberFormatCustom,
-                          }}
-                          inputProps={{
-                            name: "income_amount",
-                          }}
-                          error={!!errors[`income_amount_${index}`]}
-                          helperText={errors[`income_amount_${index}`]}
-                          size="small"
-                          disabled={editingDisabled}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          fullWidth
-                          value={detail.subsidy_amount}
-                          onChange={(e) =>
-                            handleInputChange(index, "subsidy_amount", e.target.value)
-                          }
-                          InputProps={{
-                            inputComponent: NumberFormatCustom,
-                          }}
-                          inputProps={{
-                            name: "subsidy_amount",
-                          }}
-                          error={!!errors[`subsidy_amount_${index}`]}
-                          helperText={errors[`subsidy_amount_${index}`]}
-                          size="small"
-                          disabled={editingDisabled}
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Tooltip title="Remove Row">
-                          <span>
-                            <IconButton
-                              onClick={() => handleRemoveRow(index)}
-                              size="small"
-                              color="error"
-                              disabled={details.length === 1 || editingDisabled}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {details.map((detail) => {
+                    const rowId = getRowId(detail);
+
+                    return (
+                      <TableRow key={rowId}>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            multiline
+                            rows={2}
+                            value={detail.particulars}
+                            onChange={(e) =>
+                              handleInputChange(
+                                rowId,
+                                "particulars",
+                                e.target.value
+                              )
+                            }
+                            inputRef={
+                              rowId === rowToFocusId
+                                ? newParticularsInputRef
+                                : undefined
+                            }
+                            placeholder="Enter description (e.g., Construction of Operation Room)"
+                            error={!!errors[getErrorKey(detail, "particulars")]}
+                            helperText={errors[getErrorKey(detail, "particulars")]}
+                            size="small"
+                            disabled={editingDisabled}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            value={detail.income_amount}
+                            onChange={(e) =>
+                              handleInputChange(
+                                rowId,
+                                "income_amount",
+                                e.target.value
+                              )
+                            }
+                            InputProps={{
+                              inputComponent: NumberFormatCustom,
+                            }}
+                            inputProps={{
+                              name: "income_amount",
+                            }}
+                            error={!!errors[getErrorKey(detail, "income_amount")]}
+                            helperText={errors[getErrorKey(detail, "income_amount")]}
+                            size="small"
+                            disabled={editingDisabled}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <TextField
+                            fullWidth
+                            value={detail.subsidy_amount}
+                            onChange={(e) =>
+                              handleInputChange(
+                                rowId,
+                                "subsidy_amount",
+                                e.target.value
+                              )
+                            }
+                            InputProps={{
+                              inputComponent: NumberFormatCustom,
+                            }}
+                            inputProps={{
+                              name: "subsidy_amount",
+                            }}
+                            error={
+                              !!errors[getErrorKey(detail, "subsidy_amount")]
+                            }
+                            helperText={
+                              errors[getErrorKey(detail, "subsidy_amount")]
+                            }
+                            size="small"
+                            disabled={editingDisabled}
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <Tooltip title="Remove Row">
+                            <span>
+                              <IconButton
+                                onClick={() => handleRemoveRow(rowId)}
+                                size="small"
+                                color="error"
+                                disabled={details.length === 1 || editingDisabled}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

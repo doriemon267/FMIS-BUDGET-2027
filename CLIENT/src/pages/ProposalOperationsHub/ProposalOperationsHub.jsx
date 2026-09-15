@@ -625,10 +625,12 @@ const ProposalOperationsHub = () => {
       "analyst-save-edits": "analyst-save-edits",
       "officer-approve": "forward-to-manager",
       "officer-return": "return-to-preparer",
+      "officer-return-to-analyst": "return-to-analyst",
       "officer-save-edits": "officer-save-edits",
       "officer-submit-to-manager": "forward-to-manager",
       "manager-approve": "finalize",
       "manager-return": "return-to-preparer",
+      "manager-return-to-officer": "return-to-officer",
       "manager-save-edits": "manager-save-edits",
     };
     return actionMapping[frontendAction] || frontendAction;

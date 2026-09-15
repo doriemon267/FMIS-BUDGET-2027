@@ -76,6 +76,8 @@ __tests__/
 !CLIENT/src/utils/nepReportStatus.spec.js
 !CLIENT/src/pages/ProposalOperationsHub/hooks/useProposalPermissions.test.js
 !CLIENT/src/pages/ProposalOperationsHub/ProposalOperationsHub.test.jsx
+!CLIENT/src/components/capitaloutlay/CapitalOutlayDetailsModal.test.jsx
+!SERVER/responsibilityCenterId.test.js
 
 # Temporary test files and scripts (not part of runtime)
 TEMP_FILES/

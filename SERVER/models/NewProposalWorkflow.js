@@ -81,6 +81,11 @@ const newProposalWorkflowSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     index: true
   },
+  nepAdjustmentMode: {
+    type: String,
+    enum: ['PREPARER', 'BRD'],
+    default: 'PREPARER'
+  },
   region: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'region' // Align with actual model name export in models/Region.js

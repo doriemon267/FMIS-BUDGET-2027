@@ -111,7 +111,8 @@ export const isReadOnlyProposalAction = (actionValue) =>
   ["view-details", "view-history", "view-audit-trail"].includes(actionValue);
 
 export const isProposalReturnAction = (actionValue) =>
-  String(actionValue || "").endsWith("-return");
+  String(actionValue || "").endsWith("-return") ||
+  String(actionValue || "").includes("-return-to-");
 
 export const requiresActiveProposalCycle = (actionValue) =>
   !isReadOnlyProposalAction(actionValue) && !isProposalReturnAction(actionValue);
@@ -440,6 +441,8 @@ export const useProposalPermissions = () => {
     const isActiveCycle = isProposalInActiveCycle(proposal, activeSettings);
 
     const proposalBudgetType = getProposalBudgetType(proposal);
+    const isBrdDirectAdjustment =
+      proposalBudgetType === "NEP" && proposal?.nepAdjustmentMode === "BRD";
 
     if (canAccessNepTierAdjustment(proposal, activeSettings, userRoles)) {
       actions.push({
@@ -545,12 +548,14 @@ export const useProposalPermissions = () => {
             color: "primary",
           });
         }
-        actions.push({
-          label: "Return to Budget Preparer",
-          value: "analyst-return",
-          icon: React.createElement(ReturnIcon),
-          color: "warning",
-        });
+        if (!isBrdDirectAdjustment) {
+          actions.push({
+            label: "Return to Budget Preparer",
+            value: "analyst-return",
+            icon: React.createElement(ReturnIcon),
+            color: "warning",
+          });
+        }
       }
 
       // Super admin can do officer actions
@@ -572,8 +577,10 @@ export const useProposalPermissions = () => {
           });
         }
         actions.push({
-          label: "Return to Budget Preparer",
-          value: "officer-return",
+          label: isBrdDirectAdjustment
+            ? "Return to Budget Planning Analyst"
+            : "Return to Budget Preparer",
+          value: isBrdDirectAdjustment ? "officer-return-to-analyst" : "officer-return",
           icon: React.createElement(ReturnIcon),
           color: "warning",
         });
@@ -600,8 +607,10 @@ export const useProposalPermissions = () => {
           });
         }
         actions.push({
-          label: "Return to Budget Preparer",
-          value: "manager-return",
+          label: isBrdDirectAdjustment
+            ? "Return to Budget Officer"
+            : "Return to Budget Preparer",
+          value: isBrdDirectAdjustment ? "manager-return-to-officer" : "manager-return",
           icon: React.createElement(ReturnIcon),
           color: "warning",
         });
@@ -730,12 +739,14 @@ export const useProposalPermissions = () => {
           color: "primary",
         });
       }
-      actions.push({
-        label: "Return to Budget Preparer",
-        value: "analyst-return",
-        icon: React.createElement(ReturnIcon),
-        color: "warning",
-      });
+      if (!isBrdDirectAdjustment) {
+        actions.push({
+          label: "Return to Budget Preparer",
+          value: "analyst-return",
+          icon: React.createElement(ReturnIcon),
+          color: "warning",
+        });
+      }
     }
 
     // BUDGET OFFICER
@@ -756,8 +767,10 @@ export const useProposalPermissions = () => {
         });
       }
       actions.push({
-        label: "Return to Budget Preparer",
-        value: "officer-return",
+        label: isBrdDirectAdjustment
+          ? "Return to Budget Planning Analyst"
+          : "Return to Budget Preparer",
+        value: isBrdDirectAdjustment ? "officer-return-to-analyst" : "officer-return",
         icon: React.createElement(ReturnIcon),
         color: "warning",
       });
@@ -788,8 +801,10 @@ export const useProposalPermissions = () => {
         });
       }
       actions.push({
-        label: "Return to Budget Preparer",
-        value: "manager-return",
+        label: isBrdDirectAdjustment
+          ? "Return to Budget Officer"
+          : "Return to Budget Preparer",
+        value: isBrdDirectAdjustment ? "manager-return-to-officer" : "manager-return",
         icon: React.createElement(ReturnIcon),
         color: "warning",
       });

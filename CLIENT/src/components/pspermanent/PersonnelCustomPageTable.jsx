@@ -37,7 +37,6 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import PrintIcon from '@mui/icons-material/Print';
 import PesoIcon from '../icons/PesoIcon';
-import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateDataList } from "../../utils/queryClientHelpers";
 import { useWorkflowRef } from "../../hooks/useWorkflowRef";
@@ -46,8 +45,6 @@ import { updatePersonnelChargedToIncome } from "../../services/personnelSubsidyS
 const PSPCustomPageTable = ({
   dataListName,
   schema,
-  title = "",
-  description = "",
   hasEdit = true,
   hasDelete = true,
   customEditElement = null,
@@ -81,8 +78,6 @@ const PSPCustomPageTable = ({
   const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({ open: false, mode: "tag", amount: "", notes: "" });
   const [chargedToIncomeLoading, setChargedToIncomeLoading] = useState(false);
 
-  const pageTitle = useMemo(() => title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1), [title, dataListName]);
-  const pageDescription = useMemo(() => description || `Manage ${dataListName}`, [description, dataListName]);
   const apiPath = useMemo(() => `/${dataListName}`, [dataListName]);
 
   // Define all callback functions first
@@ -228,7 +223,11 @@ const PSPCustomPageTable = ({
     }
 
     if (chargedToIncomeDialog.mode === "tag") {
-      // No amount validation needed - just moving employees to charged to income
+      const monthlyAllocation = Number(chargedToIncomeDialog.amount);
+      if (!Number.isFinite(monthlyAllocation) || monthlyAllocation <= 0) {
+        toast.error("Enter a valid monthly Income allocation greater than zero.");
+        return;
+      }
     }
 
     setChargedToIncomeLoading(true);
@@ -236,20 +235,14 @@ const PSPCustomPageTable = ({
       const payload =
         chargedToIncomeDialog.mode === "tag"
           ? {
-              items: selectedRows.map((id) => {
-                // Find the personnel record to get the salary amount
-                const personnel = filteredRows.find(r => r._id === id);
-                const salaryAmount = personnel?.Total || personnel?.total || personnel?.amount || 0;
-                // console.log("DEBUG: Marking permanent personnel as charged-to-income:", {
-                  // id,
-                  // name: personnel?.employeeFullName,
-                  // Total: personnel?.Total,
-                  // salaryAmount
-                // });
-                return { _id: id, chargedToIncomeAmount: salaryAmount };
-              }),
+              items: selectedRows.map((id) => ({
+                _id: id,
+                chargedToIncomeMonthlyAmount: Number(chargedToIncomeDialog.amount),
+                chargedToIncomeAmount: Number(chargedToIncomeDialog.amount) * 12,
+              })),
               chargedToIncomeEligible: true,
               defaultAmount: 0,
+              notes: chargedToIncomeDialog.notes.trim() || undefined,
             }
           : {
               items: selectedRows.map((id) => ({ _id: id })),
@@ -947,9 +940,50 @@ const PSPCustomPageTable = ({
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
             {chargedToIncomeDialog.mode === "tag"
-              ? `Move ${selectedRows.length.toLocaleString('en-US')} personnel to Charged to Income?`
+              ? `Set the CPCS2 monthly salary portion funded by Income for ${selectedRows.length.toLocaleString('en-US')} selected permanent personnel. The remaining annual Personnel Services cost will be funded by Subsidy.`
               : `Remove ${selectedRows.length.toLocaleString('en-US')} personnel from Charged to Income?`}
           </Typography>
+          {chargedToIncomeDialog.mode === "tag" && (
+            <>
+              <TextField
+                autoFocus
+                required
+                fullWidth
+                type="number"
+                label="Monthly Income Allocation"
+                value={chargedToIncomeDialog.amount}
+                onChange={(event) =>
+                  setChargedToIncomeDialog((previous) => ({
+                    ...previous,
+                    amount: event.target.value,
+                  }))
+                }
+                inputProps={{ min: 0, step: "0.01" }}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                }}
+                helperText={`Annual Income charge: ₱${(
+                  (Number(chargedToIncomeDialog.amount) || 0) * 12
+                ).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}. The monthly allocation cannot exceed each employee's monthly salary.`}
+              />
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                label="Notes (optional)"
+                value={chargedToIncomeDialog.notes}
+                onChange={(event) =>
+                  setChargedToIncomeDialog((previous) => ({
+                    ...previous,
+                    notes: event.target.value,
+                  }))
+                }
+              />
+            </>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseChargedToIncomeDialog} disabled={chargedToIncomeLoading}>

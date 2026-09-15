@@ -99,6 +99,7 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
   const [budgetPoolDialogOpen, setBudgetPoolDialogOpen] = useState(false);
   const [newBudgetPool, setNewBudgetPool] = useState(0);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [generationMode, setGenerationMode] = useState('PREPARER');
   const [comparisonExpanded, setComparisonExpanded] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -271,11 +272,15 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
     
     setActionLoading(true);
     try {
-      const res = await api.post(`/api/budget-ceiling/${ceiling._id}/generate-nep`);
+      const res = await api.post(`/api/budget-ceiling/${ceiling._id}/generate-nep`, {
+        generationMode,
+      });
       
       if (res.data.success) {
         const { nepProposals, errors } = res.data.data;
-        toast.success(`Generated ${nepProposals.length} NEP proposal(s)`);
+        toast.success(
+          `Generated ${nepProposals.length} NEP proposal(s) for ${generationMode === 'BRD' ? 'BRD direct adjustment' : 'Budget Preparer adjustment'}`,
+        );
         if (errors.length > 0) {
           errors.forEach(err => toast.warning(err));
         }
@@ -596,7 +601,10 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
               <Button
                 variant="contained"
                 startIcon={<GenerateIcon />}
-                onClick={() => setGenerateDialogOpen(true)}
+                onClick={() => {
+                  setGenerationMode('PREPARER');
+                  setGenerateDialogOpen(true);
+                }}
                 disabled={actionLoading}
                 sx={{ 
                   bgcolor: '#fff', 
@@ -1052,14 +1060,36 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
           <Typography sx={{ mb: 1 }}>
             <strong>Divisions:</strong> {ceiling?.allocations?.length || 0}
           </Typography>
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel id="nep-generation-mode-label">Adjustment Workflow</InputLabel>
+            <Select
+              labelId="nep-generation-mode-label"
+              value={generationMode}
+              label="Adjustment Workflow"
+              onChange={(event) => setGenerationMode(event.target.value)}
+            >
+              <MenuItem value="PREPARER">Send to Budget Preparer</MenuItem>
+              <MenuItem value="BRD">BRD Direct Adjustment</MenuItem>
+            </Select>
+          </FormControl>
           <Divider sx={{ my: 2 }} />
           <Typography sx={{ color: '#666', fontSize: '0.85rem' }}>
             ⚠️ After generating NEP proposals:
           </Typography>
           <ul style={{ color: '#666', fontSize: '0.85rem', margin: '8px 0' }}>
             <li>The ceiling will be <strong>locked</strong> (no more changes)</li>
-            <li>NEP proposals will be created in <strong>Draft</strong> status</li>
-            <li>Budget Preparers can then submit them through the workflow</li>
+            {generationMode === 'BRD' ? (
+              <>
+                <li>NEP proposals will go directly to the <strong>Budget Planning Analyst</strong></li>
+                <li>BRD can adjust the details within the approved ceiling</li>
+                <li>The review path will be <strong>Analyst → Officer → Manager</strong></li>
+              </>
+            ) : (
+              <>
+                <li>NEP proposals will be created in <strong>Draft</strong> status</li>
+                <li>Assigned Budget Preparers can submit them through the workflow</li>
+              </>
+            )}
           </ul>
         </DialogContent>
         <DialogActions>
@@ -1071,7 +1101,7 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
             startIcon={actionLoading ? <CircularProgress size={16} /> : <GenerateIcon />}
             sx={{ bgcolor: BRAND_COLORS.deepGreen }}
           >
-            Generate NEP Proposals
+            {generationMode === 'BRD' ? 'Generate for BRD Adjustment' : 'Generate NEP Proposals'}
           </Button>
         </DialogActions>
       </Dialog>

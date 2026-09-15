@@ -14,7 +14,52 @@ const PersonnelServices = require('../../models/PersonnelServices');
 const MooeProposal = require('../../models/mooeProposals');
 const CapitalOutlay = require('../../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../../models/CapitalOutlayDetails');
-const { cleanupGeneratedNepData } = require('../../services/nepProposalService');
+const {
+  cleanupGeneratedNepData,
+  normalizeNepGenerationMode,
+  buildNepGenerationAssignment
+} = require('../../services/nepProposalService');
+
+describe('NEP generation workflow assignment', () => {
+  test('routes BRD direct adjustment to the Budget Planning Analyst without preparer ownership', () => {
+    const assignment = buildNepGenerationAssignment({
+      generationMode: 'BRD',
+      brdUser: { userId: 'brd-1', userName: 'BRD Officer' }
+    });
+
+    expect(assignment).toMatchObject({
+      generationMode: 'BRD',
+      workflowStatus: 'FORWARDED_TO_BRD_ANALYST',
+      currentAssigneeRole: 'BUDGET PLANNING ANALYST',
+      legacyStatus: 'Forwarded to Budget Planning Analyst',
+      legacyWorkflowLevel: 'BUDGET_PLANNING_ANALYST',
+      assignedPreparerUserIds: [],
+      assignedPreparerNames: []
+    });
+    expect(assignment.editor).toEqual({ userId: 'brd-1', userName: 'BRD Officer' });
+  });
+
+  test('keeps Budget Preparer generation as the default workflow', () => {
+    const preparers = [
+      { userId: 'prep-1', userName: 'Primary Preparer' },
+      { userId: 'prep-2', userName: 'Backup Preparer' }
+    ];
+    const assignment = buildNepGenerationAssignment({
+      generationMode: normalizeNepGenerationMode('unsupported-value'),
+      preparers
+    });
+
+    expect(assignment).toMatchObject({
+      generationMode: 'PREPARER',
+      workflowStatus: 'DRAFT',
+      currentAssigneeRole: 'BUDGET PREPARER',
+      legacyStatus: 'Draft',
+      assignedPreparerUserIds: ['prep-1', 'prep-2'],
+      assignedPreparerNames: ['Primary Preparer', 'Backup Preparer']
+    });
+    expect(assignment.editor).toEqual(preparers[0]);
+  });
+});
 
 describe('generated NEP clone cleanup', () => {
   beforeEach(() => {

@@ -285,6 +285,17 @@ courtAppearance: {
       type: Number,
       default: 0,
     },
+    // Monthly CPCS2 salary portion funded by Income. The annual equivalent is
+    // stored in chargedToIncomeAmount for proposal-wide calculations.
+    chargedToIncomeMonthlyAmount: {
+      type: Number,
+      default: 0,
+    },
+    // Remaining personnel cost funded by Subsidy after the Income allocation.
+    chargedToSubsidyAmount: {
+      type: Number,
+      default: 0,
+    },
     chargedToIncomeSubsidyAmount: {
       type: Number,
       default: 0,

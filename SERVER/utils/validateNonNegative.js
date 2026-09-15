@@ -72,7 +72,8 @@ const PERSONNEL_NUMERIC_FIELDS = [
   'childrenAllowance', 'midyearBonus', 'cashGift', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
   'yearEndBonus', 'gsisPremium', 'philhealthPremium', 'pagibigPremium', 'employeeCompensation',
   'loyaltyAward', 'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance',
-  'Total', 'subsidyAmount', 'chargedToIncomeAmount', 'chargedToIncomeSubsidyAmount', 'amount'
+  'Total', 'subsidyAmount', 'chargedToIncomeAmount', 'chargedToIncomeMonthlyAmount',
+  'chargedToSubsidyAmount', 'chargedToIncomeSubsidyAmount', 'amount'
 ];
 
 module.exports = {

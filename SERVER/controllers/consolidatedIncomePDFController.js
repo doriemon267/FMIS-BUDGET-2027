@@ -27,7 +27,14 @@ const DiscountSettings = require('../models/DiscountSettings');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { extractSignatoriesFromWorkflow, drawWorkflowSignatureBlock, cleanupTempImages, enrichSignatoriesWithPositionTitle } = require('../utils/pdfSignatureHelper');
-const { getFolioPageSize, isAllRegionsSelection } = require('../utils/reportPageLayout');
+const {
+  buildExactRegionMongoFilter,
+  getFolioPageSize,
+  getRegionalCoverageLabel,
+  isAllRegionsSelection,
+  normalizeRegionSelection,
+} = require('../utils/reportPageLayout');
+const { calculateCorporateIncomeDiscounts } = require('../utils/corporateIncomeDiscount');
 const { getRegionsWithReportEntries } = require('../utils/reportRegionSelection');
 const {
   resolveDraftWatermarkForRecords,
@@ -65,6 +72,8 @@ const formatCurrency = (amount) => {
   const formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return `P ${formatted}`;
 };
+
+const formatDiscountCurrency = (amount) => `(${formatCurrency(Math.abs(Number(amount) || 0))})`;
 
 /**
  * Format percentage
@@ -583,7 +592,28 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       return res.status(500).json({ error: 'PDF generation library (muhammara) is not installed on the server.' });
     }
 
-    const { fiscalYear, budgetType, selectedRegions, activeTab, showPercentages } = req.body;
+    const {
+      fiscalYear,
+      budgetType,
+      consolidationType,
+      selectedRegions,
+      activeTab,
+      showPercentages,
+    } = req.body;
+    const requestedRegionSelection = normalizeRegionSelection({
+      consolidationType,
+      selectedRegions,
+    });
+
+    if (
+      String(consolidationType || '').trim().toLowerCase() === 'custom' &&
+      requestedRegionSelection.regions.length === 0
+    ) {
+      return res.status(400).json({
+        error: 'Select at least one region for a custom consolidated report.',
+        code: 'CUSTOM_REGIONS_REQUIRED',
+      });
+    }
     
     // --- SECURITY OVERRIDE: Enforce scope based on user roles and assignments ---
     const userId = req.user?.id || req.user?.userId || req.user?._id || req.user?.UserId;
@@ -655,16 +685,21 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     // Apply hierarchical filters if present
     let regionFilter = null;
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
-      regionFilter = req.hierarchicalFilters.region;
-    } else if (selectedRegions && selectedRegions !== 'all') {
-      regionFilter = selectedRegions;
+      const hierarchicalSelection = normalizeRegionSelection({
+        regions: req.hierarchicalFilters.region,
+      });
+      regionFilter = hierarchicalSelection.regions.length > 0
+        ? hierarchicalSelection.regions
+        : null;
+    } else if (!requestedRegionSelection.isAll && requestedRegionSelection.regions.length > 0) {
+      regionFilter = requestedRegionSelection.regions;
     }
 
     // Enforce accessible region if not super admin and not specified
     if (!isSuperAdmin && !regionFilter) {
       const accessibleRegion = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName
         || req.hierarchicalAccessInfo?.accessibleRegions?.[0]?.regionName;
-      if (accessibleRegion) regionFilter = accessibleRegion;
+      if (accessibleRegion) regionFilter = [accessibleRegion];
     }
     
     // Fetch data from database
@@ -675,11 +710,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     // not consume empty columns in the PDF.
     let regions;
     if (regionFilter) {
-      if (Array.isArray(regionFilter)) {
-        regions = regionFilter.map(r => ({ Region: r }));
-      } else {
-        regions = [{ Region: regionFilter }];
-      }
+      regions = regionFilter.map((regionName) => ({ Region: regionName }));
     } else {
       regions = [];
     }
@@ -705,13 +736,8 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     
     // Get income entries
     const incomeQuery = { fiscalYear, budgetType: { $regex: new RegExp(queryBudgetType, 'i') } };
-    if (regionFilter) {
-      if (Array.isArray(regionFilter)) {
-        incomeQuery.region = { $in: regionFilter.map(r => new RegExp(`^${r}$`, 'i')) };
-      } else {
-        incomeQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
-      }
-    }
+    const exactRegionFilter = buildExactRegionMongoFilter(regionFilter || []);
+    if (exactRegionFilter) incomeQuery.region = exactRegionFilter;
     
     // Fetch data using the same query as the screen report (reports.controller.js)
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
@@ -898,65 +924,65 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       );
       if (isfCategoryKey) {
         const discountQuery = { fiscalYear, budgetType: queryBudgetType };
-        if (regionFilter && !Array.isArray(regionFilter)) {
-          discountQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
-        }
-        const discountSettingsDoc = await DiscountSettings.findOne(discountQuery);
-        const applyDiscount = discountSettingsDoc ? discountSettingsDoc.applyDiscount : true;
-        const discountType   = discountSettingsDoc ? discountSettingsDoc.discountType   : 'percentage';
-        const discountValue  = discountSettingsDoc ? discountSettingsDoc.discountValue  : 10;
+        if (exactRegionFilter) discountQuery.region = exactRegionFilter;
+        const discountSettingsDocs = await DiscountSettings.find(discountQuery)
+          .sort({ updatedAt: -1 });
+        const isfCatId = isfCategoryKey.id;
 
-        if (applyDiscount) {
-          const isfCatId = isfCategoryKey.id;
-          const isfGrandTotal = reportData.categoryTotals[isfCatId] || 0;
+        const currentAccountByRegion = {};
+        regions.forEach((region) => { currentAccountByRegion[region.Region] = 0; });
 
-          // Compute "Current Account" subtotal per region
-          const currentAccountByRegion = {};
-          regions.forEach(r => { currentAccountByRegion[r.Region] = 0; });
+        incomeEntries.forEach(entry => {
+          const entryCategory = entry.incomecategory;
+          if (!entryCategory) return;
+          const catName = typeof entryCategory === 'object'
+            ? (entryCategory.incomeCategoryName || entryCategory.name || '')
+            : '';
+          const isIsf = catName.toLowerCase().includes('irrigation service fees') &&
+                        !catName.toLowerCase().includes('net');
+          if (!isIsf || entry.subcategory !== 'Current Account') return;
+          const rName = Object.keys(currentAccountByRegion).find(
+            k => k.toLowerCase() === (entry.region || '').trim().toLowerCase()
+          );
+          if (rName) currentAccountByRegion[rName] += Number(entry.amount) || 0;
+        });
 
-          incomeEntries.forEach(entry => {
-            const entryCategory = entry.incomecategory;
-            if (!entryCategory) return;
-            const catName = typeof entryCategory === 'object'
-              ? (entryCategory.incomeCategoryName || entryCategory.name || '')
-              : '';
-            const isIsf = catName.toLowerCase().includes('irrigation service fees') &&
-                          !catName.toLowerCase().includes('net');
-            if (!isIsf) return;
-            if (entry.subcategory !== 'Current Account') return;
-            const rName = Object.keys(currentAccountByRegion).find(
-              k => k.toLowerCase() === (entry.region || '').trim().toLowerCase()
-            );
-            if (rName) currentAccountByRegion[rName] += Number(entry.amount) || 0;
-          });
+        const regionNames = regions.map((region) => region.Region);
+        const isfByRegion = Object.fromEntries(regionNames.map((regionName) => [
+          regionName,
+          reportData.regionData[regionName]?.categoryAmounts[isfCatId] || 0,
+        ]));
+        const grossTotalByRegion = Object.fromEntries(regionNames.map((regionName) => [
+          regionName,
+          reportData.regionData[regionName]?.total || 0,
+        ]));
+        const discountResult = calculateCorporateIncomeDiscounts({
+          regionNames,
+          currentAccountByRegion,
+          isfByRegion,
+          grossTotalByRegion,
+          settings: discountSettingsDocs,
+        });
 
-          const discountRegionAmounts = {};
-          const netIsfRegionAmounts = {};
-          let discountGrandTotal = 0;
-
-          regions.forEach(region => {
-            const regionName = region.Region;
-            const isfRegionAmount = reportData.regionData[regionName]?.categoryAmounts[isfCatId] || 0;
-            const currentAcct = currentAccountByRegion[regionName] || 0;
-            const discountAmount = discountType === 'percentage'
-              ? currentAcct * (discountValue / 100)
-              : Math.min(discountValue, currentAcct);
-            discountRegionAmounts[regionName] = discountAmount;
-            netIsfRegionAmounts[regionName] = isfRegionAmount - discountAmount;
-            discountGrandTotal += discountAmount;
-          });
-
-          const netIsfGrandTotal = isfGrandTotal - discountGrandTotal;
-          const discountLabel = discountType === 'percentage'
-            ? `Less: ${discountValue}% Discount on Current Account`
-            : `Less: Discount on Current Account (Fixed)`;
+        if (discountResult.applyDiscount) {
+          const {
+            discountGrandTotal,
+            discountLabel,
+            discountRegionAmounts,
+            netIsfGrandTotal,
+            netIsfRegionAmounts,
+            netTotalByRegion,
+            settingsByRegion,
+          } = discountResult;
 
           const discountCatId = '__discount_isf__';
           reportData.categoryTotals[discountCatId] = discountGrandTotal;
           reportData.categorySubcategoryMap[discountCatId] = [];
           regions.forEach(region => {
-            if (!reportData.regionData[region.Region]) return;
-            reportData.regionData[region.Region].categoryAmounts[discountCatId] = discountRegionAmounts[region.Region];
+            const regionName = region.Region;
+            if (!reportData.regionData[regionName]) return;
+            reportData.regionData[regionName].categoryAmounts[discountCatId] = discountRegionAmounts[regionName];
+            reportData.regionData[regionName].total = netTotalByRegion[regionName];
           });
           reportData.hierarchicalData.push({
             id: discountCatId, name: discountLabel, type: 'category',
@@ -976,7 +1002,12 @@ const exportConsolidatedIncomePDF = async (req, res) => {
           });
 
           reportData.grandTotal -= discountGrandTotal;
-          reportData.isfDiscount = { applyDiscount, discountType, discountValue, discountGrandTotal, netIsfGrandTotal };
+          reportData.isfDiscount = {
+            applyDiscount: true,
+            discountGrandTotal,
+            netIsfGrandTotal,
+            settingsByRegion,
+          };
         }
       }
     } catch (discountErr) {
@@ -1021,7 +1052,10 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       subject: 'Corporate Income Report',
     });
 
-    const useLandscape = isAllRegionsSelection({ selectedRegions });
+    const useLandscape = isAllRegionsSelection({
+      selectedRegions,
+      regions: regionFilter || [],
+    });
     const { width: PAGE_WIDTH, height: PAGE_HEIGHT } = getFolioPageSize(useLandscape);
     const MARGIN = 18;
     const MARGIN_TOP = 25;
@@ -1098,6 +1132,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       rows.push({
         label: String(category.name || ''),
         bold: true,
+        isDiscount: Boolean(category.isDiscount),
         valuesByRegion: (regionName) => reportData.regionData?.[regionName]?.categoryAmounts?.[category.id] || 0,
         total: categoryTotal,
       });
@@ -1122,7 +1157,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       if (currentPage > 0) {
         pdfDoc.endPage();
       }
-      // All Regions uses Folio landscape; a single region keeps Folio portrait.
+      // All Regions and multi-region custom reports use Folio landscape.
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage += 1;
       drawBorder();
@@ -1169,8 +1204,11 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       
       pdfDoc.text(subTitle, cx, hy, textOpt({ fontSize: 8, align: 'center' }));
       hy += 10;
-      const regionsText = selectedRegions === 'all' ? 'ALL REGIONS' : groupRegions.join(', ');
-      pdfDoc.text(`Regions: ${regionsText}`, cx, hy, textOpt({ fontSize: 8, align: 'center' }));
+      const coverageText = getRegionalCoverageLabel({
+        isAll: requestedRegionSelection.isAll,
+        regions: filteredRegions,
+      });
+      pdfDoc.text(`Regional Coverage: ${coverageText}`, cx, hy, textOpt({ fontSize: 8, align: 'center' }));
       pdfDoc.text('ANNEX A', CONTENT_RIGHT - 46, hy + 2, textOpt({ fontSize: 9, bold: true }));
 
       pdfDoc.text(`Doc ID: ${reportData.documentId}`, CONTENT_LEFT, PAGE_HEIGHT - 10, textOpt({ fontSize: 7 }));
@@ -1179,7 +1217,14 @@ const exportConsolidatedIncomePDF = async (req, res) => {
       return hy + 20;
     };
 
-    const estimatedRowsPerPage = 24;
+    // Keep the footer's total page count aligned with the same vertical bounds
+    // used by the row-rendering loop below.
+    const firstDataRowY = MARGIN_TOP + 100;
+    const lastDataRowY = PAGE_HEIGHT - MARGIN_BOTTOM - 100;
+    const estimatedRowsPerPage = Math.max(
+      1,
+      Math.floor((lastDataRowY - firstDataRowY) / 12) + 1
+    );
     const pagesPerGroup = Math.max(1, Math.ceil(rows.length / estimatedRowsPerPage));
     const totalPages = Math.max(1, regionGroups.length * pagesPerGroup);
 
@@ -1213,10 +1258,25 @@ const exportConsolidatedIncomePDF = async (req, res) => {
           let colX = CONTENT_LEFT + descColW;
           groupRegions.forEach((regionName) => {
             const value = row.valuesByRegion(regionName);
-            pdfDoc.text(formatCurrency(value), colX + regionColW - 5, y, textOpt({ fontSize: 7, align: 'right' }));
+            pdfDoc.text(
+              row.isDiscount ? formatDiscountCurrency(value) : formatCurrency(value),
+              colX + regionColW - 5,
+              y,
+              textOpt({ fontSize: 7, align: 'right', color: row.isDiscount ? '#B91C1C' : '#000000' })
+            );
             colX += regionColW;
           });
-          pdfDoc.text(formatCurrency(row.total), CONTENT_RIGHT - 5, y, textOpt({ fontSize: row.bold ? 8 : 7, bold: row.bold, align: 'right' }));
+          pdfDoc.text(
+            row.isDiscount ? formatDiscountCurrency(row.total) : formatCurrency(row.total),
+            CONTENT_RIGHT - 5,
+            y,
+            textOpt({
+              fontSize: row.bold ? 8 : 7,
+              bold: row.bold,
+              align: 'right',
+              color: row.isDiscount ? '#B91C1C' : '#000000',
+            })
+          );
           y += 12;
           rowIndex += 1;
         }

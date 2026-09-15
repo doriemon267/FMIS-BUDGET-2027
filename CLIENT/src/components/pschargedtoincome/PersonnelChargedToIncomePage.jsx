@@ -1,7 +1,7 @@
 import React from "react";
 import PersonnelChargedToIncomeTable from "./PersonnelChargedToIncomeTable";
 
-const PersonnelChargedToIncomePage = ({ dataListName, schema, region, fiscalYear, proposalId }) => {
+const PersonnelChargedToIncomePage = ({ dataListName, proposalId }) => {
   // Use a unique cache key for charged-to-income queries - append "ChargedToIncome" to distinguish from regular personnel queries
   const chargedToIncomeCacheKey = dataListName ? `${dataListName}_ChargedToIncome` : "personnelServices_ChargedToIncome";
   
@@ -197,6 +197,21 @@ const PersonnelChargedToIncomePage = ({ dataListName, schema, region, fiscalYear
               maximumFractionDigits: 2,
             })
           : "—",
+    },
+    chargedToIncomeMonthlyAmount: {
+      type: "number",
+      label: "MONTHLY INCOME ALLOCATION",
+      show: true,
+    },
+    chargedToIncomeAmount: {
+      type: "number",
+      label: "ANNUAL INCOME ALLOCATION",
+      show: true,
+    },
+    chargedToSubsidyAmount: {
+      type: "number",
+      label: "SUBSIDY BALANCE",
+      show: true,
     },
     Total: {
       type: "number",

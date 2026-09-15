@@ -15,6 +15,11 @@ const proposalSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  nepAdjustmentMode: {
+    type: String,
+    enum: ['PREPARER', 'BRD'],
+    default: 'PREPARER'
+  },
   region: {
     type: String,
     required: true

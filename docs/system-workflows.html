@@ -60,13 +60,55 @@
     .analyst    { border-color: #795548; background: #efebe9; }
     .overall    { border-color: #F44336; background: #ffebee; }
     .admin      { border-color: #607D8B; background: #eceff1; }
+    .status-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px; padding: 24px 28px;
+    }
+    .status-card {
+      border: 1px solid #dce7e0; border-radius: 9px; padding: 16px;
+      background: #fbfdfb;
+    }
+    .status-card h3 { color: #1a4731; font-size: 1rem; margin-bottom: 5px; }
+    .status-card .percent { font-size: 1.65rem; font-weight: 750; color: #2e7d52; }
+    .status-card p { color: #59645d; font-size: .8rem; line-height: 1.45; margin-top: 8px; }
+    .progress-track {
+      height: 9px; overflow: hidden; border-radius: 999px;
+      background: #e4ebe7; margin-top: 10px;
+    }
+    .progress-fill { height: 100%; border-radius: inherit; background: #2e7d52; }
+    .progress-fill.partial { background: #ef9a35; }
+    .progress-fill.planned { background: #78909c; }
+    .doc-table-wrap { padding: 0 28px 26px; overflow-x: auto; }
+    .doc-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    .doc-table th, .doc-table td {
+      border: 1px solid #dce7e0; padding: 10px 12px; text-align: left; vertical-align: top;
+    }
+    .doc-table th { background: #edf5f0; color: #1a4731; font-weight: 700; }
+    .state {
+      display: inline-block; border-radius: 999px; padding: 3px 9px;
+      font-size: .72rem; font-weight: 700; white-space: nowrap;
+    }
+    .state.done { color: #1b5e20; background: #dff3e4; }
+    .state.partial { color: #8a4b08; background: #fff0d9; }
+    .state.planned { color: #455a64; background: #e8eef1; }
+    .note-box {
+      margin: 0 28px 24px; padding: 14px 16px; border-left: 4px solid #ef9a35;
+      border-radius: 4px; background: #fff8ed; color: #62451f;
+      font-size: .84rem; line-height: 1.55;
+    }
+    .checklist { padding: 0 48px 26px; color: #37433c; font-size: .86rem; line-height: 1.65; }
+    .checklist li { margin-bottom: 5px; }
+    footer {
+      max-width: 1200px; margin: 0 auto 30px; padding: 0 24px;
+      color: #65716a; font-size: .78rem; text-align: center;
+    }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>FMIS — Online Submission of Budget Proposals and Integrated System</h1>
-  <p>System Workflow Reference Diagrams — NIA Budget Module</p>
+  <h1>FMIS — Online Submission of Budget Proposals and Information System</h1>
+  <p>System Workflow Reference Diagrams — NIA Budget Module · Updated September 8, 2026</p>
 </header>
 
 <nav>
@@ -80,6 +122,9 @@
   <a href="#data-entry">Data Entry Flow</a>
   <a href="#reports">Reports Flow</a>
   <a href="#security">Security Events</a>
+  <a href="#budget-cycles">Budget Cycles</a>
+  <a href="#implementation-status">Implementation Status</a>
+  <a href="#organization-hierarchy">Organization Hierarchy</a>
 </nav>
 
 <main>
@@ -119,11 +164,11 @@
         <p>Reviews consolidated data, generates reports, handles BRD (Budget Review Document) analysis.</p>
       </div>
       <div class="role-card overall">
-        <h4>OVERALL BUDGET APPROVER</h4>
+        <h4>BUDGET MANAGER</h4>
         <p>Top-level approver across all regions. Can see all proposals system-wide.</p>
       </div>
       <div class="role-card admin">
-        <h4>BUDGET ADMIN / SUPER ADMIN</h4>
+        <h4>ADMIN</h4>
         <p>Full system access. Manages users, roles, settings, fiscal years, and views all data. ID must be whitelisted in .env.</p>
       </div>
     </div>
@@ -507,7 +552,231 @@ flowchart TD
     </div>
   </div>
 
+  <!-- BUDGET CYCLE LIFECYCLE -->
+  <div class="section" id="budget-cycles">
+    <div class="section-header">
+      <span class="badge">11</span>
+      <h2>Budget Cycle Lifecycle — Initial, NEP, and GAA</h2>
+    </div>
+    <div class="section-desc">
+      <p>The system uses shared proposal-entry, hierarchical approval, audit, and reporting components across budget phases. Initial and NEP have operational workflows. GAA is recognized by the common data model but its dedicated lifecycle remains under development.</p>
+    </div>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+    A([Fiscal Year and Budget Type Setup]) --> B[INITIAL BUDGET]
+    B --> C[Encode PS / MOOE / Capital Outlay / Income]
+    C --> D[Responsibility Center and Office Review]
+    D --> E[Reviewer and Approver Actions]
+    E --> F[Budget Manager Finalization]
+    F --> G[(FINALIZED INITIAL)]
+
+    G --> H[BRD Initializes NEP Ceiling]
+    H --> I[Allocate Ceiling by Office / Responsibility Center]
+    I --> J[Publish Ceiling]
+    J --> K[Generate NEP Proposals from Finalized Initial]
+    K --> K1{Adjustment Workflow}
+    K1 -- Budget Preparer --> L[Preparer Adjusts Entries Within Ceiling]
+    L --> M[Reviewer / Approver / BRD Review]
+    K1 -- BRD Direct Adjustment --> L2[Budget Planning Analyst Adjusts Within Ceiling]
+    L2 --> M2[Budget Officer Verification]
+    M2 --> M3[Budget Manager Finalization]
+    M --> N[(FINALIZED NEP)]
+    M3 --> N
+    N --> O[Initial vs NEP Comparison and Reports]
+
+    N -. Planned .-> P[Define Approved GAA Amounts and Source]
+    P -. Planned .-> Q[Generate or Import GAA Proposal]
+    Q -. Planned .-> R[GAA Adjustments and Variance Validation]
+    R -. Planned .-> S[GAA Review / Approval / Finalization]
+    S -. Planned .-> T[(FINALIZED GAA)]
+    T -. Planned .-> U[Initial vs NEP vs GAA Reports]
+
+    style G fill:#dff3e4
+    style N fill:#dff3e4
+    style P fill:#e8eef1,stroke:#78909c,stroke-dasharray: 5 5
+    style Q fill:#e8eef1,stroke:#78909c,stroke-dasharray: 5 5
+    style R fill:#e8eef1,stroke:#78909c,stroke-dasharray: 5 5
+    style S fill:#e8eef1,stroke:#78909c,stroke-dasharray: 5 5
+    style T fill:#e8eef1,stroke:#78909c,stroke-dasharray: 5 5
+    style U fill:#e8eef1,stroke:#78909c,stroke-dasharray: 5 5
+      </div>
+    </div>
+    <div class="note-box">
+      <strong>Documentation rule:</strong> A GAA label in a dropdown, permission list, schema enum, or generic report filter means the data type is recognized. It does not by itself mean that the complete GAA generation, validation, approval, and reporting workflow is operational.
+    </div>
+  </div>
+
+  <!-- IMPLEMENTATION STATUS -->
+  <div class="section" id="implementation-status">
+    <div class="section-header">
+      <span class="badge">12</span>
+      <h2>Current Implementation Status</h2>
+    </div>
+    <div class="section-desc">
+      <p>Engineering estimate as of September 8, 2026, based on implemented frontend pages, backend routes/services, data models, and automated-test coverage. These figures are planning indicators and are not a substitute for formal User Acceptance Testing (UAT).</p>
+    </div>
+
+    <div class="status-grid">
+      <div class="status-card">
+        <h3>Overall System</h3>
+        <div class="percent">78%</div>
+        <div class="progress-track"><div class="progress-fill" style="width:78%"></div></div>
+        <p>Core administration, proposal entry, approval workflow, Initial, NEP, and reporting are substantially implemented. GAA and production hardening remain.</p>
+      </div>
+      <div class="status-card">
+        <h3>Initial Budget</h3>
+        <div class="percent">93%</div>
+        <div class="progress-track"><div class="progress-fill" style="width:93%"></div></div>
+        <p>Data entry, consolidation, hierarchical workflow, finalization, reports, exports, and audit support are operational, subject to final UAT.</p>
+      </div>
+      <div class="status-card">
+        <h3>NEP</h3>
+        <div class="percent">87%</div>
+        <div class="progress-track"><div class="progress-fill partial" style="width:87%"></div></div>
+        <p>Ceiling initialization, allocation, publishing, Initial-to-NEP generation, line-item cloning, compliance checks, comparison, and workflow synchronization are implemented.</p>
+      </div>
+      <div class="status-card">
+        <h3>GAA</h3>
+        <div class="percent">25%</div>
+        <div class="progress-track"><div class="progress-fill planned" style="width:25%"></div></div>
+        <p>Generic model, selector, permission, and report-filter recognition exists. The dedicated operational GAA lifecycle is not yet complete.</p>
+      </div>
+      <div class="status-card">
+        <h3>Production Readiness</h3>
+        <div class="percent">72%</div>
+        <div class="progress-track"><div class="progress-fill partial" style="width:72%"></div></div>
+        <p>Requires full end-to-end regression, data validation, security review, deployment rehearsal, backup/restore verification, and user sign-off.</p>
+      </div>
+    </div>
+
+    <div class="doc-table-wrap">
+      <table class="doc-table">
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>Initial</th>
+            <th>NEP</th>
+            <th>GAA</th>
+            <th>Current Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Budget type recognized</td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state done">Implemented</span></td>
+            <td>Supported by common selectors, permissions, validators, and database enums.</td>
+          </tr>
+          <tr>
+            <td>PS, MOOE, CO, and Income entry</td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state partial">Shared/Partial</span></td>
+            <td>GAA can use shared structures, but phase-specific rules have not been fully validated.</td>
+          </tr>
+          <tr>
+            <td>Proposal generation from prior phase</td>
+            <td><span class="state done">Direct Creation</span></td>
+            <td><span class="state done">Initial → NEP</span></td>
+            <td><span class="state planned">Planned</span></td>
+            <td>No finalized NEP-to-GAA generation/import workflow currently exists.</td>
+          </tr>
+          <tr>
+            <td>Ceiling/allocation management</td>
+            <td><span class="state done">Not Required</span></td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state partial">Model Support</span></td>
+            <td>The budget ceiling model recognizes GAA, but the active management flow is NEP-specific.</td>
+          </tr>
+          <tr>
+            <td>Hierarchical review and approval</td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state partial">Generic Only</span></td>
+            <td>Dedicated GAA transition rules, exceptions, and locking policy remain to be defined and tested.</td>
+          </tr>
+          <tr>
+            <td>Phase-specific validation</td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state done">Ceiling Enforced</span></td>
+            <td><span class="state planned">Planned</span></td>
+            <td>GAA appropriation limits and variance rules are not yet implemented.</td>
+          </tr>
+          <tr>
+            <td>Reports and comparisons</td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state done">Implemented</span></td>
+            <td><span class="state partial">Partial</span></td>
+            <td>Generic and historical GAA references exist; operational GAA forms and complete exports remain.</td>
+          </tr>
+          <tr>
+            <td>Automated regression coverage</td>
+            <td><span class="state partial">Partial</span></td>
+            <td><span class="state done">Focused Suites</span></td>
+            <td><span class="state planned">Minimal</span></td>
+            <td>Full cross-phase end-to-end tests and UAT scenarios are still required.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-desc">
+      <p><strong>GAA completion roadmap:</strong></p>
+    </div>
+    <ol class="checklist">
+      <li>Confirm the authoritative GAA source: finalized NEP, approved appropriation import, or both.</li>
+      <li>Implement NEP-to-GAA generation/import with idempotency and complete line-item cloning.</li>
+      <li>Add GAA allotment ceilings, adjustment rules, variance validation, and exception handling.</li>
+      <li>Define GAA-specific review, approval, return, locking, reopening, and audit transitions.</li>
+      <li>Create GAA monitoring, comparison, statutory report, PDF, and Excel outputs.</li>
+      <li>Add migrations/backfills, role-permission checks, notifications, regression suites, and formal UAT.</li>
+    </ol>
+  </div>
+
+  <!-- ORGANIZATION HIERARCHY -->
+  <div class="section" id="organization-hierarchy">
+    <div class="section-header">
+      <span class="badge">13</span>
+      <h2>Organization Structure and Hierarchical Assignment</h2>
+    </div>
+    <div class="section-desc">
+      <p>Structure Mapping defines which Responsibility Centers belong to an Office within one or more Regions. User assignments consume this mapping to enforce data visibility, workflow routing, and consolidation.</p>
+    </div>
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+    A[Setup: Regions] --> D[Structure Mapping]
+    B[Setup: Offices / Departments] --> D
+    C[Setup: Divisions / Responsibility Centers] --> D
+    D --> E[Region-specific Office and RC Relationships]
+    E --> F[Hierarchical User Assignment]
+    F --> G{Assignment Level}
+    G -- Responsibility Center --> H[Own RC Data and Submission]
+    G -- Office --> I[All RCs Under Assigned Office]
+    G -- BRD / Full --> J[Assigned Regions or System-wide Scope]
+    H --> K[Consolidate to Office]
+    I --> L[Review and Forward Upward]
+    J --> M[National Monitoring and Finalization]
+
+    style D fill:#e3f2fd
+    style F fill:#fff3e0
+    style K fill:#e8f5e9
+    style L fill:#e8f5e9
+    style M fill:#e8f5e9
+      </div>
+    </div>
+    <div class="note-box">
+      <strong>Multi-region mapping:</strong> Responsibility-center identifiers are region-scoped. This prevents one region's entries—for example UPRIIS and MARIIS under a shared Division Office mapping—from overwriting each other when the organization structure is generated.
+    </div>
+  </div>
+
 </main>
+
+<footer>
+  FMIS-OSBPIS System Workflow Documentation · Implementation status should be reviewed after each major release and confirmed through formal UAT.
+</footer>
 
 <script>
   mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose', flowchart: { curve: 'basis', useMaxWidth: false } });

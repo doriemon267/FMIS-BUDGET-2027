@@ -10,6 +10,11 @@ const IAsOMCost = require("../models/IAsOMCost");
 const DiscountSettings = require("../models/DiscountSettings");
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const { getRegionsWithReportEntries } = require('../utils/reportRegionSelection');
+const {
+  buildExactRegionMongoFilter,
+  normalizeRegionSelection,
+} = require('../utils/reportPageLayout');
+const { calculateCorporateIncomeDiscounts } = require('../utils/corporateIncomeDiscount');
 const { resolveDraftWatermarkForRecords } = require('../utils/proposalPdfWatermark');
 const getConsolidatedSummary = async (req, res) => {
   try {
@@ -202,15 +207,31 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     }
     // Get budget type from query or default to "INITIAL"
     const budgetType = (req.query.budgetType || "INITIAL").toUpperCase();
-    // Optional region filter from query (set by region interceptor)
-    const regionFilterRaw = (req.query.region || '').trim();
-    const regionFilter = regionFilterRaw && regionFilterRaw.toLowerCase() !== 'all' ? regionFilterRaw : null;
+    // Support singular, repeated, and array region query parameters while
+    // retaining the legacy `region=all` behavior.
+    const regionSelection = normalizeRegionSelection({
+      consolidationType: req.query.consolidationType,
+      region: req.query.region,
+      regions: req.query.regions,
+    });
+    const selectedRegionNames = regionSelection.regions;
+    const regionFilter = buildExactRegionMongoFilter(selectedRegionNames);
+
+    if (
+      String(req.query.consolidationType || '').trim().toLowerCase() === 'custom' &&
+      selectedRegionNames.length === 0
+    ) {
+      return res.status(400).json({
+        error: 'Select at least one region for a custom consolidated report.',
+        code: 'CUSTOM_REGIONS_REQUIRED',
+      });
+    }
     // A specific-region report keeps the requested region. All Regions is
     // populated later from matching proposal entries so empty master-list
     // regions are not rendered as report columns.
     let regions;
-    if (regionFilter) {
-      regions = [{ Region: regionFilter }];
+    if (selectedRegionNames.length > 0) {
+      regions = selectedRegionNames.map((regionName) => ({ Region: regionName }));
     } else {
       regions = [];
     }
@@ -250,13 +271,10 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     if (budgetType) {
       query.budgetType = budgetTypeQuery;
     }
-    if (regionFilter) {
-      // Case-insensitive exact match for region
-      query.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
-    }
+    if (regionFilter) query.region = regionFilter;
     const incomeEntries = await Income.find(query).populate('incomecategory');
     const isFinalized = !(await resolveDraftWatermarkForRecords(incomeEntries, NewProposalWorkflow));
-    if (!regionFilter) {
+    if (selectedRegionNames.length === 0) {
       regions = getRegionsWithReportEntries(incomeEntries);
     }
     // Extract unique subcategories from income entries
@@ -451,74 +469,73 @@ const getConsolidatedCorporateIncome = async (req, res) => {
 
       if (isfCategoryKey) {
         const discountQuery = { fiscalYear, budgetType };
-        if (regionFilter) discountQuery.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
+        if (regionFilter) discountQuery.region = regionFilter;
+        const discountSettingsDocs = await DiscountSettings.find(discountQuery)
+          .sort({ updatedAt: -1 });
+        const isfCatId = isfCategoryKey.id;
 
-        const discountSettingsDoc = await DiscountSettings.findOne(discountQuery);
-        const applyDiscount = discountSettingsDoc ? discountSettingsDoc.applyDiscount : true;
-        const discountType = discountSettingsDoc ? discountSettingsDoc.discountType : 'percentage';
-        const discountValue = discountSettingsDoc ? discountSettingsDoc.discountValue : 10;
+        // Compute the Current Account subtotal per region. Each region can have
+        // its own discount configuration, so region names are matched without
+        // relying on casing from the stored income entries.
+        const currentAccountByRegion = {};
+        regions.forEach((region) => { currentAccountByRegion[region.Region] = 0; });
 
-        if (applyDiscount) {
-          const isfCatId = isfCategoryKey.id;
-          const isfGrandTotal = result.categoryTotals[isfCatId] || 0;
+        incomeEntries.forEach(entry => {
+          const entryCategory = entry.incomecategory;
+          if (!entryCategory) return;
+          const catName = typeof entryCategory === 'object'
+            ? (entryCategory.incomeCategoryName || entryCategory.name || '')
+            : '';
+          const isIsf = catName.toLowerCase().includes('irrigation service fees') &&
+                        !catName.toLowerCase().includes('net');
+          if (!isIsf || entry.subcategory !== 'Current Account') return;
 
-          // ── Compute "Current Account" subtotal PER REGION ───────────────────
-          // This matches IncomeTable.jsx which uses currentAccountTotal (subcategory === "Current Account")
-          // as the base for the discount, NOT the full ISF total.
-          const currentAccountByRegion = {};
-          regions.forEach(r => { currentAccountByRegion[r.Region] = 0; });
-          let currentAccountGrandTotal = 0;
+          const entryRegion = String(entry.region || '').trim().toLowerCase();
+          const regionName = Object.keys(currentAccountByRegion).find(
+            (name) => name.toLowerCase() === entryRegion
+          );
+          if (regionName) {
+            currentAccountByRegion[regionName] += Number(entry.amount) || 0;
+          }
+        });
 
-          incomeEntries.forEach(entry => {
-            const entryCategory = entry.incomecategory;
-            if (!entryCategory) return;
-            const catName = typeof entryCategory === 'object'
-              ? (entryCategory.incomeCategoryName || entryCategory.name || '')
-              : '';
-            const isIsf = catName.toLowerCase().includes('irrigation service fees') &&
-                          !catName.toLowerCase().includes('net');
-            if (!isIsf) return;
-            if (entry.subcategory !== 'Current Account') return;
+        const regionNames = regions.map((region) => region.Region);
+        const isfByRegion = Object.fromEntries(regionNames.map((regionName) => [
+          regionName,
+          result.regionData[regionName]?.categoryAmounts[isfCatId] || 0,
+        ]));
+        const grossTotalByRegion = Object.fromEntries(regionNames.map((regionName) => [
+          regionName,
+          result.regionData[regionName]?.total || 0,
+        ]));
+        const discountResult = calculateCorporateIncomeDiscounts({
+          regionNames,
+          currentAccountByRegion,
+          isfByRegion,
+          grossTotalByRegion,
+          settings: discountSettingsDocs,
+        });
 
-            const regionName = (entry.region || '').trim();
-            const amount = Number(entry.amount) || 0;
-            if (currentAccountByRegion[regionName] !== undefined) {
-              currentAccountByRegion[regionName] += amount;
-            }
-            currentAccountGrandTotal += amount;
-          });
-          // ────────────────────────────────────────────────────────────────────
-
-          const discountRegionAmounts = {};
-          const netIsfRegionAmounts = {};
-          let discountGrandTotal = 0;
-
-          regions.forEach(region => {
-            const regionName = region.Region;
-            const isfRegionAmount = result.regionData[regionName]?.categoryAmounts[isfCatId] || 0;
-            const currentAcct = currentAccountByRegion[regionName] || 0;
-            const discountAmount = discountType === 'percentage'
-              ? currentAcct * (discountValue / 100)
-              : Math.min(discountValue, currentAcct);
-            discountRegionAmounts[regionName] = discountAmount;
-            // Net ISF = full ISF region total - discount (same as IncomeTable.jsx line 685)
-            netIsfRegionAmounts[regionName] = isfRegionAmount - discountAmount;
-            discountGrandTotal += discountAmount;
-          });
-
-          const netIsfGrandTotal = isfGrandTotal - discountGrandTotal;
-
-          // Label matches IncomeTable.jsx: "Less: X% Discount on Current Account"
-          const discountLabel = discountType === 'percentage'
-            ? `Less: ${discountValue}% Discount on Current Account`
-            : `Less: Discount on Current Account (Fixed)`;
+        if (discountResult.applyDiscount) {
+          const {
+            currentAccountGrandTotal,
+            discountGrandTotal,
+            discountLabel,
+            discountRegionAmounts,
+            netIsfGrandTotal,
+            netIsfRegionAmounts,
+            netTotalByRegion,
+            settingsByRegion,
+          } = discountResult;
 
           // Synthetic discount category
           const discountCatId = '__discount_isf__';
           result.categoryTotals[discountCatId] = discountGrandTotal;
           result.categorySubcategoryMap[discountCatId] = [];
           regions.forEach(region => {
-            result.regionData[region.Region].categoryAmounts[discountCatId] = discountRegionAmounts[region.Region];
+            const regionName = region.Region;
+            result.regionData[regionName].categoryAmounts[discountCatId] = discountRegionAmounts[regionName];
+            result.regionData[regionName].total = netTotalByRegion[regionName];
           });
           result.hierarchicalData.push({
             id: discountCatId,
@@ -548,7 +565,13 @@ const getConsolidatedCorporateIncome = async (req, res) => {
           // Adjust grand total: ISF is already counted in full; subtract the discount
           result.grandTotal = result.grandTotal - discountGrandTotal;
 
-          result.isfDiscount = { applyDiscount, discountType, discountValue, discountGrandTotal, netIsfGrandTotal, currentAccountGrandTotal };
+          result.isfDiscount = {
+            applyDiscount: true,
+            discountGrandTotal,
+            netIsfGrandTotal,
+            currentAccountGrandTotal,
+            settingsByRegion,
+          };
         }
       }
     } catch (discountErr) {

@@ -15,7 +15,59 @@ const PREPARER_ROLES = [
   'regionCreator'
 ];
 
+const NEP_GENERATION_MODES = Object.freeze({
+  PREPARER: 'PREPARER',
+  BRD: 'BRD'
+});
+
 const normalizeText = value => String(value || '').trim().toUpperCase();
+
+const normalizeNepGenerationMode = value => (
+  normalizeText(value) === NEP_GENERATION_MODES.BRD
+    ? NEP_GENERATION_MODES.BRD
+    : NEP_GENERATION_MODES.PREPARER
+);
+
+const buildNepGenerationAssignment = ({ generationMode, preparers = [], brdUser }) => {
+  const normalizedMode = normalizeNepGenerationMode(generationMode);
+
+  if (normalizedMode === NEP_GENERATION_MODES.BRD) {
+    if (!brdUser?.userId) {
+      throw new Error('The BRD user generating the NEP proposal could not be identified');
+    }
+
+    return {
+      generationMode: normalizedMode,
+      editor: brdUser,
+      workflowStatus: 'FORWARDED_TO_BRD_ANALYST',
+      currentAssigneeRole: 'BUDGET PLANNING ANALYST',
+      legacyCurrentAssigneeRole: 'BUDGET_PLANNING_ANALYST',
+      legacyStatus: 'Forwarded to Budget Planning Analyst',
+      legacyWorkflowLevel: 'BUDGET_PLANNING_ANALYST',
+      legacyCurrentStep: 'BUDGET_PLANNING_ANALYST_REVIEW',
+      assignedPreparerUserIds: [],
+      assignedPreparerNames: []
+    };
+  }
+
+  const primaryPreparer = preparers[0];
+  if (!primaryPreparer?.userId) {
+    throw new Error('No Budget Preparer assignment found for this allocation');
+  }
+
+  return {
+    generationMode: normalizedMode,
+    editor: primaryPreparer,
+    workflowStatus: 'DRAFT',
+    currentAssigneeRole: 'BUDGET PREPARER',
+    legacyCurrentAssigneeRole: 'BUDGET PREPARER',
+    legacyStatus: 'Draft',
+    legacyWorkflowLevel: 'BUDGET PREPARER',
+    legacyCurrentStep: 'PREPARER_DRAFT',
+    assignedPreparerUserIds: preparers.map(preparer => preparer.userId),
+    assignedPreparerNames: preparers.map(preparer => preparer.userName)
+  };
+};
 
 const uniqueStrings = values => Array.from(
   new Set(values.map(value => String(value || '').trim()).filter(Boolean))
@@ -199,7 +251,8 @@ const cloneProposalLineItems = async ({
   regionName,
   department,
   division,
-  preparer
+  preparer,
+  workflowAssignment = {}
 }) => {
   const { sourceQuery } = await buildSourceLineQuery(initialProposals);
   const now = new Date();
@@ -209,8 +262,8 @@ const cloneProposalLineItems = async ({
     proposalId: targetLegacyProposalId,
     workflowRef: targetWorkflowId,
     budgetType: 'NEP',
-    status: 'Draft',
-    workflowLevel: 'BUDGET PREPARER',
+    status: workflowAssignment.legacyStatus || 'Draft',
+    workflowLevel: workflowAssignment.legacyWorkflowLevel || 'BUDGET PREPARER',
     processBy: preparer.userName,
     processDate: now,
     createdBy: preparer.userId
@@ -357,6 +410,9 @@ const cleanupGeneratedNepData = async ({ workflowId, legacyProposalId }) => {
 };
 
 module.exports = {
+  NEP_GENERATION_MODES,
+  normalizeNepGenerationMode,
+  buildNepGenerationAssignment,
   resolvePreparerAssignments,
   cloneProposalLineItems,
   cleanupGeneratedNepData,

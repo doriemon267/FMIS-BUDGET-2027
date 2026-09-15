@@ -183,6 +183,8 @@ describe("ProposalOperationsHub Budget Preparer actions", () => {
   it("classifies return actions as cycle-exempt while progression remains gated", () => {
     expect(requiresActiveProposalCycle("reviewer-return")).toBe(false);
     expect(requiresActiveProposalCycle("manager-return")).toBe(false);
+    expect(requiresActiveProposalCycle("officer-return-to-analyst")).toBe(false);
+    expect(requiresActiveProposalCycle("manager-return-to-officer")).toBe(false);
     expect(requiresActiveProposalCycle("submit-to-reviewer")).toBe(true);
     expect(requiresActiveProposalCycle("open-tier")).toBe(true);
     expect(requiresActiveProposalCycle("unconsolidate")).toBe(true);
@@ -249,5 +251,54 @@ describe("ProposalOperationsHub Budget Preparer actions", () => {
 
     expect(values).toContain("manager-return");
     expect(values).not.toContain("manager-approve");
+  });
+
+  it("uses the BRD-only return path for a direct-adjustment NEP", () => {
+    mockUseUser.mockReturnValue({
+      currentUser: { id: "analyst-1", Roles: ["BUDGET_PLANNING_ANALYST"] },
+    });
+    const { result: analystResult } = renderHook(() => useProposalPermissions());
+    const directAnalystProposal = {
+      ...proposal("NEP", "FORWARDED_TO_BRD_ANALYST"),
+      nepAdjustmentMode: "BRD",
+    };
+
+    expect(
+      actionValues(analystResult, directAnalystProposal, activeCycle("NEP"))
+    ).not.toContain("analyst-return");
+
+    mockUseUser.mockReturnValue({
+      currentUser: { id: "officer-1", Roles: ["BUDGET_OFFICER"] },
+    });
+    const { result: officerResult } = renderHook(() => useProposalPermissions());
+    const directOfficerProposal = {
+      ...proposal("NEP", "FORWARDED_TO_BRD_OFFICER"),
+      nepAdjustmentMode: "BRD",
+    };
+    const officerValues = actionValues(
+      officerResult,
+      directOfficerProposal,
+      activeCycle("NEP")
+    );
+
+    expect(officerValues).toContain("officer-return-to-analyst");
+    expect(officerValues).not.toContain("officer-return");
+
+    mockUseUser.mockReturnValue({
+      currentUser: { id: "manager-1", Roles: ["BUDGET_MANAGER"] },
+    });
+    const { result: managerResult } = renderHook(() => useProposalPermissions());
+    const directManagerProposal = {
+      ...proposal("NEP", "FORWARDED_TO_BRD_MANAGER"),
+      nepAdjustmentMode: "BRD",
+    };
+    const managerValues = actionValues(
+      managerResult,
+      directManagerProposal,
+      activeCycle("NEP")
+    );
+
+    expect(managerValues).toContain("manager-return-to-officer");
+    expect(managerValues).not.toContain("manager-return");
   });
 });

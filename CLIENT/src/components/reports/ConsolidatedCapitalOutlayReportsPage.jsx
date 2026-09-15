@@ -979,7 +979,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
                           <TableCell sx={{ textAlign: "center", fontSize: "0.8rem", color: "#666", padding: "6px 12px" }}>
                             {child.uacsCode || ""}
                           </TableCell>
-                          <TableCell sx={{ fontSize: "0.8rem", paddingLeft: "20px", padding: "6px 12px 6px 20px" }}>
+                          <TableCell sx={{ fontSize: "0.8rem", color: "black", paddingLeft: "20px", padding: "6px 12px 6px 20px" }}>
                             {child.projectTitle || child.particulars}
                           </TableCell>
                           <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>

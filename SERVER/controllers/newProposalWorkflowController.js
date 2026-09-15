@@ -115,10 +115,12 @@ const WORKFLOW_TRANSITIONS = {
   'BUDGET OFFICER': {
     'FORWARDED_TO_BRD_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
+      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST',
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
+      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST',
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PREPARER': {
@@ -129,6 +131,7 @@ const WORKFLOW_TRANSITIONS = {
   'BUDGET MANAGER': {
     'FORWARDED_TO_BRD_MANAGER': {
       'finalize': 'FINALIZED',
+      'return-to-officer': 'RETURNED_TO_OFFICER',
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PREPARER': {
@@ -178,6 +181,7 @@ const WORKFLOW_TRANSITIONS = {
     },
     'FORWARDED_TO_BRD_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
+      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST',
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_OFFICER': {
@@ -186,6 +190,7 @@ const WORKFLOW_TRANSITIONS = {
     },
     'FORWARDED_TO_BRD_MANAGER': {
       'finalize': 'FINALIZED',
+      'return-to-officer': 'RETURNED_TO_OFFICER',
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     }
   }
@@ -3469,6 +3474,13 @@ exports.performAction = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'You are not authorized to perform this action'
+      });
+    }
+
+    if (proposal.nepAdjustmentMode === 'BRD' && action === 'return-to-preparer') {
+      return res.status(400).json({
+        success: false,
+        message: 'BRD Direct Adjustment proposals cannot be returned to a Budget Preparer'
       });
     }
 

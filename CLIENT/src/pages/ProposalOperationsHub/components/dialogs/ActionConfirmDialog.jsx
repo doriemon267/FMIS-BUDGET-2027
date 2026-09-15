@@ -36,20 +36,22 @@ const mapActionToBackend = (frontendAction) => {
     "approver-return": "return-to-reviewer",
     "approver-save-edits": "approver-save-edits",
 
-    // Budget Planning Analyst actions (BRD: return goes to Preparer only)
+    // Budget Planning Analyst actions
     "analyst-submit-to-officer": "forward-to-officer",
     "analyst-return": "return-to-preparer",
     "analyst-save-edits": "analyst-save-edits",
 
-    // Budget Officer actions (BRD: return goes to Preparer only)
+    // Budget Officer actions
     "officer-approve": "forward-to-manager",
     "officer-return": "return-to-preparer",
+    "officer-return-to-analyst": "return-to-analyst",
     "officer-save-edits": "officer-save-edits",
     "officer-submit-to-manager": "forward-to-manager",
 
-    // Budget Manager actions (BRD: return goes to Preparer only)
+    // Budget Manager actions
     "manager-approve": "finalize",
     "manager-return": "return-to-preparer",
+    "manager-return-to-officer": "return-to-officer",
     "manager-save-edits": "manager-save-edits",
   };
 

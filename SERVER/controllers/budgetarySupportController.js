@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const BudgetarySupport = require('../models/BudgetarySupport');
 const PersonnelServices = require('../models/PersonnelServices');
+const { splitPersonnelFunding } = require('../utils/personnelIncomeAllocation');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const IAsOMCost = require('../models/IAsOMCost');
@@ -483,12 +484,15 @@ const calculateBudgetarySupport = async (req, res) => {
         totalChargedToIncome += (Number(item.chargedToIncomeAmount) || 0);
         return sum + calculatePersonnelLineTotal(item);
       }, 0));
+      const personnelFunding = splitPersonnelFunding(personnelTotal, totalChargedToIncome);
+      totalChargedToIncome = personnelFunding.incomeAmount;
+      const personnelSubsidy = personnelFunding.subsidyAmount;
 
-      if (personnelTotal > 0) {
-        totalSubsidy += personnelTotal;
+      if (personnelSubsidy > 0) {
+        totalSubsidy += personnelSubsidy;
         breakdown.push({
           source: 'B.1.1 - Personnel Services',
-          amount: personnelTotal,
+          amount: personnelSubsidy,
           description: 'Government funding for personnel services (subsidy portion)'
         });
       } else {

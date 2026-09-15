@@ -18,6 +18,7 @@ const {
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { getActiveSettingsWithCompensation, getCompensationField } = require("../utils/settingsUtils");
 const { validateNonNegativeFields, validateNonNegativeInItems, PERSONNEL_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
+const { resolvePersonnelIncomeAllocation } = require('../utils/personnelIncomeAllocation');
 // Import ChildrenAllowance model safely
 const ChildrenAllowance =
   mongoose.models.ChildrenAllowance || require("../models/childrenAllowance");
@@ -2268,9 +2269,10 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
     const chargedNonNeg = validateNonNegativeInItems(
       items.map(p => ({
         chargedToIncomeAmount: p.chargedToIncomeAmount,
+        chargedToIncomeMonthlyAmount: p.chargedToIncomeMonthlyAmount,
         chargedToIncomeSubsidyAmount: p.chargedToIncomeSubsidyAmount
       })),
-      ['chargedToIncomeAmount', 'chargedToIncomeSubsidyAmount']
+      ['chargedToIncomeAmount', 'chargedToIncomeMonthlyAmount', 'chargedToIncomeSubsidyAmount']
     );
     if (!chargedNonNeg.valid) {
       return res.status(400).json({ message: chargedNonNeg.message });
@@ -2320,24 +2322,21 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
 
       console.log("DEBUG: Updating record, chargedToIncomeEligible:", chargedToIncomeEligible);
 
-      // CRITICAL: When chargedToIncomeEligible is true and no amount is provided, default to the full record.Total
-      // This ensures that "Select All" + "Charge to Income" marks 100% of salary, not 0%
-      let resolvedAmount = 0;
-      if (chargedToIncomeEligible) {
-        // When marking as charged-to-income, prefer the provided amount, then fallback to full total
-        const providedAmount = Number(payload.chargedToIncomeAmount ?? defaultAmount ?? null);
-        if (Number.isFinite(providedAmount) && providedAmount > 0) {
-          resolvedAmount = providedAmount;
-        } else {
-          // No amount provided - use the full salary total
-          resolvedAmount = Number(record.Total || record.total || 0);
-        }
-      } else {
-        // When unmarking, use zero
-        resolvedAmount = 0;
+      const allocation = chargedToIncomeEligible
+        ? resolvePersonnelIncomeAllocation(record, payload, defaultAmount)
+        : {
+            valid: true,
+            monthlyIncomeAmount: 0,
+            annualIncomeAmount: 0,
+            subsidyAmount: 0,
+          };
+
+      if (!allocation.valid) {
+        results.skipped.push({ reason: allocation.reason, id: targetId });
+        continue;
       }
-      
-      const normalizedAmount = Number.isFinite(resolvedAmount) && resolvedAmount > 0 ? resolvedAmount : 0;
+
+      const normalizedAmount = allocation.annualIncomeAmount;
       const resolvedNotes = payload.chargedToIncomeNotes ?? notes ?? record.chargedToIncomeNotes ?? null;
       
       console.log("DEBUG: Amount resolution for record:", {
@@ -2345,7 +2344,7 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
         payloadAmount: payload.chargedToIncomeAmount,
         defaultAmount,
         recordTotal: record.Total || record.total,
-        resolvedAmount,
+        monthlyAmount: allocation.monthlyIncomeAmount,
         normalizedAmount,
         chargedToIncomeEligible
       });
@@ -2357,6 +2356,8 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
         ? {
             chargedToIncomeEligible: true,
             chargedToIncomeAmount: normalizedAmount,
+            chargedToIncomeMonthlyAmount: allocation.monthlyIncomeAmount,
+            chargedToSubsidyAmount: allocation.subsidyAmount,
             chargedToIncomeNotes: resolvedNotes,
             chargedToIncomeTaggedBy: req.user?.userName || req.user?.email || req.user?.id || "SYSTEM",
             chargedToIncomeTaggedAt: new Date(),
@@ -2365,6 +2366,8 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
         : {
             chargedToIncomeEligible: false,
             chargedToIncomeAmount: 0,
+            chargedToIncomeMonthlyAmount: 0,
+            chargedToSubsidyAmount: 0,
             chargedToIncomeNotes: null,
             chargedToIncomeTaggedBy: null,
             chargedToIncomeTaggedAt: null,
@@ -2523,7 +2526,7 @@ exports.listChargedToIncome = async (req, res) => {
     }
 
     const records = await PersonnelServices.find(query)
-      .select('_id employeeFullName employeeNumber positionTitle department division region fiscalYear Total chargedToIncomeAmount chargedToIncomeTaggedAt')
+      .select('_id employeeFullName employeeNumber positionTitle department division region fiscalYear monthlySalary annualSalary Total chargedToIncomeMonthlyAmount chargedToIncomeAmount chargedToSubsidyAmount chargedToIncomeTaggedAt')
       .lean();
 
     const totalAmount = records.reduce((sum, r) => sum + (Number(r.chargedToIncomeAmount) || Number(r.Total) || 0), 0);
@@ -2575,6 +2578,8 @@ exports.resetChargedToIncome = async (req, res) => {
       $set: {
         chargedToIncomeEligible: false,
         chargedToIncomeAmount: 0,
+        chargedToIncomeMonthlyAmount: 0,
+        chargedToSubsidyAmount: 0,
         chargedToIncomeNotes: null,
         chargedToIncomeTaggedBy: null,
         chargedToIncomeTaggedAt: null,
