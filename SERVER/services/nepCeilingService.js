@@ -174,6 +174,21 @@ const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
     }
   });
 
+  const targetDifference = roundMoney(caps.totalExpenses - actual.proposedBudget);
+  if (Math.abs(targetDifference) > MONEY_EPSILON) {
+    violations.push({
+      field: 'targetCeilingMismatch',
+      actual: actual.proposedBudget,
+      cap: caps.totalExpenses,
+      excess: targetDifference < 0 ? Math.abs(targetDifference) : 0,
+      difference: targetDifference,
+      status: targetDifference > 0 ? 'BELOW_CEILING' : 'ABOVE_CEILING',
+      message: targetDifference > 0
+        ? 'Total NEP Income and Subsidy must be increased to match the BRD ceiling'
+        : 'Total NEP Income and Subsidy must be reduced to match the BRD ceiling'
+    });
+  }
+
   if (actual.totalExpenses - caps.totalExpenses > MONEY_EPSILON) {
     violations.push({
       field: 'totalExpenses',
@@ -205,7 +220,8 @@ const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
     actual,
     caps,
     remaining: {
-      totalExpenses: roundMoney(caps.totalExpenses - actual.totalExpenses),
+      totalExpenses: targetDifference,
+      targetCeiling: targetDifference,
       personnelServices: roundMoney(caps.personnelServices - actual.personnelServices),
       mooe: roundMoney(caps.mooe - actual.mooe),
       capitalOutlay: roundMoney(caps.capitalOutlay - actual.capitalOutlay)
@@ -340,6 +356,12 @@ const serializeNepCeilingContext = context => ({
   division: context.allocation.division,
   department: context.allocation.department,
   assignedPreparerNames: context.allocation.assignedPreparerNames || [],
+  adjustment: {
+    mode: context.allocation.nepAdjustmentMode || context.proposal.nepAdjustmentMode,
+    assignedBy: context.allocation.adjustmentAssignedBy,
+    assignedByName: context.allocation.adjustmentAssignedByName,
+    assignedAt: context.allocation.adjustmentAssignedAt
+  },
   initial: {
     amount: finiteNumber(context.allocation.initialRequestAmount),
     subsidy: finiteNumber(context.allocation.initialSubsidy),

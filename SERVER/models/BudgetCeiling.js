@@ -151,6 +151,17 @@ const budgetCeilingSchema = new mongoose.Schema({
       enum: ['PREPARER', 'BRD'],
       default: 'PREPARER'
     },
+    adjustmentAssignedBy: {
+      type: String,
+      trim: true
+    },
+    adjustmentAssignedByName: {
+      type: String,
+      trim: true
+    },
+    adjustmentAssignedAt: {
+      type: Date
+    },
     
     // Allocation status
     allocationStatus: {

@@ -21,6 +21,7 @@ import {
 } from "../../../utils/nepReportStatus";
 
 const FIELD_LABELS = {
+  targetCeilingMismatch: "Income + Subsidy total",
   totalExpenses: "Total allocation",
   personnelServices: "Personnel Services",
   mooe: "MOOE",
@@ -310,7 +311,7 @@ const StickyCeilingTracker = ({
             sx={{ mt: 0.55, height: 6, bgcolor: (theme) => alpha(theme.palette.text.primary, 0.09) }}
           />
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.3 }}>
-            Live as Tier values change
+            Live as Income and Subsidy change
           </Typography>
         </Box>
       </Box>
@@ -397,22 +398,26 @@ const NEPCeilingSummary = ({
     );
   }
 
-  const currentAllocation = Number(compliance.actual?.totalExpenses || 0);
+  const currentAllocation = Number(compliance.actual?.proposedBudget || 0);
+  const currentSubsidy = Number(compliance.actual?.projectedSubsidy || 0);
+  const currentIncome = Math.max(0, currentAllocation - currentSubsidy);
   const approvedCeiling = Number(compliance.caps?.totalExpenses || data.ceiling?.amount || 0);
   const remaining = Number(compliance?.remaining?.totalExpenses || 0);
   const isAligned = Math.abs(remaining) <= CURRENCY_TOLERANCE;
   const isTotalOver = remaining < -CURRENCY_TOLERANCE;
   const hasAnyViolation =
-    compliance.compliant === false || Number(compliance.violations?.length || 0) > 0;
+    !isAligned || Number(compliance.violations?.length || 0) > 0;
   const hasCategoryViolation = Boolean(
     compliance.violations?.some((violation) => violation.field !== "totalExpenses")
   );
   const utilization = getUtilization(currentAllocation, approvedCeiling);
   const statusLabel = hasAnyViolation
-    ? "Over ceiling"
+    ? isTotalOver
+      ? "ABOVE CEILING"
+      : "BELOW CEILING"
     : isAligned
-      ? "Ceiling aligned"
-      : "Within ceiling";
+      ? "MATCHED"
+      : "BELOW CEILING";
   const varianceLabel = isAligned
     ? "Ceiling Aligned"
     : isTotalOver
@@ -450,11 +455,11 @@ const NEPCeilingSummary = ({
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
             {readOnly
               ? isActiveCycle
-                ? "Review the approved BRD ceiling and saved Tier allocation. Use NEP Tier Adjustment when the action is available to make changes."
-                : "Review the approved BRD ceiling and saved Tier allocation. This proposal is outside the active NEP cycle, so its Tier values are read-only."
+                ? "Review the approved Target Ceiling and saved Income/Subsidy allocation."
+                : "Review the Target Ceiling and saved Income/Subsidy allocation. This proposal is outside the active NEP cycle and is read-only."
               : liveTotals
-              ? "Edit the Tier rows below. Unsaved edits are a live preview; save the Tier values to use them for submission validation."
-              : "Load or edit the Tier rows below, then save once the total and category ceilings are aligned."}
+              ? "Unsaved Income/Subsidy edits are shown live. Save only after the total matches the Target Ceiling."
+              : "Income plus Subsidy must exactly match the Target Ceiling before submission."}
           </Typography>
         </Box>
         <Chip
@@ -472,7 +477,7 @@ const NEPCeilingSummary = ({
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <FinancialMetric
-            label="Approved NEP Ceiling"
+            label="Target Ceiling"
             value={approvedCeiling}
             tone="success"
             helper="Approved by BRD"
@@ -480,10 +485,10 @@ const NEPCeilingSummary = ({
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <FinancialMetric
-            label="Current Tier Allocation"
+            label="Current NEP Total"
             value={currentAllocation}
             tone={isTotalOver ? "error" : "neutral"}
-            helper={hasUnsavedChanges ? "Includes unsaved edits" : "Saved Tier values"}
+            helper={hasUnsavedChanges ? "Includes unsaved edits" : "Income + Subsidy"}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -499,6 +504,15 @@ const NEPCeilingSummary = ({
                   : "Against approved ceiling"
             }
           />
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={1.25} sx={{ mt: 0 }}>
+        <Grid item xs={12} sm={6}>
+          <FinancialMetric label="Current Income" value={currentIncome} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <FinancialMetric label="Current Subsidy" value={currentSubsidy} />
         </Grid>
       </Grid>
 
@@ -540,9 +554,9 @@ const NEPCeilingSummary = ({
           }}
         >
           {[
-            ["Tier 1", liveTotals.tier1],
-            ["Tier 2", liveTotals.tier2],
-            ["Corporate Income", liveTotals.corporateIncome],
+            ["Income", liveTotals.projectedCorporateIncome ?? liveTotals.corporateIncome],
+            ["Subsidy", liveTotals.projectedSubsidy ?? liveTotals.subsidies],
+            ["NEP Total", liveTotals.proposedBudget],
           ].map(([label, value]) => (
             <Box key={label}>
               <Typography variant="caption" color="text.secondary">
@@ -584,7 +598,7 @@ const NEPCeilingSummary = ({
             ? isActiveCycle
               ? "Use NEP Tier Adjustment when the action is available to correct the saved allocation."
               : "The saved allocation is shown for reference. Adjustment becomes available when this proposal's NEP fiscal year is the active budget cycle."
-            : "Reduce the allocation until the total and every expense category are within their approved ceilings."}
+            : "Adjust Income and Subsidy until their total exactly matches the Target Ceiling."}
           {compliance.violations?.length > 0 && (
             <Box component="ul" sx={{ mt: 0.75, mb: 0, pl: 2.25 }}>
               {compliance.violations.map((violation) => (
@@ -599,14 +613,14 @@ const NEPCeilingSummary = ({
         </Alert>
       ) : (
         <Alert severity={isAligned ? "success" : "info"} sx={{ mt: 2 }}>
-          <AlertTitle>{isAligned ? "Allocation matches the approved ceiling" : "Allocation is within ceiling"}</AlertTitle>
+          <AlertTitle>{isAligned ? "Income and Subsidy match the Target Ceiling" : "Submission is blocked"}</AlertTitle>
           {readOnly
             ? isActiveCycle
-              ? "Saved Tier values are shown for reference. Use NEP Tier Adjustment when the action is available for your role and workflow stage."
-              : "Saved Tier values are shown for reference. Adjustment becomes available only when this proposal's NEP fiscal year is the active budget cycle."
+              ? "Saved Income and Subsidy are shown for reference."
+              : "Saved values are read-only outside the active NEP budget cycle."
             : hasUnsavedChanges
-            ? "This is a live preview. Save the Tier values before returning to the proposal for submission."
-            : "The saved Tier values will be used when this proposal is checked for submission."}
+            ? "This is a live preview. Save the values before submission."
+            : "The saved Income and Subsidy will be validated again by the server on submission."}
         </Alert>
       )}
 

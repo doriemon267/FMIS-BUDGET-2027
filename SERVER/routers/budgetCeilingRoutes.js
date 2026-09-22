@@ -813,6 +813,9 @@ router.post('/:id/generate-nep', isAuth, isBRDStaff, requireDynamicPermission('/
           budgetCeilingId: ceiling._id,
           budgetCeilingAllocationId: allocation._id,
           nepAdjustmentMode: assignment.generationMode,
+          adjustmentAssignedBy: String(userId),
+          adjustmentAssignedByName: userName,
+          adjustmentAssignedAt: new Date(),
           currentAssigneeRole: assignment.currentAssigneeRole,
           workflowHistory: [{
             action: generationMode === NEP_GENERATION_MODES.BRD
@@ -890,6 +893,9 @@ router.post('/:id/generate-nep', isAuth, isBRDStaff, requireDynamicPermission('/
         allocation.nepProposalStatus = assignment.workflowStatus;
         allocation.allocationStatus = 'NEP_Created';
         allocation.nepAdjustmentMode = assignment.generationMode;
+        allocation.adjustmentAssignedBy = String(userId);
+        allocation.adjustmentAssignedByName = userName;
+        allocation.adjustmentAssignedAt = new Date();
         allocation.assignedPreparerUserIds = assignment.assignedPreparerUserIds;
         allocation.assignedPreparerNames = assignment.assignedPreparerNames;
         nepProposals.push(nepProposal);
