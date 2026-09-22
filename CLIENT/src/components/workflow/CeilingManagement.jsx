@@ -34,7 +34,6 @@ import {
   Save as SaveIcon,
   Cancel as CancelIcon,
   Publish as PublishIcon,
-  Lock as LockIcon,
   Refresh as RefreshIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
@@ -42,6 +41,7 @@ import {
   TrendingDown as TrendingDownIcon,
   CompareArrows as CompareIcon,
   PlayArrow as GenerateIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import api from '../../config/api';
@@ -426,7 +426,7 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
                 <Typography component="span" display="block" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
                   Switch region above (e.g. Central Office) or finalize proposals in All Proposals first.
                 </Typography>
-              )}
+              )}  
             </Alert>
           )}
           
@@ -980,9 +980,15 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
                           </Tooltip>
                         )
                       )}
-                      {ceiling?.status === 'Locked' && allocation.nepProposalId && (
-                        <Tooltip title="NEP Created">
-                          <LockIcon sx={{ color: '#888', fontSize: 18 }} />
+                      {allocation.nepProposalId && (
+                        <Tooltip title="Open standalone NEP Proposal">
+                          <IconButton
+                            size="small"
+                            aria-label={`Open NEP proposal for ${allocation.division || allocation.department}`}
+                            onClick={() => window.open(`/nep-proposal/${allocation.nepProposalId}`, '_self')}
+                          >
+                            <OpenInNewIcon sx={{ color: BRAND_COLORS.deepGreen, fontSize: 18 }} />
+                          </IconButton>
                         </Tooltip>
                       )}
                     </TableCell>

@@ -16,11 +16,13 @@ export const buildLiveCompliance = (liveTotals, serverCompliance) => {
     capitalOutlay: roundMoney(liveTotals.capitalOutlay),
   };
   const hasDetailedCeiling = Boolean(serverCompliance?.hasDetailedCeiling);
-  const enforcedFields = [
-    "totalExpenses",
-    ...(hasDetailedCeiling ? ["personnelServices", "mooe", "capitalOutlay"] : []),
-  ];
-  const violations = enforcedFields
+  const cappedFields = hasDetailedCeiling
+    ? ["personnelServices", "mooe", "capitalOutlay"]
+    : [];
+  const targetDifference = roundMoney(
+    Number(caps.totalExpenses || 0) - actual.proposedBudget
+  );
+  const violations = cappedFields
     .filter((field) => actual[field] - Number(caps[field] || 0) > CURRENCY_TOLERANCE)
     .map((field) => ({
       field,
@@ -29,6 +31,17 @@ export const buildLiveCompliance = (liveTotals, serverCompliance) => {
       excess: roundMoney(actual[field] - Number(caps[field] || 0)),
     }));
 
+  if (Math.abs(targetDifference) > CURRENCY_TOLERANCE) {
+    violations.unshift({
+      field: "targetCeilingMismatch",
+      actual: actual.proposedBudget,
+      cap: Number(caps.totalExpenses || 0),
+      difference: targetDifference,
+      status: targetDifference > 0 ? "BELOW_CEILING" : "ABOVE_CEILING",
+      excess: targetDifference < 0 ? Math.abs(targetDifference) : 0,
+    });
+  }
+
   return {
     compliant: violations.length === 0,
     actual,
@@ -36,7 +49,8 @@ export const buildLiveCompliance = (liveTotals, serverCompliance) => {
     hasDetailedCeiling,
     violations,
     remaining: {
-      totalExpenses: roundMoney(Number(caps.totalExpenses || 0) - actual.totalExpenses),
+      totalExpenses: targetDifference,
+      targetCeiling: targetDifference,
       personnelServices: roundMoney(
         Number(caps.personnelServices || 0) - actual.personnelServices
       ),
@@ -61,11 +75,11 @@ export const getNepReportReadiness = ({ compliance, hasUnsavedChanges = false } 
     compliance.compliant === false || Number(compliance.violations?.length || 0) > 0;
   if (hasViolation) {
     return {
-      key: "OVER_CEILING",
-      label: "Working copy · over ceiling",
-      reportStatus: "WORKING COPY – OVER CEILING",
+      key: "CEILING_MISMATCH",
+      label: "Working copy · ceiling mismatch",
+      reportStatus: "WORKING COPY – CEILING MISMATCH",
       color: "error",
-      helper: "Preview is available, but total or category ceilings still require adjustment.",
+      helper: "Income and Subsidy must match the Target Ceiling before submission.",
     };
   }
 
@@ -79,12 +93,7 @@ export const getNepReportReadiness = ({ compliance, hasUnsavedChanges = false } 
     };
   }
 
-  const enforcedFields = [
-    "totalExpenses",
-    ...(compliance.hasDetailedCeiling
-      ? ["personnelServices", "mooe", "capitalOutlay"]
-      : []),
-  ];
+  const enforcedFields = ["targetCeiling"];
   const isExactlyAligned = enforcedFields.every(
     (field) => Math.abs(Number(compliance.remaining?.[field] || 0)) <= CURRENCY_TOLERANCE
   );
@@ -95,7 +104,7 @@ export const getNepReportReadiness = ({ compliance, hasUnsavedChanges = false } 
       label: "Ready for submission",
       reportStatus: "READY FOR SUBMISSION",
       color: "success",
-      helper: "Saved Tier values match every enforced BRD ceiling.",
+      helper: "Saved Income and Subsidy match the BRD Target Ceiling.",
     };
   }
 

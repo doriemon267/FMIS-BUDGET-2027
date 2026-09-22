@@ -5,7 +5,7 @@ const {
 } = require('../../services/nepCeilingService');
 
 describe('NEP BRD ceiling compliance', () => {
-  test('accepts recalculated expenses that are within the total and category ceilings', () => {
+  test('rejects a proposal below the target ceiling even when categories are within their caps', () => {
     const report = buildNepCeilingComplianceReport({
       totals: {
         expenses: 900000,
@@ -26,8 +26,42 @@ describe('NEP BRD ceiling compliance', () => {
       }
     });
 
-    expect(report.compliant).toBe(true);
+    expect(report.compliant).toBe(false);
     expect(report.remaining.totalExpenses).toBe(100000);
+    expect(report.violations).toEqual([
+      expect.objectContaining({
+        field: 'targetCeilingMismatch',
+        difference: 100000,
+        status: 'BELOW_CEILING'
+      })
+    ]);
+  });
+
+  test('accepts Income plus Subsidy only when it matches the target ceiling', () => {
+    const report = buildNepCeilingComplianceReport({
+      totals: {
+        expenses: 1000000,
+        proposedBudget: 1000000,
+        subsidies: 700000,
+        income: 300000,
+        personnel: 550000,
+        mooe: 275000,
+        capitalOutlay: 175000
+      },
+      allocation: {
+        ceilingAmount: 1000000,
+        ceilingSubsidy: 700000,
+        ceilingIncome: 300000,
+        ceilingBreakdown: {
+          personnelServices: 550000,
+          mooe: 275000,
+          capitalOutlay: 175000
+        }
+      }
+    });
+
+    expect(report.compliant).toBe(true);
+    expect(report.remaining.targetCeiling).toBe(0);
     expect(report.violations).toEqual([]);
   });
 
@@ -55,6 +89,7 @@ describe('NEP BRD ceiling compliance', () => {
     expect(report.compliant).toBe(false);
     expect(report.remaining.totalExpenses).toBe(-50000);
     expect(report.violations.map(violation => violation.field)).toEqual([
+      'targetCeilingMismatch',
       'totalExpenses',
       'personnelServices',
       'mooe'
@@ -64,18 +99,30 @@ describe('NEP BRD ceiling compliance', () => {
     expect(report.violations.some(violation => violation.field === 'projectedSubsidy')).toBe(false);
   });
 
-  test('allows sub-cent rounding noise but rejects a real excess', () => {
+  test('allows sub-cent target noise but rejects a real mismatch in either direction', () => {
     const allocation = { ceilingAmount: 100, ceilingBreakdown: {} };
 
     expect(buildNepCeilingComplianceReport({
-      totals: { expenses: 100 + MONEY_EPSILON / 2 },
+      totals: {
+        expenses: 100 + MONEY_EPSILON / 2,
+        proposedBudget: 100 + MONEY_EPSILON / 2
+      },
       allocation
     }).compliant).toBe(true);
 
     expect(buildNepCeilingComplianceReport({
-      totals: { expenses: 100.02 },
+      totals: { expenses: 100.02, proposedBudget: 100.02 },
       allocation
     }).compliant).toBe(false);
+
+    const below = buildNepCeilingComplianceReport({
+      totals: { expenses: 99.98, proposedBudget: 99.98 },
+      allocation
+    });
+    expect(below.compliant).toBe(false);
+    expect(below.violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'targetCeilingMismatch', status: 'BELOW_CEILING' })
+    ]));
   });
 
   test('uses saved Tier 1 and Tier 2 as the authoritative NEP subsidy totals', () => {

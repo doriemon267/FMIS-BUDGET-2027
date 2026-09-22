@@ -64,6 +64,7 @@ import BRDConsolidationPage from "./pages/BRDConsolidationPage";
 import TierComparisonPage from "./pages/TierComparisonPage";
 import ComparativeReportPage from "./pages/ComparativeReportPage";
 import NEPCeilingPage from "./pages/NEPCeilingPage";
+import NEPProposalPage from "./pages/NEPProposalPage";
 import TierPage from "./pages/TierPage";
 import UserActivityLogsPage from "./pages/UserActivityLogsPage";
 import RoutePermissionManagementPage from "./pages/RoutePermissionManagementPage";
@@ -453,6 +454,16 @@ const App = () => {
               requiredWorkflowRoles={["BUDGET_OFFICER", "BUDGET_MANAGER", "overallBudgetApprover", "superAdmin"]}
             >
               <NEPCeilingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/nep-proposal/:proposalId"
+          element={
+            <ProtectedRoute
+              requiredWorkflowRoles={["preparer", "budgetAnalyst", "budgetOfficer", "budgetManager", "superAdmin"]}
+            >
+              <NEPProposalPage />
             </ProtectedRoute>
           }
         />

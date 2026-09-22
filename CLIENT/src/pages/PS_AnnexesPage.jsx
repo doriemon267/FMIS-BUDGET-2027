@@ -1,5 +1,5 @@
 import React from "react";
-import PS_AnnexesCustomPage from "../components/ps_annexes/PS_AnnexesCustompage";
+import PS_AnnexesCustomPage from "../components/ps_annexes/PS_AnnexesCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
 
 const PS_AnnexesPage = () => {

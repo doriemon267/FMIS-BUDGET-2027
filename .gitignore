@@ -62,6 +62,7 @@ coverage/
 # Markdown files (exclude from tracking)
 *.md
 !README.md
+!docs/FY2027_BUDGET_REQUIREMENTS_WORKING_NOTES.md
 
 # Test directories and files
 test/
