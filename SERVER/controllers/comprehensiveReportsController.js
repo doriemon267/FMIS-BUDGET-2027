@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
+const { personnelItemFunding } = require('../utils/personnelReportFunding');
 const COSPersonnel = require('../models/COSPersonnel');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
@@ -89,7 +90,7 @@ const PERSONNEL_SERVICES_STRUCTURE = {
           "h": { name: "Additional Medical Allowance", field: "additionalMedical" },
           "i": { name: "Meal Allowances", field: "meal" },
           "j": { name: "Per Diem & Allowance of Board of Directors", field: "perDiem" },
-          "k": { name: "Subsistence Allowance", field: "subsistenceAllowance" },
+          "k": { name: "Subsistence Allowance", field: "subsistenceAllowance,subsistenceAllowanceMDS,subsistenceAllowanceST" },
           "l": { name: "Longevity Pay (Loyalty Award)", field: "loyaltyAward" },
           "m": { name: "Overtime Services", field: "overtimePay" },
           "n": { name: "Special Counsel Allowance", field: "specialCounsel" },
@@ -99,7 +100,8 @@ const PERSONNEL_SERVICES_STRUCTURE = {
           "r": { name: "Performance Based Bonus", field: "performanceBonus" },
           "s": { name: "Hazard Pay", field: "hazardPay" },
           "t": { name: "Other Bonuses and Allowances", field: "otherBonuses" },
-          "u": { name: "Anniversary Bonus", field: "anniversaryBonus" }
+          "u": { name: "Anniversary Bonus", field: "anniversaryBonus" },
+          "v": { name: "Court Appearance", field: "courtAppearance" }
         }
       },
       "3": {
@@ -1047,10 +1049,6 @@ const processPersonnelServicesData = async (psData, query) => {
       regionSet.add(employee.region || 'Unspecified');
       totalEmployees++;
       const empTotal = Number(employee.Total) || 0;
-      const chargedIncome = Number(employee.chargedToIncomeAmount) || 0;
-      const subsidyPortion = Math.max(0, empTotal - chargedIncome);
-      const ratioIncome = empTotal > 0 ? chargedIncome / empTotal : 0;
-      const ratioSubsidy = empTotal > 0 ? subsidyPortion / empTotal : 1;
       // Process each category in the structure
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         if (!consolidatedCategories[categoryKey]) {
@@ -1093,14 +1091,13 @@ const processPersonnelServicesData = async (psData, query) => {
             }
           }
           category.items[itemKey].amount += amount;
-          category.items[itemKey].income += amount * ratioIncome;
-          category.items[itemKey].subsidy += amount * ratioSubsidy;
+          const funding = personnelItemFunding(employee, categoryKey === '1' ? 'annualSalary' : itemData.field, amount);
+          category.items[itemKey].income += funding.incomeAmount;
+          category.items[itemKey].subsidy += funding.subsidyAmount;
           category.total += amount;
         });
       });
       sectionTotal += empTotal;
-      sectionTotalIncome += chargedIncome;
-      sectionTotalSubsidy += subsidyPortion;
     });
     // Derive category totalIncome/totalSubsidy from items
     Object.values(consolidatedCategories).forEach(cat => {
@@ -1162,12 +1159,12 @@ const processPersonnelServicesData = async (psData, query) => {
             // Special handling for Salaries and Wages based on statusOfAppointment
             if (categoryKey === '1' && itemKey === 'a') {
               // Salaries - Regular (Authorized Positions) = Permanent only
-              if (employee.statusOfAppointment === 'PERMANENT') {
+              if (String(employee.statusOfAppointment).trim().toUpperCase() === 'PERMANENT') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else if (categoryKey === '1' && itemKey === 'b') {
               // Casual Personnel = Casual only
-              if (employee.statusOfAppointment === 'CASUAL') {
+              if (String(employee.statusOfAppointment).trim().toUpperCase() === 'CASUAL') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else {
@@ -1183,6 +1180,11 @@ const processPersonnelServicesData = async (psData, query) => {
           }
           category.items[itemKey].amount += amount;
           category.total += amount;
+          const funding = personnelItemFunding(employee, categoryKey === '1' ? 'annualSalary' : itemData.field, amount);
+          category.items[itemKey].income = (category.items[itemKey].income || 0) + funding.incomeAmount;
+          category.items[itemKey].subsidy = (category.items[itemKey].subsidy || 0) + funding.subsidyAmount;
+          category.totalIncome = (category.totalIncome || 0) + funding.incomeAmount;
+          category.totalSubsidy = (category.totalSubsidy || 0) + funding.subsidyAmount;
         });
       });
       // Calculate employee total
@@ -1196,7 +1198,9 @@ const processPersonnelServicesData = async (psData, query) => {
       sectionTotal,
       totalEmployees,
       totalRegions: regionSet.size,
-      regions: Object.values(grouped)
+      regions: Object.values(grouped),
+      sectionTotalIncome: Object.values(grouped).reduce((sum, region) => sum + Object.values(region.categories).reduce((s, category) => s + category.totalIncome, 0), 0),
+      sectionTotalSubsidy: Object.values(grouped).reduce((sum, region) => sum + Object.values(region.categories).reduce((s, category) => s + category.totalSubsidy, 0), 0),
     };
   }
 };
@@ -2671,6 +2675,7 @@ module.exports = {
   verifyDocument,
   verifyDocumentUpload,
   _private: {
+    processPersonnelServicesData,
     buildReportWorkflowVisibilityConditions
   }
 };

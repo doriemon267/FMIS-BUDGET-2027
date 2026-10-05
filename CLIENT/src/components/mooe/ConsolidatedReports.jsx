@@ -39,7 +39,7 @@ import {
   FormControl,
   InputLabel,
 } from "@mui/material";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import { NumericFormat } from "react-number-format";
@@ -323,7 +323,6 @@ const ConsolidatedReports = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <ToastContainer position="top-right" autoClose={3000} />
       
       {/* Header */}
       <Paper elevation={2} sx={{ p: 3, mb: 3 }}>

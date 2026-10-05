@@ -18,7 +18,16 @@ const queryClient = vi.hoisted(() => ({
 }));
 
 const mockApiGet = vi.hoisted(() => vi.fn());
+const mockNavigate = vi.hoisted(() => vi.fn());
 const MockIcon = vi.hoisted(() => () => null);
+
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 vi.mock("@mui/icons-material", () => ({
   Add: MockIcon,
@@ -155,7 +164,7 @@ describe("ProposalOperationsHub action-menu lifecycle", () => {
     await waitFor(() => {
       expect(screen.queryByText("Submit Initial Proposal to Budget Reviewer")).toBeTruthy();
     });
-    expect(screen.queryByText("NEP Tier Adjustment")).toBeNull();
+    expect(screen.queryByText("Open NEP Proposal")).toBeNull();
   });
 
   it("keeps active NEP Tier and submission actions after menu effects settle", async () => {
@@ -166,8 +175,28 @@ describe("ProposalOperationsHub action-menu lifecycle", () => {
     fireEvent.click(await screen.findByRole("button", { name: /actions/i }));
 
     await waitFor(() => {
-      expect(screen.queryByText("NEP Tier Adjustment")).toBeTruthy();
+      expect(screen.queryByText("Open NEP Proposal")).toBeTruthy();
       expect(screen.queryByText("Submit NEP Proposal to Budget Reviewer")).toBeTruthy();
+    });
+  });
+
+  it("opens the dedicated NEP proposal page from the NEP adjustment action", async () => {
+    testState.activeSettings = { budgetType: "NEP", fiscalYear: "2027" };
+    testState.proposal = createProposal("NEP");
+    mockApiGet.mockImplementation(url =>
+      Promise.resolve({
+        data: url === "/settings/active" ? testState.activeSettings : { data: [] },
+      })
+    );
+    renderHub();
+
+    fireEvent.click(await screen.findByRole("button", { name: /actions/i }));
+    fireEvent.click(await screen.findByText("Open NEP Proposal"));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(
+        `/nep-proposal/${testState.proposal._id}`
+      );
     });
   });
 
@@ -177,7 +206,7 @@ describe("ProposalOperationsHub action-menu lifecycle", () => {
     const view = renderHub();
 
     fireEvent.click(await screen.findByRole("button", { name: /actions/i }));
-    expect(await screen.findByText("NEP Tier Adjustment")).toBeTruthy();
+    expect(await screen.findByText("Open NEP Proposal")).toBeTruthy();
 
     testState.activeSettings = { budgetType: "Initial", fiscalYear: "2027" };
     view.rerender(
@@ -187,7 +216,7 @@ describe("ProposalOperationsHub action-menu lifecycle", () => {
     );
 
     await waitFor(() => {
-      expect(screen.queryByText("NEP Tier Adjustment")).toBeNull();
+      expect(screen.queryByText("Open NEP Proposal")).toBeNull();
       expect(screen.queryByText("Submit NEP Proposal to Budget Reviewer")).toBeNull();
     });
   });

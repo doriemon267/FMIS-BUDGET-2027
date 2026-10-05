@@ -145,6 +145,11 @@ const compensationSchema = yup.object().shape({
   }),
   subsistenceAllowanceRate: yup.number().min(0),
   earnedLeaves: yup.number().min(0),
+  earnedLeaveDays: yup.number()
+    .typeError("Enter a valid number of days")
+    .required("Earned leave days are required")
+    .min(0, "Days must be 0 or greater")
+    .test("finite", "Enter a finite number of days", Number.isFinite),
   loyaltyPay: yup.object({
     baseYears: yup.number(),
     baseAmount: yup.number(),
@@ -212,6 +217,7 @@ const CompensationStandaloneDialog = ({
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { errors }
   } = useForm({
     resolver: yupResolver(compensationSchema),
@@ -249,7 +255,8 @@ const CompensationStandaloneDialog = ({
         fourToLessThanFiveMin: 4,
       },
       subsistenceAllowanceRate: 0,
-      earnedLeaves: 0,
+      earnedLeaves: 0.0481927,
+      earnedLeaveDays: 30,
       loyaltyPay: {
         baseYears: 10,
         baseAmount: 10000,
@@ -276,6 +283,8 @@ const CompensationStandaloneDialog = ({
     if (editData) {
       reset({
         ...editData,
+        earnedLeaves: editData.earnedLeaves ?? 0.0481927,
+        earnedLeaveDays: editData.earnedLeaveDays ?? 30,
         subsistenceAllowanceMonthlyTiers: {
           eightHoursOrMore: editData.subsistenceAllowanceMonthlyTiers?.eightHoursOrMore ?? 150,
           sixToLessThanEight: editData.subsistenceAllowanceMonthlyTiers?.sixToLessThanEight ?? 125,
@@ -290,7 +299,7 @@ const CompensationStandaloneDialog = ({
           fiveToLessThanSixMin: editData.subsistenceAllowanceHourThresholds?.fiveToLessThanSixMin ?? 5,
           fourToLessThanFiveMin: editData.subsistenceAllowanceHourThresholds?.fourToLessThanFiveMin ?? 4,
         },
-      });
+      }, { keepDefaultValues: true });
     } else {
       reset();
     }
@@ -336,7 +345,11 @@ const CompensationStandaloneDialog = ({
       // Pre-fill name with " - Copy" suffix
       copyData.name = `${copyData.name} - Copy`;
       
-      reset(copyData);
+      reset({
+        ...copyData,
+        earnedLeaves: copyData.earnedLeaves ?? 0.0481927,
+        earnedLeaveDays: copyData.earnedLeaveDays ?? 30,
+      }, { keepDefaultValues: true });
       toast.success(`Compensation "${sourceCompensation.name}" loaded. Edit and save as new.`);
     }
   };
@@ -728,7 +741,8 @@ const CompensationStandaloneDialog = ({
                 <Grid container spacing={2}>
                   {[
                     { name: "subsistenceAllowanceRate", label: "Subsistence Allowance MDS Rate (₱)" },
-                    { name: "earnedLeaves", label: "Earned Leaves (Days)", component: HighPrecisionFormatCustom }
+                    { name: "earnedLeaves", label: "Earned Leave Conversion Factor", component: HighPrecisionFormatCustom },
+                    { name: "earnedLeaveDays", label: "Earned Leave Days" }
                   ].map(({ name, label, component }) => (
                     <Grid item xs={12} sm={6} key={name}>
                       <Controller
@@ -754,6 +768,11 @@ const CompensationStandaloneDialog = ({
                     </Grid>
                   ))}
                 </Grid>
+                <FormHelperText sx={{ mt: 2 }}>
+                  Earned leaves = Monthly salary × {watch("earnedLeaveDays") || 0} days × {watch("earnedLeaves") || 0}.
+                  Default: 30 days × 0.0481927. Reduce the days to fit the available budget; use 0 for no allocation.
+                  Applies when adding personnel using this compensation. Existing personnel amounts are retained.
+                </FormHelperText>
               </AccordionDetails>
             </Accordion>
 

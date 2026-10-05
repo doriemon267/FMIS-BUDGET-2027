@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   AlertTitle,
   Box,
@@ -9,11 +12,11 @@ import {
   Container,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SaveIcon from '@mui/icons-material/Save';
 import SendIcon from '@mui/icons-material/Send';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -23,10 +26,19 @@ import { useUser } from '../context/UserContext';
 import { useProposalLock } from '../hooks/useProposalLock';
 import { useProposalCalculations } from './ProposalOperationsHub/hooks/useProposalCalculations';
 import NEPCeilingSummary from './ProposalOperationsHub/components/NEPCeilingSummary';
-import IncomeTable from './ProposalOperationsHub/components/tables/IncomeTable';
-import PersonnelServicesTable from './ProposalOperationsHub/components/tables/PersonnelServicesTable';
-import MooeTable from './ProposalOperationsHub/components/tables/MooeTable';
-import CapitalOutlayTable from './ProposalOperationsHub/components/tables/CapitalOutlayTable';
+import NEPWorkspaceNavigation from './ProposalOperationsHub/components/NEPWorkspaceNavigation';
+import NEPPersonnelComparisonTable from './ProposalOperationsHub/components/tables/NEPPersonnelComparisonTable';
+import NEPFinancialComparisonTable from './ProposalOperationsHub/components/tables/NEPFinancialComparisonTable';
+import {
+  applyPersonnelLineAllocation,
+  buildPersonnelComparisonRows,
+  getPersonnelComparisonTotals,
+} from './ProposalOperationsHub/components/tables/nepPersonnelComparison';
+import {
+  getModuleComparisonTotals,
+  NEP_WORKSPACE_MODULES,
+} from './ProposalOperationsHub/components/tables/nepFinancialComparison';
+import ProposalAttachments from '../components/workflow/ProposalAttachments';
 
 const EMPTY_DETAILS = { income: [], personnel: [], mooe: [], capitalOutlay: [] };
 
@@ -54,7 +66,7 @@ const NEPProposalPage = () => {
   const [details, setDetails] = useState(EMPTY_DETAILS);
   const [editableItems, setEditableItems] = useState(EMPTY_DETAILS);
   const [changedCategories, setChangedCategories] = useState(new Set());
-  const [activeTab, setActiveTab] = useState('income-permanent');
+  const [activeTab, setActiveTab] = useState('income');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -109,11 +121,11 @@ const NEPProposalPage = () => {
         0
       ),
       mooe: editableItems.mooe.reduce(
-        (sum, item) => sum + (Number(item.amount ?? item.income) || 0),
+        (sum, item) => sum + (Number(item.income) || 0) + (Number(item.subsidy) || 0),
         0
       ),
       capitalOutlay: editableItems.capitalOutlay.reduce(
-        (sum, item) => sum + (Number(item.cost ?? item.amount) || 0),
+        (sum, item) => sum + (Number(item.income) || 0) + (Number(item.subsidy) || 0),
         0
       ),
     }),
@@ -122,6 +134,90 @@ const NEPProposalPage = () => {
   const targetCeiling = Number(ceilingContext?.ceiling?.amount || 0);
   const difference = Math.round((targetCeiling - liveTotals.proposedBudget) * 100) / 100;
   const isMatched = Math.abs(difference) <= 0.01;
+
+  const financialModuleTotals = useMemo(
+    () => ({
+      income: getModuleComparisonTotals({
+        moduleKey: 'income',
+        initialItems: details.income,
+        currentItems: editableItems.income,
+      }),
+      mooe: getModuleComparisonTotals({
+        moduleKey: 'mooe',
+        initialItems: details.mooe,
+        currentItems: editableItems.mooe,
+      }),
+      capital: getModuleComparisonTotals({
+        moduleKey: 'capital',
+        initialItems: details.capitalOutlay,
+        currentItems: editableItems.capitalOutlay,
+      }),
+    }),
+    [details, editableItems]
+  );
+  const personnelModuleTotals = useMemo(() => {
+    const totals = getPersonnelComparisonTotals(
+      buildPersonnelComparisonRows(editableItems.personnel)
+    );
+    return {
+      initial: totals.initialIncome + totals.initialSubsidy,
+      proposed: totals.nepIncome + totals.nepSubsidy,
+    };
+  }, [editableItems.personnel]);
+  const moduleTotals = useMemo(
+    () => ({
+      income: financialModuleTotals.income,
+      personnel: personnelModuleTotals,
+      mooe: financialModuleTotals.mooe,
+      capital: financialModuleTotals.capital,
+    }),
+    [financialModuleTotals, personnelModuleTotals]
+  );
+  const workspaceModules = useMemo(
+    () =>
+      NEP_WORKSPACE_MODULES.map(module => ({
+        ...module,
+        total: moduleTotals[module.key].proposed,
+      })),
+    [moduleTotals]
+  );
+  const activeModuleTotals = moduleTotals[activeTab] || moduleTotals.income;
+  const activeCategoryCap = Number(
+    activeTab === 'personnel'
+      ? ceilingContext?.compliance?.caps?.personnelServices ||
+          ceilingContext?.ceiling?.personnelServices
+      : activeTab === 'mooe'
+        ? ceilingContext?.compliance?.caps?.mooe || ceilingContext?.ceiling?.mooe
+        : activeTab === 'capital'
+          ? ceilingContext?.compliance?.caps?.capitalOutlay ||
+            ceilingContext?.ceiling?.capitalOutlay
+          : 0
+  );
+  const activeRemaining = activeCategoryCap - Number(activeModuleTotals.proposed || 0);
+  const activeSummary = {
+    initial: activeModuleTotals.initial,
+    proposed: activeModuleTotals.proposed,
+    ...(activeTab === 'income'
+      ? {
+          ceilingLabel: 'Collection only',
+          ceilingHelper: 'Not added to the expense allocation total',
+          ceilingTone: 'info',
+        }
+      : activeCategoryCap > 0
+        ? {
+            ceilingLabel: activeRemaining < -0.01 ? 'Above category ceiling' : 'Within category ceiling',
+            ceilingHelper: `${Math.abs(activeRemaining).toLocaleString('en-PH', {
+              style: 'currency',
+              currency: 'PHP',
+            })} ${activeRemaining < 0 ? 'over' : 'remaining'}`,
+            ceilingTone: activeRemaining < -0.01 ? 'error' : 'success',
+          }
+        : {
+            ceilingLabel: 'No category ceiling',
+            ceilingHelper: 'Validated against the overall target',
+            ceilingTone: 'info',
+          }),
+  };
 
   const loadProposal = useCallback(async () => {
     setLoading(true);
@@ -173,6 +269,10 @@ const NEPProposalPage = () => {
   }, [loadProposal]);
 
   useEffect(() => {
+    setActiveTab('income');
+  }, [proposalId]);
+
+  useEffect(() => {
     if (proposalId && assignmentAllowsEdit) acquireLock();
     return () => releaseLock();
   }, [acquireLock, assignmentAllowsEdit, proposalId, releaseLock]);
@@ -207,6 +307,25 @@ const NEPProposalPage = () => {
       return updated;
     });
     setChangedCategories(previous => new Set(previous).add(category));
+  };
+
+  const handlePersonnelAllocationChange = useCallback(
+    (row, funding, newAmount) => {
+      if (!canEdit) return;
+      setEditableItems(previous => ({
+        ...previous,
+        personnel: applyPersonnelLineAllocation(previous.personnel, row, funding, newAmount),
+      }));
+      setChangedCategories(previous => new Set(previous).add('personnel'));
+    },
+    [canEdit]
+  );
+
+  const resetUnsavedChanges = () => {
+    if (!canEdit || changedCategories.size === 0) return;
+    setEditableItems(cloneDetails(details));
+    setChangedCategories(new Set());
+    toast.info('Unsaved NEP changes were reset.');
   };
 
   const saveChanges = async () => {
@@ -301,15 +420,6 @@ const NEPProposalPage = () => {
     );
   }
 
-  const tableProps = {
-    proposalDetails: editableItems,
-    editableItems,
-    changedItems: changedCategories,
-    handleEditItemAmount,
-    canUserEdit: () => canEdit,
-    selectedProposal: proposal,
-  };
-
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" gap={2}>
@@ -345,35 +455,97 @@ const NEPProposalPage = () => {
         </Alert>
       )}
 
-      <Box sx={{ mt: 3 }}>
-        <NEPCeilingSummary
-          proposal={proposal}
-          liveTotals={liveTotals}
-          hasUnsavedChanges={changedCategories.size > 0}
-          readOnly={!canEdit}
-        />
-      </Box>
+      <NEPWorkspaceNavigation
+        proposal={proposal}
+        modules={workspaceModules}
+        activeModule={activeTab}
+        onModuleChange={setActiveTab}
+        canEdit={canEdit}
+        summary={activeSummary}
+      />
 
-      <Paper variant="outlined" sx={{ mt: 3 }}>
-        <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value)} variant="scrollable">
-          <Tab value="income-permanent" label="Income – Permanent (CPCS2)" />
-          <Tab value="income" label="Other Income" />
-          <Tab value="personnel" label="Personnel Services" />
-          <Tab value="mooe" label="MOOE" />
-          <Tab value="capital" label="Capital Outlay" />
-        </Tabs>
-        <Box sx={{ p: 2, overflowX: 'auto' }}>
-          {activeTab === 'income-permanent' && (
-            <PersonnelServicesTable {...tableProps} appointmentType="charged" />
-          )}
-          {activeTab === 'income' && <IncomeTable {...tableProps} />}
+      <Paper variant="outlined" sx={{ mt: 1.5, p: { xs: 1.25, md: 2 } }}>
+        {activeTab === 'income' && (
+          <NEPFinancialComparisonTable
+            moduleKey="income"
+            initialItems={details.income}
+            currentItems={editableItems.income}
+            canEdit={canEdit}
+            hasChanges={changedCategories.has('income')}
+            emptyLabel="No Corporate Income records available"
+            onEdit={(indices, value) => handleEditItemAmount('income', indices, value)}
+          />
+        )}
           {activeTab === 'personnel' && (
-            <PersonnelServicesTable {...tableProps} appointmentType="permanent" />
+            <NEPPersonnelComparisonTable
+              personnel={editableItems.personnel}
+              canEdit={canEdit}
+              hasChanges={changedCategories.has('personnel')}
+              onAllocationChange={handlePersonnelAllocationChange}
+            />
           )}
-          {activeTab === 'mooe' && <MooeTable {...tableProps} />}
-          {activeTab === 'capital' && <CapitalOutlayTable {...tableProps} />}
-        </Box>
+        {activeTab === 'mooe' && (
+          <NEPFinancialComparisonTable
+            moduleKey="mooe"
+            initialItems={details.mooe}
+            currentItems={editableItems.mooe}
+            canEdit={canEdit}
+            hasChanges={changedCategories.has('mooe')}
+            emptyLabel="No MOOE records available"
+            onEdit={(indices, value, field) =>
+              handleEditItemAmount('mooe', indices, value, field)
+            }
+          />
+        )}
+        {activeTab === 'capital' && (
+          <NEPFinancialComparisonTable
+            moduleKey="capital"
+            initialItems={details.capitalOutlay}
+            currentItems={editableItems.capitalOutlay}
+            canEdit={canEdit}
+            hasChanges={changedCategories.has('capitalOutlay')}
+            emptyLabel="No Capital Outlay records available"
+            onEdit={(indices, value, field) =>
+              handleEditItemAmount('capitalOutlay', indices, value, field)
+            }
+          />
+        )}
       </Paper>
+
+      <Paper variant="outlined" sx={{ mt: 1.5, p: { xs: 1.25, md: 2 } }}>
+        <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 850 }}>
+          Attachments &amp; Supporting Documents
+        </Typography>
+        <ProposalAttachments
+          key={activeTab}
+          proposal={proposal}
+          moduleName={activeTab}
+          userInfo={currentUser}
+        />
+      </Paper>
+
+      <Accordion key={proposalId} defaultExpanded={false} variant="outlined" sx={{ mt: 2 }}>
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          id="nep-ceiling-summary"
+          aria-controls="nep-ceiling-details"
+        >
+          <Box>
+            <Typography sx={{ fontWeight: 800 }}>NEP Ceiling Alignment</Typography>
+            <Typography variant="body2" color="text.secondary">
+              View ceiling breakdown and category limits
+            </Typography>
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: { xs: 1, md: 2 }, pt: 0 }}>
+          <NEPCeilingSummary
+            proposal={proposal}
+            liveTotals={liveTotals}
+            hasUnsavedChanges={changedCategories.size > 0}
+            readOnly={!canEdit}
+          />
+        </AccordionDetails>
+      </Accordion>
 
       <Paper variant="outlined" sx={{ mt: 2, p: 2, position: 'sticky', bottom: 12, zIndex: 2 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={2}>
@@ -390,7 +562,15 @@ const NEPProposalPage = () => {
               {Math.abs(difference).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
             </Typography>
           </Box>
-          <Stack direction="row" spacing={1}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <Button
+              variant="text"
+              startIcon={<RestartAltIcon />}
+              disabled={!canEdit || changedCategories.size === 0 || saving}
+              onClick={resetUnsavedChanges}
+            >
+              Reset
+            </Button>
             <Button
               variant="outlined"
               startIcon={<SaveIcon />}

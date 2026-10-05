@@ -142,6 +142,18 @@ const personnelServicesSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    cpcs1MonthlySalary: { type: Number, min: 0 },
+    cpcs2MonthlySalary: { type: Number, min: 0 },
+    // Portion already included in monthlySalary, never added again to PS cost.
+    monthlySalaryIncrement: {
+      type: Number,
+      default: 0,
+      min: 0,
+      validate: {
+        validator(value) { return Number.isFinite(value) && value <= this.monthlySalary; },
+        message: 'Monthly salary increment cannot exceed monthly salary.',
+      },
+    },
     noOfDependent: {
       type: Number,
       required: true,
@@ -300,6 +312,20 @@ courtAppearance: {
       type: Number,
       default: 0,
     },
+    // Immutable Initial-proposal baseline and editable line-level NEP split.
+    // Mixed maps are keyed by canonical Personnel Services amount field.
+    nepInitialValues: {
+      type: mongoose.Schema.Types.Mixed,
+      default: undefined,
+    },
+    nepInitialAllocations: {
+      type: mongoose.Schema.Types.Mixed,
+      default: undefined,
+    },
+    nepAllocations: {
+      type: mongoose.Schema.Types.Mixed,
+      default: undefined,
+    },
     chargedToIncomeNotes: {
       type: String,
       trim: true,
@@ -366,7 +392,7 @@ courtAppearance: {
   { timestamps: true }
 );
 // Add a pre-save hook to ensure meal is properly set and calculate total
-personnelServicesSchema.pre('save', function(next) {
+personnelServicesSchema.pre('save', async function() {
   // If meal is undefined or null, set it to 0
   if (this.meal === undefined || this.meal === null) {
     this.meal = 0;
@@ -377,9 +403,9 @@ personnelServicesSchema.pre('save', function(next) {
   // Calculate total from all numeric fields (25 components per SUBTOTAL formula)
   const numericFields = [
     "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-    "medical", "childrenAllowance", "meal", "cashGift", 
+    "medical", "additionalMedical", "childrenAllowance", "meal", "cashGift",
     "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
-    "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium", 
+    "midyearBonus", "yearEndBonus", "gsisPremium", "providentFund", "philhealthPremium", "pagibigPremium",
     "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 
     "terminalLeave", "hazardPay", "honoraria"
   ];
@@ -390,7 +416,15 @@ personnelServicesSchema.pre('save', function(next) {
     0
   ));
   
-  next();
+  // Keep the saved split consistent when salary or benefits are edited.
+  if (this.workflowRef && String(this.statusOfAppointment).toUpperCase() === 'PERMANENT') {
+    const workflow = await require('./NewProposalWorkflow').findById(this.workflowRef)
+      .select('modelType permanentIncomeAllocation').lean();
+    if (workflow?.modelType === 'Initial') {
+      const { applyPermanentIncomeAllocation } = require('../utils/personnelIncomeAllocation');
+      Object.assign(this, applyPermanentIncomeAllocation(this, workflow.permanentIncomeAllocation));
+    }
+  }
 });
 // Add a static method to reset meal allowance
 personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumber, fiscalYear) {

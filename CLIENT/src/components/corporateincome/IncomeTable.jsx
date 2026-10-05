@@ -21,7 +21,7 @@ import {
   ExpandMore as ExpandMoreIcon, Add as AddIcon, Search as SearchIcon,
   Summarize as SummarizeIcon, CloudUpload as CloudUploadIcon
 } from "@mui/icons-material";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { NumericFormat } from "react-number-format";
 import { debounce } from 'lodash';
@@ -1613,7 +1613,6 @@ const IncomeTable = ({
         }}
       />
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover />
     </Paper>
   );
 };

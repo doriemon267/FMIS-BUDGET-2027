@@ -327,24 +327,99 @@ const canPerformAction = (userRole, proposal, action) => {
   return canDo;
 };
 
-const isProposalPreparerOwner = (proposal, userId, userName = '') => {
-  const normalizedUserId = String(userId || '');
-  const normalizedUserName = String(userName || '').trim().toLowerCase();
+const normalizeIdentityValue = value => String(value || '').trim().toLowerCase();
+
+const isProposalPreparerOwner = (
+  proposal,
+  userId,
+  userName = '',
+  additionalUserIds = [],
+  additionalUserNames = []
+) => {
+  const normalizedUserIds = [userId, ...additionalUserIds]
+    .flat()
+    .map(normalizeIdentityValue)
+    .filter(Boolean);
+  const normalizedUserNames = [userName, ...additionalUserNames]
+    .flat()
+    .map(normalizeIdentityValue)
+    .filter(Boolean);
   const assignedIds = Array.isArray(proposal?.assignedPreparerUserIds)
-    ? proposal.assignedPreparerUserIds.map(value => String(value || ''))
+    ? proposal.assignedPreparerUserIds.map(normalizeIdentityValue).filter(Boolean)
     : [];
   const assignedNames = Array.isArray(proposal?.assignedPreparerNames)
-    ? proposal.assignedPreparerNames.map(value => String(value || '').trim().toLowerCase())
+    ? proposal.assignedPreparerNames.map(normalizeIdentityValue).filter(Boolean)
     : [];
+  const createdBy = normalizeIdentityValue(proposal?.createdBy);
+  const createdByName = normalizeIdentityValue(proposal?.createdByName);
 
   return (
-    String(proposal?.createdBy || '') === normalizedUserId ||
-    assignedIds.includes(normalizedUserId) ||
-    (normalizedUserName && (
-      String(proposal?.createdByName || '').trim().toLowerCase() === normalizedUserName ||
-      assignedNames.includes(normalizedUserName)
-    ))
+    (createdBy && normalizedUserIds.includes(createdBy)) ||
+    assignedIds.some(assignedId => normalizedUserIds.includes(assignedId)) ||
+    (createdByName && normalizedUserNames.includes(createdByName)) ||
+    assignedNames.some(assignedName => normalizedUserNames.includes(assignedName))
   );
+};
+
+const resolvePreparerRequestIdentity = async req => {
+  const usernameFields = Array.isArray(req.user?.Username)
+    ? req.user.Username
+    : [req.user?.Username];
+  const ids = [
+    req.user?.id,
+    ...usernameFields,
+    req.user?.userId,
+    req.user?.UserId,
+    req.user?.Id,
+    req.user?._id,
+    req.user?.username,
+    req.user?.particularID,
+    req.user?.employeeId,
+    req.user?.EmployeeId,
+    req.identity?.userId,
+  ].flat().map(value => String(value || '').trim()).filter(Boolean);
+  const names = [
+    req.user?.name || req.user?.Name,
+    req.user?.particular,
+    req.user?.userName,
+    req.user?.UserName,
+    `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(),
+    req.identity?.displayName,
+  ].flat().map(value => String(value || '').trim()).filter(Boolean);
+  const emails = [req.user?.email, req.identity?.email]
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+
+  const lookupConditions = [];
+  if (ids.length) lookupConditions.push({ userId: { $in: ids } });
+  if (emails.length) lookupConditions.push({ email: { $in: emails } });
+  if (names.length) lookupConditions.push({ userName: { $in: names } });
+
+  if (lookupConditions.length) {
+    try {
+      const assignment = await HierarchicalUserAssignment.findOne({
+        isActive: true,
+        $or: lookupConditions,
+      })
+        .collation({ locale: 'en', strength: 2 })
+        .select('userId userName email')
+        .lean();
+
+      if (assignment) {
+        ids.push(assignment.userId);
+        names.push(assignment.userName);
+        emails.push(assignment.email);
+      }
+    } catch (error) {
+      console.warn('[resolvePreparerRequestIdentity] Identity lookup failed:', error.message);
+    }
+  }
+
+  return {
+    userId: ids[0] || null,
+    ids: Array.from(new Set(ids.filter(Boolean))),
+    names: Array.from(new Set([...names, ...emails].filter(Boolean))),
+  };
 };
 
 const getAssignedPreparerRecipientIds = proposal => {
@@ -2184,14 +2259,38 @@ exports.createProposal = async (req, res) => {
  * @param {string} userRole - Current user's primary role
  * @returns {Promise<boolean>}
  */
-const checkProposalOrgAccess = async (proposal, userId, userRole) => {
+const checkProposalOrgAccess = async (
+  proposal,
+  userId,
+  userRole,
+  userName = '',
+  additionalUserIds = [],
+  additionalUserNames = []
+) => {
   if (userRole === 'SUPER ADMIN') return true;
   
-  // Ownership always grants access
-  if (isProposalPreparerOwner(proposal, userId)) return true;
+  // Explicit proposal ownership/assignment is authoritative. Authentication
+  // can expose both an internal id and an employee Username, while NEP
+  // assignments are stored using the employee identity.
+  if (
+    isProposalPreparerOwner(
+      proposal,
+      userId,
+      userName,
+      additionalUserIds,
+      additionalUserNames
+    )
+  ) return true;
 
   try {
-    const assignment = await HierarchicalUserAssignment.findOne({ userId: String(userId), isActive: true })
+    const identityIds = [userId, ...additionalUserIds]
+      .flat()
+      .map(value => String(value || '').trim())
+      .filter(Boolean);
+    const assignment = await HierarchicalUserAssignment.findOne({
+      userId: { $in: identityIds },
+      isActive: true
+    })
       .populate('departmentId')
       .populate('regionId')
       .lean();
@@ -3261,7 +3360,11 @@ exports.getProposalById = async (req, res) => {
   try {
     const { id } = req.params;
     const userRole = getUserRole(req);
-    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const preparerIdentity = await resolvePreparerRequestIdentity(req);
+    const userId = preparerIdentity.userId;
+    const preparerIdentityIds = preparerIdentity.ids;
+    const preparerNames = preparerIdentity.names;
+    const preparerName = preparerNames[0] || '';
 
     // CRITICAL: First try to fetch from Proposal model (fmis_budget) which has projectedSubsidy
     // This is needed for BudgetarySupportTable which passes Proposal._id, not NewProposalWorkflow._id
@@ -3269,7 +3372,14 @@ exports.getProposalById = async (req, res) => {
     
     if (proposal) {
       // Check organizational access for legacy proposal lookup
-      const hasOrgAccess = await checkProposalOrgAccess(proposal, userId, userRole);
+      const hasOrgAccess = await checkProposalOrgAccess(
+        proposal,
+        userId,
+        userRole,
+        preparerName,
+        preparerIdentityIds,
+        preparerNames
+      );
       if (!hasOrgAccess) {
         return res.status(403).json({
           success: false,
@@ -3296,7 +3406,14 @@ exports.getProposalById = async (req, res) => {
     }
 
     // Organizational Access Security Check
-    const hasOrgAccess = await checkProposalOrgAccess(proposal, userId, userRole);
+    const hasOrgAccess = await checkProposalOrgAccess(
+      proposal,
+      userId,
+      userRole,
+      preparerName,
+      preparerIdentityIds,
+      preparerNames
+    );
     if (!hasOrgAccess) {
       return res.status(403).json({
         success: false,
@@ -3309,7 +3426,13 @@ exports.getProposalById = async (req, res) => {
       userRole !== 'SUPER ADMIN' &&
       userRole === 'BUDGET PREPARER' &&
       String(proposal.modelType || '').toUpperCase() === 'NEP' &&
-      !isProposalPreparerOwner(proposal, userId, req.user?.name || req.user?.email)
+      !isProposalPreparerOwner(
+        proposal,
+        userId,
+        preparerName,
+        preparerIdentityIds,
+        preparerNames
+      )
     ) {
       return res.status(403).json({
         success: false,

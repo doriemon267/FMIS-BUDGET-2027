@@ -20,6 +20,40 @@ const NEP_GENERATION_MODES = Object.freeze({
   BRD: 'BRD'
 });
 
+const PERSONNEL_NEP_FIELDS = [
+  'annualSalary', 'PERA', 'RATA', 'honoraria', 'uniformALLOWANCE',
+  'childrenAllowance', 'medical', 'additionalMedical', 'meal',
+  'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
+  'loyaltyAward', 'overtimePay', 'productivityIncentive', 'cashGift',
+  'midyearBonus', 'yearEndBonus', 'hazardPay', 'retirementBenefits',
+  'terminalLeave', 'gsisPremium', 'pagibigPremium', 'philhealthPremium',
+  'employeeCompensation', 'providentFund', 'earnedLeaves'
+];
+
+const buildPersonnelNepSnapshot = row => {
+  const initialValues = {};
+  const initialAllocations = {};
+  const salaryIncome = Math.min(
+    Math.max(0, Number(row?.annualSalary) || 0),
+    row?.chargedToIncomeEligible === false
+      ? 0
+      : Math.max(0, Number(row?.chargedToIncomeAmount) || 0)
+  );
+
+  PERSONNEL_NEP_FIELDS.forEach(field => {
+    const value = Math.max(0, Number(row?.[field]) || 0);
+    const income = field === 'annualSalary' ? salaryIncome : 0;
+    initialValues[field] = value;
+    initialAllocations[field] = { income, subsidy: Math.max(0, value - income) };
+  });
+
+  return {
+    nepInitialValues: initialValues,
+    nepInitialAllocations: initialAllocations,
+    nepAllocations: initialAllocations
+  };
+};
+
 const normalizeText = value => String(value || '').trim().toUpperCase();
 
 const normalizeNepGenerationMode = value => (
@@ -125,7 +159,14 @@ const resolvePreparerAssignments = async ({
     .lean();
 
   const activePreparers = assignments.filter(isPreparerAssignment);
-  const divisionCandidates = uniqueStrings([allocation.division]);
+  const allocationDivision = String(allocation.division || '').trim();
+  const isConsolidatedAllocation = /\(consolidated\)/i.test(allocationDivision);
+  // "<Region> (Consolidated)" is a display/grouping label, not an actual
+  // organizational division. Matching it against divisionName would exclude
+  // the real Budget Preparers assigned at department or regional level.
+  const divisionCandidates = isConsolidatedAllocation
+    ? []
+    : uniqueStrings([allocationDivision]);
   const departmentCandidates = uniqueStrings([allocation.department]);
   const regionCandidates = uniqueStrings([
     ceilingRegion,
@@ -150,11 +191,13 @@ const resolvePreparerAssignments = async ({
       !divisionCandidates.length || assignmentMatchesAny(assignmentDivision, divisionCandidates);
     const departmentMatches =
       !departmentCandidates.length || assignmentMatchesAny(assignmentDepartment, departmentCandidates);
-    // Central-office assignments can legitimately have a null regionId. In
-    // that case the exact department/division match remains authoritative.
+    const hasExactDepartmentOrDivisionScope =
+      divisionCandidates.length > 0 || departmentCandidates.length > 0;
+    // Central-office assignments can legitimately have a null regionId, but
+    // only accept that fallback when department/division matched exactly.
     const regionMatches =
       !regionCandidates.length ||
-      !assignmentRegion.length ||
+      (!assignmentRegion.length && hasExactDepartmentOrDivisionScope) ||
       assignmentMatchesAny(assignmentRegion, regionCandidates);
 
     return divisionMatches && departmentMatches && regionMatches;
@@ -238,7 +281,8 @@ const stripPersonnelWorkflowFields = row => {
     '_id', '__v', 'createdAt', 'updatedAt', 'proposalId', 'workflowRef',
     'status', 'workflowLevel', 'processBy', 'processDate', 'date_process',
     'username_process', 'createdBy', 'submittedDate', 'reviewedBy',
-    'reviewedAt', 'approvedBy', 'approvedAt', 'rejectionReason', 'finalNote'
+    'reviewedAt', 'approvedBy', 'approvedAt', 'rejectionReason', 'finalNote',
+    'nepInitialValues', 'nepInitialAllocations', 'nepAllocations'
   ].forEach(field => delete cloned[field]);
   return cloned;
 };
@@ -299,6 +343,7 @@ const cloneProposalLineItems = async ({
 
   const personnelDocs = personnelRows.map(row => ({
     ...stripPersonnelWorkflowFields(row),
+    ...buildPersonnelNepSnapshot(row),
     region: regionName || row.region,
     department: department || row.department,
     division: division || row.division,
@@ -326,24 +371,56 @@ const cloneProposalLineItems = async ({
     ...targetBase
   }));
 
-  const capitalDocs = capitalRows.map(row => ({
-    particulars: row.particulars,
-    cost: Number(row.cost || 0),
-    income: Number(row.income || 0),
-    subsidy: Number(row.subsidy || 0),
-    category: row.category,
-    sublineItem: row.sublineItem,
-    accountingTitle: row.accountingTitle,
-    uacsCode: row.uacsCode,
-    region: regionName || row.region,
-    department: department || row.department,
-    division: division || row.division,
-    fiscalYear: fiscalYearString,
-    fiscal_year: fiscalYearNumber,
-    date_process: now,
-    username_process: preparer.userName,
-    ...targetBase
-  }));
+  // CapitalOutlay has a unique business-key index. Consolidated Initial
+  // proposals can legitimately contribute the same account from multiple
+  // source proposals, so aggregate those parent rows before inserting the
+  // generated NEP data. Their detail rows are still copied individually.
+  const capitalDocsByKey = new Map();
+  const capitalKeyBySourceId = new Map();
+  capitalRows.forEach((row, index) => {
+    const doc = {
+      particulars: row.particulars,
+      cost: Number(row.cost || 0),
+      income: Number(row.income || 0),
+      subsidy: Number(row.subsidy || 0),
+      category: row.category,
+      sublineItem: row.sublineItem,
+      accountingTitle: row.accountingTitle,
+      uacsCode: row.uacsCode,
+      region: regionName || row.region,
+      department: department || row.department,
+      division: division || row.division,
+      fiscalYear: fiscalYearString,
+      fiscal_year: fiscalYearNumber,
+      date_process: now,
+      username_process: preparer.userName,
+      ...targetBase
+    };
+    const businessKey = [
+      String(targetLegacyProposalId || ''),
+      String(doc.uacsCode || ''),
+      String(doc.region || ''),
+      String(doc.department || ''),
+      String(doc.division || ''),
+      String(doc.fiscalYear || ''),
+      String(doc.sublineItem || ''),
+      String(doc.category || '')
+    ].join('\u001f');
+
+    if (capitalDocsByKey.has(businessKey)) {
+      const existing = capitalDocsByKey.get(businessKey);
+      existing.cost += doc.cost;
+      existing.income += doc.income;
+      existing.subsidy += doc.subsidy;
+    } else {
+      capitalDocsByKey.set(businessKey, doc);
+    }
+
+    const sourceKey = row?._id ? String(row._id) : `source-${index}`;
+    capitalKeyBySourceId.set(sourceKey, businessKey);
+  });
+  const capitalEntries = Array.from(capitalDocsByKey.entries());
+  const capitalDocs = capitalEntries.map(([, doc]) => doc);
 
   const [incomeInserted, personnelInserted, mooeInserted, capitalInserted] = await Promise.all([
     incomeDocs.length ? Income.insertMany(incomeDocs) : [],
@@ -352,11 +429,18 @@ const cloneProposalLineItems = async ({
     capitalDocs.length ? CapitalOutlay.insertMany(capitalDocs) : []
   ]);
 
+  const insertedCapitalIdByKey = new Map();
+  capitalEntries.forEach(([businessKey], index) => {
+    if (capitalInserted[index]?._id) {
+      insertedCapitalIdByKey.set(businessKey, capitalInserted[index]._id);
+    }
+  });
   const capitalIdMap = new Map();
   capitalRows.forEach((source, index) => {
-    if (source?._id && capitalInserted[index]?._id) {
-      capitalIdMap.set(String(source._id), capitalInserted[index]._id);
-    }
+    if (!source?._id) return;
+    const sourceKey = String(source._id || `source-${index}`);
+    const targetId = insertedCapitalIdByKey.get(capitalKeyBySourceId.get(sourceKey));
+    if (targetId) capitalIdMap.set(sourceKey, targetId);
   });
 
   let capitalDetailsInserted = [];

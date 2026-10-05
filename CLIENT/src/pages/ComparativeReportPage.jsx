@@ -30,7 +30,7 @@ import {
   Home as HomeIcon,
   Assessment as AssessmentIcon,
 } from '@mui/icons-material';
-import { ToastContainer, toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
@@ -188,7 +188,6 @@ const ComparativeReportPage = () => {
         breadcrumbLabel="Comparative Budget Report"
         fiscalYear={currentFiscalYear || new Date().getFullYear()}
       >
-      <ToastContainer position="top-right" autoClose={3000} />
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={3}>

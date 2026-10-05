@@ -75,7 +75,7 @@ const TIER_BRD_STATUSES = new Set([
 ]);
 
 /**
- * Authoritative UI boundary for NEP Tier Adjustment.
+ * Authoritative UI boundary for NEP Proposal Adjustment.
  *
  * Both the proposal action menu and details dialog must use this policy so
  * proposal type, active model/FY, role, and workflow status cannot diverge.
@@ -83,7 +83,8 @@ const TIER_BRD_STATUSES = new Set([
 export const canAccessNepTierAdjustment = (
   proposal,
   activeSettings,
-  userRoles = []
+  userRoles = [],
+  currentUser = null
 ) => {
   if (
     getProposalBudgetType(proposal) !== "NEP" ||
@@ -100,9 +101,43 @@ export const canAccessNepTierAdjustment = (
     TIER_PREPARER_ROLES.has(role)
   );
   const isBRDStaff = normalizedRoles.some((role) => TIER_BRD_ROLES.has(role));
+  const assignedIds = (proposal?.assignedPreparerUserIds || []).map(value =>
+    String(value || "").trim()
+  );
+  const assignedNames = (proposal?.assignedPreparerNames || []).map(value =>
+    String(value || "").trim().toLowerCase()
+  );
+  const username = Array.isArray(currentUser?.Username)
+    ? currentUser.Username[0]
+    : currentUser?.Username;
+  const currentUserIds = [
+    username,
+    currentUser?.id,
+    currentUser?._id,
+    currentUser?.userId,
+    currentUser?.UserId,
+    currentUser?.Id,
+  ]
+    .map(value => String(value || "").trim())
+    .filter(Boolean);
+  const currentUserNames = [
+    currentUser?.name,
+    currentUser?.UserName,
+    `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`.trim(),
+  ]
+    .map(value => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  const hasExplicitPreparerAssignment = assignedIds.length > 0 || assignedNames.length > 0;
+  const isAssignedPreparer =
+    !currentUser ||
+    !hasExplicitPreparerAssignment ||
+    assignedIds.some(assignedId => currentUserIds.includes(assignedId)) ||
+    assignedNames.some(assignedName => currentUserNames.includes(assignedName));
 
   return Boolean(
-    (isBudgetPreparer && TIER_PREPARER_STATUSES.has(normalizedStatus)) ||
+    (isBudgetPreparer &&
+      isAssignedPreparer &&
+      TIER_PREPARER_STATUSES.has(normalizedStatus)) ||
       (isBRDStaff && TIER_BRD_STATUSES.has(normalizedStatus))
   );
 };
@@ -444,9 +479,9 @@ export const useProposalPermissions = () => {
     const isBrdDirectAdjustment =
       proposalBudgetType === "NEP" && proposal?.nepAdjustmentMode === "BRD";
 
-    if (canAccessNepTierAdjustment(proposal, activeSettings, userRoles)) {
+    if (canAccessNepTierAdjustment(proposal, activeSettings, userRoles, currentUser)) {
       actions.push({
-        label: "NEP Tier Adjustment",
+        label: "Open NEP Proposal",
         value: "open-tier",
         icon: React.createElement(TableChartIcon),
         color: headerBg,

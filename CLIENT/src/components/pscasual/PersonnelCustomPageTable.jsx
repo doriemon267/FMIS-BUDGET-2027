@@ -35,7 +35,7 @@ import {
   InputAdornment,
   useTheme,
 } from "@mui/material";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
@@ -967,7 +967,6 @@ const PSCasualCustomPageTable = ({
         </DialogActions>
       </Dialog>
 
-      <ToastContainer />
 
       {/* Charged to Income Dialog */}
       <Dialog

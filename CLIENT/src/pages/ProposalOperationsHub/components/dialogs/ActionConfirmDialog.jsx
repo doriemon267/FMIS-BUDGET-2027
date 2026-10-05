@@ -15,6 +15,7 @@ import {
   Grid,
   Button,
   CircularProgress,
+  LinearProgress,
   useTheme,
 } from "@mui/material";
 import { actionRequiresDigitalSignature } from "../../../../utils/digitalSignature";
@@ -80,7 +81,8 @@ const ActionConfirmDialog = ({
   const headerBg = theme.palette.mode === "dark" ? "#0b2413" : "#2d5016";
   const titleColor = theme.palette.mode === "dark" ? "#a5d6a7" : "#2d5016";
 
-  const handleClose = () => {
+  const handleClose = (_event, reason) => {
+    if (actionLoading || reason === "backdropClick") return;
     onClose();
   };
 
@@ -90,6 +92,8 @@ const ActionConfirmDialog = ({
     <Dialog
       open={open}
       onClose={handleClose}
+      disableEscapeKeyDown={actionLoading}
+      aria-busy={actionLoading}
       maxWidth="sm"
       fullWidth
       PaperProps={{
@@ -110,7 +114,7 @@ const ActionConfirmDialog = ({
         Confirm Action
       </DialogTitle>
       <DialogContent sx={{ mt: 3 }}>
-        <Typography variant="body1" sx={{ mb: 3, color: "#333", lineHeight: 1.6 }}>
+        <Typography variant="body1" sx={{ mb: 3, color: "text.primary", lineHeight: 1.6 }}>
           {isSubmitToAnalystAction && analystsForProposal.length > 0 ? (
             <>
               Approved and Forward to Central Office BRD
@@ -122,6 +126,7 @@ const ActionConfirmDialog = ({
                       value={targetAnalystId || analystsForProposal[0]?.userId || ""}
                       onChange={(e) => setTargetAnalystId(e.target.value)}
                       label="Select Analyst"
+                      disabled={actionLoading}
                     >
                       {analystsForProposal.map((a) => (
                         <MenuItem key={a.userId} value={a.userId}>
@@ -140,6 +145,7 @@ const ActionConfirmDialog = ({
         <TextField
           fullWidth
           required={isReturnAction}
+          disabled={actionLoading}
           label={isReturnAction ? "Comment (Required)" : "Comment (Optional)"}
           value={actionComment}
           onChange={(e) => setActionComment(e.target.value)}
@@ -198,6 +204,7 @@ const ActionConfirmDialog = ({
                     <input
                       type="file"
                       accept=".p12,.pfx"
+                      disabled={actionLoading}
                       onChange={(e) => {
                         const file = e.target.files[0];
                         setActionP12File(file);
@@ -223,10 +230,51 @@ const ActionConfirmDialog = ({
             )}
           </Box>
         )}
+        {actionLoading && (
+          <Box
+            role="status"
+            aria-live="polite"
+            sx={{
+              mt: 3,
+              p: 2,
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: theme.palette.mode === "dark" ? "#36523d" : "#dce7d2",
+              bgcolor: theme.palette.mode === "dark" ? "#172b20" : "#f3f7ef",
+            }}
+          >
+            <Typography variant="body2" sx={{ color: titleColor, fontWeight: 700, mb: 0.5 }}>
+              Processing your request…
+            </Typography>
+            <Typography variant="caption" sx={{ display: "block", color: "text.secondary", mb: 1.5 }}>
+              Please keep this window open while we process your proposal.
+            </Typography>
+            <LinearProgress
+              aria-label="Processing proposal"
+              sx={{
+                height: 6,
+                borderRadius: 3,
+                bgcolor: theme.palette.mode === "dark" ? "#2d4935" : "#dce7d2",
+                "& .MuiLinearProgress-bar": {
+                  bgcolor: theme.palette.mode === "dark" ? "#a5d6a7" : "#456b2d",
+                  borderRadius: 3,
+                },
+                "@media (prefers-reduced-motion: reduce)": {
+                  "& .MuiLinearProgress-bar": {
+                    animation: "none",
+                    transform: "none",
+                    width: "40%",
+                  },
+                },
+              }}
+            />
+          </Box>
+        )}
       </DialogContent>
       <DialogActions sx={{ p: 3, gap: 1 }}>
         <Button
           onClick={handleClose}
+          disabled={actionLoading}
           sx={{
             color: "#666",
             textTransform: "none",
@@ -268,15 +316,27 @@ const ActionConfirmDialog = ({
                   : "0 4px 12px rgba(45,80,22,0.4)",
             },
             "&:disabled": {
-              bgcolor: "#ccc",
-              color: "#666",
+              bgcolor: actionLoading ? headerBg : "#ccc",
+              color: actionLoading ? "white" : "#666",
             },
             display: "flex",
             alignItems: "center",
             gap: 1,
           }}
         >
-          {actionLoading && <CircularProgress size={20} sx={{ color: "white" }} />}
+          {actionLoading && (
+            <CircularProgress
+              size={18}
+              aria-hidden="true"
+              sx={{
+                color: "inherit",
+                "@media (prefers-reduced-motion: reduce)": {
+                  animation: "none",
+                  "& .MuiCircularProgress-circle": { animation: "none" },
+                },
+              }}
+            />
+          )}
           {actionLoading ? "Processing..." : "Confirm Action"}
         </Button>
       </DialogActions>

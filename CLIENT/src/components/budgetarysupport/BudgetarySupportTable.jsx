@@ -1161,8 +1161,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       },
       {
         'Description': 'B.1.1 Personnel Services',
-        'Projected Corporate Income': 0,
-        'Projected Subsidy': parseFloat(useOfFundsBreakdown.personalServices || 0),
+        'Projected Corporate Income': Number(useOfFundsBreakdown.chargedToIncomeAmount || 0),
+        'Projected Subsidy': Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0),
         'Proposed Budget': parseFloat(useOfFundsBreakdown.personalServices || 0),
         'Fiscal Year': fiscalYear,
         'Budget Type': budgetType,

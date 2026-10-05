@@ -20,6 +20,7 @@ const {
 const PersonnelService = require('../models/PersonnelServices');
 const checkDueDate = require("../middleware/checkDueDate");
 const isAuth = require('../middleware/is_auth');
+const { getPermanentIncomeAllocation, savePermanentIncomeAllocation, previewPermanentIncomeAllocation } = require('../controllers/permanentIncomeAllocationController');
 
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const Router = require("express").Router;
@@ -32,6 +33,14 @@ personnelServicesRouter.use('/personnel-services', submissionWorkflowControl('re
 personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
 personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.get('/personnelServices/permanent-income-allocation/:proposalId', getPermanentIncomeAllocation);
+personnelServicesRouter.post('/personnelServices/permanent-income-allocation/:proposalId/preview', previewPermanentIncomeAllocation);
+personnelServicesRouter.put(
+  '/personnelServices/permanent-income-allocation/:proposalId',
+  checkDueDate,
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  savePermanentIncomeAllocation
+);
 // 🔒 Protect with due date check and submission workflow control
 personnelServicesRouter.post(
   "/personnelServices/bulk-add", 
@@ -167,4 +176,3 @@ personnelServicesRouter.post(
 );
 
 module.exports = personnelServicesRouter;
-

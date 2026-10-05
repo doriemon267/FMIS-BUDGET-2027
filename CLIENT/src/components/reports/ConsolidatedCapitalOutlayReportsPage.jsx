@@ -36,7 +36,7 @@ import {
   InputLabel,
   Skeleton,
 } from "@mui/material";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import ReportPageLayout from "./ReportPageLayout";
@@ -601,7 +601,6 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
       breadcrumbLabel="Consolidated Capital Outlay Reports"
       fiscalYear={selectedFiscalYear || activeSettings?.fiscalYear || new Date().getFullYear()}
     >
-      <ToastContainer position="top-right" autoClose={3000} />
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           {/* Fiscal Year filter */}

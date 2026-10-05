@@ -235,7 +235,7 @@ const StickyCeilingTracker = ({
         </Box>
 
         {[
-          ["Current Tier Allocation", formatCurrency(currentAllocation)],
+          ["Current NEP Allocation", formatCurrency(currentAllocation)],
           ["Approved NEP Ceiling", formatCurrency(approvedCeiling)],
         ].map(([label, value]) => (
           <Box key={label} sx={{ minWidth: 0 }}>
@@ -380,7 +380,7 @@ const NEPCeilingSummary = ({
               Loading NEP ceiling alignment
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Checking the approved BRD ceiling and saved Tier values…
+              Checking the approved BRD ceiling and saved NEP values…
             </Typography>
           </Box>
         </Box>
@@ -596,7 +596,7 @@ const NEPCeilingSummary = ({
           </AlertTitle>
           {readOnly
             ? isActiveCycle
-              ? "Use NEP Tier Adjustment when the action is available to correct the saved allocation."
+              ? "Open the NEP Proposal when the action is available to correct the saved allocation."
               : "The saved allocation is shown for reference. Adjustment becomes available when this proposal's NEP fiscal year is the active budget cycle."
             : "Adjust Income and Subsidy until their total exactly matches the Target Ceiling."}
           {compliance.violations?.length > 0 && (

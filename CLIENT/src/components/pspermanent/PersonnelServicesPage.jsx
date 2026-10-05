@@ -63,6 +63,16 @@ const PersonnelServicesPage = () => {
       label: "MONTHLY SALARY",
       show: true,
     },
+    cpcs1MonthlySalary: { type: "number", label: "CPCS 1 MONTHLY / SUBSIDY", show: true, readOnly: true },
+    cpcs2MonthlySalary: { type: "number", label: "CPCS 2 MONTHLY", show: true, readOnly: true },
+    monthlySalaryIncrement: {
+      type: "number",
+      label: "MONTHLY INCREASE / INCOME",
+      readOnly: true,
+      show: true,
+      default: 0,
+      customRender: (row) => (Number(row.monthlySalaryIncrement) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    },
      annualSalary: {
       type: "number",
       label: "ANNUAL SALARY",

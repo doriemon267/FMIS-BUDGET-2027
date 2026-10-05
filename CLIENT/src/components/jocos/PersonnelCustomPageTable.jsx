@@ -34,7 +34,7 @@ import {
   GetApp as GetAppIcon,
   MoreVert as MoreVertIcon,
 } from "@mui/icons-material";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
@@ -803,7 +803,6 @@ const PSCOSCustomPageTable = ({
         </DialogActions>
       </Dialog>
 
-      <ToastContainer />
 
       <CustomTable
         ROWS_PER_PAGE={ROWS_PER_PAGE}

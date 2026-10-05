@@ -80,4 +80,36 @@ function splitPersonnelFunding(personnelTotalValue, chargedToIncomeValue) {
   };
 }
 
-module.exports = { resolvePersonnelIncomeAllocation, splitPersonnelFunding };
+// Salary increments are recorded explicitly: an existing monthly rate alone
+// cannot establish whether an employee received an increase.
+function applyPermanentIncomeAllocation(record, config) {
+  if (config?.mode === 'CPCS_DIFFERENCE') {
+    return require('./permanentSalaryReference').applySalaryReferences(record, config);
+  }
+  const incrementOnly = config?.mode === 'INCREMENT_ONLY';
+  if ((!incrementOnly && config?.monthlyAmount == null) ||
+      String(record.statusOfAppointment || '').trim().toUpperCase() !== 'PERMANENT') {
+    return {};
+  }
+  const monthlySalary = Math.max(0, toAmount(record.monthlySalary));
+  const annualSalary = Math.max(0, toAmount(record.annualSalary) || monthlySalary * 12);
+  const total = Math.max(0, toAmount(record.Total ?? record.total) || annualSalary);
+  const annualAmount = roundTo2Decimals(Math.min(
+    Math.max(0, toAmount(incrementOnly ? record.monthlySalaryIncrement : config.monthlyAmount)) * 12,
+    monthlySalary * 12,
+    annualSalary,
+    total
+  ));
+  return {
+    chargedToIncomeEligible: annualAmount > 0,
+    chargedToIncomeMonthlyAmount: roundTo2Decimals(annualAmount / 12),
+    chargedToIncomeAmount: annualAmount,
+    chargedToSubsidyAmount: roundTo2Decimals(total - annualAmount),
+    chargedToIncomeSubsidyAmount: annualAmount > 0 ? toAmount(record.subsidyAmount) : 0,
+    chargedToIncomeNotes: config.notes || null,
+    chargedToIncomeTaggedBy: config.updatedBy || null,
+    chargedToIncomeTaggedAt: config.updatedAt || null,
+  };
+}
+
+module.exports = { resolvePersonnelIncomeAllocation, splitPersonnelFunding, applyPermanentIncomeAllocation };

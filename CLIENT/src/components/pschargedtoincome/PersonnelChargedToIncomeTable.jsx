@@ -25,7 +25,7 @@ import {
   InputAdornment,
   useTheme,
 } from '@mui/material';
-import { toast, ToastContainer } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import api from '../../config/api';
 import { useRegion } from '../../context/RegionContext';
@@ -383,8 +383,8 @@ const PersonnelChargedToIncomeTable = ({
 
       {!isLoading && filteredRows.length === 0 && (
         <Alert severity="info">
-          No personnel tagged as Charged to Income. Select personnel from PS-Permanent or PS-Casual
-          tabs and use "Charge to Income" button to move them here.
+          No personnel charged to Income. Set the Salary Income Allocation in PS-Permanent
+          to automatically apply it to permanent personnel. For casual personnel, use "Charge to Income" in PS-Casual.
         </Alert>
       )}
 
@@ -568,7 +568,6 @@ const PersonnelChargedToIncomeTable = ({
         onRowsPerPageChange={handleRowsPerPageChange}
       />
 
-      <ToastContainer />
     </>
   );
 };

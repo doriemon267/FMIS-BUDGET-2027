@@ -26,8 +26,6 @@ import { DateRange as DateRangeIcon } from "@mui/icons-material";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBoundary } from 'react-error-boundary';
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 
 // Project Imports
 import env from "../utils/env";
@@ -347,7 +345,6 @@ const DashboardContent = () => {
           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
-        <ToastContainer position="top-right" />
         
         {/* Maintenance mode warning banner (visible to Super Admin only when maintenance is ON) */}
         {showMaintenanceBanner && (

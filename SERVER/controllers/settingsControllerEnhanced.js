@@ -975,7 +975,8 @@ exports.createCompensationSettings = async (req, res) => {
       pagibigPremium: compensationData.pagibigPremium ?? 0,
       employeeCompensation: compensationData.employeeCompensation ?? 0,
       // Leave & Benefits
-      earnedLeaves: compensationData.earnedLeaves ?? 0,
+      earnedLeaves: compensationData.earnedLeaves ?? 0.0481927,
+      earnedLeaveDays: compensationData.earnedLeaveDays ?? 30,
       retirementBenefits: compensationData.retirementBenefits ?? 0,
       terminalLeave: compensationData.terminalLeave ?? 0,
       // Overtime Rates
@@ -1031,6 +1032,9 @@ exports.createCompensationSettings = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in createCompensationSettings:", error.stack);
+    if (error.name === "ValidationError" || error.name === "CastError") {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -1114,6 +1118,9 @@ exports.updateCompensationSettingsStandalone = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in updateCompensationSettingsStandalone:", error.stack);
+    if (error.name === "ValidationError" || error.name === "CastError") {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };

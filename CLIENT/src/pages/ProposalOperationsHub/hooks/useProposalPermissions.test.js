@@ -54,7 +54,7 @@ const actionLabels = (result, row, settings) =>
     .getAvailableActions(row, [], "#2d5016", settings)
     .map((action) => action.label);
 
-describe("shared NEP Tier Adjustment eligibility", () => {
+describe("shared NEP Proposal Adjustment eligibility", () => {
   const preparerRoles = ["BUDGET_PREPARER"];
 
   it("allows an eligible draft NEP proposal in the active NEP fiscal year", () => {
@@ -96,6 +96,34 @@ describe("shared NEP Tier Adjustment eligibility", () => {
       )
     ).toBe(false);
   });
+
+  it("matches an assigned preparer using the employee Username identity", () => {
+    expect(
+      canAccessNepTierAdjustment(
+        {
+          ...proposal("NEP", "DRAFT", "2027"),
+          assignedPreparerUserIds: ["10001234"],
+        },
+        activeCycle("NEP", "2027"),
+        preparerRoles,
+        { id: "internal-auth-id", Username: ["10001234"] }
+      )
+    ).toBe(true);
+  });
+
+  it("hides the adjustment action from a different Budget Preparer", () => {
+    expect(
+      canAccessNepTierAdjustment(
+        {
+          ...proposal("NEP", "DRAFT", "2027"),
+          assignedPreparerUserIds: ["assigned-preparer"],
+        },
+        activeCycle("NEP", "2027"),
+        preparerRoles,
+        { id: "different-preparer" }
+      )
+    ).toBe(false);
+  });
 });
 
 describe("ProposalOperationsHub Budget Preparer actions", () => {
@@ -134,14 +162,14 @@ describe("ProposalOperationsHub Budget Preparer actions", () => {
     );
   });
 
-  it("shows NEP Tier Adjustment and NEP-specific submission for an active NEP draft", () => {
+  it("shows NEP Proposal Adjustment and NEP-specific submission for an active NEP draft", () => {
     const { result } = renderHook(() => useProposalPermissions());
     const row = proposal("NEP", "DRAFT");
     const settings = activeCycle("NEP");
 
     expect(actionValues(result, row, settings)).toContain("open-tier");
     expect(actionValues(result, row, settings)).toContain("submit-to-reviewer");
-    expect(actionLabels(result, row, settings)).toContain("NEP Tier Adjustment");
+    expect(actionLabels(result, row, settings)).toContain("Open NEP Proposal");
     expect(actionLabels(result, row, settings)).toContain(
       "Submit NEP Proposal to Budget Reviewer"
     );

@@ -38,7 +38,18 @@ const compensationSettingsSchema = new mongoose.Schema(
     employeeCompensation: { type: Number }, // fixed monthly amount (annualized in PS)
     
     // Leave & Benefits
-    earnedLeaves: { type: Number },
+    // earnedLeaves stores the conversion factor; days are configured separately.
+    earnedLeaves: { type: Number, default: 0.0481927, min: 0 },
+    earnedLeaveDays: {
+      type: Number,
+      default: 30,
+      required: true,
+      min: 0,
+      validate: {
+        validator: Number.isFinite,
+        message: "Earned leave days must be a finite number",
+      },
+    },
     retirementBenefits: { type: Number },
     terminalLeave: { type: Number },
     

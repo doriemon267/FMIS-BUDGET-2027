@@ -38,7 +38,7 @@ import {
   Select,
   useTheme,
 } from "@mui/material";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import { debounce } from "lodash";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import StickyButtons from "./StickyButtons";
@@ -2603,19 +2603,6 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
           </Button>
         </Box>
       </Menu>
-
-      {/* Enhanced Toast Container */}
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-      />
 
       <BulkUploadModal
         open={showBulkUpload}

@@ -38,6 +38,9 @@ import { formatDateToMDY, isValidDate } from '../../utils/formatDate';
 // Fields that should NOT be included in column totals row
 const EXCLUDED_TOTAL_FIELDS = new Set([
   'monthlySalary',
+  'monthlySalaryIncrement',
+  'cpcs1MonthlySalary',
+  'cpcs2MonthlySalary',
   'noOfDependent',
 ]);
 
@@ -116,7 +119,6 @@ const PermanentCustomTable = ({
         orderBy,
         order,
         statusOfAppointment: 'PERMANENT',
-        chargedToIncomeEligible: false, // Exclude charged-to-income personnel
       };
 
       if (proposalId) {

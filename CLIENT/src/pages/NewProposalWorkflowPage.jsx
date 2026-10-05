@@ -1683,7 +1683,7 @@ const NewProposalWorkflowPage = () => {
       color: "#d97706",
     });
 
-    // OPEN TIER: for BRD-level users when proposal is at BRD or finalized (so they can fill/update Tier for this scope)
+    // OPEN NEP PROPOSAL: for BRD-level users when the proposal is at BRD or finalized.
     const brdOrFinalizedStatuses = [
       "FORWARDED_TO_BRD_ANALYST",
       "Forwarded to Budget Planning Analyst",
@@ -1701,7 +1701,7 @@ const NewProposalWorkflowPage = () => {
     );
     if (isBRDStaffForTier && isBRDOrFinalized) {
       actions.push({
-        label: "Open Tier",
+        label: "Open NEP Proposal",
         value: "open-tier",
         icon: <TableChartIcon />,
         color: headerBg,
@@ -3272,12 +3272,7 @@ const NewProposalWorkflowPage = () => {
                                             } else if (action.value === "view-audit-trail") {
                                               await handleViewAuditTrail(proposal);
                                             } else if (action.value === "open-tier") {
-                                              const params = new URLSearchParams();
-                                              if (proposal.fiscalYear != null) params.set("fiscalYear", String(proposal.fiscalYear));
-                                              if (proposal.region) params.set("region", String(proposal.region));
-                                              if (proposal.department) params.set("department", String(proposal.department));
-                                              if (proposal.division || proposal.responsibilityCenter) params.set("division", String(proposal.division || proposal.responsibilityCenter));
-                                              navigate(`/tier?${params.toString()}`);
+                                              navigate(`/nep-proposal/${proposal._id}`);
                                             } else if (action.value === "unconsolidate") {
                                               setSelectedProposal(proposal);
                                               setUnconsolidateDialogOpen(true);
@@ -3899,28 +3894,17 @@ const NewProposalWorkflowPage = () => {
                       ["BUDGET_PLANNING_ANALYST", "BUDGET PLANNING ANALYST", "BUDGET_OFFICER", "BUDGET OFFICER", "BUDGET_MANAGER", "BUDGET MANAGER", "SUPER_ADMIN", "SUPER ADMIN"].includes(String(r))
                     );
                     if (!brdOrFinal || !isBRD) return null;
-                    const tierParams = new URLSearchParams();
-                    if (selectedProposal?.fiscalYear != null) tierParams.set("fiscalYear", String(selectedProposal.fiscalYear));
-                    if (selectedProposal?.region) {
-                      const regRaw = selectedProposal.region;
-                      const regStr = regRaw && typeof regRaw === "object"
-                        ? (regRaw.RegionName || regRaw.Region || regRaw.regionName || regRaw.region || regRaw.name || "")
-                        : String(regRaw || "");
-                      tierParams.set("region", regStr);
-                    }
-                    if (selectedProposal?.department) tierParams.set("department", String(selectedProposal.department));
-                    if (selectedProposal?.division || selectedProposal?.responsibilityCenter) tierParams.set("division", String(selectedProposal.division || selectedProposal.responsibilityCenter));
                     return (
                       <Grid item xs={12}>
                         <Alert severity="info" sx={{ mt: 1 }}>
-                          For this proposal&apos;s scope, you can fill or update <strong>Tier</strong> (Tier 1 / Tier 2). The Tier you save is what gets passed to Budget Officer until Budget Manager finalizes.
+                          Open this NEP proposal to adjust its Income and Subsidy allocation against the approved BRD ceiling.
                           <Button
                             size="small"
                             variant="contained"
                             sx={{ ml: 2, mt: 0.5 }}
-                            onClick={() => navigate(`/tier?${tierParams.toString()}`)}
+                            onClick={() => navigate(`/nep-proposal/${selectedProposal._id}`)}
                           >
-                            Open Tier
+                            Open NEP Proposal
                           </Button>
                         </Alert>
                       </Grid>

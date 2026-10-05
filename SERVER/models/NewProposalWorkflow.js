@@ -245,6 +245,15 @@ const newProposalWorkflowSchema = new mongoose.Schema({
   personnelData: {
     type: mongoose.Schema.Types.Mixed
   },
+  permanentIncomeAllocation: {
+    mode: { type: String, enum: ['INCREMENT_ONLY', 'ALL_PERMANENT', 'CPCS_DIFFERENCE'] },
+    // Saved rate tables keep the proposal reproducible until the user reapplies references.
+    referenceTables: { type: mongoose.Schema.Types.Mixed },
+    monthlyAmount: { type: Number, min: 0 },
+    notes: { type: String, trim: true },
+    updatedBy: { type: String },
+    updatedAt: { type: Date }
+  },
   cosJoPremium: {
     enabled: { type: Boolean, default: false },
     percentage: { type: Number, default: 10, min: 0, max: 100 },

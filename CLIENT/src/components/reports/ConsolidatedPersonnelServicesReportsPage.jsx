@@ -30,11 +30,12 @@ import {
   InputLabel,
   Skeleton,
 } from "@mui/material";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import ReportPageLayout from "./ReportPageLayout";
 import RegionalComparisonMatrix from "./RegionalComparisonMatrix";
+
 import { getRegionalMatrixView } from "./regionalMatrixView";
 import GenericPdfPreviewDialog from "../GenericPdfPreviewDialog";
 
@@ -49,7 +50,13 @@ import CategoryIcon from "@mui/icons-material/Category";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import MapIcon from "@mui/icons-material/Map";
 
-const PS_MATRIX_COLUMNS = [{ key: 'amount', label: 'Amount' }];
+const PS_MATRIX_COLUMNS = [{ key: 'income', label: 'Income' }, { key: 'subsidy', label: 'Subsidy' }, { key: 'amount', label: 'Amount' }];
+
+export const PersonnelFundingCells = ({ income = 0, subsidy = 0, amount = 0, sx = {} }) => (
+  <>{[income, subsidy, amount].map((value, index) => <TableCell key={index} align="right" sx={sx}>
+    ₱{Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+  </TableCell>)}</>
+);
 
 const ConsolidatedPersonnelServicesReportsPage = () => {
   const { currentUser } = useUser();
@@ -282,6 +289,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
       return {
         data: response.data?.data || [],
         matrix: response.data?.matrix || { regions: [], sections: [] },
+        summary: response.data?.summary,
       };
     },
     enabled: Boolean(
@@ -311,23 +319,27 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
   const grandTotals = useMemo(() => {
     try {
       if (!consolidatedData || !Array.isArray(consolidatedData)) {
-        return { totalEmployees: 0, totalAmount: 0 };
+        return { totalEmployees: 0, totalAmount: 0, income: 0, subsidy: 0 };
       }
       let totalEmployees = 0;
       let totalAmount = 0;
+      let income = 0;
+      let subsidy = 0;
       consolidatedData.forEach(region => {
         if (region) {
           totalEmployees += region.totalEmployees || 0;
           if (region.categories && Array.isArray(region.categories)) {
             region.categories.forEach(category => {
               totalAmount += category.total || 0;
+              income += category.income || 0;
+              subsidy += category.subsidy || 0;
             });
           }
         }
       });
-      return { totalEmployees, totalAmount };
+      return { totalEmployees, totalAmount, income, subsidy };
     } catch (_error) {
-      return { totalEmployees: 0, totalAmount: 0 };
+      return { totalEmployees: 0, totalAmount: 0, income: 0, subsidy: 0 };
     }
   }, [consolidatedData]);
 
@@ -481,7 +493,6 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
       breadcrumbLabel="Consolidated Personnel Services Reports"
       fiscalYear={activeSettings?.fiscalYear || new Date().getFullYear()}
     >
-      <ToastContainer position="top-right" autoClose={3000} />
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={3}>
@@ -706,8 +717,10 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 <col style={{ width: '5%' }} />
                 <col style={{ width: '20%' }} />
                 <col style={{ width: '10%' }} />
-                <col style={{ width: '50%' }} />
-                <col style={{ width: '15%' }} />
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '13%' }} />
               </colgroup>
               <TableHead>
                 <TableRow>
@@ -716,6 +729,8 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                     "REGION",
                     "ITEM NO.",
                     "PARTICULARS",
+                    "INCOME",
+                    "SUBSIDY",
                     "AMOUNT",
                   ].map((headCell, index) => (
                     <TableCell
@@ -726,7 +741,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                         fontWeight: 700,
                         padding: "12px",
                         borderBottom: "2px solid #e2e8f0",
-                        textAlign: index === 4 ? "right" : "center",
+                        textAlign: index >= 4 ? "right" : "center",
                         fontSize: "0.75rem",
                         letterSpacing: "0.5px",
                         textTransform: "uppercase",
@@ -766,9 +781,12 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                         <TableCell sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
                           Personnel Services ({region.totalEmployees} employees)
                         </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
-                          ₱{(region.categories || []).reduce((sum, cat) => sum + (cat.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </TableCell>
+                        <PersonnelFundingCells
+                          income={(region.categories || []).reduce((sum, cat) => sum + (cat.income || 0), 0)}
+                          subsidy={(region.categories || []).reduce((sum, cat) => sum + (cat.subsidy || 0), 0)}
+                          amount={(region.categories || []).reduce((sum, cat) => sum + (cat.total || 0), 0)}
+                          sx={{ fontWeight: 'bold', padding: '8px 12px', fontSize: '0.875rem' }}
+                        />
                       </TableRow>
                       {expandedRows.includes(region.id) && (region.categories || []).map((category) => (
                         <React.Fragment key={category.id}>
@@ -791,9 +809,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                             <TableCell sx={{ fontSize: "0.8rem", paddingLeft: "20px", padding: "6px 12px 6px 20px", fontWeight: "bold" }}>
                               {category.name}
                             </TableCell>
-                            <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333", fontWeight: "bold" }}>
-                              ₱{(category.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </TableCell>
+                            <PersonnelFundingCells income={category.income} subsidy={category.subsidy} amount={category.total} sx={{ fontSize: '0.8rem', padding: '6px 12px', fontWeight: 'bold' }} />
                           </TableRow>
                           {expandedRows.includes(category.id) && (category.items || []).map((item) => (
                             <TableRow key={item.id} sx={{ '&:hover': { backgroundColor: "rgba(55, 94, 56, 0.04)" } }}>
@@ -809,9 +825,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                               <TableCell sx={{ fontSize: "0.75rem", paddingLeft: "40px", padding: "6px 12px 6px 40px" }}>
                                 {item.name}
                               </TableCell>
-                              <TableCell align="right" sx={{ fontSize: "0.75rem", padding: "6px 12px", color: "#555" }}>
-                                ₱{(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </TableCell>
+                            <PersonnelFundingCells income={item.income} subsidy={item.subsidy} amount={item.amount} sx={{ fontSize: '0.8rem', padding: '6px 12px', fontWeight: 'normal' }} />
                             </TableRow>
                           ))}
                         </React.Fragment>
@@ -824,7 +838,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
           </TableContainer>
         )}
         
-        <Fade in={true} timeout={1000}>
+        <Fade in={!isAllRegionsMatrix} timeout={1000} unmountOnExit>
           <Table
             sx={{
               position: 'sticky',
@@ -843,8 +857,10 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
               <col style={{ width: '5%' }} />
               <col style={{ width: '20%' }} />
               <col style={{ width: '10%' }} />
-              <col style={{ width: '50%' }} />
-              <col style={{ width: '15%' }} />
+              <col style={{ width: '26%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '13%' }} />
             </colgroup>
             <TableFooter>
               <TableRow>
@@ -865,20 +881,8 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 >
                   GRAND TOTAL:
                 </TableCell>
-                <TableCell 
-                  sx={{ 
-                    backgroundColor: "#f8fafc",
-                    color: "#1e293b",
-                    fontWeight: 800,
-                    padding: "16px 12px",
-                    borderTop: "2px solid #cbd5e1",
-                    borderBottom: "none",
-                    textAlign: "right",
-                    fontSize: "0.875rem"
-                  }}
-                >
-                  ₱{(grandTotals.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </TableCell>
+                <PersonnelFundingCells income={grandTotals.income} subsidy={grandTotals.subsidy} amount={grandTotals.totalAmount}
+                  sx={{ backgroundColor: '#f8fafc', fontWeight: 800, padding: '16px 12px', borderTop: '2px solid #cbd5e1', fontSize: '0.875rem' }} />
               </TableRow>
             </TableFooter>
           </Table>

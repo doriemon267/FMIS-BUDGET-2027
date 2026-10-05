@@ -29,7 +29,7 @@ import * as yup from "yup";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { NumericFormat } from "react-number-format";
 import api from "../../config/api";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
   MdAccountBalance,
@@ -1241,7 +1241,6 @@ const CompensationSettingsDialogForm = ({
           </Button>
         </DialogActions>
       </Dialog>
-      <ToastContainer />
     </>
   );
 };

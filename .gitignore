@@ -77,7 +77,10 @@ __tests__/
 !CLIENT/src/utils/nepReportStatus.spec.js
 !CLIENT/src/pages/ProposalOperationsHub/hooks/useProposalPermissions.test.js
 !CLIENT/src/pages/ProposalOperationsHub/ProposalOperationsHub.test.jsx
+!CLIENT/src/pages/ProposalOperationsHub/components/tables/nepPersonnelComparison.spec.js
+!CLIENT/src/pages/ProposalOperationsHub/components/tables/nepFinancialComparison.spec.js
 !CLIENT/src/components/capitaloutlay/CapitalOutlayDetailsModal.test.jsx
+!CLIENT/src/components/pspermanent/PersonnelCustomPageTable.test.jsx
 !SERVER/responsibilityCenterId.test.js
 
 # Temporary test files and scripts (not part of runtime)
@@ -100,6 +103,8 @@ SERVER/archive/
 # Keep this focused Capital Outlay validation regression suite under version control.
 !SERVER/tests/
 !SERVER/tests/capitalOutlayAccountValidation.test.js
+!SERVER/tests/earnedLeaves.test.js
+!CLIENT/src/components/settings/CompensationStandaloneDialog.test.jsx
 !SERVER/tests/__tests__/
 !SERVER/tests/__tests__/reportExportAndDraftVisibility.js
 
@@ -116,3 +121,6 @@ SERVER/mssql.7z
 
 # Local runtime artifacts (do not commit)
 SERVER/SERVER/
+
+# Local design previews and evaluation screenshots
+.codex-design-tmp/

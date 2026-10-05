@@ -24,9 +24,9 @@ import {
   Typography,
   Paper,
   Checkbox,
-  InputAdornment,
+  Alert,
 } from "@mui/material";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import api from "../../config/api";
 import { useRegion } from "../../context/RegionContext";
@@ -40,7 +40,6 @@ import PesoIcon from '../icons/PesoIcon';
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateDataList } from "../../utils/queryClientHelpers";
 import { useWorkflowRef } from "../../hooks/useWorkflowRef";
-import { updatePersonnelChargedToIncome } from "../../services/personnelSubsidyService";
 
 const PSPCustomPageTable = ({
   dataListName,
@@ -74,8 +73,10 @@ const PSPCustomPageTable = ({
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [viewDetailsDialog, setViewDetailsDialog] = useState({ open: false, data: null });
   const [filteredRows, setFilteredRows] = useState([]);
-  const [selectedRows, setSelectedRows] = useState([]);
-  const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({ open: false, mode: "tag", amount: "", notes: "" });
+  const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({ open: false, notes: "", cpcs1Reference: "", cpcs2Reference: "", cpcs1MatchBy: "JG", cpcs2MatchBy: "SG" });
+  const [salaryReferences, setSalaryReferences] = useState({ cpcs1: [], cpcs2: [] });
+  const [salaryPreview, setSalaryPreview] = useState(null);
+  const [salaryError, setSalaryError] = useState("");
   const [chargedToIncomeLoading, setChargedToIncomeLoading] = useState(false);
 
   const apiPath = useMemo(() => `/${dataListName}`, [dataListName]);
@@ -117,12 +118,14 @@ const PSPCustomPageTable = ({
   const invalidatePersonnelRelatedQueries = useCallback(async () => {
     try {
       await queryClient.invalidateQueries({ queryKey: [dataListName, "chargedToIncome"] });
+      await queryClient.invalidateQueries({ queryKey: ["chargedToIncomeList"] });
       await queryClient.invalidateQueries({ queryKey: ["proposals"] });
       await queryClient.invalidateQueries({ queryKey: ["allProposals"] });
       await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       await queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
       await queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
       await queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+      await queryClient.invalidateQueries({ queryKey: ["consolidatedPersonnelServicesReports"] });
     } catch (e) {
       console.warn("Personnel-related invalidation error:", e);
     }
@@ -203,12 +206,27 @@ const PSPCustomPageTable = ({
   };
 
   // Charged to Income Dialog Handlers
-  const handleOpenChargedToIncomeDialog = (mode) => {
-    if (!selectedRows.length) {
-      toast.error("Select at least one personnel record first.");
-      return;
+  const handleOpenChargedToIncomeDialog = async () => {
+    if (locked || !(proposalId || workflowRef)) return;
+    setChargedToIncomeLoading(true);
+    try {
+      const { data } = await api.get(`/personnelServices/permanent-income-allocation/${proposalId || workflowRef}`);
+      setChargedToIncomeDialog({
+        open: true,
+        cpcs1Reference: data.cpcs1Reference || "",
+        cpcs2Reference: data.cpcs2Reference || "",
+        cpcs1MatchBy: data.cpcs1MatchBy || "JG",
+        cpcs2MatchBy: data.cpcs2MatchBy || "SG",
+        notes: data.notes || "",
+      });
+      setSalaryReferences(data.references || { cpcs1: [], cpcs2: [] });
+      setSalaryPreview(null);
+      setSalaryError("");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load salary Income allocation");
+    } finally {
+      setChargedToIncomeLoading(false);
     }
-    setChargedToIncomeDialog({ open: true, mode, amount: "", notes: "" });
   };
 
   const handleCloseChargedToIncomeDialog = () => {
@@ -216,58 +234,47 @@ const PSPCustomPageTable = ({
     setChargedToIncomeDialog((prev) => ({ ...prev, open: false }));
   };
 
+  const allocationPayload = () => ({
+    mode: 'CPCS_DIFFERENCE',
+    cpcs1Reference: chargedToIncomeDialog.cpcs1Reference,
+    cpcs2Reference: chargedToIncomeDialog.cpcs2Reference,
+    cpcs1MatchBy: chargedToIncomeDialog.cpcs1MatchBy,
+    cpcs2MatchBy: chargedToIncomeDialog.cpcs2MatchBy,
+    notes: chargedToIncomeDialog.notes.trim(),
+  });
+  const changeSalaryReference = (key, value) => {
+    setChargedToIncomeDialog(previous => ({ ...previous, [key]: value }));
+    setSalaryPreview(null);
+    setSalaryError("");
+  };
+  const handlePreviewSalary = async () => {
+    setChargedToIncomeLoading(true);
+    setSalaryError("");
+    setSalaryPreview(null);
+    try {
+      const { data } = await api.post(
+        `/personnelServices/permanent-income-allocation/${proposalId || workflowRef}/preview`,
+        allocationPayload(), { headers: headerConfig() }
+      );
+      setSalaryPreview(data);
+    } catch (error) {
+      setSalaryError(error.response?.data?.message || 'Failed to preview salary allocation.');
+    } finally { setChargedToIncomeLoading(false); }
+  };
   const handleConfirmChargedToIncome = async () => {
-    if (!selectedRows.length) {
-      toast.error("No personnel selected.");
-      return;
-    }
-
-    if (chargedToIncomeDialog.mode === "tag") {
-      const monthlyAllocation = Number(chargedToIncomeDialog.amount);
-      if (!Number.isFinite(monthlyAllocation) || monthlyAllocation <= 0) {
-        toast.error("Enter a valid monthly Income allocation greater than zero.");
-        return;
-      }
-    }
-
+    if (locked || !(proposalId || workflowRef)) return;
+    if (!salaryPreview) return;
     setChargedToIncomeLoading(true);
     try {
-      const payload =
-        chargedToIncomeDialog.mode === "tag"
-          ? {
-              items: selectedRows.map((id) => ({
-                _id: id,
-                chargedToIncomeMonthlyAmount: Number(chargedToIncomeDialog.amount),
-                chargedToIncomeAmount: Number(chargedToIncomeDialog.amount) * 12,
-              })),
-              chargedToIncomeEligible: true,
-              defaultAmount: 0,
-              notes: chargedToIncomeDialog.notes.trim() || undefined,
-            }
-          : {
-              items: selectedRows.map((id) => ({ _id: id })),
-              chargedToIncomeEligible: false,
-              defaultAmount: 0,
-            };
-
-      // console.log("DEBUG: Full payload being sent:", JSON.stringify(payload, null, 2));
-      const response = await updatePersonnelChargedToIncome(payload);
-      
-      // Check if there were any skipped items
-      if (response?.data?.skipped && response.data.skipped.length > 0) {
-        const skipReason = response.data.skipped.map(s => `${s.id}: ${s.reason}`).join(", ");
-        toast.warning(`${response.data.updatedCount} updated, ${response.data.skipped.length} skipped - ${skipReason}`);
-      } else {
-        toast.success(
-          chargedToIncomeDialog.mode === "tag"
-            ? `${selectedRows.length} employee(s) moved to Charged to Income`
-            : `${selectedRows.length} employee(s) moved back to Personnel Services`
-        );
-      }
-      
-      setSelectedRows([]);
-      setChargedToIncomeDialog({ open: false, mode: "tag", amount: "", notes: "" });
-      refreshPersonnelData();
+      const { data } = await api.put(
+        `/personnelServices/permanent-income-allocation/${proposalId || workflowRef}`,
+        allocationPayload(),
+        { headers: headerConfig() }
+      );
+      toast.success(`Salary Income allocation saved. ${data.chargedCount ?? data.updatedCount} permanent personnel charged to Income.`);
+      setChargedToIncomeDialog(previous => ({ ...previous, open: false }));
+      await refreshPersonnelData();
+      await queryClient.invalidateQueries({ queryKey: ["proposalWorkflow", proposalId || workflowRef] });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update charged to income");
     } finally {
@@ -426,7 +433,7 @@ const PSPCustomPageTable = ({
       if (error.response?.status === 403) {
         toast.error(error.response.data.message || "Submission is locked.");
       } else {
-        toast.error("Error bulk adding personnel.");
+        toast.error(error.response?.data?.message || "Error bulk adding personnel.");
       }
       console.error("Error bulk adding personnel:", error);
     } finally {
@@ -602,20 +609,11 @@ const PSPCustomPageTable = ({
               variant="outlined"
               color="info"
               startIcon={<PesoIcon />}
-              disabled={!selectedRows.length}
-              onClick={() => handleOpenChargedToIncomeDialog("tag")}
+              disabled={locked || !(proposalId || workflowRef) || chargedToIncomeLoading}
+              onClick={handleOpenChargedToIncomeDialog}
             >
-              Charge to Income
+              Salary Income Allocation
             </Button>
-            {/* <Button
-              variant="text"
-              color="error"
-              startIcon={<HighlightOffIcon />}
-              disabled={!selectedRows.length}
-              onClick={() => handleOpenChargedToIncomeDialog("untag")}
-            >
-              Remove Tag
-            </Button> */}
             {!hasWorkflowRef && (
               <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
                 Create a proposal first to unlock personnel entry.
@@ -645,9 +643,6 @@ const PSPCustomPageTable = ({
           </Box>
 
           <Box display="flex" alignItems="center" gap={2}>
-            <Typography variant="body2" color={selectedRows.length ? "primary" : "text.secondary"}>
-              Selected: {selectedRows.length.toLocaleString("en-US")}
-            </Typography>
             <Typography variant="body2" color="text.secondary">
               Records loaded: {filteredRows.length.toLocaleString('en-US')}
             </Typography>
@@ -935,40 +930,44 @@ const PSPCustomPageTable = ({
         fullWidth
       >
         <DialogTitle>
-          {chargedToIncomeDialog.mode === "tag" ? "Charge to Income Recipients" : "Remove Charged to Income Tags"}
+          CPCS Salary Reference Allocation
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            {chargedToIncomeDialog.mode === "tag"
-              ? `Set the CPCS2 monthly salary portion funded by Income for ${selectedRows.length.toLocaleString('en-US')} selected permanent personnel. The remaining annual Personnel Services cost will be funded by Subsidy.`
-              : `Remove ${selectedRows.length.toLocaleString('en-US')} personnel from Charged to Income?`}
+            Applies automatically to all permanent personnel, including those without increases.
+            CPCS 1 monthly salary is funded by Subsidy; CPCS 2 minus CPCS 1 is funded by Income.
+            Matching uses each employee&apos;s grade and step. Other PS benefits retain their amounts.
           </Typography>
-          {chargedToIncomeDialog.mode === "tag" && (
-            <>
-              <TextField
-                autoFocus
-                required
-                fullWidth
-                type="number"
-                label="Monthly Income Allocation"
-                value={chargedToIncomeDialog.amount}
-                onChange={(event) =>
-                  setChargedToIncomeDialog((previous) => ({
-                    ...previous,
-                    amount: event.target.value,
-                  }))
-                }
-                inputProps={{ min: 0, step: "0.01" }}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                }}
-                helperText={`Annual Income charge: ₱${(
-                  (Number(chargedToIncomeDialog.amount) || 0) * 12
-                ).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}. The monthly allocation cannot exceed each employee's monthly salary.`}
-              />
+          {['cpcs1', 'cpcs2'].map((key, index) => (
+            <Box key={key} sx={{ display: 'flex', gap: 2 }}>
+              <TextField select fullWidth required label={`CPCS ${index + 1} reference table`}
+                value={chargedToIncomeDialog[`${key}Reference`]} disabled={chargedToIncomeLoading}
+                onChange={event => changeSalaryReference(`${key}Reference`, event.target.value)}
+                helperText={!salaryReferences[key]?.length ? 'Create an active salary template and its rates in Salary Management.' : undefined}>
+                {(salaryReferences[key] || []).map(table => <MenuItem key={table.id} value={table.id}>{table.label}</MenuItem>)}
+              </TextField>
+              <TextField select label={`CPCS ${index + 1} grade`} sx={{ minWidth: 130 }}
+                value={chargedToIncomeDialog[`${key}MatchBy`]} disabled={chargedToIncomeLoading}
+                onChange={event => changeSalaryReference(`${key}MatchBy`, event.target.value)}>
+                <MenuItem value="SG">Salary Grade</MenuItem><MenuItem value="JG">Job Grade</MenuItem>
+              </TextField>
+            </Box>
+          ))}
+          <Typography variant="body2">Example: CPCS 1 ₱30,000 + Income increase ₱3,000 = CPCS 2 ₱33,000 monthly. Equal rates mean zero Income charge.</Typography>
+          {salaryError && <Alert severity="error">{salaryError}</Alert>}
+          {salaryPreview && <>
+            <Alert severity="success">{salaryPreview.updatedCount} permanent personnel included; {salaryPreview.chargedCount} with increases.
+              Monthly salary Subsidy: ₱{Number(salaryPreview.monthlySalarySubsidy).toLocaleString()}; Income: ₱{Number(salaryPreview.monthlyIncome).toLocaleString()}.
+            </Alert>
+            <Box sx={{ maxHeight: 240, overflow: 'auto' }}>
+              <table style={{ width: '100%' }} aria-label="Monthly salary allocation preview">
+                <thead><tr><th>Employee</th><th>CPCS 1 / Subsidy</th><th>CPCS 2</th><th>Income increase</th></tr></thead>
+                <tbody>{salaryPreview.personnel?.map(person => <tr key={person.id}>
+                  <td>{person.name}</td><td>{person.cpcs1?.toLocaleString()}</td><td>{person.cpcs2?.toLocaleString()}</td><td>{person.income?.toLocaleString()}</td>
+                </tr>)}</tbody>
+              </table>
+            </Box>
+          </>}
               <TextField
                 fullWidth
                 multiline
@@ -982,29 +981,25 @@ const PSPCustomPageTable = ({
                   }))
                 }
               />
-            </>
-          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseChargedToIncomeDialog} disabled={chargedToIncomeLoading}>
             Cancel
           </Button>
+          <Button onClick={handlePreviewSalary} disabled={chargedToIncomeLoading || locked || !chargedToIncomeDialog.cpcs1Reference || !chargedToIncomeDialog.cpcs2Reference}>Preview Allocation</Button>
           <Button
             onClick={handleConfirmChargedToIncome}
             variant="contained"
-            color={chargedToIncomeDialog.mode === "tag" ? "primary" : "error"}
-            disabled={chargedToIncomeLoading}
+            color="primary"
+            disabled={chargedToIncomeLoading || locked || !salaryPreview}
           >
             {chargedToIncomeLoading
               ? "Processing..."
-              : chargedToIncomeDialog.mode === "tag"
-              ? "Confirm Move"
-              : "Confirm Remove"}
+              : "Save Allocation"}
           </Button>
         </DialogActions>
       </Dialog>
 
-      <ToastContainer />
 
       <CustomTable
         ROWS_PER_PAGE={ROWS_PER_PAGE}
@@ -1012,8 +1007,6 @@ const PSPCustomPageTable = ({
         apiPath={apiPath}
         proposalId={proposalId || workflowRef}
         onDataChange={setFilteredRows}
-        selectedRows={selectedRows}
-        onRowSelectionChange={setSelectedRows}
         columns={useMemo(() => Object.keys(schema)
           .filter((key) => (columnVisibility[key] !== false && (schema[key].show === true || key === "action")))
           .map((key) => {

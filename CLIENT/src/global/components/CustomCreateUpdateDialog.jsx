@@ -66,6 +66,7 @@ const CustomCreateUpdateDialog = ({
   // Convert schema to Yup validation dynamically
   const validationSchema = yup.object(
     Object.keys(schema).reduce((acc, key) => {
+      if (schema[key].readOnly) return acc;
       if (schema[key].type === "text" && schema[key].required) {
         acc[key] = yup.string().required(`${schema[key].label} is required`);
       } else if (schema[key].type === "number") {
@@ -170,6 +171,7 @@ const CustomCreateUpdateDialog = ({
       isGlobal: Boolean(data.isGlobal)
     };
     
+    Object.keys(schema).filter(key => schema[key].readOnly).forEach(key => delete formattedData[key]);
     mutation.mutate(formattedData);
   };
 
@@ -209,6 +211,7 @@ const CustomCreateUpdateDialog = ({
 
           {Object.keys(schema).map((key) => {
             const field = schema[key];
+            if (field.readOnly) return null;
 
             if (
               field.type === "action" ||

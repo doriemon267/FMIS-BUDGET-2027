@@ -28,7 +28,7 @@ import {
   InputLabel,
   Skeleton,
 } from "@mui/material";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import ReportPageLayout from "./ReportPageLayout";
@@ -839,7 +839,6 @@ const visibleTotals = useMemo(() => {
       breadcrumbLabel="Consolidated MOOE"
       fiscalYear={activeSettings?.fiscalYear || new Date().getFullYear()}
     >
-      <ToastContainer className="report-no-print" position="top-right" autoClose={3000} />
       <Paper
         className="report-no-print"
         elevation={0}

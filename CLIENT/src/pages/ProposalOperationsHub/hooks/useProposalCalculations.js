@@ -44,17 +44,25 @@ export const useProposalCalculations = () => {
         }, 0);
       }
 
-      // Personnel Services subsidy
-      // Align with Personnel Services table and BudgetarySupportTable:
-      // only NON charged-to-income personnel are counted as subsidy.
+      // Personnel Services subsidy. NEP rows can split a personnel record
+      // between Income and Subsidy, so retain the funded remainder instead of
+      // dropping the entire record when any portion is charged to Income.
       if (proposalDetails.personnel?.length) {
         const sameDivision = selectedProposal?.division
           ? proposalDetails.personnel.filter(
-              (p) => p.division === selectedProposal.division && p.chargedToIncomeEligible !== true
+              (p) => p.division === selectedProposal.division
             )
-          : proposalDetails.personnel.filter((p) => p.chargedToIncomeEligible !== true);
+          : proposalDetails.personnel;
 
         total += sameDivision.reduce((sum, item) => {
+          if (item.chargedToIncomeEligible === true) {
+            const explicitSubsidy = Number(item.chargedToSubsidyAmount);
+            if (Number.isFinite(explicitSubsidy)) return sum + explicitSubsidy;
+            return sum + Math.max(
+              0,
+              (Number(item.Total) || 0) - (Number(item.chargedToIncomeAmount) || 0)
+            );
+          }
           return sum + (Number(item.Total) || 0);
         }, 0);
       }
@@ -177,4 +185,3 @@ export const useProposalCalculations = () => {
     getDisplayAmounts
   ]);
 };
-

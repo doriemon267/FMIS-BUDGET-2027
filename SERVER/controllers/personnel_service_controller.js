@@ -17,8 +17,21 @@ const {
 } = require("../utils/loyaltyPayUtils");
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { getActiveSettingsWithCompensation, getCompensationField } = require("../utils/settingsUtils");
+const { calculateEarnedLeaves } = require("../utils/earnedLeaveUtils");
 const { validateNonNegativeFields, validateNonNegativeInItems, PERSONNEL_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
-const { resolvePersonnelIncomeAllocation } = require('../utils/personnelIncomeAllocation');
+const { resolvePersonnelIncomeAllocation, applyPermanentIncomeAllocation } = require('../utils/personnelIncomeAllocation');
+
+const NEP_PERSONNEL_EDITABLE_FIELDS = [
+  'annualSalary', 'PERA', 'RATA', 'honoraria', 'uniformALLOWANCE',
+  'childrenAllowance', 'medical', 'additionalMedical', 'meal',
+  'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
+  'loyaltyAward', 'overtimePay', 'productivityIncentive', 'cashGift',
+  'midyearBonus', 'yearEndBonus', 'hazardPay', 'retirementBenefits',
+  'terminalLeave', 'gsisPremium', 'pagibigPremium', 'philhealthPremium',
+  'employeeCompensation', 'providentFund', 'earnedLeaves',
+  'chargedToIncomeAmount', 'chargedToSubsidyAmount', 'chargedToIncomeEligible',
+  'subsidyAmount', 'subsidyEligible'
+];
 // Import ChildrenAllowance model safely
 const ChildrenAllowance =
   mongoose.models.ChildrenAllowance || require("../models/childrenAllowance");
@@ -703,10 +716,12 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     // CRITICAL: Extract proposalId to link personnel services to specific proposal
     const workflowProposalId = req.body.proposalId || workflowData.proposalId; // NewProposalWorkflow _id
     
+    let permanentIncomeConfig;
     // Check workflow status - prevent adding to locked proposals
     if (workflowProposalId) {
       const NewProposalWorkflow = require('../models/NewProposalWorkflow');
-      const workflow = await NewProposalWorkflow.findById(workflowProposalId).select('status');
+      const workflow = await NewProposalWorkflow.findById(workflowProposalId).select('status modelType permanentIncomeAllocation');
+      if (workflow?.modelType === 'Initial') permanentIncomeConfig = workflow.permanentIncomeAllocation;
       if (workflow && LOCKED_PERSONNEL_STATUSES.includes(workflow.status)) {
         return res.status(403).json({
           error: "Cannot add entries",
@@ -1225,7 +1240,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         subsistenceAllowanceST: 0,
         overtimePay: 0,
         loyaltyAward: calculatedLoyaltyAmount,
-        earnedLeaves: monthlySalary * 30 * (activeSettings.earnedLeaves || 0), // Assuming 12 months of leaves for each employee
+        earnedLeaves: calculateEarnedLeaves(monthlySalary, activeSettings),
         retirementBenefits: 0,
         terminalLeave: 0,
         courtAppearance: 0,
@@ -1304,6 +1319,12 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
           (acc, field) => acc + (Number(personnelService[field]) || 0),
           0
         ));
+      }
+      try {
+        Object.assign(personnelService, applyPermanentIncomeAllocation(personnelService, permanentIncomeConfig));
+      } catch (error) {
+        error.message = `${personnelService.employeeFullName || personnelService.employeeNumber}: ${error.message}`;
+        throw error;
       }
       personnelServicesData.push({
         ps: personnelService,
@@ -1537,7 +1558,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
     }
   } catch (error) {
     console.error("Error in bulkAddPersonnelServices:", error.stack);
-    res.status(500).json({ message: "Server error", details: error.message });
+    res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : "Server error", details: error.message });
   }
 };
 exports.updatePersonnelService = async (req, res) => {
@@ -1575,6 +1596,7 @@ exports.updatePersonnelService = async (req, res) => {
 
     const allowedFields = [
       "employeeFullName",
+      "monthlySalaryIncrement",
       "noOfDependent",
       "hazardPay",
       "subsistenceAllowance",
@@ -1641,6 +1663,33 @@ exports.updatePersonnelService = async (req, res) => {
       });
     }
 
+    if (filteredUpdateFields.monthlySalaryIncrement !== undefined &&
+        filteredUpdateFields.monthlySalaryIncrement !== (personnelServices.monthlySalaryIncrement ?? 0)) {
+      const increment = filteredUpdateFields.monthlySalaryIncrement;
+      if (typeof increment !== 'number' || !Number.isFinite(increment) || increment < 0 ||
+          increment > Number(personnelServices.monthlySalary)) {
+        return res.status(400).json({ message: 'Monthly salary increment must be between zero and the monthly salary.' });
+      }
+      if (String(personnelServices.statusOfAppointment).toUpperCase() !== 'PERMANENT') {
+        return res.status(400).json({ message: 'Salary increments for Income allocation apply to permanent personnel only.' });
+      }
+      // Preserve versioned NEP/GAA splits and the workflow lock when recording increments.
+      if (personnelServices.workflowRef) {
+        const workflow = await require('../models/NewProposalWorkflow').findById(personnelServices.workflowRef);
+        if (workflow?.permanentIncomeAllocation?.mode === 'CPCS_DIFFERENCE') {
+          return res.status(400).json({ message: 'The salary increase is calculated from the CPCS reference tables. Update Salary Income Allocation instead.' });
+        }
+        const userId = String(req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId || '');
+        if (!workflow || workflow.modelType !== 'Initial' || !['DRAFT', 'RETURNED_TO_PREPARER'].includes(workflow.status)) {
+          return res.status(403).json({ message: 'Salary increments can only be changed in an editable Initial proposal.' });
+        }
+        if (workflow.isLocked && String(workflow.lockedBy?.userId || '') !== userId) {
+          return res.status(423).json({ message: 'This proposal is locked by another user.' });
+        }
+      }
+      filteredUpdateFields.monthlySalaryIncrement = roundTo2Decimals(increment);
+    }
+
     const updatedPersonnelService = await PersonnelServices.findByIdAndUpdate(
       id,
       { $set: filteredUpdateFields },
@@ -1696,7 +1745,9 @@ exports.updatePersonnelService = async (req, res) => {
         region: updatedPersonnelService?.region,
         processBy: updatedPersonnelService?.processBy
       };
-      if (keys.fiscalYear && keys.region) {
+      if (updatedPersonnelService.workflowRef) {
+        await recalculateAndSaveProposalTotals({ workflowRef: updatedPersonnelService.workflowRef });
+      } else if (keys.fiscalYear && keys.region) {
         const strictQuery = {
           fiscalYear: keys.fiscalYear,
           budgetType: keys.budgetType,
@@ -1785,11 +1836,10 @@ exports.getGrandTotalPermanent = async (req, res) => {
     const { fiscalYear } = activeSettings;
     // Get region from query parameters
     const { region, search, employeeFullName, orderBy, order = 'asc' } = req.query;
-    // Build query criteria - match list endpoint: exclude charged-to-income
+    // All permanent personnel remain in the list, including split-funded salaries.
     const query = {
       statusOfAppointment: { $regex: /^PERMANENT$/i },
       fiscalYear,
-      chargedToIncomeEligible: false, // Same as table list - exclude charged-to-income
     };
     // Align totals with table filters
     if (search) {
@@ -2009,10 +2059,19 @@ exports.bulkUpdatePersonnelService = async (req, res) => {
         return res.status(404).json({ message: `Personnel entry with ID ${item._id} not found` });
       }
 
+      const nepAllocationUpdate = {};
+      NEP_PERSONNEL_EDITABLE_FIELDS.forEach(field => {
+        if (item[field] !== undefined) nepAllocationUpdate[field] = item[field];
+      });
+      ['nepInitialValues', 'nepInitialAllocations', 'nepAllocations'].forEach(field => {
+        if (item[field] !== undefined) nepAllocationUpdate[field] = item[field];
+      });
+
       updates.push(
         PersonnelServices.findByIdAndUpdate(
           item._id,
           {
+            ...nepAllocationUpdate,
             Total: item.Total !== undefined ? item.Total : (item.amount !== undefined ? item.amount : existingPersonnel.Total),
             amount: item.amount !== undefined ? item.amount : (item.Total !== undefined ? item.Total : existingPersonnel.amount),
             ...(setFY ? { fiscalYear: setFY } : {}),
@@ -2322,6 +2381,14 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
 
       console.log("DEBUG: Updating record, chargedToIncomeEligible:", chargedToIncomeEligible);
 
+      if (record.cpcs1MonthlySalary > 0 && record.workflowRef) {
+        const workflow = await require('../models/NewProposalWorkflow').findById(record.workflowRef);
+        if (workflow?.modelType === 'Initial' && workflow.permanentIncomeAllocation?.mode === 'CPCS_DIFFERENCE') {
+          results.skipped.push({ id: targetId, reason: 'Salary funding is calculated from CPCS references. Update Salary Income Allocation instead.' });
+          continue;
+        }
+      }
+
       const allocation = chargedToIncomeEligible
         ? resolvePersonnelIncomeAllocation(record, payload, defaultAmount)
         : {
@@ -2574,6 +2641,15 @@ exports.resetChargedToIncome = async (req, res) => {
       query = { $and: [query, { $or: proposalScope }] };
     }
 
+    const referenceRows = await PersonnelServices.find({ $and: [query, {
+      statusOfAppointment: /^PERMANENT$/i, cpcs1MonthlySalary: { $gt: 0 },
+    }] }).select('workflowRef').lean();
+    if (referenceRows.length && await require('../models/NewProposalWorkflow').exists({
+      _id: { $in: referenceRows.map(row => row.workflowRef).filter(Boolean) },
+      modelType: 'Initial', 'permanentIncomeAllocation.mode': 'CPCS_DIFFERENCE',
+    })) {
+      return res.status(400).json({ message: 'This scope includes automatic CPCS salary allocations. Update Salary Income Allocation in PS-Permanent instead.' });
+    }
     const result = await PersonnelServices.updateMany(query, {
       $set: {
         chargedToIncomeEligible: false,

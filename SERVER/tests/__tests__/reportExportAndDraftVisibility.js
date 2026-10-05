@@ -328,22 +328,22 @@ describe('Budget Summary draft visibility', () => {
 });
 
 describe('PS and CO All Regions matrix contract', () => {
-  test('maps the PS grouped response to its single Amount financial column', () => {
+  test('maps PS funding to Income, Subsidy, and Amount columns', () => {
     const matrix = consolidatedPersonnelServicesController._private.buildPersonnelServicesRegionMatrix({
       future: {
         region: 'Future Region XXI',
         categories: {
           salaries: {
             name: 'Salaries',
-            items: { permanent: { name: 'Permanent Personnel', amount: 125 } }
+            items: { permanent: { name: 'Permanent Personnel', income: 25, subsidy: 100, amount: 125 } }
           }
         }
       }
     });
 
-    expect(matrix.columns).toEqual(['amount']);
+    expect(matrix.columns).toEqual(['income', 'subsidy', 'amount']);
     expect(matrix.regions).toEqual(['Future Region XXI']);
-    expect(matrix.regionalTotal.amount).toBe(125);
+    expect(matrix.regionalTotal).toEqual({ income: 25, subsidy: 100, amount: 125 });
   });
 
   test('maps CO response items to true Income, Subsidy, and Amount columns', () => {

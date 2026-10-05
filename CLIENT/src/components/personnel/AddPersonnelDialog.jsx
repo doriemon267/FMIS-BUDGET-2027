@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, FormControl, Autocomplete } from '@mui/material';
 import api from '../../config/api'; // API instance for fetching positions
-import { toast, ToastContainer } from 'react-toastify'; // Import toast for error notifications
+import { toast } from 'react-toastify'; // Import toast for error notifications
 import 'react-toastify/dist/ReactToastify.css'; // Import Toastify styles
 
 const AddPersonnelDialog = ({ open, onClose, onAdd }) => {
@@ -162,7 +162,6 @@ const AddPersonnelDialog = ({ open, onClose, onAdd }) => {
         <Button onClick={onClose} color="secondary">Cancel</Button>
         <Button onClick={handleSubmit} color="primary">Add</Button>
       </DialogActions>
-      <ToastContainer />
     </Dialog>
   );
 };

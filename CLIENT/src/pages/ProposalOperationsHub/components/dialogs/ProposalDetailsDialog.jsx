@@ -137,7 +137,8 @@ const ProposalDetailsDialog = ({
   const canOpenNepTier = canAccessNepTierAdjustment(
     selectedProposal,
     activeSettings,
-    currentUser?.Roles
+    currentUser?.Roles,
+    currentUser
   );
 
   const handleOpenNepTierAdjustment = async () => {
@@ -147,37 +148,7 @@ const ProposalDetailsDialog = ({
     // cannot enter Tier after the active model/FY has changed.
     if (!(await ensureProposalMatchesActiveCycle(selectedProposal))) return;
 
-    const tierParams = new URLSearchParams();
-    if (selectedProposal.fiscalYear != null) {
-      tierParams.set("fiscalYear", String(selectedProposal.fiscalYear));
-    }
-    if (selectedProposal.region) {
-      const region = selectedProposal.region;
-      const regionValue =
-        region && typeof region === "object"
-          ? region.RegionName ||
-            region.Region ||
-            region.regionName ||
-            region.region ||
-            region.name ||
-            ""
-          : String(region || "");
-      tierParams.set("region", regionValue);
-    }
-    if (selectedProposal.department) {
-      tierParams.set("department", String(selectedProposal.department));
-    }
-    if (selectedProposal.division || selectedProposal.responsibilityCenter) {
-      tierParams.set(
-        "division",
-        String(selectedProposal.division || selectedProposal.responsibilityCenter)
-      );
-    }
-    if (selectedProposal._id) {
-      tierParams.set("proposalId", String(selectedProposal._id));
-    }
-    tierParams.set("budgetType", "NEP");
-    navigate(`/tier?${tierParams.toString()}`);
+    navigate(`/nep-proposal/${selectedProposal._id}`);
   };
 
   const handleDialogClose = () => {
@@ -534,13 +505,13 @@ const ProposalDetailsDialog = ({
                             },
                           }}
                         >
-                          NEP Tier Adjustment
+                          Open NEP Proposal
                         </Button>
                       }
                       sx={{ mt: 1, alignItems: "center" }}
                     >
-                      Adjust the Tier 1 and Tier 2 allocation to match the approved BRD
-                      ceiling before submitting this NEP proposal.
+                      Adjust the Income and Subsidy allocation to match the approved BRD ceiling
+                      before submitting this NEP proposal.
                     </Alert>
                   </Grid>
                 )}
@@ -548,7 +519,7 @@ const ProposalDetailsDialog = ({
                 {isNepProposal && !isActiveProposalCycle && (
                   <Grid item xs={12}>
                     <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
-                      NEP Tier Adjustment is read-only for this proposal. It becomes
+                      NEP Proposal Adjustment is read-only for this proposal. It becomes
                       available when NEP FY {selectedProposal?.fiscalYear || "—"} is the
                       active budget cycle.
                     </Alert>
@@ -721,7 +692,7 @@ const ProposalDetailsDialog = ({
             </Box>
 
             {/* Tabs for different sections */}
-            {!selectedProposal?.isConsolidated && (
+            {!isNepProposal && !selectedProposal?.isConsolidated && (
               <>
                 <Tabs
                   value={detailsTab}
@@ -932,7 +903,7 @@ const ProposalDetailsDialog = ({
         sx={{ p: 3, borderTop: "1px solid #e0e0e0", justifyContent: "space-between" }}
       >
         <Box sx={{ display: "flex", gap: 2 }}>
-          {canUserEdit() && changedItems.size > 0 && (
+          {!isNepProposal && canUserEdit() && changedItems.size > 0 && (
             <>
               <Button
                 variant="contained"

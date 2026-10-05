@@ -278,14 +278,24 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
       
       if (res.data.success) {
         const { nepProposals, errors } = res.data.data;
-        toast.success(
-          `Generated ${nepProposals.length} NEP proposal(s) for ${generationMode === 'BRD' ? 'BRD direct adjustment' : 'Budget Preparer adjustment'}`,
-        );
+        if (nepProposals.length > 0) {
+          const assignedPreparers = Array.from(new Set(
+            nepProposals.flatMap((proposal) => proposal.assignedPreparerNames || []),
+          ));
+          const assignmentSuffix = generationMode === 'PREPARER' && assignedPreparers.length
+            ? ` Assigned to: ${assignedPreparers.join(', ')}.`
+            : '';
+          toast.success(
+            `Generated ${nepProposals.length} NEP proposal(s) for ${generationMode === 'BRD' ? 'BRD direct adjustment' : 'Budget Preparer adjustment'}.${assignmentSuffix}`,
+          );
+        } else {
+          toast.error('No NEP proposal was generated. Review the generation error shown below.');
+        }
         if (errors.length > 0) {
           errors.forEach(err => toast.warning(err));
         }
         setCeiling(res.data.data.ceiling);
-        setGenerateDialogOpen(false);
+        if (nepProposals.length > 0) setGenerateDialogOpen(false);
         if (onRefresh) onRefresh();
       }
     } catch (error) {
@@ -1055,7 +1065,7 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
         </DialogTitle>
         <DialogContent sx={{ pt: 3, minWidth: 450 }}>
           <Alert severity="info" sx={{ mb: 2 }}>
-            This will create NEP proposals for each division based on the published ceiling amounts.
+            This will create NEP proposals for each published ceiling allocation.
           </Alert>
           <Typography sx={{ mb: 1 }}>
             <strong>Region:</strong> {regionName || region}
@@ -1064,8 +1074,16 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
             <strong>Fiscal Year:</strong> {fiscalYear}
           </Typography>
           <Typography sx={{ mb: 1 }}>
-            <strong>Divisions:</strong> {ceiling?.allocations?.length || 0}
+            <strong>Allocation groups:</strong> {ceiling?.allocations?.length || 0}
           </Typography>
+          {ceiling?.allocations?.length > 0 && (
+            <Typography sx={{ mb: 1 }}>
+              <strong>Scope:</strong>{' '}
+              {ceiling.allocations
+                .map((allocation) => allocation.division || allocation.department || 'Unassigned')
+                .join(', ')}
+            </Typography>
+          )}
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel id="nep-generation-mode-label">Adjustment Workflow</InputLabel>
             <Select

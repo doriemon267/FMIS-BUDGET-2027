@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
+const { summarizePersonnelFunding, personnelItemFunding } = require('../utils/personnelReportFunding');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const Region = require('../models/Region');
@@ -49,11 +50,11 @@ const buildPersonnelServicesRegionMatrix = (grouped = {}) => buildRegionalReport
         region: regionData.region,
         section: category.name,
         particulars: item.name,
-        values: { amount: item.amount },
+        values: { income: item.income || 0, subsidy: item.subsidy ?? item.amount, amount: item.amount },
       }))
     ))
   )),
-  ['amount']
+  ['income', 'subsidy', 'amount']
 );
 
 const buildPersonnelServicesPdfMatrix = (grouped = {}) => buildRegionalReportMatrix(
@@ -63,11 +64,11 @@ const buildPersonnelServicesPdfMatrix = (grouped = {}) => buildRegionalReportMat
         region,
         section,
         particulars: item.name,
-        values: { amount: item.amount },
+        values: { income: item.income || 0, subsidy: item.subsidy ?? item.amount, amount: item.amount },
       }))
     ))
   )),
-  ['amount']
+  ['income', 'subsidy', 'amount']
 );
 
 const getVisibleWorkflowIdsPS = async (req, { fiscalYear, budgetType, regions } = {}) => {
@@ -185,7 +186,7 @@ const PERSONNEL_SERVICES_STRUCTURE = {
           "h": { name: "Additional Medical Allowance", field: "additionalMedical" },
           "i": { name: "Meal Allowances", field: "meal" },
           "j": { name: "Per Diem & Allowance of Board of Directors", field: "perDiem" }, // Not in model
-          "k": { name: "Subsistence Allowance", field: "subsistenceAllowance" },
+          "k": { name: "Subsistence Allowance", field: "subsistenceAllowance,subsistenceAllowanceMDS,subsistenceAllowanceST" },
           "l": { name: "Longevity Pay (Loyalty Award)", field: "loyaltyAward" },
           "m": { name: "Overtime Services", field: "overtimePay" },
           "n": { name: "Special Counsel Allowance", field: "specialCounsel" }, // Not in model
@@ -195,7 +196,8 @@ const PERSONNEL_SERVICES_STRUCTURE = {
           "r": { name: "Performance Based Bonus", field: "performanceBonus" }, // Not in model
           "s": { name: "Hazard Pay", field: "hazardPay" },
           "t": { name: "Other Bonuses and Allowances", field: "otherBonuses" }, // Not in model
-          "u": { name: "Anniversary Bonus", field: "anniversaryBonus" } // Not in model
+          "u": { name: "Anniversary Bonus", field: "anniversaryBonus" }, // Not in model
+          "v": { name: "Court Appearance", field: "courtAppearance" }
         }
       },
       "3": {
@@ -275,7 +277,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         return res.status(200).json({
           success: true,
           data: [],
-          matrix: buildRegionalReportMatrix([], ['amount']),
+          matrix: buildRegionalReportMatrix([], ['income', 'subsidy', 'amount']),
           summary: { totalRegions: 0, totalEmployees: 0, grandTotal: 0 }
         });
       }
@@ -293,7 +295,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
       return res.status(200).json({
         success: true,
         data: [],
-        matrix: buildRegionalReportMatrix([], ['amount']),
+        matrix: buildRegionalReportMatrix([], ['income', 'subsidy', 'amount']),
         summary: {
           totalRegions: 0,
           totalEmployees: 0,
@@ -324,7 +326,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
           grouped[region].categories[categoryKey] = {
             name: categoryData.name,
             items: {},
-            total: 0
+            total: 0, income: 0, subsidy: 0
           };
         }
         const category = grouped[region].categories[categoryKey];
@@ -333,7 +335,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
           if (!category.items[itemKey]) {
             category.items[itemKey] = {
               name: itemData.name,
-              amount: 0
+              amount: 0, income: 0, subsidy: 0
             };
           }
           // Calculate amount based on field mapping
@@ -365,6 +367,11 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
           }
           category.items[itemKey].amount += amount;
           category.total += amount;
+          const funding = personnelItemFunding(employee, categoryKey === '1' ? 'annualSalary' : itemData.field, amount);
+          category.items[itemKey].income += funding.incomeAmount;
+          category.items[itemKey].subsidy += funding.subsidyAmount;
+          category.income += funding.incomeAmount;
+          category.subsidy += funding.subsidyAmount;
         });
       });
       // Calculate employee total
@@ -385,20 +392,24 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
             consolidatedCategories[categoryKey] = {
               key: categoryKey,
               name: categoryData.name,
-              total: 0,
+              total: 0, income: 0, subsidy: 0,
               items: {}
             };
           }
           consolidatedCategories[categoryKey].total += categoryData.total;
+          consolidatedCategories[categoryKey].income += categoryData.income;
+          consolidatedCategories[categoryKey].subsidy += categoryData.subsidy;
           Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
             if (!consolidatedCategories[categoryKey].items[itemKey]) {
               consolidatedCategories[categoryKey].items[itemKey] = {
                 key: `${categoryKey}.${itemKey}`,
                 name: itemData.name,
-                amount: 0
+                amount: 0, income: 0, subsidy: 0
               };
             }
             consolidatedCategories[categoryKey].items[itemKey].amount += itemData.amount;
+            consolidatedCategories[categoryKey].items[itemKey].income += itemData.income;
+            consolidatedCategories[categoryKey].items[itemKey].subsidy += itemData.subsidy;
           });
         });
       });
@@ -413,13 +424,17 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
             key: categoryKey,
             name: categoryData.name,
             total: categoryData.total,
+            income: categoryData.income,
+            subsidy: categoryData.subsidy,
             items: Object.entries(categoryData.items)
               .filter(([_, itemData]) => itemData.amount > 0)
               .map(([itemKey, itemData]) => ({
                 id: `all-regions-${categoryKey}-${itemKey}`,
                 key: itemData.key,
                 name: itemData.name,
-                amount: itemData.amount
+                amount: itemData.amount,
+                income: itemData.income,
+                subsidy: itemData.subsidy
               }))
           }))
       }];
@@ -436,13 +451,17 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
             key: categoryKey,
             name: categoryData.name,
             total: categoryData.total,
+            income: categoryData.income,
+            subsidy: categoryData.subsidy,
             items: Object.entries(categoryData.items)
               .filter(([_, itemData]) => itemData.amount > 0)
               .map(([itemKey, itemData]) => ({
                 id: `${regionData.region}-${categoryKey}-${itemKey}`,
                 key: `${categoryKey}.${itemKey}`,
                 name: itemData.name,
-                amount: itemData.amount
+                amount: itemData.amount,
+                income: itemData.income,
+                subsidy: itemData.subsidy
               }))
           }))
       })).sort((a, b) => a.region.localeCompare(b.region));
@@ -454,7 +473,11 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
       summary: {
         totalRegions: regionSet.size,
         totalEmployees,
-        grandTotal: Math.round(grandTotal * 100) / 100
+        grandTotal: Math.round(grandTotal * 100) / 100,
+        funding: summarizePersonnelFunding(psData),
+        fundingByRegion: Array.from(regionSet).map(region => ({
+          region, ...summarizePersonnelFunding(psData.filter(row => (row.region || 'Unspecified') === region)),
+        })),
       }
     });
   } catch (error) {
@@ -669,7 +692,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
         if (!grouped[rcName][categoryName]) grouped[rcName][categoryName] = {};
         Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
           if (!grouped[rcName][categoryName][itemKey]) {
-            grouped[rcName][categoryName][itemKey] = { key: `${categoryKey}.${itemKey}`, name: itemData.name, amount: 0 };
+            grouped[rcName][categoryName][itemKey] = { key: `${categoryKey}.${itemKey}`, name: itemData.name, amount: 0, income: 0, subsidy: 0 };
           }
           let amount = 0;
           if (itemData.field) {
@@ -687,7 +710,11 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
               amount = Number(employee[itemData.field]) || 0;
             }
           }
-          grouped[rcName][categoryName][itemKey].amount += amount;
+          const item = grouped[rcName][categoryName][itemKey];
+          item.amount += amount;
+          const funding = personnelItemFunding(employee, categoryKey === '1' ? 'annualSalary' : itemData.field, amount);
+          item.income += funding.incomeAmount;
+          item.subsidy += funding.subsidyAmount;
         });
       });
     });
@@ -810,31 +837,44 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       if (curY + lines * LINE_H > PAGE_HEIGHT - MARGIN - 22) startNewPage();
     };
 
-    const COL_REGION = 90;
-    const COL_ITEM = 75;
+    const COL_REGION = 70;
+    const COL_ITEM = 35;
     const COL_AMOUNT = 90;
-    const COL_PARTICULARS = CONTENT_RIGHT - CONTENT_LEFT - COL_REGION - COL_ITEM - COL_AMOUNT;
+    const COL_PARTICULARS = CONTENT_RIGHT - CONTENT_LEFT - COL_REGION - COL_ITEM - (COL_AMOUNT * 3);
     const colX = {
       region: CONTENT_LEFT,
       item: CONTENT_LEFT + COL_REGION,
       particulars: CONTENT_LEFT + COL_REGION + COL_ITEM,
-      amount: CONTENT_LEFT + COL_REGION + COL_ITEM + COL_PARTICULARS,
+      income: CONTENT_LEFT + COL_REGION + COL_ITEM + COL_PARTICULARS,
+      subsidy: CONTENT_LEFT + COL_REGION + COL_ITEM + COL_PARTICULARS + COL_AMOUNT,
+      amount: CONTENT_LEFT + COL_REGION + COL_ITEM + COL_PARTICULARS + (COL_AMOUNT * 2),
     };
 
     const drawTableHeader = () => {
       ensureSpace(2);
-      pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.5 });
-      pdfDoc.text('RESPONSIBILITY CENTER', colX.region + 3, curY, textOpt({ fontSize: 7, bold: true }));
+      pdfDoc.rectangle(colX.region, curY - 3, CONTENT_RIGHT - CONTENT_LEFT, LINE_H * 2 + 4, { stroke: '#4d4c4c', lineWidth: 0.5 });
+      pdfDoc.text('RESPONSIBILITY', colX.region + 3, curY, textOpt({ fontSize: 6.5, bold: true }));
+      pdfDoc.text('CENTER', colX.region + 3, curY + LINE_H, textOpt({ fontSize: 6.5, bold: true }));
       pdfDoc.text('ITEM NO.', colX.item + 3, curY, textOpt({ fontSize: 8, bold: true }));
       pdfDoc.text('PARTICULARS', colX.particulars + 3, curY, textOpt({ fontSize: 8, bold: true }));
-      pdfDoc.text('AMOUNT', colX.amount + 3, curY, textOpt({ fontSize: 8, bold: true }));
-      curY += LINE_H + 4;
+      ['income', 'subsidy', 'amount'].forEach(key => pdfDoc.text(key.toUpperCase(), colX[key] + 3, curY, textOpt({ fontSize: 8, bold: true })));
+      curY += LINE_H * 2 + 4;
     };
 
-    let grandAmount = 0;
+    const financialKeys = ['income', 'subsidy', 'amount'];
+    const emptyFinancials = () => ({ income: 0, subsidy: 0, amount: 0 });
+    const addFinancials = (target, values) => financialKeys.forEach(key => { target[key] += Number(values?.[key] || 0); });
+    const drawFinancials = (values, x, width, y, bold = false) => {
+      const cellWidth = width / 3;
+      financialKeys.forEach((key, index) => {
+        pdfDoc.text(formatPhp(values?.[key]), x + ((index + 1) * cellWidth) - 4, y,
+          textOpt({ fontSize: 6.5, bold, align: 'right' }));
+      });
+    };
+    const grandFinancials = emptyFinancials();
     if (useRegionMatrix) {
       const particularsWidth = 250;
-      const minAmountWidth = 80;
+      const minAmountWidth = 210;
       const capacity = Math.max(1, Math.floor(((CONTENT_RIGHT - CONTENT_LEFT) - particularsWidth) / minAmountWidth) - 1);
       const chunks = chunkRegionalMatrixRegions(regionMatrix.regions, capacity);
       const headerHeight = 28;
@@ -853,7 +893,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
           wrapText(label, amountWidth - 6, 6).slice(0, 2).forEach((line, lineIndex) => {
             pdfDoc.text(line, x + (amountWidth / 2), y + 4 + (lineIndex * 7), textOpt({ fontSize: 6, bold: true, align: 'center' }));
           });
-          pdfDoc.text('AMOUNT', x + (amountWidth / 2), y + 20, textOpt({ fontSize: 5.5, bold: true, align: 'center' }));
+          financialKeys.forEach((key, subIndex) => pdfDoc.text(key.toUpperCase(), x + (amountWidth / 3) * (subIndex + 0.5), y + 20, textOpt({ fontSize: 5.5, bold: true, align: 'center' })));
         });
         curY += headerHeight;
         return amountWidth;
@@ -898,46 +938,56 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
             ensureMatrixSpace(rowHeight);
             pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, rowHeight, { stroke: '#c0c0c0', lineWidth: 0.3 });
             titleLines.forEach((line, lineIndex) => pdfDoc.text(line, CONTENT_LEFT + 10, curY + 4 + lineIndex * 7.4, textOpt({ fontSize: 7 })));
-            let chunkTotal = 0;
+            const chunkTotal = emptyFinancials();
             chunk.forEach((regionName, index) => {
               const x = CONTENT_LEFT + particularsWidth + (index * amountWidth);
               pdfDoc.rectangle(x, curY, 0.3, rowHeight, { fill: '#c0c0c0', stroke: '#c0c0c0', lineWidth: 0 });
-              const value = Number(row.valuesByRegion?.[regionName]?.amount || 0);
-              chunkTotal += value;
-              pdfDoc.text(formatPhp(value), x + amountWidth - 4, curY + Math.max(4, (rowHeight - 7) / 2), textOpt({ fontSize: 6.5, align: 'right' }));
+              const values = row.valuesByRegion?.[regionName];
+              addFinancials(chunkTotal, values);
+              drawFinancials(values, x, amountWidth, curY + Math.max(4, (rowHeight - 7) / 2));
             });
             const totalX = CONTENT_LEFT + particularsWidth + (chunk.length * amountWidth);
             pdfDoc.rectangle(totalX, curY, 0.4, rowHeight, { fill: '#9e9e9e', stroke: '#9e9e9e', lineWidth: 0 });
-            pdfDoc.text(formatPhp(chunkTotal), totalX + amountWidth - 4, curY + Math.max(4, (rowHeight - 7) / 2), textOpt({ fontSize: 6.5, bold: true, align: 'right' }));
+            drawFinancials(chunkTotal, totalX, amountWidth, curY + Math.max(4, (rowHeight - 7) / 2), true);
             curY += rowHeight;
           });
+          ensureMatrixSpace(totalHeight);
+          pdfDoc.text('SUBTOTAL', CONTENT_LEFT + 4, curY + 5, textOpt({ fontSize: 7, bold: true }));
+          const sectionTotal = emptyFinancials();
+          chunk.forEach((regionName, index) => {
+            const values = emptyFinancials();
+            section.rows.forEach(row => addFinancials(values, row.valuesByRegion?.[regionName]));
+            addFinancials(sectionTotal, values);
+            drawFinancials(values, CONTENT_LEFT + particularsWidth + index * amountWidth, amountWidth, curY + 5, true);
+          });
+          drawFinancials(sectionTotal, CONTENT_LEFT + particularsWidth + chunk.length * amountWidth, amountWidth, curY + 5, true);
+          curY += totalHeight;
         });
 
         ensureMatrixSpace(totalHeight);
         pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, totalHeight, { fill: '#ededed', stroke: '#4d4c4c', lineWidth: 0.7 });
         pdfDoc.text(chunks.length > 1 ? 'CHUNK REGIONAL TOTAL' : 'REGIONAL TOTAL', CONTENT_LEFT + 4, curY + 5, textOpt({ fontSize: 7.5, bold: true }));
-        let chunkGrandTotal = 0;
+        const chunkGrandTotal = emptyFinancials();
         chunk.forEach((regionName, index) => {
           const x = CONTENT_LEFT + particularsWidth + (index * amountWidth);
-          const value = Number(regionMatrix.totalsByRegion?.[regionName]?.amount || 0);
-          chunkGrandTotal += value;
+          const values = regionMatrix.totalsByRegion?.[regionName];
+          addFinancials(chunkGrandTotal, values);
           pdfDoc.rectangle(x, curY, 0.4, totalHeight, { fill: '#9e9e9e', stroke: '#9e9e9e', lineWidth: 0 });
-          pdfDoc.text(formatPhp(value), x + amountWidth - 4, curY + 5, textOpt({ fontSize: 6.5, bold: true, align: 'right' }));
+          drawFinancials(values, x, amountWidth, curY + 5, true);
         });
         const totalX = CONTENT_LEFT + particularsWidth + (chunk.length * amountWidth);
         pdfDoc.rectangle(totalX, curY, 0.4, totalHeight, { fill: '#4d4c4c', stroke: '#4d4c4c', lineWidth: 0 });
-        pdfDoc.text(formatPhp(chunkGrandTotal), totalX + amountWidth - 4, curY + 5, textOpt({ fontSize: 6.5, bold: true, align: 'right' }));
+        drawFinancials(chunkGrandTotal, totalX, amountWidth, curY + 5, true);
         curY += totalHeight + 6;
 
         if (chunks.length > 1 && chunkIndex === chunks.length - 1) {
           ensureMatrixSpace(totalHeight);
           pdfDoc.rectangle(CONTENT_LEFT, curY, CONTENT_RIGHT - CONTENT_LEFT, totalHeight, { fill: '#dfe8df', stroke: '#4d4c4c', lineWidth: 0.8 });
           pdfDoc.text('ALL-REGION TOTAL', CONTENT_LEFT + 4, curY + 5, textOpt({ fontSize: 8, bold: true }));
-          pdfDoc.text(formatPhp(regionMatrix.regionalTotal.amount), CONTENT_RIGHT - 4, curY + 5, textOpt({ fontSize: 7, bold: true, align: 'right' }));
+          drawFinancials(regionMatrix.regionalTotal, totalX, amountWidth, curY + 5, true);
           curY += totalHeight + 6;
         }
       }
-      grandAmount = Number(regionMatrix.regionalTotal.amount || 0);
     } else {
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       drawPage(true);
@@ -962,22 +1012,23 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
         curY += (Math.max(1, rcLines.length) * LINE_H);
         regionFirstRow = false;
 
-        let catTotal = 0;
+        const catFinancials = emptyFinancials();
         filteredItems.forEach((item) => {
-          ensureSpace(1);
+          const lines = wrapText(safeStr(item.name), COL_PARTICULARS - 6, 7.5);
+          ensureSpace(Math.max(1, lines.length));
           pdfDoc.text(safeStr(item.key), colX.item + 3, curY, textOpt({ fontSize: 7.5 }));
-          pdfDoc.text(safeStr(item.name), colX.particulars + 3, curY, textOpt({ fontSize: 7.5 }), { columnWidth: COL_PARTICULARS - 6, overflow: 'truncate' });
-          pdfDoc.text(formatPhp(item.amount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 7.5, align: 'right' }));
-          curY += LINE_H;
-          catTotal += Number(item.amount || 0);
+          lines.forEach((line, index) => pdfDoc.text(line, colX.particulars + 3, curY + index * LINE_H, textOpt({ fontSize: 7.5 })));
+          drawFinancials(item, colX.income, COL_AMOUNT * 3, curY);
+          curY += LINE_H * Math.max(1, lines.length);
+          addFinancials(catFinancials, item);
         });
 
         ensureSpace(1);
         pdfDoc.rectangle(colX.region, curY - 1, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 1, { stroke: '#9e9e9e', lineWidth: 0.4 });
         pdfDoc.text(`Subtotal: ${categoryName}`, colX.item + 3, curY, textOpt({ fontSize: 7.5, bold: true }));
-        pdfDoc.text(formatPhp(catTotal), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 7.5, bold: true, align: 'right' }));
+        drawFinancials(catFinancials, colX.income, COL_AMOUNT * 3, curY, true);
         curY += LINE_H + 2;
-        grandAmount += catTotal;
+        addFinancials(grandFinancials, catFinancials);
       }
       curY += 4;
     }
@@ -985,7 +1036,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
     ensureSpace(2);
     pdfDoc.rectangle(colX.region, curY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_H + 4, { stroke: '#4d4c4c', lineWidth: 0.6 });
     pdfDoc.text('GRAND TOTAL', colX.region + 3, curY, textOpt({ fontSize: 9, bold: true }));
-    pdfDoc.text(formatPhp(grandAmount), colX.amount + COL_AMOUNT - 5, curY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+    drawFinancials(grandFinancials, colX.income, COL_AMOUNT * 3, curY, true);
     curY += LINE_H + 6;
     }
 

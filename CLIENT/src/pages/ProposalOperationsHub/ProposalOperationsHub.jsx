@@ -2136,42 +2136,10 @@ const ProposalOperationsHub = () => {
                 await handleViewAuditTrail(selectedProposal);
               } else if (action.value === "open-tier") {
                 if (getProposalBudgetType(selectedProposal) !== "NEP") {
-                  toast.warning("NEP Tier Adjustment is available only for NEP proposals.");
+                  toast.warning("NEP Proposal Adjustment is available only for NEP proposals.");
                   return;
                 }
-
-                const params = new URLSearchParams();
-                if (selectedProposal.fiscalYear != null)
-                  params.set("fiscalYear", String(selectedProposal.fiscalYear));
-                const proposalRegion =
-                  selectedProposal.region ||
-                  selectedProposal.regionName ||
-                  selectedProposal.Region ||
-                  resolvedRegion;
-                if (proposalRegion) {
-                  const region = proposalRegion;
-                  const regionValue =
-                    region && typeof region === "object"
-                      ? region.RegionName ||
-                        region.Region ||
-                        region.regionName ||
-                        region.region ||
-                        region.name ||
-                        ""
-                      : String(region);
-                  if (regionValue) params.set("region", regionValue);
-                }
-                if (selectedProposal.department)
-                  params.set("department", String(selectedProposal.department));
-                if (selectedProposal.division || selectedProposal.responsibilityCenter)
-                  params.set(
-                    "division",
-                    String(selectedProposal.division || selectedProposal.responsibilityCenter)
-                  );
-                if (selectedProposal._id)
-                  params.set("proposalId", String(selectedProposal._id));
-                params.set("budgetType", "NEP");
-                navigate(`/tier?${params.toString()}`);
+                navigate(`/nep-proposal/${selectedProposal._id}`);
               } else if (action.value === "unconsolidate") {
                 setUnconsolidateDialogOpen(true);
               } else {

@@ -3,7 +3,7 @@ import CustomMenu from "../../global/components/CustomMenu";
 import CustomTable from "../personnel/PersonnelCustomTable";
 import PropTypes from "prop-types";
 import { Button, Box, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, CircularProgress, MenuItem, Select, FormControl, InputLabel, Typography, Alert } from "@mui/material";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
@@ -198,7 +198,6 @@ const CustomPageTable = ({
         </DialogActions>
       </Dialog>
 
-      <ToastContainer />
 
       <CustomTable
         ROWS_PER_PAGE={ROWS_PER_PAGE}
