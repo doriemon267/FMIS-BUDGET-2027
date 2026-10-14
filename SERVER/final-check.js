@@ -17,7 +17,7 @@ const ObjectId = require('mongodb').ObjectId;
     
     const componentFields = [
       'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive',
-      'subsistenceAllowance', 'medical', 'childrenAllowance', 'meal', 'additionalMedical',
+      'subsistenceAllowance', 'medical', 'ChildrenAllowance', 'meal', 'additionalMedical',
       'cashGift', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST', 'midyearBonus',
       'yearEndBonus', 'gsisPremium', 'providentFund', 'philhealthPremium', 'pagibigPremium',
       'employeeCompensation', 'loyaltyAward', 'overtimePay', 'earnedLeaves', 'retirementBenefits',

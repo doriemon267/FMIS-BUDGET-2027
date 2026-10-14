@@ -11,7 +11,7 @@ try {
 // Import models for data fetching
 const PersonnelServices = require('../models/PersonnelServices');
 const COSPersonnel = require('../models/COSPersonnel');
-const MooeProposal = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
@@ -42,7 +42,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
       queryRegion = req.hierarchicalFilters.region;
     }
     // Fetch actual data from database instead of receiving in payload
-    const [personnelData, cosPersonnelData, mooeData, capitalOutlayData, incomeData] = await Promise.all([
+    const [personnelData, cosPersonnelData, mooeData, CapitalOutlayData, incomeData] = await Promise.all([
       PersonnelServices.find({ 
         fiscalYear, 
         region: { $regex: new RegExp(queryRegion, 'i') } 
@@ -74,7 +74,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
     // Combine personnel data
     const allPersonnelData = [...personnelData, ...cosPersonnelData];
     const showDraftWatermark = await resolveDraftWatermarkForRecords(
-      [allPersonnelData, mooeData, capitalOutlayData, incomeData],
+      [allPersonnelData, mooeData, CapitalOutlayData, incomeData],
       NewProposalWorkflow
     );
 
@@ -139,9 +139,9 @@ const exportBudgetSummaryPDF = async (req, res) => {
     };
 
     const drawHeader = () => {
-      const sealPath = resolveLogoPath('Seal.png');
+      const sealPath = resolveLogoPath('seal.png');
       const logoPath = resolveLogoPath('logo.png');
-      const bagongPath = resolveLogoPath('Bagong_Pilipinas.png');
+      const bagongPath = resolveLogoPath('bagong-pilipinas.png');
       const logoY = currentY + 3;
       const logoW = 36;
       const logoH = 36;
@@ -196,7 +196,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
     const cleanBudgetSummary = {
       personnelTotal: formatCurrency(budgetSummary.personnelTotal || 0),
       mooeTotal: formatCurrency(budgetSummary.mooeTotal || 0),
-      capitalOutlayTotal: formatCurrency(budgetSummary.capitalOutlayTotal || 0),
+      CapitalOutlayTotal: formatCurrency(budgetSummary.CapitalOutlayTotal || 0),
       budgetarySupportTotal: formatCurrency(budgetSummary.budgetarySupportTotal || 0),
       incomeTotal: formatCurrency(budgetSummary.incomeTotal || 0),
       combinedIncomeTotal: formatCurrency(budgetSummary.combinedIncomeTotal || budgetSummary.incomeTotal || 0),
@@ -205,7 +205,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
     // Calculate clean grand total
     const grandTotalValue = (Number(String(budgetSummary.personnelTotal || 0).replace(/[₱$,+\-\s]/g, '')) || 0) + 
                            (Number(String(budgetSummary.mooeTotal || 0).replace(/[₱$,+\-\s]/g, '')) || 0) + 
-                           (Number(String(budgetSummary.capitalOutlayTotal || 0).replace(/[₱$,+\-\s]/g, '')) || 0) + 
+                           (Number(String(budgetSummary.CapitalOutlayTotal || 0).replace(/[₱$,+\-\s]/g, '')) || 0) + 
                            (Number(String(budgetSummary.budgetarySupportTotal || 0).replace(/[₱$,+\-\s]/g, '')) || 0);
     const cleanGrandTotal = formatCurrency(grandTotalValue);
     
@@ -246,7 +246,7 @@ const exportBudgetSummaryPDF = async (req, res) => {
     drawSectionTitle('BUDGET OVERVIEW');
     drawSummaryRow('Personnel Services', cleanBudgetSummary.personnelTotal);
     drawSummaryRow('Maintenance & Other Operating Expenses', cleanBudgetSummary.mooeTotal);
-    drawSummaryRow('Capital Outlay', cleanBudgetSummary.capitalOutlayTotal);
+    drawSummaryRow('Capital Outlay', cleanBudgetSummary.CapitalOutlayTotal);
     drawSummaryRow('Budgetary Support', cleanBudgetSummary.budgetarySupportTotal);
     pdfDoc.rectangle(CONTENT_LEFT, currentY - 3, CONTENT_RIGHT - CONTENT_LEFT, 0.5, { stroke: '#000000', lineWidth: 0.5 });
     currentY += 2;
@@ -275,14 +275,14 @@ const exportBudgetSummaryPDF = async (req, res) => {
     drawSectionTitle('DETAILED BREAKDOWN');
     drawStatusSummary('Personnel Services Summary', allPersonnelData);
     drawStatusSummary('MOOE Summary', mooeData);
-    drawStatusSummary('Capital Outlay Summary', capitalOutlayData);
+    drawStatusSummary('Capital Outlay Summary', CapitalOutlayData);
     drawStatusSummary('Income Summary', incomeData);
 
     // Fetch workflow data to get signatories
     // Fetch workflow data to get signatories
     let signatoriesInfo = extractSignatoriesFromWorkflow(null, req.user);
     const workflowRefId = (mooeData.find(m => m.workflowRef)?.workflowRef) || 
-                          (capitalOutlayData.find(c => c.workflowRef)?.workflowRef) || 
+                          (CapitalOutlayData.find(c => c.workflowRef)?.workflowRef) || 
                           (personnelData.find(p => p.workflowRef)?.workflowRef);
     if (workflowRefId) {
       const workflow = await NewProposalWorkflow.findById(workflowRefId).lean();
@@ -351,7 +351,7 @@ const exportBudgetSummaryExcel = async (req, res) => {
       queryRegion = req.hierarchicalFilters.region;
     }
     // Fetch actual data from database instead of receiving in payload
-    const [personnelData, cosPersonnelData, mooeData, capitalOutlayData, incomeData] = await Promise.all([
+    const [personnelData, cosPersonnelData, mooeData, CapitalOutlayData, incomeData] = await Promise.all([
       PersonnelServices.find({ 
         fiscalYear, 
         region: { $regex: new RegExp(queryRegion, 'i') } 
@@ -426,14 +426,14 @@ const exportBudgetSummaryExcel = async (req, res) => {
     // Budget data rows
     summarySheet.addRow(['Personnel Services', formatExcelCurrency(budgetSummary.personnelTotal)]);
     summarySheet.addRow(['Maintenance & Other Operating Expenses', formatExcelCurrency(budgetSummary.mooeTotal)]);
-    summarySheet.addRow(['Capital Outlay', formatExcelCurrency(budgetSummary.capitalOutlayTotal)]);
+    summarySheet.addRow(['Capital Outlay', formatExcelCurrency(budgetSummary.CapitalOutlayTotal)]);
     summarySheet.addRow(['Budgetary Support', formatExcelCurrency(budgetSummary.budgetarySupportTotal)]);
     // Grand total row
     const grandTotalRow = summarySheet.addRow(['GRAND TOTAL', 
       formatExcelCurrency(
         (budgetSummary.personnelTotal || 0) + 
         (budgetSummary.mooeTotal || 0) + 
-        (budgetSummary.capitalOutlayTotal || 0) + 
+        (budgetSummary.CapitalOutlayTotal || 0) + 
         (budgetSummary.budgetarySupportTotal || 0)
       )
     ]);
@@ -513,11 +513,11 @@ const exportBudgetSummaryExcel = async (req, res) => {
       mooeSheet.getColumn(5).numFmt = currencyFormat;
     }
     // Capital Outlay Data Sheet
-    if (capitalOutlayData && capitalOutlayData.length > 0) {
+    if (CapitalOutlayData && CapitalOutlayData.length > 0) {
       const capitalSheet = workbook.addWorksheet('Capital Outlay');
       const headers = ['Accounting Title', 'Description', 'Status', 'Cost', 'Subsidy', 'Region', 'Fiscal Year'];
       capitalSheet.addRow(headers);
-      capitalOutlayData.forEach(item => {
+      CapitalOutlayData.forEach(item => {
         capitalSheet.addRow([
           item.accountingTitle || '',
           item.itemDescription || '',

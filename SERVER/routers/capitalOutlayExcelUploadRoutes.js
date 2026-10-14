@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const isAuth = require('../middleware/is_auth');
-const capitalOutlayExcelUploadController = require("../controllers/capitalOutlayExcelUploadController");
+const CapitalOutlayExcelUploadController = require("../controllers/CapitalOutlayExcelUploadController");
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -39,19 +39,19 @@ router.post("/upload", upload.single("file"), (req, res, next) => {
     });
   }
   next();
-}, capitalOutlayExcelUploadController.uploadCapitalOutlay);
+}, CapitalOutlayExcelUploadController.uploadCapitalOutlay);
 
 /**
  * GET /capitaloutlay/template
  * Download Capital Outlay Excel template
  */
-router.get("/template", capitalOutlayExcelUploadController.getSampleCapitalOutlayTemplate);
+router.get("/template", CapitalOutlayExcelUploadController.getSampleCapitalOutlayTemplate);
 
 /**
  * GET /capitaloutlay/export
  * Export Capital Outlay data to Excel
  */
-router.get("/export", capitalOutlayExcelUploadController.exportCapitalOutlayToExcel);
+router.get("/export", CapitalOutlayExcelUploadController.exportCapitalOutlayToExcel);
 
 module.exports = router;
 

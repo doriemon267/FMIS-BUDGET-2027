@@ -4,12 +4,12 @@ const CapitalOutlay = require("../models/CapitalOutlay");
 // Get all details for a specific capital outlay
 exports.getCapitalOutlayDetails = async (req, res) => {
   try {
-    const { capitalOutlayId } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(capitalOutlayId)) {
+    const { CapitalOutlayId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(CapitalOutlayId)) {
       return res.status(400).json({ error: "Invalid capital outlay ID" });
     }
     const details = await CapitalOutlayDetails.find({
-      capital_outlay_id: capitalOutlayId,
+      capital_outlay_id: CapitalOutlayId,
     }).sort({ createdAt: 1 });
     res.status(200).json({
       success: true,
@@ -40,17 +40,17 @@ const buildParticularsSummary = (detailsArr = []) => {
 // Save/Update details for a capital outlay
 exports.saveCapitalOutlayDetails = async (req, res) => {
   try {
-    const { capitalOutlayId } = req.params;
+    const { CapitalOutlayId } = req.params;
     const { details, processBy } = req.body;
     
     console.log("=== SAVE CAPITAL OUTLAY DETAILS ===");
-    console.log("Capital Outlay ID:", capitalOutlayId);
+    console.log("Capital Outlay ID:", CapitalOutlayId);
     console.log("Process By:", processBy);
     console.log("Details count:", details?.length);
     console.log("Details:", JSON.stringify(details, null, 2));
     
-    if (!mongoose.Types.ObjectId.isValid(capitalOutlayId)) {
-      console.error("Invalid capital outlay ID format:", capitalOutlayId);
+    if (!mongoose.Types.ObjectId.isValid(CapitalOutlayId)) {
+      console.error("Invalid capital outlay ID format:", CapitalOutlayId);
       return res.status(400).json({ error: "Invalid capital outlay ID" });
     }
     if (!Array.isArray(details)) {
@@ -69,13 +69,13 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
       }
     }
     // Delete existing details for this capital outlay
-    console.log("Deleting existing details for capital outlay:", capitalOutlayId);
-    const deleteResult = await CapitalOutlayDetails.deleteMany({ capital_outlay_id: capitalOutlayId });
+    console.log("Deleting existing details for capital outlay:", CapitalOutlayId);
+    const deleteResult = await CapitalOutlayDetails.deleteMany({ capital_outlay_id: CapitalOutlayId });
     console.log("Deleted", deleteResult.deletedCount, "existing details");
     
     // Insert new details
     const detailsToInsert = details.map((detail) => ({
-      capital_outlay_id: capitalOutlayId,
+      capital_outlay_id: CapitalOutlayId,
       particulars: detail.particulars.trim(),
       income_amount: parseFloat(detail.income_amount) || 0,
       subsidy_amount: parseFloat(detail.subsidy_amount) || 0,
@@ -104,9 +104,9 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
     const particularsSummary = buildParticularsSummary(detailsToInsert);
 
     // Update the main capital outlay record with calculated totals and particulars summary
-    console.log("Updating main capital outlay record:", capitalOutlayId);
+    console.log("Updating main capital outlay record:", CapitalOutlayId);
     const updatedCapitalOutlay = await CapitalOutlay.findByIdAndUpdate(
-      capitalOutlayId,
+      CapitalOutlayId,
       {
         particulars: particularsSummary,
         income: totalIncome,
@@ -117,7 +117,7 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
     );
     
     if (!updatedCapitalOutlay) {
-      console.error("Capital outlay not found:", capitalOutlayId);
+      console.error("Capital outlay not found:", CapitalOutlayId);
       return res.status(404).json({ error: "Capital outlay not found" });
     }
     
@@ -152,7 +152,7 @@ exports.deleteCapitalOutlayDetail = async (req, res) => {
     if (!detail) {
       return res.status(404).json({ error: "Detail not found" });
     }
-    const capitalOutlayId = detail.capital_outlay_id;
+    const CapitalOutlayId = detail.capital_outlay_id;
     // Start a transaction
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -161,7 +161,7 @@ exports.deleteCapitalOutlayDetail = async (req, res) => {
       await CapitalOutlayDetails.findByIdAndDelete(detailId, { session });
       // Recalculate totals for the remaining details
       const remainingDetails = await CapitalOutlayDetails.find(
-        { capital_outlay_id: capitalOutlayId },
+        { capital_outlay_id: CapitalOutlayId },
         null,
         { session }
       );
@@ -178,7 +178,7 @@ exports.deleteCapitalOutlayDetail = async (req, res) => {
       const particularsSummary = buildParticularsSummary(remainingDetails);
       // Update the main capital outlay record
       await CapitalOutlay.findByIdAndUpdate(
-        capitalOutlayId,
+        CapitalOutlayId,
         {
           particulars: particularsSummary,
           income: totalIncome,
@@ -214,20 +214,20 @@ exports.getCapitalOutlayDetailsSummary = async (req, res) => {
     const { region, fiscalYear, budgetType } = req.query;
     // Build match criteria for the aggregation
     const matchCriteria = {};
-    if (region) matchCriteria["capitalOutlay.region"] = region;
-    if (fiscalYear) matchCriteria["capitalOutlay.fiscalYear"] = fiscalYear;
-    if (budgetType) matchCriteria["capitalOutlay.budgetType"] = budgetType;
+    if (region) matchCriteria["CapitalOutlay.region"] = region;
+    if (fiscalYear) matchCriteria["CapitalOutlay.fiscalYear"] = fiscalYear;
+    if (budgetType) matchCriteria["CapitalOutlay.budgetType"] = budgetType;
     const summary = await CapitalOutlayDetails.aggregate([
       {
         $lookup: {
           from: "capitaloutlays",
           localField: "capital_outlay_id",
           foreignField: "_id",
-          as: "capitalOutlay",
+          as: "CapitalOutlay",
         },
       },
       {
-        $unwind: "$capitalOutlay",
+        $unwind: "$CapitalOutlay",
       },
       {
         $match: matchCriteria,
@@ -235,8 +235,8 @@ exports.getCapitalOutlayDetailsSummary = async (req, res) => {
       {
         $group: {
           _id: {
-            accountingTitle: "$capitalOutlay.accountingTitle",
-            region: "$capitalOutlay.region",
+            accountingTitle: "$CapitalOutlay.accountingTitle",
+            region: "$CapitalOutlay.region",
           },
           totalIncome: { $sum: "$income_amount" },
           totalSubsidy: { $sum: "$subsidy_amount" },

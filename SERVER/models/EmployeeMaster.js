@@ -123,5 +123,5 @@ EmployeeMasterSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
-const EmployeeMaster = mongoose.model("employee_master", EmployeeMasterSchema);
+const EmployeeMaster = mongoose.model("EmployeeMaster", EmployeeMasterSchema);
 module.exports = EmployeeMaster;

@@ -3,7 +3,7 @@ const {
     addAnnex,
     editAnnex,
     deleteAnnex,
-  } = require("../controllers/annex_controller");
+  } = require("../controllers/annexController");
   const Router = require("express").Router;
   
   const annexRouter = Router();

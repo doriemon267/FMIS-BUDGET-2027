@@ -54,7 +54,7 @@ describe('MOOE proposal lookup index contract', () => {
 
   test('model loading and bulk upload never drop the canonical index at runtime', () => {
     const modelSource = fs.readFileSync(
-      path.join(__dirname, '../../models/mooeProposals.js'),
+      path.join(__dirname, '../../models/MooeProposal.js'),
       'utf8'
     );
     const uploadSource = fs.readFileSync(

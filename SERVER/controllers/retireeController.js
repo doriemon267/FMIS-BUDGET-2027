@@ -2,7 +2,7 @@ const Retiree = require("../models/Retiree");
 const PersonnelService = require('../models/PersonnelServices');
 const EmployeeList = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
-const EmployeeMaster = require("../models/employee_master");
+const EmployeeMaster = require("../models/EmployeeMaster");
 /**
  * Get all retirees with pagination
  */
@@ -208,7 +208,7 @@ exports.createRetiree = async (req, res) => {
           "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
           "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
           "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-          "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+          "hazardPay", "subsistenceAllowance", "honoraria", "ChildrenAllowance"
         ];
         personnel.Total = numericFields.reduce(
           (acc, field) => acc + (Number(personnel[field]) || 0),
@@ -311,7 +311,7 @@ exports.updateRetiree = async (req, res) => {
         "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
         "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
         "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-        "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+        "hazardPay", "subsistenceAllowance", "honoraria", "ChildrenAllowance"
       ];
       const newTotal = numericFields.reduce(
         (acc, field) => acc + (Number(personnel[field]) || 0),
@@ -363,7 +363,7 @@ exports.deleteRetiree = async (req, res) => {
         "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
         "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
         "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-        "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+        "hazardPay", "subsistenceAllowance", "honoraria", "ChildrenAllowance"
       ];
       const newTotal = numericFields.reduce(
         (acc, field) => acc + (Number(personnel[field]) || 0),

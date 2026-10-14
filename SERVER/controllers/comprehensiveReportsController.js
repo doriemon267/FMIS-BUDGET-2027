@@ -4,7 +4,7 @@ const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
 const { personnelItemFunding } = require('../utils/personnelReportFunding');
 const COSPersonnel = require('../models/COSPersonnel');
-const MooeProposal = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const Income = require('../models/Income');
@@ -85,7 +85,7 @@ const PERSONNEL_SERVICES_STRUCTURE = {
           "c": { name: "Transportation Allowance", field: "transportationAllowance" },
           "d": { name: "Honoraria", field: "honoraria" },
           "e": { name: "Uniform/Clothing Allowance", field: "uniformALLOWANCE" },
-          "f": { name: "Children Allowances", field: "childrenAllowance" },
+          "f": { name: "Children Allowances", field: "ChildrenAllowance" },
           "g": { name: "Medical Allowances", field: "medical" },
           "h": { name: "Additional Medical Allowance", field: "additionalMedical" },
           "i": { name: "Meal Allowances", field: "meal" },
@@ -1810,10 +1810,10 @@ const getComprehensiveReportPdf = async (req, res) => {
 
     // Resolve logo paths with server + client + cwd fallbacks
     const sealPath = resolveExistingPath(
-      path.join(__dirname, '../assets/Seal.png'),
-      path.join(__dirname, '../../CLIENT/public/Seal.png'),
-      path.join(process.cwd(), 'SERVER/assets/Seal.png'),
-      path.join(process.cwd(), 'CLIENT/public/Seal.png')
+      path.join(__dirname, '../assets/seal.png'),
+      path.join(__dirname, '../../CLIENT/public/seal.png'),
+      path.join(process.cwd(), 'SERVER/assets/seal.png'),
+      path.join(process.cwd(), 'CLIENT/public/seal.png')
     );
 
     const nialogoPath = resolveExistingPath(
@@ -1824,10 +1824,10 @@ const getComprehensiveReportPdf = async (req, res) => {
     );
 
     const bagongPilipinasPath = resolveExistingPath(
-      path.join(__dirname, '../assets/Bagong_Pilipinas.png'),
-      path.join(__dirname, '../../CLIENT/public/Bagong_Pilipinas.png'),
-      path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'),
-      path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png')
+      path.join(__dirname, '../assets/bagong-pilipinas.png'),
+      path.join(__dirname, '../../CLIENT/public/bagong-pilipinas.png'),
+      path.join(process.cwd(), 'SERVER/assets/bagong-pilipinas.png'),
+      path.join(process.cwd(), 'CLIENT/public/bagong-pilipinas.png')
     );
     
     const hasSeal = !!sealPath;
@@ -1841,7 +1841,7 @@ const getComprehensiveReportPdf = async (req, res) => {
       const logoHeight = 44;
       
       if (hasSeal || hasNiaLogo || hasBagong) {
-        // Left side: Seal.png and logo.png side by side
+        // Left side: seal.png and logo.png side by side
         if (hasSeal) {
           try {
             pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoWidth, height: logoHeight });
@@ -1856,7 +1856,7 @@ const getComprehensiveReportPdf = async (req, res) => {
             console.warn('PDF NIA logo load failed:', e.message);
           }
         }
-        // Right side: Bagong_Pilipinas.png
+        // Right side: bagong-pilipinas.png
         if (hasBagong) {
           try {
             pdfDoc.image(bagongPilipinasPath, CONTENT_RIGHT - logoWidth, logoY, { width: logoWidth, height: logoHeight });

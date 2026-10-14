@@ -10,7 +10,7 @@ const {
   getEmployeeStats,
   checkEmployeeRegions,
   fixEmployeeRegions
-} = require("../controllers/employee_master_controller");
+} = require("../controllers/EmployeeMaster_controller");
 const employeeMasterRouter = express.Router();
 // Apply authentication middleware to all routes in this router
 employeeMasterRouter.use(isAuth);

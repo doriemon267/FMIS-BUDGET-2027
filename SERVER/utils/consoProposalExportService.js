@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const BRDConsolidation = require('../models/BRDConsolidation');
 const PersonnelServices = require('../models/PersonnelServices');
-const MooeProposal = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const COSPersonnel = require('../models/COSPersonnel');
@@ -67,7 +67,7 @@ const createCategoryMap = () => ({
     transportationAllowance: 0,
     honoraria: 0,
     uniformAllowance: 0,
-    childrenAllowance: 0,
+    ChildrenAllowance: 0,
     medicalAllowance: 0,
     mealAllowance: 0,
     additionalMedicalAllowance: 0,
@@ -291,7 +291,7 @@ const getConsolidatedData = async (fiscalYear, { selectedRegions = [], regionalO
     addPsValue('representationAllowance', r.RATA); // Mapping full RATA to RA
     addPsValue('honoraria', r.honoraria);
     addPsValue('uniformAllowance', r.uniformALLOWANCE);
-    addPsValue('childrenAllowance', r.childrenAllowance);
+    addPsValue('ChildrenAllowance', r.ChildrenAllowance);
     addPsValue('medicalAllowance', r.medical);
     addPsValue('mealAllowance', r.meal);
     addPsValue('additionalMedicalAllowance', r.additionalMedical);
@@ -498,7 +498,7 @@ const generateConsoProposalExcel = async (fiscalYear) => {
   addDataRow('        c. Transportation Allowance', 'ps', 'transportationAllowance');
   addDataRow('        d. Honoraria', 'ps', 'honoraria');
   addDataRow('        e. Uniform/Clothing Allowance', 'ps', 'uniformAllowance');
-  addDataRow('        f. Children Allowances', 'ps', 'childrenAllowance');
+  addDataRow('        f. Children Allowances', 'ps', 'ChildrenAllowance');
   addDataRow('        g. Medical Allowances', 'ps', 'medicalAllowance');
   addDataRow('        h. Meal Allowances', 'ps', 'mealAllowance');
   addDataRow('        i. Additional Medical Allowance', 'ps', 'additionalMedicalAllowance');
@@ -632,7 +632,7 @@ const generateConsoProposalPdf = async (fiscalYear, { selectedRegions = [] } = {
     ['    c. Transportation Allowance', 'ps', 'transportationAllowance'],
     ['    d. Honoraria', 'ps', 'honoraria'],
     ['    e. Uniform/Clothing Allowance', 'ps', 'uniformAllowance'],
-    ['    f. Children Allowances', 'ps', 'childrenAllowance'],
+    ['    f. Children Allowances', 'ps', 'ChildrenAllowance'],
     ['    g. Medical Allowances', 'ps', 'medicalAllowance'],
     ['    h. Meal Allowances', 'ps', 'mealAllowance'],
     ['    i. Additional Medical Allowance', 'ps', 'additionalMedicalAllowance'],

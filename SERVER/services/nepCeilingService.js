@@ -4,7 +4,7 @@ const Proposal = require('../models/Proposal');
 const Tier = require('../models/Tier');
 const Region = require('../models/Region');
 const PersonnelServices = require('../models/PersonnelServices');
-const MooeProposal = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const mongoose = require('mongoose');
@@ -22,7 +22,7 @@ const buildTierTotalsFromItems = ({ items = [], corporateIncome = 0, categoryInc
   const subsidyByCategory = {
     personnelServices: 0,
     mooe: 0,
-    capitalOutlay: 0
+    CapitalOutlay: 0
   };
   let tier1 = 0;
   let tier2 = 0;
@@ -35,7 +35,7 @@ const buildTierTotalsFromItems = ({ items = [], corporateIncome = 0, categoryInc
     tier2 += itemTier2;
     if (category === 'PERSONNEL') subsidyByCategory.personnelServices += itemTier1 + itemTier2;
     if (category === 'MOOE') subsidyByCategory.mooe += itemTier1 + itemTier2;
-    if (category === 'CAPITAL OUTLAY') subsidyByCategory.capitalOutlay += itemTier1 + itemTier2;
+    if (category === 'CAPITAL OUTLAY') subsidyByCategory.CapitalOutlay += itemTier1 + itemTier2;
   });
 
   const subsidies = tier1 + tier2;
@@ -49,8 +49,8 @@ const buildTierTotalsFromItems = ({ items = [], corporateIncome = 0, categoryInc
       subsidyByCategory.personnelServices + finiteNumber(categoryIncome.personnelServices)
     ),
     mooe: roundMoney(subsidyByCategory.mooe + finiteNumber(categoryIncome.mooe)),
-    capitalOutlay: roundMoney(
-      subsidyByCategory.capitalOutlay + finiteNumber(categoryIncome.capitalOutlay)
+    CapitalOutlay: roundMoney(
+      subsidyByCategory.CapitalOutlay + finiteNumber(categoryIncome.CapitalOutlay)
     ),
     tier1: roundMoney(tier1),
     tier2: roundMoney(tier2),
@@ -106,7 +106,7 @@ const getTierCategoryIncome = async proposal => {
       { proposalId: { $in: proposalIds } }
     ]
   };
-  const [personnel, mooe, capitalOutlay] = await Promise.all([
+  const [personnel, mooe, CapitalOutlay] = await Promise.all([
     PersonnelServices.find(query).select('chargedToIncomeAmount').lean(),
     MooeProposal.find(query).select('income').lean(),
     CapitalOutlay.find(query).select('income').lean()
@@ -118,7 +118,7 @@ const getTierCategoryIncome = async proposal => {
       0
     ),
     mooe: mooe.reduce((sum, item) => sum + finiteNumber(item.income), 0),
-    capitalOutlay: capitalOutlay.reduce((sum, item) => sum + finiteNumber(item.income), 0)
+    CapitalOutlay: CapitalOutlay.reduce((sum, item) => sum + finiteNumber(item.income), 0)
   };
 };
 
@@ -151,14 +151,14 @@ const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
     projectedSubsidy: roundMoney(totals.subsidies),
     personnelServices: roundMoney(totals.personnel),
     mooe: roundMoney(totals.mooe),
-    capitalOutlay: roundMoney(totals.capitalOutlay)
+    CapitalOutlay: roundMoney(totals.CapitalOutlay)
   };
   const caps = {
     totalExpenses: roundMoney(allocation.ceilingAmount),
     projectedSubsidy: roundMoney(allocation.ceilingSubsidy),
     personnelServices: roundMoney(allocation.ceilingBreakdown?.personnelServices),
     mooe: roundMoney(allocation.ceilingBreakdown?.mooe),
-    capitalOutlay: roundMoney(allocation.ceilingBreakdown?.capitalOutlay)
+    CapitalOutlay: roundMoney(allocation.ceilingBreakdown?.CapitalOutlay)
   };
 
   const violations = [];
@@ -200,9 +200,9 @@ const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
   }
 
   const hasDetailedCeiling =
-    caps.personnelServices + caps.mooe + caps.capitalOutlay > MONEY_EPSILON;
+    caps.personnelServices + caps.mooe + caps.CapitalOutlay > MONEY_EPSILON;
   if (hasDetailedCeiling) {
-    ['personnelServices', 'mooe', 'capitalOutlay'].forEach(field => {
+    ['personnelServices', 'mooe', 'CapitalOutlay'].forEach(field => {
       if (actual[field] - caps[field] > MONEY_EPSILON) {
         violations.push({
           field,
@@ -224,7 +224,7 @@ const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
       targetCeiling: targetDifference,
       personnelServices: roundMoney(caps.personnelServices - actual.personnelServices),
       mooe: roundMoney(caps.mooe - actual.mooe),
-      capitalOutlay: roundMoney(caps.capitalOutlay - actual.capitalOutlay)
+      CapitalOutlay: roundMoney(caps.CapitalOutlay - actual.CapitalOutlay)
     },
     hasDetailedCeiling,
     violations
@@ -275,7 +275,7 @@ const getNepCeilingContext = async ({ proposalId, recalculate = true }) => {
     subsidies: finiteNumber(proposal.projectedSubsidy),
     personnel: 0,
     mooe: 0,
-    capitalOutlay: 0
+    CapitalOutlay: 0
   };
   if (recalculate) {
     const recalculated = await recalculateAndSaveProposalTotals({ workflowRef: proposal._id });

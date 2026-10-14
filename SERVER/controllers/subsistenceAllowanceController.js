@@ -40,7 +40,7 @@ function calculatePersonnelTotal(personnel) {
     'subsistenceAllowance',
     'additionalMedical',
     'honoraria',
-    'childrenAllowance'
+    'ChildrenAllowance'
   ];
   return numericFields.reduce(
     (acc, field) => acc + (Number(personnel[field]) || 0),

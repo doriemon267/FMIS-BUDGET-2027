@@ -2,7 +2,7 @@ const { roundTo2Decimals: round } = require('./roundCurrency');
 
 const PS_COST_FIELDS = [
   'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive',
-  'medical', 'additionalMedical', 'childrenAllowance', 'meal', 'cashGift',
+  'medical', 'additionalMedical', 'ChildrenAllowance', 'meal', 'cashGift',
   'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
   'loyaltyAward', 'overtimePay', 'midyearBonus', 'yearEndBonus', 'gsisPremium',
   'providentFund', 'philhealthPremium', 'pagibigPremium', 'employeeCompensation',

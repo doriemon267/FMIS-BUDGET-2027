@@ -1,4 +1,4 @@
-const PersonnelServicesAnnexes = require("../models/PS_Annexes");
+const PersonnelServicesAnnexes = require("../models/PsAnnex");
 const PersonnelService = require('../models/PersonnelServices');
 const AnnexName = require("../models/Annex");
 exports.getAllPersonnelServicesAnnexes = async (req, res) => {
@@ -37,15 +37,15 @@ exports.getAllPersonnelServicesAnnexes = async (req, res) => {
             totalRecords,
         });
     } catch (error) {
-        console.error("Error fetching PS_Annexes:", error);
-        res.status(500).json({ error: "Failed to retrieve PS_Annexes." });
+        console.error("Error fetching PsAnnex:", error);
+        res.status(500).json({ error: "Failed to retrieve PsAnnex." });
     }
 };
 // Add a new PS_Annex
 exports.addPersonnelServicesAnnex = async (req, res) => {
     try {
         const { employeeFullName, positionTitle, department, division, Amount, status, region, processBy, processDate, fiscalYear, annexNameId } = req.body;
-        const newOutlay = new PS_Annexes({
+        const newOutlay = new PsAnnex({
             employeeFullName,
             positionTitle,
             department,
@@ -82,7 +82,7 @@ exports.editPersonnelServicesAnnex = async (req, res) => {
     if (!annexName) {
       return res.status(404).json({ message: "Annex name not found" });
     }
-    const updatedPS_Annex = await PS_Annexes.findByIdAndUpdate(
+    const updatedPS_Annex = await PsAnnex.findByIdAndUpdate(
       id,
       { employeeFullName, positionTitle, department, division, Amount, status, region, processBy, processDate, fiscalYear, AnnexName: annexName._id },
       { new: true }
@@ -94,7 +94,7 @@ exports.editPersonnelServicesAnnex = async (req, res) => {
 };
 exports.deletePersonnelServicesAnnex = async (req, res) => {
   try {
-    await PS_Annexes.findByIdAndDelete(req.params.id);
+    await PsAnnex.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: "PS_Annex deleted" });
   } catch (error) {
     res.status(500).json({ message: error.message });

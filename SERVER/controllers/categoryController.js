@@ -63,7 +63,7 @@ exports.getSublineItems = async (req, res) => {
     // Get distinct subline items from ChartOfAccounts
     const dbItems = await ChartOfAccounts.distinct("sublineItem");
     // Comprehensive list of Capital Outlay subline items based on government standards
-    const capitalOutlaySublineItems = [
+    const CapitalOutlaySublineItems = [
       // Infrastructure Outlay
       "Infrastructure Outlay",
       // Building and Other Structures
@@ -133,7 +133,7 @@ exports.getSublineItems = async (req, res) => {
       "Fire Safety Equipment"
     ];
     // Combine database items with comprehensive list and remove duplicates
-    const allItems = [...new Set([...dbItems, ...capitalOutlaySublineItems])];
+    const allItems = [...new Set([...dbItems, ...CapitalOutlaySublineItems])];
     // Sort alphabetically
     const sortedItems = allItems.filter(item => item && item.trim()).sort();
     res.status(200).json({

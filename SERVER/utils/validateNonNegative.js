@@ -69,7 +69,7 @@ const CAPITAL_OUTLAY_DETAILS_NUMERIC_FIELDS = ['income_amount', 'subsidy_amount'
 const PERSONNEL_NUMERIC_FIELDS = [
   'monthlySalary', 'noOfDependent', 'hazardPay', 'subsistenceAllowance', 'honoraria',
   'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive', 'medical',
-  'childrenAllowance', 'midyearBonus', 'cashGift', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
+  'ChildrenAllowance', 'midyearBonus', 'cashGift', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
   'yearEndBonus', 'gsisPremium', 'philhealthPremium', 'pagibigPremium', 'employeeCompensation',
   'loyaltyAward', 'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance',
   'Total', 'subsidyAmount', 'chargedToIncomeAmount', 'chargedToIncomeMonthlyAmount',

@@ -1,5 +1,5 @@
 const Income = require('../models/Income');
-const MooeProposal = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Settings = require('../models/Settings');
 

@@ -71,20 +71,20 @@ module.exports = async function enforceOrgAccess(req, res, next) {
     // Special-case: Allow saving Capital Outlay breakdown details by validating
     // the parent CapitalOutlay record's organizational ownership instead of
     // requiring region/department/division in the request body.
-    // This catches routes like: POST /api/capital-outlay/:capitalOutlayId/details
+    // This catches routes like: POST /api/capital-outlay/:CapitalOutlayId/details
     try {
       const url = (req.originalUrl || '').toLowerCase();
       const method = (req.method || 'GET').toUpperCase();
       // Match 24-hex ObjectId in the details route
       const detailsMatch = url.match(/\/api\/capital-outlay\/([a-f0-9]{24})\/details/);
       if (method === 'POST' && detailsMatch && detailsMatch[1]) {
-        const capitalOutlayId = detailsMatch[1];
+        const CapitalOutlayId = detailsMatch[1];
         const mongoose = require('mongoose');
-        if (!mongoose.Types.ObjectId.isValid(capitalOutlayId)) {
+        if (!mongoose.Types.ObjectId.isValid(CapitalOutlayId)) {
           return res.status(400).json({ message: 'Invalid capital outlay ID' });
         }
         const CapitalOutlay = require('../models/CapitalOutlay');
-        const record = await CapitalOutlay.findById(capitalOutlayId).lean();
+        const record = await CapitalOutlay.findById(CapitalOutlayId).lean();
         if (!record) {
           return res.status(404).json({ message: 'Capital outlay not found' });
         }
@@ -121,7 +121,7 @@ module.exports = async function enforceOrgAccess(req, res, next) {
         const getModelByEntity = (e) => {
           switch ((e || '').toLowerCase()) {
             case 'personnel': return require('../models/PersonnelServices');
-            case 'mooe': return require('../models/mooeProposals');
+            case 'mooe': return require('../models/MooeProposal');
             case 'capital': return require('../models/CapitalOutlay');
             case 'income': return require('../models/Income');
             case 'budgetarysupport': return require('../models/BudgetarySupport');

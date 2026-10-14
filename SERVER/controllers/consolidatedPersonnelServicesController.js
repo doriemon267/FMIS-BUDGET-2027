@@ -181,7 +181,7 @@ const PERSONNEL_SERVICES_STRUCTURE = {
           "c": { name: "Transportation Allowance", field: "transportationAllowance" }, // Not in model
           "d": { name: "Honoraria", field: "honoraria" },
           "e": { name: "Uniform/Clothing Allowance", field: "uniformALLOWANCE" },
-          "f": { name: "Children Allowances", field: "childrenAllowance" },
+          "f": { name: "Children Allowances", field: "ChildrenAllowance" },
           "g": { name: "Medical Allowances", field: "medical" },
           "h": { name: "Additional Medical Allowance", field: "additionalMedical" },
           "i": { name: "Meal Allowances", field: "meal" },
@@ -777,9 +777,9 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       if (currentLine) lines.push(currentLine);
       return lines;
     };
-    const sealPath = resolveExisting(path.join(__dirname, '../assets/Seal.png'), path.join(process.cwd(), 'SERVER/assets/Seal.png'), path.join(process.cwd(), 'CLIENT/public/Seal.png'));
+    const sealPath = resolveExisting(path.join(__dirname, '../assets/seal.png'), path.join(process.cwd(), 'SERVER/assets/seal.png'), path.join(process.cwd(), 'CLIENT/public/seal.png'));
     const nialogoPath = resolveExisting(path.join(__dirname, '../assets/logo.png'), path.join(process.cwd(), 'SERVER/assets/logo.png'), path.join(process.cwd(), 'CLIENT/public/logo.png'));
-    const bagongPath = resolveExisting(path.join(__dirname, '../assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png'));
+    const bagongPath = resolveExisting(path.join(__dirname, '../assets/bagong-pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/bagong-pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/bagong-pilipinas.png'));
 
     const drawPage = (isFirst) => {
       const cx = PAGE_WIDTH / 2;

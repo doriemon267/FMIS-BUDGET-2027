@@ -22,7 +22,7 @@ const normalizeCategory = value => {
     return { key: 'mooe', modelValue: 'MOOE', label: 'Maintenance and Other Operating Expenses' };
   }
   if (category === 'CAPITAL OUTLAY') {
-    return { key: 'capitalOutlay', modelValue: 'Capital Outlay', label: 'Capital Outlay' };
+    return { key: 'CapitalOutlay', modelValue: 'Capital Outlay', label: 'Capital Outlay' };
   }
   const error = new Error(`Unsupported NEP report category: ${value || 'blank'}`);
   error.statusCode = 400;
@@ -97,7 +97,7 @@ const buildAuthoritativeNepSummary = ({ reportSummary, categoryIncome = {} }) =>
     throw error;
   }
 
-  const categoryRows = { personnelServices: [], mooe: [], capitalOutlay: [] };
+  const categoryRows = { personnelServices: [], mooe: [], CapitalOutlay: [] };
   reportSummary.lineItems.forEach((item, index) => {
     const category = normalizeCategory(item?.category);
     const tier1 = finiteMoney(item?.tier1, `lineItems[${index}].tier1`);
@@ -117,7 +117,7 @@ const buildAuthoritativeNepSummary = ({ reportSummary, categoryIncome = {} }) =>
   const canonicalIncome = {
     personnelServices: finiteMoney(categoryIncome.personnelServices, 'Personnel Services income'),
     mooe: finiteMoney(categoryIncome.mooe, 'MOOE income'),
-    capitalOutlay: finiteMoney(categoryIncome.capitalOutlay, 'Capital Outlay income'),
+    CapitalOutlay: finiteMoney(categoryIncome.CapitalOutlay, 'Capital Outlay income'),
   };
   const lineItems = [];
   Object.entries(categoryRows).forEach(([key, rows]) => {
@@ -137,7 +137,7 @@ const buildAuthoritativeNepSummary = ({ reportSummary, categoryIncome = {} }) =>
     tier2: 0,
     personnelServices: { tier1: 0, tier2: 0, total: 0 },
     mooe: { tier1: 0, tier2: 0, total: 0 },
-    capitalOutlay: { tier1: 0, tier2: 0, total: 0 },
+    CapitalOutlay: { tier1: 0, tier2: 0, total: 0 },
   });
   const corporateIncome = Object.values(canonicalIncome).reduce((sum, value) => sum + value, 0);
   const subsidy = tierTotals.tier1 + tierTotals.tier2;
@@ -146,7 +146,7 @@ const buildAuthoritativeNepSummary = ({ reportSummary, categoryIncome = {} }) =>
   const usesOfFunds = {
     'Personnel Services': tierTotals.personnelServices,
     'Maintenance and Other Operating Expenses': tierTotals.mooe,
-    'Capital Outlay': tierTotals.capitalOutlay,
+    'Capital Outlay': tierTotals.CapitalOutlay,
     tier1: tierTotals.tier1,
     tier2: tierTotals.tier2,
     total: subsidy,
@@ -157,7 +157,7 @@ const buildAuthoritativeNepSummary = ({ reportSummary, categoryIncome = {} }) =>
     usesCorporateIncome: {
       'Personnel Services': canonicalIncome.personnelServices,
       'Maintenance and Other Operating Expenses': canonicalIncome.mooe,
-      'Capital Outlay': canonicalIncome.capitalOutlay,
+      'Capital Outlay': canonicalIncome.CapitalOutlay,
     },
     usesOfFunds,
     sourcesOfFunds: {
@@ -210,7 +210,7 @@ const buildAuthoritativeNepReport = ({
     subsidies: sources.budgetarySupport.total,
     personnel: uses['Personnel Services'].total + income['Personnel Services'],
     mooe: uses['Maintenance and Other Operating Expenses'].total + income['Maintenance and Other Operating Expenses'],
-    capitalOutlay: uses['Capital Outlay'].total + income['Capital Outlay'],
+    CapitalOutlay: uses['Capital Outlay'].total + income['Capital Outlay'],
   };
   const compliance = buildNepCeilingComplianceReport({ totals, allocation });
   const hasUnsavedChanges = Boolean(clientClaimsDirty) ||

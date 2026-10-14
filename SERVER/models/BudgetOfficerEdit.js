@@ -76,7 +76,7 @@ const budgetOfficerEditSchema = new mongoose.Schema({
     uniformALLOWANCE: Number,
     productivityIncentive: Number,
     medical: Number,
-    childrenAllowance: Number,
+    ChildrenAllowance: Number,
     meal: Number,
     cashGift: Number,
     subsistenceAllowanceMDS: Number,
@@ -225,7 +225,7 @@ budgetOfficerEditSchema.methods.getChangeSummary = function() {
       modified: this.editedMOOE.filter(i => i.changeType === 'modified').length,
       deleted: this.editedMOOE.filter(i => i.changeType === 'deleted').length
     },
-    capitalOutlay: {
+    CapitalOutlay: {
       added: this.editedCapitalOutlay.filter(i => i.changeType === 'added').length,
       modified: this.editedCapitalOutlay.filter(i => i.changeType === 'modified').length,
       deleted: this.editedCapitalOutlay.filter(i => i.changeType === 'deleted').length

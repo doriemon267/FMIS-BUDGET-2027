@@ -16,7 +16,7 @@ const resolveSeedFilePath = () => {
   if (envPath) {
     return path.isAbsolute(envPath) ? envPath : path.resolve(process.cwd(), envPath);
   }
-  return path.resolve(__dirname, "../database-scripts/seeds/capitalOutlayChartOfAccounts.json");
+  return path.resolve(__dirname, "../database-scripts/seeds/CapitalOutlayChartOfAccounts.json");
 };
 
 const normalizeSeedEntries = (data) => {

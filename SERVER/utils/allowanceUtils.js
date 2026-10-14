@@ -59,7 +59,7 @@ function getAllowanceRates(settings) {
   return {
     medicalAllowance: settings?.compensationSettingsId?.medicalAllowance ?? settings?.medicalAllowance ?? 200,
     mealAllowance: settings?.compensationSettingsId?.meal ?? settings?.meal ?? 200,
-    childrenAllowance: settings?.compensationSettingsId?.childrenAllowance ?? settings?.childrenAllowance ?? 30
+    ChildrenAllowance: settings?.compensationSettingsId?.ChildrenAllowance ?? settings?.ChildrenAllowance ?? 30
   };
 }
 /**

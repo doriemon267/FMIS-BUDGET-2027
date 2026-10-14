@@ -13,7 +13,7 @@ const {
   const psAnnexesRouter = Router();
   // Apply authentication middleware to all routes in this router
   psAnnexesRouter.use(isAuth);
-  // Get all PS_Annexes - with submission workflow control
+  // Get all PsAnnex - with submission workflow control
   psAnnexesRouter.get("/ps_annexes", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllPersonnelServicesAnnexes);
   // Add a new PS_Annex - with submission workflow control
   psAnnexesRouter.post("/ps_annexes", submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }), addPersonnelServicesAnnex);

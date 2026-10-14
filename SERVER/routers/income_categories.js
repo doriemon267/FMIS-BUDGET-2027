@@ -1,4 +1,4 @@
-const {getIncomeCategories}= require('../controllers/incomeCategoriesController');
+const {getIncomeCategories}= require('../controllers/incomeCategoryController');
 const router =require('express').Router();
 const isAuth = require('../middleware/is_auth');
 

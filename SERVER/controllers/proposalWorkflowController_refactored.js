@@ -4,7 +4,7 @@ const Notification = require('../models/Notification');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
-const mooeProposals = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const Income = require('../models/Income');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
 const ProposalEditLog = require('../models/ProposalEditLog');
@@ -187,7 +187,7 @@ async function syncBudgetItemsStatus(proposal) {
           updatedAt: new Date()
         } 
       }),
-      mooeProposals.updateMany(combinedFilter, { 
+      MooeProposal.updateMany(combinedFilter, { 
         $set: { 
           status: mappedStatus,
           updatedAt: new Date()

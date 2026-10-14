@@ -3,7 +3,7 @@ const {
   validateOrganizationalSelection,
   getOrganizationalStats,
   testOrganizationalSegregation
-} = require('../controllers/BudgetManagerOrgController');
+} = require('../controllers/budgetManagerOrgController');
 const Router = require('express').Router;
 const { 
   authenticatedRoute, 
@@ -73,7 +73,7 @@ budgetManagerOrgRouter.post(
       const budgetManagerContext = req.budgetManagerContext;
       if (!proposalType) {
         return res.status(400).json({
-          message: 'proposalType is required (personnel, mooe, capitalOutlay, cos)'
+          message: 'proposalType is required (personnel, mooe, CapitalOutlay, cos)'
         });
       }
       let createdProposal;
@@ -93,7 +93,7 @@ budgetManagerOrgRouter.post(
           });
           break;
         case 'mooe':
-          const MooeProposal = require('../models/mooeProposals');
+          const MooeProposal = require('../models/MooeProposal');
           createdProposal = await MooeProposal.create({
             ...proposalData,
             region: region,
@@ -105,7 +105,7 @@ budgetManagerOrgRouter.post(
             status: 'Draft'
           });
           break;
-        case 'capitalOutlay':
+        case 'CapitalOutlay':
           const CapitalOutlay = require('../models/CapitalOutlay');
           const activeFiscalYear = await getActiveFiscalYear();
           createdProposal = await CapitalOutlay.create({
@@ -133,7 +133,7 @@ budgetManagerOrgRouter.post(
           break;
         default:
           return res.status(400).json({
-            message: 'Invalid proposalType. Use: personnel, mooe, capitalOutlay, or cos'
+            message: 'Invalid proposalType. Use: personnel, mooe, CapitalOutlay, or cos'
           });
       }
       res.status(201).json({
@@ -185,7 +185,7 @@ budgetManagerOrgRouter.get(
       const budgetManagerContext = req.budgetManagerContext;
       // Import real models
       const PersonnelServices = require('../models/PersonnelServices');
-      const MooeProposal = require('../models/mooeProposals');
+      const MooeProposal = require('../models/MooeProposal');
       const CapitalOutlay = require('../models/CapitalOutlay');
       const COSPersonnel = require('../models/COSPersonnel');
       // Build filters based on organizational selection
@@ -198,7 +198,7 @@ budgetManagerOrgRouter.get(
       let totalCount = 0;
       if (!category || category === 'all') {
         // Get all types of proposals
-        const [personnel, mooe, capitalOutlay, cosPersonnel] = await Promise.all([
+        const [personnel, mooe, CapitalOutlay, cosPersonnel] = await Promise.all([
           PersonnelServices.find(filters)
             .select('employeeFullName region department division fiscalYear Total status processBy processDate')
             .sort({ processDate: -1 })
@@ -248,7 +248,7 @@ budgetManagerOrgRouter.get(
             processBy: m.processBy,
             processDate: m.processDate
           })),
-          ...capitalOutlay.map(c => ({
+          ...CapitalOutlay.map(c => ({
             id: c._id,
             type: 'Capital Outlay',
             title: c.particulars,
@@ -292,7 +292,7 @@ budgetManagerOrgRouter.get(
             selectFields = 'accountingTitle region amount fiscalYear status processBy processDate';
             typeLabel = 'MOOE';
             break;
-          case 'capitalOutlay':
+          case 'CapitalOutlay':
             Model = CapitalOutlay;
             selectFields = 'particulars region department cost fiscalYear status processBy processDate';
             typeLabel = 'Capital Outlay';
@@ -406,17 +406,17 @@ budgetManagerOrgRouter.get(
     try {
       // Import models
       const PersonnelServices = require('../models/PersonnelServices');
-      const MooeProposal = require('../models/mooeProposals');
+      const MooeProposal = require('../models/MooeProposal');
       const CapitalOutlay = require('../models/CapitalOutlay');
       const COSPersonnel = require('../models/COSPersonnel');
       // Get organizational distribution from actual database
       const [
         personnelRegions,
         mooeRegions,
-        capitalOutlayRegions,
+        CapitalOutlayRegions,
         cosRegions,
         personnelDepartments,
-        capitalOutlayDepartments,
+        CapitalOutlayDepartments,
         cosDepartments
       ] = await Promise.all([
         PersonnelServices.distinct('region'),
@@ -430,7 +430,7 @@ budgetManagerOrgRouter.get(
       // Get record counts per organizational unit
       const organizationalStats = {};
       // Combine all unique regions
-      const allRegions = [...new Set([...personnelRegions, ...mooeRegions, ...capitalOutlayRegions, ...cosRegions])].filter(Boolean);
+      const allRegions = [...new Set([...personnelRegions, ...mooeRegions, ...CapitalOutlayRegions, ...cosRegions])].filter(Boolean);
       for (const region of allRegions) {
         const [personnelCount, mooeCount, capitalCount, cosCount] = await Promise.all([
           PersonnelServices.countDocuments({ region }),
@@ -441,7 +441,7 @@ budgetManagerOrgRouter.get(
         organizationalStats[region] = {
           personnel: personnelCount,
           mooe: mooeCount,
-          capitalOutlay: capitalCount,
+          CapitalOutlay: capitalCount,
           cos: cosCount,
           total: personnelCount + mooeCount + capitalCount + cosCount
         };
@@ -461,13 +461,13 @@ budgetManagerOrgRouter.get(
           byCategory: {
             personnel: totalPersonnel,
             mooe: totalMooe,
-            capitalOutlay: totalCapital,
+            CapitalOutlay: totalCapital,
             cos: totalCOS
           }
         },
         organizationalUnits: {
           regions: allRegions,
-          departments: [...new Set([...personnelDepartments, ...capitalOutlayDepartments, ...cosDepartments])].filter(Boolean),
+          departments: [...new Set([...personnelDepartments, ...CapitalOutlayDepartments, ...cosDepartments])].filter(Boolean),
           regionsCount: allRegions.length
         },
         organizationalStats: organizationalStats,

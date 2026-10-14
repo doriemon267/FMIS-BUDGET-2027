@@ -676,9 +676,9 @@ const getConsolidatedCapitalOutlayPdf = async (req, res) => {
       for (const c of candidates) { if (c && fs.existsSync(c)) return c; }
       return null;
     };
-    const sealPath      = resolveExisting(path.join(__dirname, '../assets/Seal.png'),            path.join(process.cwd(), 'SERVER/assets/Seal.png'),            path.join(process.cwd(), 'CLIENT/public/Seal.png'));
+    const sealPath      = resolveExisting(path.join(__dirname, '../assets/seal.png'),            path.join(process.cwd(), 'SERVER/assets/seal.png'),            path.join(process.cwd(), 'CLIENT/public/seal.png'));
     const nialogoPath   = resolveExisting(path.join(__dirname, '../assets/logo.png'),            path.join(process.cwd(), 'SERVER/assets/logo.png'),            path.join(process.cwd(), 'CLIENT/public/logo.png'));
-    const bagongPath    = resolveExisting(path.join(__dirname, '../assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png'));
+    const bagongPath    = resolveExisting(path.join(__dirname, '../assets/bagong-pilipinas.png'), path.join(process.cwd(), 'SERVER/assets/bagong-pilipinas.png'), path.join(process.cwd(), 'CLIENT/public/bagong-pilipinas.png'));
 
     // ── Font resolution: Cambria & Trajan Pro (Windows fonts) ────────────────
     const F_CAMBRIA      = resolveExisting('C:/Windows/Fonts/cambria.ttc',  'C:/Windows/Fonts/CAMBRIA.TTC')  || 'Times-Roman';

@@ -23,7 +23,7 @@ const { resolvePersonnelIncomeAllocation, applyPermanentIncomeAllocation } = req
 
 const NEP_PERSONNEL_EDITABLE_FIELDS = [
   'annualSalary', 'PERA', 'RATA', 'honoraria', 'uniformALLOWANCE',
-  'childrenAllowance', 'medical', 'additionalMedical', 'meal',
+  'ChildrenAllowance', 'medical', 'additionalMedical', 'meal',
   'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
   'loyaltyAward', 'overtimePay', 'productivityIncentive', 'cashGift',
   'midyearBonus', 'yearEndBonus', 'hazardPay', 'retirementBenefits',
@@ -34,7 +34,7 @@ const NEP_PERSONNEL_EDITABLE_FIELDS = [
 ];
 // Import ChildrenAllowance model safely
 const ChildrenAllowance =
-  mongoose.models.ChildrenAllowance || require("../models/childrenAllowance");
+  mongoose.models.ChildrenAllowance || require("../models/ChildrenAllowance");
 const {
   numberFilter,
   dateFilter,
@@ -182,7 +182,7 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
             "hazardPay",
             "subsistenceAllowance",
             "honoraria",
-            "childrenAllowance",
+            "ChildrenAllowance",
           ];
           const newTotal = roundTo2Decimals(numericFields.reduce(
             (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
@@ -541,7 +541,7 @@ exports.getAllPersonnelServices = async (req, res) => {
         : (activeSettings.productivityIncentive || 0);
       const recalculatedMedical = personnel.medical ?? 0;
       const recalculatedMeal = personnel.meal ?? 0;
-      const recalculatedChildrenAllowance = personnel.childrenAllowance ?? 0;
+      const recalculatedChildrenAllowance = personnel.ChildrenAllowance ?? 0;
       const recalculatedMidyearBonus = personnel.midyearBonus || personnel.monthlySalary || 0;
       const recalculatedCashGift = (personnel.cashGift != null && personnel.cashGift !== 0)
         ? personnel.cashGift
@@ -621,7 +621,7 @@ exports.getAllPersonnelServices = async (req, res) => {
         productivityIncentive: recalculatedProductivityIncentive,
         medical: recalculatedMedical,
         meal: recalculatedMeal,
-        childrenAllowance: recalculatedChildrenAllowance,
+        ChildrenAllowance: recalculatedChildrenAllowance,
         cashGift: recalculatedCashGift,
         additionalMedical:recalculatedAdditionalMedical,
         midyearBonus: recalculatedMidyearBonus,
@@ -640,7 +640,7 @@ exports.getAllPersonnelServices = async (req, res) => {
 
     const grandTotals = {};
     allPersonnelServices.forEach(ps => {
-      ['monthlySalary', 'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive', 'honoraria', 'medical', 'noOfDependent', 'childrenAllowance', 'meal', 'additionalMedical', 'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST', 'cashGift', 'midyearBonus', 'yearEndBonus', 'loyaltyAward', 'overtimePay', 'gsisPremium', 'providentFund', 'pagibigPremium', 'philhealthPremium', 'employeeCompensation', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'hazardPay', 'courtAppearance', 'subsidyAmount', 'Total'].forEach(field => {
+      ['monthlySalary', 'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive', 'honoraria', 'medical', 'noOfDependent', 'ChildrenAllowance', 'meal', 'additionalMedical', 'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST', 'cashGift', 'midyearBonus', 'yearEndBonus', 'loyaltyAward', 'overtimePay', 'gsisPremium', 'providentFund', 'pagibigPremium', 'philhealthPremium', 'employeeCompensation', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'hazardPay', 'courtAppearance', 'subsidyAmount', 'Total'].forEach(field => {
         grandTotals[field] = (grandTotals[field] || 0) + (Number(ps[field]) || 0);
       });
     });
@@ -1179,7 +1179,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         : 0;
       // Children Allowance: for ALL employees with dependents (not tied to 1988 rule)
       const computedChildrenAllowance = noOfDep > 0
-        ? noOfDep * (allowanceRates.childrenAllowance || 0) * 12
+        ? noOfDep * (allowanceRates.ChildrenAllowance || 0) * 12
         : 0;
 
       let personnelService = {
@@ -1214,7 +1214,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
         subsistenceAllowance: req.body.subsistenceAllowance || 0,
         honoraria: req.body.honoraria || 0,
         // Auto-computed from entitlement flag and noOfDependent
-        childrenAllowance: computedChildrenAllowance,
+        ChildrenAllowance: computedChildrenAllowance,
         annualSalary: annualSalary,
         RATA: rataAmount * 12,
         PERA: (req.body.PERA || activeSettings.PERA || 0) * 12,
@@ -1313,7 +1313,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
           "subsistenceAllowance",
           "additionalMedical",
           "honoraria",
-          "childrenAllowance",
+          "ChildrenAllowance",
         ];
         personnelService.Total = roundTo2Decimals(numericFields.reduce(
           (acc, field) => acc + (Number(personnelService[field]) || 0),
@@ -1486,7 +1486,7 @@ if (empNum && !['VACANT', 'TO-BE-FILLED'].includes(empNum.toUpperCase().trim()))
             division: ps.division,
             region: ps.region,
             noOfDependents: ps.noOfDependent,
-            amount: ps.childrenAllowance,
+            amount: ps.ChildrenAllowance,
             processBy: ps.processBy,
             processDate: ps.processDate,
             fiscalYear: String(fiscalYear),
@@ -1601,7 +1601,7 @@ exports.updatePersonnelService = async (req, res) => {
       "hazardPay",
       "subsistenceAllowance",
       "honoraria",
-      "childrenAllowance",
+      "ChildrenAllowance",
       "Total",
       "subsidyAmount",
       "subsidyEligible",
@@ -1614,7 +1614,7 @@ exports.updatePersonnelService = async (req, res) => {
         return obj;
       }, {});
     if (filteredUpdateFields.noOfDependent !== undefined) {
-      filteredUpdateFields.childrenAllowance =
+      filteredUpdateFields.ChildrenAllowance =
         filteredUpdateFields.noOfDependent * 30 * 12;
     }
     const nonNeg = validateNonNegativeFields(filteredUpdateFields, PERSONNEL_NUMERIC_FIELDS);
@@ -1730,7 +1730,7 @@ exports.updatePersonnelService = async (req, res) => {
       "subsistenceAllowance",
       "additionalMedical",
       "honoraria",
-      "childrenAllowance",
+      "ChildrenAllowance",
     ];
     updatedPersonnelService.Total = roundTo2Decimals(numericFields.reduce(
       (acc, field) => acc + (Number(updatedPersonnelService[field]) || 0),

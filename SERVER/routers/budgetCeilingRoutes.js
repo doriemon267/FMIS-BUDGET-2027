@@ -4,7 +4,7 @@ const BudgetCeiling = require('../models/BudgetCeiling');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const Proposal = require('../models/Proposal');
 const PersonnelService = require('../models/PersonnelServices');
-const MooeProposal = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const isAuth = require('../middleware/is_auth');
@@ -439,7 +439,7 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       initialBreakdown: {
         personnelServices: div.totalPS,
         mooe: div.totalMOOE,
-        capitalOutlay: div.totalCO
+        CapitalOutlay: div.totalCO
       },
       // Default ceiling to initial request (BRD will adjust)
       ceilingAmount: div.totalAmount,
@@ -448,7 +448,7 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       ceilingBreakdown: {
         personnelServices: div.totalPS,
         mooe: div.totalMOOE,
-        capitalOutlay: div.totalCO
+        CapitalOutlay: div.totalCO
       },
       allocationStatus: 'Pending'
     }));
@@ -545,7 +545,7 @@ router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep
       allocation.ceilingBreakdown = {
         personnelServices: Number(ceilingBreakdown.personnelServices) || 0,
         mooe: Number(ceilingBreakdown.mooe) || 0,
-        capitalOutlay: Number(ceilingBreakdown.capitalOutlay) || 0
+        CapitalOutlay: Number(ceilingBreakdown.CapitalOutlay) || 0
       };
     }
     if (ceilingSubsidy !== undefined) allocation.ceilingSubsidy = ceilingSubsidy;
@@ -880,7 +880,7 @@ router.post('/:id/generate-nep', isAuth, isBRDStaff, requireDynamicPermission('/
         });
 
         const clonedLineCount = cloneCounts.income + cloneCounts.personnel +
-          cloneCounts.mooe + cloneCounts.capitalOutlay;
+          cloneCounts.mooe + cloneCounts.CapitalOutlay;
         if (clonedLineCount === 0) {
           throw new Error('The finalized Initial proposal has no line items to clone');
         }

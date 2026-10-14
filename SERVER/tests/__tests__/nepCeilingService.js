@@ -13,7 +13,7 @@ describe('NEP BRD ceiling compliance', () => {
         subsidies: 700000,
         personnel: 500000,
         mooe: 250000,
-        capitalOutlay: 150000
+        CapitalOutlay: 150000
       },
       allocation: {
         ceilingAmount: 1000000,
@@ -21,7 +21,7 @@ describe('NEP BRD ceiling compliance', () => {
         ceilingBreakdown: {
           personnelServices: 550000,
           mooe: 275000,
-          capitalOutlay: 175000
+          CapitalOutlay: 175000
         }
       }
     });
@@ -46,7 +46,7 @@ describe('NEP BRD ceiling compliance', () => {
         income: 300000,
         personnel: 550000,
         mooe: 275000,
-        capitalOutlay: 175000
+        CapitalOutlay: 175000
       },
       allocation: {
         ceilingAmount: 1000000,
@@ -55,7 +55,7 @@ describe('NEP BRD ceiling compliance', () => {
         ceilingBreakdown: {
           personnelServices: 550000,
           mooe: 275000,
-          capitalOutlay: 175000
+          CapitalOutlay: 175000
         }
       }
     });
@@ -73,7 +73,7 @@ describe('NEP BRD ceiling compliance', () => {
         subsidies: 900000,
         personnel: 600000,
         mooe: 300000,
-        capitalOutlay: 150000
+        CapitalOutlay: 150000
       },
       allocation: {
         ceilingAmount: 1000000,
@@ -81,7 +81,7 @@ describe('NEP BRD ceiling compliance', () => {
         ceilingBreakdown: {
           personnelServices: 550000,
           mooe: 275000,
-          capitalOutlay: 175000
+          CapitalOutlay: 175000
         }
       }
     });
@@ -131,7 +131,7 @@ describe('NEP BRD ceiling compliance', () => {
       categoryIncome: {
         personnelServices: 20000,
         mooe: 30000,
-        capitalOutlay: 50000
+        CapitalOutlay: 50000
       },
       items: [
         { category: 'Personnel', tier1: 300000, tier2: 50000 },
@@ -149,7 +149,7 @@ describe('NEP BRD ceiling compliance', () => {
       expenses: 850000,
       personnel: 370000,
       mooe: 255000,
-      capitalOutlay: 225000,
+      CapitalOutlay: 225000,
       source: 'TIER'
     });
   });

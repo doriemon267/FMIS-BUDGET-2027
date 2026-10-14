@@ -12,7 +12,7 @@ const {
   normalizeAccountLabel,
   findConfiguredCapitalOutlayCategory,
   selectCapitalOutlayMapping,
-} = require("../utils/capitalOutlayAccountValidation");
+} = require("../utils/CapitalOutlayAccountValidation");
 
 const normalizeHeader = (value = "") => value.toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
 

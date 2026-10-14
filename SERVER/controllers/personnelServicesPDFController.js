@@ -87,9 +87,9 @@ const exportPermanentPersonnelPDF = async (req, res) => {
     const contentWidth = pageWidth - (2 * margin);
 
     // Logo paths
-    const sealPath = path.join(__dirname, '..', 'assets', 'Seal.png');
+    const sealPath = path.join(__dirname, '..', 'assets', 'seal.png');
     const niaLogoPath = path.join(__dirname, '..', 'assets', 'logo.png');
-    const bagongPilipinasPath = path.join(__dirname, '..', 'assets', 'Bagong_Pilipinas.png');
+    const bagongPilipinasPath = path.join(__dirname, '..', 'assets', 'bagong-pilipinas.png');
 
     let currentY = margin;
     let pageNumber = 1;
@@ -193,7 +193,7 @@ const exportPermanentPersonnelPDF = async (req, res) => {
         { field: 'RATA', label: 'RATA', width: 50, align: 'right' },
         { field: 'uniformALLOWANCE', label: 'Uniform', width: 50, align: 'right' },
         { field: 'medical', label: 'Medical', width: 50, align: 'right' },
-        { field: 'childrenAllowance', label: 'Children', width: 50, align: 'right' },
+        { field: 'ChildrenAllowance', label: 'Children', width: 50, align: 'right' },
         { field: 'midyearBonus', label: 'Midyear', width: 50, align: 'right' },
         { field: 'yearEndBonus', label: 'YE Bonus', width: 50, align: 'right' },
         { field: 'Total', label: 'Total', width: 70, align: 'right' },
@@ -229,7 +229,7 @@ const exportPermanentPersonnelPDF = async (req, res) => {
       // Calculate column totals
       const totals = {};
       const numericFields = ['monthlySalary', 'annualSalary', 'PERA', 'RATA', 'uniformALLOWANCE', 
-                             'medical', 'childrenAllowance', 'midyearBonus', 'yearEndBonus', 'Total'];
+                             'medical', 'ChildrenAllowance', 'midyearBonus', 'yearEndBonus', 'Total'];
       
       numericFields.forEach(field => {
         totals[field] = data.reduce((sum, row) => sum + (parseFloat(row[field]) || 0), 0);
@@ -379,7 +379,7 @@ const exportPermanentPersonnelPDF = async (req, res) => {
       { field: 'RATA', label: 'RATA', width: 50, align: 'right' },
       { field: 'uniformALLOWANCE', label: 'Uniform', width: 50, align: 'right' },
       { field: 'medical', label: 'Medical', width: 50, align: 'right' },
-      { field: 'childrenAllowance', label: 'Children', width: 50, align: 'right' },
+      { field: 'ChildrenAllowance', label: 'Children', width: 50, align: 'right' },
       { field: 'midyearBonus', label: 'Midyear', width: 50, align: 'right' },
       { field: 'yearEndBonus', label: 'YE Bonus', width: 50, align: 'right' },
       { field: 'Total', label: 'Total', width: 70, align: 'right' },
@@ -500,9 +500,9 @@ const exportCasualPersonnelPDF = async (req, res) => {
     const contentWidth = pageWidth - (2 * margin);
 
     // Logo paths
-    const sealPath = path.join(__dirname, '..', 'assets', 'Seal.png');
+    const sealPath = path.join(__dirname, '..', 'assets', 'seal.png');
     const niaLogoPath = path.join(__dirname, '..', 'assets', 'logo.png');
-    const bagongPilipinasPath = path.join(__dirname, '..', 'assets', 'Bagong_Pilipinas.png');
+    const bagongPilipinasPath = path.join(__dirname, '..', 'assets', 'bagong-pilipinas.png');
 
     let currentY = margin;
     let pageNumber = 1;
@@ -912,9 +912,9 @@ const exportCOSPersonnelPDF = async (req, res) => {
     const contentWidth = pageWidth - (2 * margin);
 
     // Logo paths
-    const sealPath = path.join(__dirname, '..', 'assets', 'Seal.png');
+    const sealPath = path.join(__dirname, '..', 'assets', 'seal.png');
     const niaLogoPath = path.join(__dirname, '..', 'assets', 'logo.png');
-    const bagongPilipinasPath = path.join(__dirname, '..', 'assets', 'Bagong_Pilipinas.png');
+    const bagongPilipinasPath = path.join(__dirname, '..', 'assets', 'bagong-pilipinas.png');
 
     let currentY = margin;
     let pageNumber = 1;

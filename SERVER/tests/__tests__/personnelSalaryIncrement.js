@@ -3,7 +3,7 @@ jest.mock('../../models/NewProposalWorkflow', () => ({ findById: jest.fn(), exis
 jest.mock('../../utils/recalculateProposalTotals', () => ({ recalculateAndSaveProposalTotals: jest.fn().mockResolvedValue({}) }));
 const Workflow = require('../../models/NewProposalWorkflow');
 const Personnel = require('../../models/PersonnelServices');
-const { updatePersonnelService, bulkSetPersonnelChargedToIncome, resetChargedToIncome } = require('../../controllers/personnel_service_controller');
+const { updatePersonnelService, bulkSetPersonnelChargedToIncome, resetChargedToIncome } = require('../../controllers/personnelServiceController');
 const { recalculateAndSaveProposalTotals } = require('../../utils/recalculateProposalTotals');
 
 const workflowRef = new mongoose.Types.ObjectId();

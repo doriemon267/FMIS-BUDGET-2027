@@ -5,7 +5,7 @@ const {
   nepReportScopesMatch,
 } = require('../../services/nepReportService');
 
-const lineItems = ({ mooe = 30, capitalOutlay = 30 } = {}) => [
+const lineItems = ({ mooe = 30, CapitalOutlay = 30 } = {}) => [
   {
     lineItemId: 'Personnel Services-ps-1',
     category: 'Personnel Services',
@@ -25,7 +25,7 @@ const lineItems = ({ mooe = 30, capitalOutlay = 30 } = {}) => [
     lineItemId: 'Capital Outlay-co-1',
     category: 'Capital Outlay',
     description: 'Capital row',
-    tier1: capitalOutlay,
+    tier1: CapitalOutlay,
     tier2: 0,
   },
 ];
@@ -48,8 +48,8 @@ const allocation = (withDetailedCaps = true) => ({
   ceilingAmount: 100,
   ceilingSubsidy: 100,
   ceilingBreakdown: withDetailedCaps
-    ? { personnelServices: 40, mooe: 30, capitalOutlay: 30 }
-    : { personnelServices: 0, mooe: 0, capitalOutlay: 0 },
+    ? { personnelServices: 40, mooe: 30, CapitalOutlay: 30 }
+    : { personnelServices: 0, mooe: 0, CapitalOutlay: 0 },
 });
 
 const serializedContext = {
@@ -81,7 +81,7 @@ describe('authoritative NEP reporting', () => {
   });
 
   test('never manufactures READY for unsaved live rows even when totals are within caps', () => {
-    const rows = lineItems({ capitalOutlay: 20 });
+    const rows = lineItems({ CapitalOutlay: 20 });
     const report = buildAuthoritativeNepReport({
       reportSummary: { lineItems: rows },
       allocation: allocation(true),
@@ -110,7 +110,7 @@ describe('authoritative NEP reporting', () => {
   });
 
   test('treats missing detailed caps as not enforced', () => {
-    const rows = lineItems({ capitalOutlay: 20 });
+    const rows = lineItems({ CapitalOutlay: 20 });
     const report = buildAuthoritativeNepReport({
       reportSummary: { lineItems: rows },
       allocation: allocation(false),

@@ -20,7 +20,7 @@ const LEGACY_COMPENSATION_FIELDS = [
   "uniformAllowance",
   "productivityIncentive",
   "medicalAllowance",
-  "childrenAllowance",
+  "ChildrenAllowance",
   "meal",
   "cashGift",
   "gsisPremium",

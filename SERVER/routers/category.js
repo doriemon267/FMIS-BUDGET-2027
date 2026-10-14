@@ -4,7 +4,7 @@ const {
   editCategory,
   deleteCategory,
   getSublineItems, // ⬅️ Import the new controller
-} = require("../controllers/category_controller"); // or update path if in a different controller
+} = require("../controllers/categoryController"); // or update path if in a different controller
 const isAuth = require('../middleware/is_auth');
 
 const Router = require("express").Router;

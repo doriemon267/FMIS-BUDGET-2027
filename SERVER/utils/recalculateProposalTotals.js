@@ -25,7 +25,7 @@ const { splitPersonnelFunding } = require('./personnelIncomeAllocation');
 const Proposal = require('../models/Proposal');
 const Income = require('../models/Income');
 const PersonnelServices = require('../models/PersonnelServices');
-const MOOE = require('../models/mooeProposals');
+const MOOE = require('../models/MooeProposal');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const DiscountSettings = require('../models/DiscountSettings');
@@ -332,7 +332,7 @@ async function computeModuleTotals(filterKeys, proposalId, workflowRefId) {
       toNumberExpr("$subsistenceAllowance"),
       toNumberExpr("$additionalMedical"),
       toNumberExpr("$honoraria"),
-      toNumberExpr("$childrenAllowance")
+      toNumberExpr("$ChildrenAllowance")
     ]
   };
   const personnelLegacyTotalExpr = {
@@ -634,7 +634,7 @@ async function persistProposalTotals(proposal) {
       chargedToIncome: effectiveChargedToIncomeTotal,
       personnel: adjustedPsTotal,
       mooe: mooeAmountTotal,
-      capitalOutlay: coAmountTotal,
+      CapitalOutlay: coAmountTotal,
       expenses: expenseSum,
       subsidies: projectedSubsidy,
       chargedToIncomeSubsidiesMinus: chargedToIncomeSubsidyTotal,

@@ -5,7 +5,7 @@ const {
   saveCapitalOutlayDetails,
   deleteCapitalOutlayDetail,
   getCapitalOutlayDetailsSummary,
-} = require("../controllers/capitalOutlayDetailsController");
+} = require("../controllers/CapitalOutlayDetailsController");
 const isAuth = require("../middleware/is_auth");
 
 const checkDueDate = require("../middleware/checkDueDate");
@@ -13,9 +13,9 @@ const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBy
 // Apply authentication to all routes
 router.use(isAuth);
 // Get details for a specific capital outlay
-router.get("/capital-outlay/:capitalOutlayId/details", getCapitalOutlayDetails);
+router.get("/capital-outlay/:CapitalOutlayId/details", getCapitalOutlayDetails);
 // Save/Update details for a capital outlay
-router.post("/capital-outlay/:capitalOutlayId/details", checkDueDateWithRoleBypass, saveCapitalOutlayDetails);
+router.post("/capital-outlay/:CapitalOutlayId/details", checkDueDateWithRoleBypass, saveCapitalOutlayDetails);
 // Delete a specific detail item
 router.delete("/capital-outlay-detail/:detailId", checkDueDateWithRoleBypass, deleteCapitalOutlayDetail);
 // Get summary of all capital outlay details (for reporting)

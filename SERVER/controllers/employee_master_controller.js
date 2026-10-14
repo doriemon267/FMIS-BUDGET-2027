@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const EmployeeMaster = require("../models/employee_master");
+const EmployeeMaster = require("../models/EmployeeMaster");
 // Create a new employee
 const createEmployee = async (req, res) => {
   try {
@@ -27,7 +27,7 @@ const getAllEmployees = async (req, res) => {
     // // DIRECT APPROACH: Use a raw MongoDB query for exact matching
     // This bypasses any potential Mongoose issues
     const db = mongoose.connection.db;
-    const collection = db.collection('employee_masters');
+    const collection = db.collection('EmployeeMasters');
     // Build the base query with strict region matching
     let mongoQuery = { Region: region };
     // Add search if provided

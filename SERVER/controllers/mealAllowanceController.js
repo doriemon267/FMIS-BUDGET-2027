@@ -56,7 +56,7 @@ async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount 
         "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
         "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
         "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-        "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+        "hazardPay", "subsistenceAllowance", "honoraria", "ChildrenAllowance"
       ];
       const newTotal = numericFields.reduce(
         (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
@@ -180,7 +180,7 @@ exports.createMealAllowance = [
             "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
             "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
             "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-            "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+            "hazardPay", "subsistenceAllowance", "honoraria", "ChildrenAllowance"
           ];
           const newTotal = numericFields.reduce(
             (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
@@ -328,7 +328,7 @@ exports.updateMealAllowance = [
             "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
             "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
             "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-            "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+            "hazardPay", "subsistenceAllowance", "honoraria", "ChildrenAllowance"
           ];
           const newTotal = numericFields.reduce(
             (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
@@ -520,7 +520,7 @@ exports.deleteMealAllowance = async (req, res) => {
           "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
           "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
           "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-          "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+          "hazardPay", "subsistenceAllowance", "honoraria", "ChildrenAllowance"
         ];
         const newTotal = numericFields.reduce(
           (acc, field) => acc + (Number(verifyDoc[field]) || 0),

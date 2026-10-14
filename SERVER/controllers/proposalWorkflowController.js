@@ -6,7 +6,7 @@ const Department = require('../models/Department');
 const Region = require('../models/Region');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
-const mooeProposals = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const Income = require('../models/Income');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
 const ProposalEditLog = require('../models/ProposalEditLog');
@@ -585,7 +585,7 @@ async function validateAnalystSubmissionReadiness(proposal) {
 
   const [personnelStats, mooeStats, capitalStats, incomeStats] = await Promise.all([
     evaluateModuleCompletion(PersonnelServices, filters, ['Total']),
-    evaluateModuleCompletion(mooeProposals, filters, ['amount']),
+    evaluateModuleCompletion(MooeProposal, filters, ['amount']),
     evaluateModuleCompletion(CapitalOutlay, filters, ['cost']),
     requiresIncome ? evaluateModuleCompletion(Income, filters, ['amount']) : Promise.resolve({
       count: 0,
@@ -709,7 +709,7 @@ exports.checkAnalystSubmissionPrerequisites = async (req, res) => {
 
 /**
  * Helper function to sync proposal status to all related budget items
- * Updates status and workflowLevel for PersonnelServices, CapitalOutlay, mooeProposals, and Income
+ * Updates status and workflowLevel for PersonnelServices, CapitalOutlay, MooeProposal, and Income
  */
 async function syncBudgetItemsStatus(proposal) {
   try {
@@ -788,14 +788,14 @@ async function syncBudgetItemsStatus(proposal) {
     const [psCount, coCount, mooeCount, incomeCount] = await Promise.all([
       PersonnelServices.countDocuments(combinedFilter),
       CapitalOutlay.countDocuments(combinedFilter),
-      mooeProposals.countDocuments(combinedFilter),
+      MooeProposal.countDocuments(combinedFilter),
       Income.countDocuments(combinedFilter)
     ]);
 
     console.log('📊 Found budget items to update:', {
       personnelServices: psCount,
-      capitalOutlay: coCount,
-      mooeProposals: mooeCount,
+      CapitalOutlay: coCount,
+      MooeProposal: mooeCount,
       income: incomeCount,
       filter: combinedFilter
     });
@@ -816,7 +816,7 @@ async function syncBudgetItemsStatus(proposal) {
           updatedAt: new Date()
         } 
       }),
-      mooeProposals.updateMany(combinedFilter, { 
+      MooeProposal.updateMany(combinedFilter, { 
         $set: { 
           status: mappedStatus, 
           workflowLevel: mappedWorkflowLevel,
@@ -836,8 +836,8 @@ async function syncBudgetItemsStatus(proposal) {
     
     console.log('✅ Budget items status synced:', {
       personnelServices: results[0].modifiedCount,
-      capitalOutlay: results[1].modifiedCount,
-      mooeProposals: results[2].modifiedCount,
+      CapitalOutlay: results[1].modifiedCount,
+      MooeProposal: results[2].modifiedCount,
       income: results[3].modifiedCount,
       totalModified: results.reduce((sum, r) => sum + r.modifiedCount, 0)
     });
@@ -846,8 +846,8 @@ async function syncBudgetItemsStatus(proposal) {
       success: true,
       updated: {
         personnelServices: results[0].modifiedCount,
-        capitalOutlay: results[1].modifiedCount,
-        mooeProposals: results[2].modifiedCount,
+        CapitalOutlay: results[1].modifiedCount,
+        MooeProposal: results[2].modifiedCount,
         income: results[3].modifiedCount
       }
     };
@@ -1588,7 +1588,7 @@ exports.approveProposal = async (req, res) => {
       // First, let's count how many records match our filter
       const psCount = await PersonnelServices.countDocuments(entityFilter);
       const coCount = await CapitalOutlay.countDocuments(entityFilter);
-      const mooeCount = await mooeProposals.countDocuments(entityFilter);
+      const mooeCount = await MooeProposal.countDocuments(entityFilter);
       const incomeCount = await Income.countDocuments(entityFilter);
       
       console.log(`🔍 Found potential matches: PS=${psCount}, CO=${coCount}, MOOE=${mooeCount}, Income=${incomeCount}`);
@@ -1608,7 +1608,7 @@ exports.approveProposal = async (req, res) => {
       console.log(`📊 Updated ${coResult.matchedCount} CapitalOutlay records (${coResult.modifiedCount} modified)`);
       
       // Update MOOE Proposals records
-      const mooeResult = await mooeProposals.updateMany(entityFilter, entityUpdate);
+      const mooeResult = await MooeProposal.updateMany(entityFilter, entityUpdate);
       console.log(`📊 Updated ${mooeResult.matchedCount} MOOE Proposals records (${mooeResult.modifiedCount} modified)`);
       
       // Update Income records (if they have status field)
@@ -2098,7 +2098,7 @@ exports.bulkApproveProposals = async (req, res) => {
         const results = await Promise.all([
           PersonnelServices.updateMany(entityFilter, entityUpdate),
           CapitalOutlay.updateMany(entityFilter, entityUpdate),
-          mooeProposals.updateMany(entityFilter, entityUpdate),
+          MooeProposal.updateMany(entityFilter, entityUpdate),
           Income.updateMany(entityFilter, entityUpdate)
         ]);
         
@@ -2252,7 +2252,7 @@ exports.consolidateProposals = async (req, res) => {
     // Also update entity-level collections (PersonnelServices, MooeProposal, CapitalOutlay, Income)
     try {
       const PersonnelServices = require(path.join(__dirname, '..', 'models', 'PersonnelServices'));
-      const MooeProposal = require(path.join(__dirname, '..', 'models', 'mooeProposals'));
+      const MooeProposal = require(path.join(__dirname, '..', 'models', 'MooeProposal'));
       const CapitalOutlay = require(path.join(__dirname, '..', 'models', 'CapitalOutlay'));
       const Income = require(path.join(__dirname, '..', 'models', 'Income'));
 

@@ -337,7 +337,7 @@ exports.updateAdvancedSettings = async (req, res) => {
           "hazardPay",
           "subsistenceAllowance",
           "honoraria",
-          "childrenAllowance",
+          "ChildrenAllowance",
           "earnedLeaves"
         ];
         personnel.philhealthPremium = newPhilhealthPremium;

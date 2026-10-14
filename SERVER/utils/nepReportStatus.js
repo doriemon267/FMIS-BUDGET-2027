@@ -10,7 +10,7 @@ const getNepReportStatus = ({ compliance, hasUnsavedChanges = false } = {}) => {
   const enforcedFields = [
     'totalExpenses',
     ...(compliance.hasDetailedCeiling
-      ? ['personnelServices', 'mooe', 'capitalOutlay']
+      ? ['personnelServices', 'mooe', 'CapitalOutlay']
       : [])
   ];
   const exact = enforcedFields.every(

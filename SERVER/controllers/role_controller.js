@@ -1,4 +1,4 @@
-const assigned_role = require("../models/assigned_role");
+const AssignedRole = require("../models/AssignedRole");
 const Role = require("../models/role");
 const { textFilter, searchFilter } = require("../utils/controller_get_process");
 
@@ -125,7 +125,7 @@ exports.assignRole = async (req, res) => {
   }
 
   try {
-    const assigned = await assigned_role
+    const assigned = await AssignedRole
       .findOneAndUpdate(
         { user },
         {
@@ -178,7 +178,7 @@ exports.getAllAssignedRoles = async (req, res) => {
     }
 
     // === 2. Check if current user is Super Admin ===
-    const currentUserAssignment = await assigned_role
+    const currentUserAssignment = await AssignedRole
       .findOne({ user: currentUserId })
       .populate("roles");
 
@@ -224,7 +224,7 @@ exports.getAllAssignedRoles = async (req, res) => {
 
     // === 6. Exclude Super Admins & Current User ===
     // Get all users who have SUPER ADMIN role
-    const superAdminAssignments = await assigned_role
+    const superAdminAssignments = await AssignedRole
       .find({
         roles: { $in: await Role.find({ name: "SUPER ADMIN" }).select("_id") },
       })
@@ -245,14 +245,14 @@ exports.getAllAssignedRoles = async (req, res) => {
     const sortQuery = { [sortByField]: sortOrder };
 
     // === 8. Fetch results ===
-    const assigned = await assigned_role
+    const assigned = await AssignedRole
       .find(query)
       .populate("roles")
       .skip(skip)
       .limit(limitNum)
       .sort(sortQuery);
 
-    const totalRecords = await assigned_role.countDocuments(query);
+    const totalRecords = await AssignedRole.countDocuments(query);
 
     return res.json({
       assigned,
@@ -276,7 +276,7 @@ exports.reAssignRole = async (req, res) => {
   }
 
   try {
-    const updated = await assigned_role
+    const updated = await AssignedRole
       .findByIdAndUpdate(
         id,
         { roles }, // Can be [] â†’ removes all roles

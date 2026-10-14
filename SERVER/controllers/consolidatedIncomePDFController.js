@@ -739,7 +739,7 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     const exactRegionFilter = buildExactRegionMongoFilter(regionFilter || []);
     if (exactRegionFilter) incomeQuery.region = exactRegionFilter;
     
-    // Fetch data using the same query as the screen report (reports.controller.js)
+    // Fetch data using the same query as the screen report (reportController.js)
     const incomeEntries = await Income.find(incomeQuery).populate('incomecategory');
     const showDraftWatermark = await resolveDraftWatermarkForRecords(incomeEntries, NewProposalWorkflow);
     if (!regionFilter) {
@@ -1167,9 +1167,9 @@ const exportConsolidatedIncomePDF = async (req, res) => {
         pageHeight: PAGE_HEIGHT,
       });
 
-      const sealPath = resolveLogoPath('Seal.png');
+      const sealPath = resolveLogoPath('seal.png');
       const logoPath = resolveLogoPath('logo.png');
-      const bagongPath = resolveLogoPath('Bagong_Pilipinas.png');
+      const bagongPath = resolveLogoPath('bagong-pilipinas.png');
       const logoY = MARGIN_TOP - 2;
       const logoW = 44;
       const logoH = 44;

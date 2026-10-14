@@ -17,14 +17,14 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const Proposal = require('../models/Proposal');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
-const mooeProposals = require('../models/mooeProposals');
+const MooeProposal = require('../models/MooeProposal');
 const Income = require('../models/Income');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
 
 const MODELS_TO_UPDATE = [
   { name: 'PersonnelServices', model: PersonnelServices },
   { name: 'CapitalOutlay', model: CapitalOutlay },
-  { name: 'mooeProposals', model: mooeProposals },
+  { name: 'MooeProposal', model: MooeProposal },
   { name: 'Income', model: Income }
 ];
 
@@ -71,7 +71,7 @@ async function migrateProposals() {
     }
     console.log(`\n📊 Total Proposals updated: ${proposalCount}`);
 
-    // Update Budget Item models (PersonnelServices, CapitalOutlay, mooeProposals, Income)
+    // Update Budget Item models (PersonnelServices, CapitalOutlay, MooeProposal, Income)
     let totalBudgetItemsUpdated = 0;
     
     for (const { name, model } of MODELS_TO_UPDATE) {

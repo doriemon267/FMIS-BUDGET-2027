@@ -1,4 +1,4 @@
-const { getIAsOMCost, saveIAsOMCost } = require("../controllers/iasOMCost.controller");
+const { getIAsOMCost, saveIAsOMCost } = require("../controllers/iasOmCostController");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

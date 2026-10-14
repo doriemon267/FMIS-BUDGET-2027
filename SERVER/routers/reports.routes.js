@@ -1,7 +1,7 @@
 const { 
     getConsolidatedSummary,
     getConsolidatedCorporateIncome
-} = require("../controllers/reports.controller");
+} = require("../controllers/reportController");
 const {
     exportConsolidatedIncomePDF,
     getConsolidatedIncomePreview
