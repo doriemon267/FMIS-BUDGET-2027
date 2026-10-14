@@ -4,11 +4,12 @@ const SalaryGrade = require('../models/SalarySelection');
 const CPCSSalaryTable = require('../models/CPCSSalaryTable');
 const { gradeNumber, referenceError } = require('../utils/permanentSalaryReference');
 
-const templateLabel = template => `${template.templateName.replace('CPSC', 'CPCS')} — FY ${template.fiscalYear} / ${template.budgetType}${template.description ? ` — ${template.description}` : ''}`;
+const templateLabel = template => `${template.templateName.replace('CPSC', 'CPCS')} — FY ${template.fiscalYear} / ${template.budgetType}${template.description ? ` — ${template.description}` : ''}${template.isActive === false ? ' (Inactive reference)' : ''}`;
 
 async function listSalaryReferences() {
-  const templates = await Template.find({ isActive: true, templateName: { $in: ['CPSC 1', 'CPSC 2'] } })
-    .select('_id templateName fiscalYear budgetType description').sort({ fiscalYear: -1 }).lean();
+  // Allocation compares historical and current tables independently of salary activation.
+  const templates = await Template.find({ templateName: { $in: ['CPSC 1', 'CPSC 2'] } })
+    .select('_id templateName fiscalYear budgetType description isActive').sort({ fiscalYear: -1 }).lean();
   return {
     cpcs1: templates.filter(row => row.templateName === 'CPSC 1').map(row => ({ id: String(row._id), label: templateLabel(row) })),
     cpcs2: [
@@ -22,13 +23,14 @@ async function loadReference(id, matchBy, role) {
   if (!['SG', 'JG'].includes(matchBy)) throw referenceError(`${role}: choose SG or JG matching.`);
   let rows;
   let label;
-  if (role === 'CPCS 2' && id === 'CURRENT_CPCS2') {
+  if (['CPCS 2', 'Salary'].includes(role) && id === 'CURRENT_CPCS2') {
     rows = await CPCSSalaryTable.find({}).lean();
     label = 'CPCS 2 — Employee Salary Table';
   } else {
     if (typeof id !== 'string' || !mongoose.isValidObjectId(id)) throw referenceError(`Select a valid ${role} reference table.`);
-    const template = await Template.findOne({ _id: id, isActive: true, templateName: role.replace('CPCS', 'CPSC') }).lean();
-    if (!template) throw referenceError(`${role} reference table is missing or inactive.`);
+    const templateName = role === 'Salary' ? { $in: ['CPSC 1', 'CPSC 2'] } : role.replace('CPCS', 'CPSC');
+    const template = await Template.findOne({ _id: id, templateName }).lean();
+    if (!template) throw referenceError(`${role} reference table is missing or has the wrong CPCS type.`);
     label = templateLabel(template);
     rows = await SalaryGrade.find({ cpscTemplate: template._id, isActive: { $ne: false } }).lean();
   }
@@ -48,6 +50,9 @@ async function loadReference(id, matchBy, role) {
 }
 
 async function loadSalaryReferences(body) {
+  if (body.mode === 'STEP_INCREMENT') {
+    return { stepBase: await loadReference(body.stepReference, body.stepMatchBy || 'SG', 'Salary') };
+  }
   const [cpcs1, cpcs2] = await Promise.all([
     loadReference(body.cpcs1Reference, body.cpcs1MatchBy || 'JG', 'CPCS 1'),
     loadReference(body.cpcs2Reference, body.cpcs2MatchBy || 'SG', 'CPCS 2'),

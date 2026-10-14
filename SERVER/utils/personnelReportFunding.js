@@ -16,8 +16,8 @@ function personnelItemFunding(row, field, amount) {
     return splitPersonnelFunding(amount, entries.reduce((sum, entry) => sum + (Number(entry.income) || 0), 0));
   }
   const funding = fundingForPersonnel(row);
-  if (row.cpcs1MonthlySalary > 0 && row.cpcs2MonthlySalary > 0) {
-    // CPCS increases fund salary only; benefits keep their own funding source.
+  if ((row.salarySubsidyMonthlyAmount != null && row.salarySubsidyMonthlyAmount >= 0) || (row.cpcs1MonthlySalary > 0 && row.cpcs2MonthlySalary > 0)) {
+    // Automatic salary allocations (including zero salary Subsidy) leave benefits in Subsidy.
     return splitPersonnelFunding(amount, fields.includes('annualSalary') ? funding.incomeAmount : 0);
   }
   const total = funding.incomeAmount + funding.subsidyAmount;

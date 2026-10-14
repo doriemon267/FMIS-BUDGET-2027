@@ -142,3 +142,52 @@ describe('automatic permanent salary Income allocation', () => {
     expect(applyPermanentIncomeAllocation({ ...record, statusOfAppointment: 'CASUAL', monthlySalaryIncrement: 5000 }, { mode: 'INCREMENT_ONLY' })).toEqual({});
   });
 });
+
+describe('full salary funded by Income', () => {
+  const row = { statusOfAppointment: 'PERMANENT', monthlySalary: 33000, annualSalary: 396000,
+    PERA: 24000, earnedLeaves: 12000, gsisPremium: 48000, Total: 480000, monthlySalaryIncrement: 3000 };
+  const config = { mode: 'FULL_SALARY' };
+
+  test('funds only salary, preserves benefits and the real increment, and is idempotent', () => {
+    const allocation = applyPermanentIncomeAllocation(row, config);
+    expect(allocation).toMatchObject({ annualSalary: 396000, Total: 480000,
+      salarySubsidyMonthlyAmount: 0, chargedToIncomeMonthlyAmount: 33000,
+      chargedToIncomeAmount: 396000, chargedToSubsidyAmount: 84000,
+      cpcs1MonthlySalary: null, cpcs2MonthlySalary: null });
+    expect(allocation).not.toHaveProperty('monthlySalary');
+    expect(allocation).not.toHaveProperty('monthlySalaryIncrement');
+    expect(allocation).not.toHaveProperty('PERA');
+    expect(applyPermanentIncomeAllocation({ ...row, ...allocation }, config)).toEqual(allocation);
+    expect(row.monthlySalaryIncrement).toBe(3000);
+  });
+
+  test.each([0, -1, NaN, Infinity, undefined])('rejects invalid saved salary %p', monthlySalary => {
+    expect(() => applyPermanentIncomeAllocation({ ...row, monthlySalary }, config)).toThrow('valid saved monthly salary');
+  });
+
+  test('does not require a grade or step, and does not apply to casual personnel', () => {
+    expect(applyPermanentIncomeAllocation(row, config).chargedToIncomeAmount).toBe(396000);
+    expect(applyPermanentIncomeAllocation({ ...row, statusOfAppointment: 'CASUAL' }, config)).toEqual({});
+  });
+
+  test('switches from full salary back to the Step 1 split', () => {
+    const full = { ...row, ...applyPermanentIncomeAllocation(row, config), step: 2, gradelevel_SG: 10 };
+    const step = applyPermanentIncomeAllocation(full, { mode: 'STEP_INCREMENT',
+      referenceTables: { stepBase: { matchBy: 'SG', rows: [{ sg: 10, rates: { 1: 30000 } }] } } });
+    expect(step).toMatchObject({ chargedToIncomeAmount: 36000, chargedToSubsidyAmount: 444000, salarySubsidyMonthlyAmount: 30000 });
+  });
+
+  test('reports salary as Income and every benefit as Subsidy', () => {
+    const { personnelItemFunding, summarizePersonnelFunding } = require('../../utils/personnelReportFunding');
+    const full = { ...row, ...applyPermanentIncomeAllocation(row, config) };
+    expect(personnelItemFunding(full, 'annualSalary', full.annualSalary)).toEqual({ incomeAmount: 396000, subsidyAmount: 0 });
+    for (const field of ['PERA', 'earnedLeaves', 'gsisPremium']) {
+      expect(personnelItemFunding(full, field, full[field])).toEqual({ incomeAmount: 0, subsidyAmount: full[field] });
+    }
+    expect(summarizePersonnelFunding([full])).toEqual({ total: 480000, income: 396000, subsidy: 84000,
+      salaryTotal: 396000, salaryIncome: 396000, salarySubsidy: 0 });
+    expect(personnelItemFunding({ ...full, budgetType: 'NEP',
+      nepAllocations: { PERA: { income: 5000, subsidy: 19000 } } }, 'PERA', 24000))
+      .toEqual({ incomeAmount: 5000, subsidyAmount: 19000 });
+  });
+});

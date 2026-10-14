@@ -90,11 +90,12 @@ const PersonnelChargedToIncomePage = ({ dataListName, proposalId }) => {
       label: "OVERTIME PAY",
       show: true,
     },
+    salarySubsidyMonthlyAmount: { type: "number", label: "MONTHLY SALARY / SUBSIDY", show: true, readOnly: true },
     cpcs1MonthlySalary: { type: "number", label: "CPCS 1 MONTHLY / SUBSIDY", show: true, readOnly: true },
     cpcs2MonthlySalary: { type: "number", label: "CPCS 2 MONTHLY", show: true, readOnly: true },
     monthlySalaryIncrement: {
       type: "number",
-      label: "MONTHLY INCREASE / INCOME",
+      label: "MONTHLY SALARY INCREASE",
       readOnly: true,
       show: true,
       default: 0,

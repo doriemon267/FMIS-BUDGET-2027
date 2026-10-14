@@ -479,18 +479,18 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
 
   return (
     <ReportPageLayout
-      title={`CONSOLIDATED PERSONNEL SERVICES – ${String(activeSettings?.budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`}
+      title={`PERSONNEL SERVICES – ${String(activeSettings?.budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`}
       subtitle={
         consolidationType === "current" && activeRegion
           ? `Personnel Services data for ${activeRegion.name || activeRegion.Region}`
           : consolidationType === "all"
-          ? "Consolidated Personnel Services data from all regions"
+          ? "Personnel Services data from all regions"
           : consolidationType === "custom" && selectedRegions.length > 0
           ? `Personnel Services data for selected regions: ${selectedRegions.join(", ")}`
           : "Comprehensive consolidation of Personnel Services data"
       }
       showNiaBranding={true}
-      breadcrumbLabel="Consolidated Personnel Services Reports"
+      breadcrumbLabel="Personnel Services Reports"
       fiscalYear={activeSettings?.fiscalYear || new Date().getFullYear()}
     >
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
@@ -893,7 +893,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
         open={pdfDialogOpen}
         onClose={closePdfDialog}
         pdfUrl={pdfPreviewUrl}
-        title="Consolidated Personnel Services PDF Preview"
+        title="Personnel Services PDF Preview"
         downloadFilename={pdfFilename}
       />
 

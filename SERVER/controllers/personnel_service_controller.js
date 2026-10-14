@@ -1676,8 +1676,8 @@ exports.updatePersonnelService = async (req, res) => {
       // Preserve versioned NEP/GAA splits and the workflow lock when recording increments.
       if (personnelServices.workflowRef) {
         const workflow = await require('../models/NewProposalWorkflow').findById(personnelServices.workflowRef);
-        if (workflow?.permanentIncomeAllocation?.mode === 'CPCS_DIFFERENCE') {
-          return res.status(400).json({ message: 'The salary increase is calculated from the CPCS reference tables. Update Salary Income Allocation instead.' });
+        if (['CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY'].includes(workflow?.permanentIncomeAllocation?.mode)) {
+          return res.status(400).json({ message: 'Salary funding is configured automatically. Update Salary Income Allocation instead.' });
         }
         const userId = String(req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId || '');
         if (!workflow || workflow.modelType !== 'Initial' || !['DRAFT', 'RETURNED_TO_PREPARER'].includes(workflow.status)) {
@@ -2381,10 +2381,10 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
 
       console.log("DEBUG: Updating record, chargedToIncomeEligible:", chargedToIncomeEligible);
 
-      if (record.cpcs1MonthlySalary > 0 && record.workflowRef) {
+      if ((record.cpcs1MonthlySalary > 0 || (record.salarySubsidyMonthlyAmount != null && record.salarySubsidyMonthlyAmount >= 0)) && record.workflowRef) {
         const workflow = await require('../models/NewProposalWorkflow').findById(record.workflowRef);
-        if (workflow?.modelType === 'Initial' && workflow.permanentIncomeAllocation?.mode === 'CPCS_DIFFERENCE') {
-          results.skipped.push({ id: targetId, reason: 'Salary funding is calculated from CPCS references. Update Salary Income Allocation instead.' });
+        if (workflow?.modelType === 'Initial' && ['CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY'].includes(workflow.permanentIncomeAllocation?.mode)) {
+          results.skipped.push({ id: targetId, reason: 'Salary funding is configured automatically. Update Salary Income Allocation instead.' });
           continue;
         }
       }
@@ -2642,13 +2642,14 @@ exports.resetChargedToIncome = async (req, res) => {
     }
 
     const referenceRows = await PersonnelServices.find({ $and: [query, {
-      statusOfAppointment: /^PERMANENT$/i, cpcs1MonthlySalary: { $gt: 0 },
+      statusOfAppointment: /^PERMANENT$/i,
+      $or: [{ cpcs1MonthlySalary: { $gt: 0 } }, { salarySubsidyMonthlyAmount: { $gte: 0 } }],
     }] }).select('workflowRef').lean();
     if (referenceRows.length && await require('../models/NewProposalWorkflow').exists({
       _id: { $in: referenceRows.map(row => row.workflowRef).filter(Boolean) },
-      modelType: 'Initial', 'permanentIncomeAllocation.mode': 'CPCS_DIFFERENCE',
+      modelType: 'Initial', 'permanentIncomeAllocation.mode': { $in: ['CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY'] },
     })) {
-      return res.status(400).json({ message: 'This scope includes automatic CPCS salary allocations. Update Salary Income Allocation in PS-Permanent instead.' });
+      return res.status(400).json({ message: 'This scope includes automatic salary allocations. Update Salary Income Allocation in PS-Permanent instead.' });
     }
     const result = await PersonnelServices.updateMany(query, {
       $set: {

@@ -50,6 +50,7 @@ function applySalaryReferences(record, config) {
     Total: total,
     cpcs1MonthlySalary: base,
     cpcs2MonthlySalary: current,
+    salarySubsidyMonthlyAmount: null,
     monthlySalaryIncrement: increment,
     chargedToIncomeEligible: income > 0,
     chargedToIncomeMonthlyAmount: increment,
@@ -62,4 +63,63 @@ function applySalaryReferences(record, config) {
   };
 }
 
-module.exports = { gradeNumber, referenceRate, applySalaryReferences, personnelTotal, referenceError };
+function applyStepIncrement(record, config) {
+  if (String(record.statusOfAppointment || '').trim().toUpperCase() !== 'PERMANENT') return {};
+  const step = gradeNumber(record.step);
+  if (!step || step > 8) throw referenceError('Step must be from 1 to 8.');
+  const plain = record.toObject ? record.toObject() : record;
+  const base = referenceRate({ ...plain, step: 1 }, config.referenceTables?.stepBase, 'Step 1 salary');
+  const current = Number(record.monthlySalary);
+  if (!Number.isFinite(current) || current <= 0) throw referenceError('Employee has no valid saved monthly salary.');
+  if (round(current) < base) throw referenceError('Saved monthly salary is lower than the Step 1 reference. Check the selected salary table and grade mapping.');
+  const increment = round(round(current) - base);
+  const annualSalary = round(current * 12);
+  const income = round(increment * 12);
+  const total = personnelTotal({ ...plain, annualSalary });
+  return {
+    // Employee/PS monthlySalary remains authoritative; the reference only splits funding.
+    annualSalary,
+    Total: total,
+    salarySubsidyMonthlyAmount: base,
+    cpcs1MonthlySalary: null,
+    cpcs2MonthlySalary: null,
+    monthlySalaryIncrement: increment,
+    chargedToIncomeEligible: income > 0,
+    chargedToIncomeMonthlyAmount: increment,
+    chargedToIncomeAmount: income,
+    chargedToSubsidyAmount: round(total - income),
+    chargedToIncomeSubsidyAmount: income > 0 ? Number(record.subsidyAmount) || 0 : 0,
+    chargedToIncomeNotes: config.notes || null,
+    chargedToIncomeTaggedBy: config.updatedBy || null,
+    chargedToIncomeTaggedAt: config.updatedAt || null,
+  };
+}
+
+function applyFullSalary(record, config) {
+  if (String(record.statusOfAppointment || '').trim().toUpperCase() !== 'PERMANENT') return {};
+  const monthlySalary = Number(record.monthlySalary);
+  if (!Number.isFinite(monthlySalary) || monthlySalary <= 0) {
+    throw referenceError('Employee has no valid saved monthly salary.');
+  }
+  const annualSalary = round(monthlySalary * 12);
+  const plain = record.toObject ? record.toObject() : record;
+  const total = personnelTotal({ ...plain, annualSalary });
+  return {
+    annualSalary,
+    Total: total,
+    // Zero explicitly identifies salary-only funding with no salary Subsidy.
+    salarySubsidyMonthlyAmount: 0,
+    cpcs1MonthlySalary: null,
+    cpcs2MonthlySalary: null,
+    chargedToIncomeEligible: true,
+    chargedToIncomeMonthlyAmount: round(monthlySalary),
+    chargedToIncomeAmount: annualSalary,
+    chargedToSubsidyAmount: round(total - annualSalary),
+    chargedToIncomeSubsidyAmount: Number(record.subsidyAmount) || 0,
+    chargedToIncomeNotes: config.notes || null,
+    chargedToIncomeTaggedBy: config.updatedBy || null,
+    chargedToIncomeTaggedAt: config.updatedAt || null,
+  };
+}
+
+module.exports = { gradeNumber, referenceRate, applySalaryReferences, applyStepIncrement, applyFullSalary, personnelTotal, referenceError };

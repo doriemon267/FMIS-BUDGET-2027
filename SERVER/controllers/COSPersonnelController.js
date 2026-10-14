@@ -8,6 +8,7 @@ const { recalculateAndSaveProposalTotals } = require('../utils/recalculatePropos
 const {
   COS_PREMIUM_EFFECTIVE_DATE,
   applyCOSPremium,
+  isPremiumSelected,
   getCOSVacantKey,
   isVacantCOSEmployee,
   normalizePremiumConfig,
@@ -24,6 +25,8 @@ const normalizeRole = (role) => String(role || '').trim().replace(/\s+/g, '_').t
 const getWorkflowPremiumConfig = (workflow) => normalizePremiumConfig({
   enabled: workflow?.cosJoPremium?.enabled ?? false,
   percentage: workflow?.cosJoPremium?.percentage ?? 10,
+  selectionMode: workflow?.cosJoPremium?.selectionMode,
+  selectedPersonnelIds: workflow?.cosJoPremium?.selectedPersonnelIds,
 });
 
 const assertActiveWorkflowAccess = async (req, proposalId, { write = false } = {}) => {
@@ -77,6 +80,10 @@ const premiumSettingsResponse = (workflow, summary = null) => ({
   proposalId: String(workflow._id),
   enabled: Boolean(workflow.cosJoPremium?.enabled),
   percentage: Number(workflow.cosJoPremium?.percentage ?? 10),
+  selectionMode: ['SELECTED', 'EXCLUDED'].includes(workflow.cosJoPremium?.selectionMode)
+    ? workflow.cosJoPremium.selectionMode
+    : 'ALL',
+  selectedPersonnelIds: (workflow.cosJoPremium?.selectedPersonnelIds || []).map(String),
   effectiveDate: workflow.cosJoPremium?.effectiveDate || COS_PREMIUM_EFFECTIVE_DATE,
   eligibility: 'Fiscal year 2026 and later; July 2026 is the policy effectivity marker.',
   calculation: 'Premium = annual salary × percentage; total = annual salary + premium.',
@@ -123,11 +130,14 @@ const reapplyPremiumToWorkflow = async (workflow, config, session = null) => {
   const operations = rows.map((row) => ({
     updateOne: {
       filter: { _id: row._id, workflowRef: workflow._id },
-      update: { $set: applyCOSPremium(row, config) },
+      update: { $set: applyCOSPremium(row, isPremiumSelected(row, config) ? config : { ...config, enabled: false }) },
     },
   }));
   if (operations.length > 0) await COSPersonnel.bulkWrite(operations, session ? { session } : undefined);
-  const recalculatedRows = rows.map((row) => ({ ...row.toObject(), ...applyCOSPremium(row, config) }));
+  const recalculatedRows = rows.map((row) => ({
+    ...row.toObject(),
+    ...applyCOSPremium(row, isPremiumSelected(row, config) ? config : { ...config, enabled: false }),
+  }));
   const summary = summarizeCOSRows(recalculatedRows);
   await syncCOSGrandTotalToMOOE(workflow._id, summary.total, session);
   return summary;
@@ -381,7 +391,8 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
       // same upload batch are skipped before insertMany reaches MongoDB.
       existingByEmployeeNumber.set(employeeNumber, employee);
       if (isVacant) existingVacantByDetails.add(vacantKey);
-      const premiumFields = applyCOSPremium({ monthlySalary, annualSalary, fiscalYear }, premiumConfig);
+      const premiumFields = applyCOSPremium({ monthlySalary, annualSalary, fiscalYear },
+        premiumConfig.selectionMode === 'SELECTED' ? { ...premiumConfig, enabled: false } : premiumConfig);
       return {
         department: employee.Department,
         region: employee.Region,
@@ -690,7 +701,7 @@ exports.updateCOSPersonnel = async (req, res) => {
 
     const premiumFields = applyCOSPremium(
       { ...existing.toObject(), ...filteredUpdateFields },
-      premiumConfig,
+      isPremiumSelected(existing, premiumConfig) ? premiumConfig : { ...premiumConfig, enabled: false },
       { monthlySalaryChanged: filteredUpdateFields.monthlySalary !== undefined }
     );
     Object.assign(filteredUpdateFields, premiumFields);
@@ -818,9 +829,15 @@ exports.updateCOSPremiumSettings = async (req, res) => {
       return res.status(400).json({ message: 'Premium enabled must be true or false.' });
     }
 
+    if (['SELECTED', 'EXCLUDED'].includes(req.body.selectionMode) && (!Array.isArray(req.body.selectedPersonnelIds) || req.body.selectedPersonnelIds.length === 0)) {
+      return res.status(400).json({ message: 'Select at least one COS/JO personnel for the selected premium coverage.' });
+    }
+
     const config = normalizePremiumConfig({
       enabled: req.body.enabled,
       percentage: req.body.percentage,
+      selectionMode: req.body.selectionMode,
+      selectedPersonnelIds: req.body.selectedPersonnelIds,
     });
     const updatedWorkflow = await NewProposalWorkflow.findByIdAndUpdate(
       workflow._id,

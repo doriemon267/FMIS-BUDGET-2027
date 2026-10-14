@@ -17,6 +17,7 @@ import {
   Fade,
   CircularProgress,
   useTheme,
+  Checkbox,
 } from "@mui/material";
 import { blueGrey, green, grey } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
@@ -39,6 +40,8 @@ const COSCustomTable = ({
   proposalId = null,
   fiscalYear = null,
   region = null,
+  selectedRows = [],
+  onSelectionChange,
 }) => {
   const theme = useTheme();
   const headerBg = theme.palette.mode === 'dark' ? '#0b2413' : '#2d5016';
@@ -317,6 +320,36 @@ const COSCustomTable = ({
   };
 
   const tableData = data && data[dataListName] ? data[dataListName] : [];
+  const selectionColumn = Boolean(onSelectionChange);
+  const isSelected = (id) => selectedRows.includes(id);
+  const handleRowSelection = (event, id) => {
+    event.stopPropagation();
+    if (!onSelectionChange) return;
+    onSelectionChange(isSelected(id)
+      ? selectedRows.filter((selectedId) => selectedId !== id)
+      : [...selectedRows, id]);
+  };
+  const handleSelectAll = async (event) => {
+    if (!onSelectionChange) return;
+    if (!event.target.checked) {
+      onSelectionChange([]);
+      return;
+    }
+    try {
+      const response = await api.get(apiPath, { params: {
+        page: 1,
+        limit: 10000,
+        statusOfAppointment: 'COS',
+        ...(proposalId ? { proposalId } : {}),
+        ...(fiscalYear ? { fiscalYear } : {}),
+        ...(providedRegion ? { region: providedRegion } : {}),
+      } });
+      const allRows = response.data?.[dataListName] || [];
+      onSelectionChange(allRows.map((row) => row._id));
+    } catch (_error) {
+      onSelectionChange(tableData.map((row) => row._id));
+    }
+  };
 
   return (
     <>
@@ -350,6 +383,15 @@ const COSCustomTable = ({
             <Table size="small" sx={{ borderCollapse: "collapse" }}>
               <TableHead>
                 <TableRow>
+                  {selectionColumn && <TableCell sx={{ backgroundColor: headerBg, position: 'sticky', top: 0, zIndex: 2, width: 48 }}>
+                    <Checkbox
+                      checked={tableData.length > 0 && selectedRows.length === tableData.length}
+                      indeterminate={selectedRows.length > 0 && selectedRows.length < tableData.length}
+                      onChange={handleSelectAll}
+                      sx={{ color: '#fff', '&.Mui-checked': { color: '#fff' }, '&.MuiCheckbox-indeterminate': { color: '#fff' } }}
+                      inputProps={{ 'aria-label': 'Select all COS/JO personnel' }}
+                    />
+                  </TableCell>}
                   {columns.map((column) => (
                     <TableCell
                       key={column.field}
@@ -411,7 +453,7 @@ const COSCustomTable = ({
               {isLoading ? (
                 <TableBody>
                   <TableRow>
-                    <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
+                    <TableCell colSpan={columns.length + (selectionColumn ? 1 : 0)} sx={{ textAlign: 'center', py: 8 }}>
                       <Fade in={isLoading}>
                         <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
                           <CircularProgress size={40} sx={{ color: headerBg }} />
@@ -428,7 +470,7 @@ const COSCustomTable = ({
                   {tableData.length === 0 ? (
                     <TableRow sx={{ height: "70vh" }}>
                       <TableCell
-                        colSpan={columns.length}
+                        colSpan={columns.length + (selectionColumn ? 1 : 0)}
                         sx={{ textAlign: "center", fontWeight: "500" }}
                       >
                         {searchValue ? (
@@ -468,6 +510,13 @@ const COSCustomTable = ({
                             }
                           }}
                         >
+                          {selectionColumn && <TableCell padding="checkbox">
+                            <Checkbox
+                              checked={isSelected(row._id)}
+                              onChange={(event) => handleRowSelection(event, row._id)}
+                              inputProps={{ 'aria-label': `Select ${row.employeeFullName || 'personnel'}` }}
+                            />
+                          </TableCell>}
                           {columns.map((column, i) => (
                             <TableCell
                               key={column.field}
@@ -534,6 +583,7 @@ const COSCustomTable = ({
                   {/* Totals row */}
                   {tableData.length > 0 && (
                     <TableRow>
+                      {selectionColumn && <TableCell sx={{ backgroundColor: headerBg }} />}
                       {columns.map((column, index) => (
                         <TableCell
                           key={column.field}

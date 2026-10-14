@@ -56,8 +56,19 @@ const validatePremiumPercentage = (value) => {
 const normalizePremiumConfig = (config = {}) => ({
   enabled: Boolean(config.enabled),
   percentage: validatePremiumPercentage(config.percentage ?? 10),
+  selectionMode: ['SELECTED', 'EXCLUDED'].includes(config.selectionMode) ? config.selectionMode : 'ALL',
+  selectedPersonnelIds: Array.isArray(config.selectedPersonnelIds)
+    ? [...new Set(config.selectedPersonnelIds.map((id) => String(id)).filter(Boolean))]
+    : [],
   effectiveDate: COS_PREMIUM_EFFECTIVE_DATE,
 });
+
+const isPremiumSelected = (row, config = {}) => {
+  const selected = Array.isArray(config.selectedPersonnelIds) && config.selectedPersonnelIds.includes(String(row?._id));
+  if (config.selectionMode === 'SELECTED') return selected;
+  if (config.selectionMode === 'EXCLUDED') return !selected;
+  return true;
+};
 
 const calculateCOSPremium = ({ annualSalary, fiscalYear, enabled, percentage }) => {
   const baseAnnualAmount = roundCurrency(Number(annualSalary) || 0);
@@ -103,6 +114,7 @@ module.exports = {
   normalizeCOSKeyPart,
   resolveCOSEmployeeNumber,
   roundCurrency,
+  isPremiumSelected,
   toWorkflowObjectId,
   validatePremiumPercentage,
 };

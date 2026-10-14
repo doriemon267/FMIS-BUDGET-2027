@@ -83,6 +83,12 @@ function splitPersonnelFunding(personnelTotalValue, chargedToIncomeValue) {
 // Salary increments are recorded explicitly: an existing monthly rate alone
 // cannot establish whether an employee received an increase.
 function applyPermanentIncomeAllocation(record, config) {
+  if (config?.mode === 'FULL_SALARY') {
+    return require('./permanentSalaryReference').applyFullSalary(record, config);
+  }
+  if (config?.mode === 'STEP_INCREMENT') {
+    return require('./permanentSalaryReference').applyStepIncrement(record, config);
+  }
   if (config?.mode === 'CPCS_DIFFERENCE') {
     return require('./permanentSalaryReference').applySalaryReferences(record, config);
   }
@@ -101,6 +107,7 @@ function applyPermanentIncomeAllocation(record, config) {
     total
   ));
   return {
+    salarySubsidyMonthlyAmount: null,
     chargedToIncomeEligible: annualAmount > 0,
     chargedToIncomeMonthlyAmount: roundTo2Decimals(annualAmount / 12),
     chargedToIncomeAmount: annualAmount,

@@ -113,24 +113,44 @@ test('new personnel automatically use saved reference tables and preserve benefi
   expect(doc.chargedToSubsidyAmount).toBe(405000);
 });
 
-test('manual increment edits cannot override an automatic CPCS split', async () => {
+test('the model hook automatically allocates a saved employee step increase and preserves salary', async () => {
+  Workflow.findById.mockReturnValue({ select: () => ({ lean: async () => ({
+    modelType: 'Initial', permanentIncomeAllocation: { mode: 'STEP_INCREMENT', referenceTables: {
+      stepBase: { matchBy: 'SG', rows: [{ sg: 10, rates: { 1: 30000, 2: 31000 } }] },
+    } },
+  }) }) });
+  jest.spyOn(Personnel.collection, 'insertOne').mockResolvedValue({ acknowledged: true });
+  const doc = new Personnel({ workflowRef, statusOfAppointment: 'PERMANENT',
+    monthlySalary: 31500, annualSalary: 378000, gradelevel_SG: '10', step: '2', PERA: 24000,
+  });
+  await doc.save({ validateBeforeSave: false });
+  expect(doc.monthlySalary).toBe(31500);
+  expect(doc.salarySubsidyMonthlyAmount).toBe(30000);
+  expect(doc.monthlySalaryIncrement).toBe(1500);
+  expect(doc.chargedToIncomeAmount).toBe(18000);
+  expect(doc.Total).toBe(402000);
+});
+
+test.each(['CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY'])('manual increment edits cannot override automatic %s', async mode => {
   jest.spyOn(Personnel, 'findById').mockResolvedValue(record());
   const update = jest.spyOn(Personnel, 'findByIdAndUpdate');
-  Workflow.findById.mockResolvedValue({ modelType: 'Initial', status: 'DRAFT', permanentIncomeAllocation: { mode: 'CPCS_DIFFERENCE' } });
+  Workflow.findById.mockResolvedValue({ modelType: 'Initial', status: 'DRAFT', permanentIncomeAllocation: { mode } });
   const res = response();
   await updatePersonnelService(request(5000), res);
   expect(res.status).toHaveBeenCalledWith(400);
   expect(update).not.toHaveBeenCalled();
 });
 
-test('manual income tagging cannot overwrite a saved CPCS reference allocation', async () => {
-  jest.spyOn(Personnel, 'findById').mockResolvedValue({ ...record(), cpcs1MonthlySalary: 30000 });
+test.each(['CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY'])('manual income tagging cannot overwrite %s', async mode => {
+  jest.spyOn(Personnel, 'findById').mockResolvedValue({ ...record(),
+    ...(mode === 'FULL_SALARY' ? { salarySubsidyMonthlyAmount: 0 } : mode === 'STEP_INCREMENT' ? { salarySubsidyMonthlyAmount: 30000 } : { cpcs1MonthlySalary: 30000 }),
+  });
   const update = jest.spyOn(Personnel, 'findByIdAndUpdate');
-  Workflow.findById.mockResolvedValue({ modelType: 'Initial', permanentIncomeAllocation: { mode: 'CPCS_DIFFERENCE' } });
+  Workflow.findById.mockResolvedValue({ modelType: 'Initial', permanentIncomeAllocation: { mode } });
   const res = response();
   await bulkSetPersonnelChargedToIncome({ ...request(), body: { items: [{ _id: 'person-1' }], defaultAmount: 10000 } }, res);
   expect(update).not.toHaveBeenCalled();
-  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ updatedCount: 0, skipped: [expect.objectContaining({ reason: expect.stringContaining('CPCS references') })] }));
+  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ updatedCount: 0, skipped: [expect.objectContaining({ reason: expect.stringContaining('configured automatically') })] }));
 });
 
 test('reset does not erase automatic CPCS funding', async () => {
@@ -141,4 +161,36 @@ test('reset does not erase automatic CPCS funding', async () => {
   await resetChargedToIncome({ body: { fiscalYear: '2027' } }, res);
   expect(res.status).toHaveBeenCalledWith(400);
   expect(update).not.toHaveBeenCalled();
+});
+
+test('reset guard checks step allocations as well as CPCS differences', async () => {
+  const find = jest.spyOn(Personnel, 'find').mockReturnValue({ select: () => ({ lean: async () => [{ workflowRef }] }) });
+  Workflow.exists.mockResolvedValue({ _id: workflowRef });
+  jest.spyOn(Personnel, 'updateMany');
+  await resetChargedToIncome({ body: { fiscalYear: '2027' } }, response());
+  expect(find.mock.calls[0][0].$and[1].$or).toContainEqual({ salarySubsidyMonthlyAmount: { $gte: 0 } });
+  expect(Workflow.exists).toHaveBeenCalledWith(expect.objectContaining({
+    'permanentIncomeAllocation.mode': { $in: ['CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY'] },
+  }));
+  expect(Personnel.updateMany).not.toHaveBeenCalled();
+});
+
+test('new personnel inherit full salary funding and benefit edits stay in Subsidy', async () => {
+  Workflow.findById.mockReturnValue({ select: () => ({ lean: async () => ({
+    modelType: 'Initial', permanentIncomeAllocation: { mode: 'FULL_SALARY' },
+  }) }) });
+  jest.spyOn(Personnel.collection, 'insertOne').mockResolvedValue({ acknowledged: true });
+  const update = jest.spyOn(Personnel.collection, 'updateOne').mockResolvedValue({ acknowledged: true, modifiedCount: 1 });
+  const doc = new Personnel({ workflowRef, statusOfAppointment: 'PERMANENT',
+    monthlySalary: 33000, annualSalary: 396000, PERA: 24000, earnedLeaves: 12000 });
+  await doc.save({ validateBeforeSave: false });
+  expect(doc.salarySubsidyMonthlyAmount).toBe(0);
+  expect(doc.chargedToIncomeAmount).toBe(396000);
+  expect(doc.chargedToSubsidyAmount).toBe(36000);
+  doc.PERA = 30000;
+  await doc.save({ validateBeforeSave: false });
+  expect(update).toHaveBeenCalled();
+  expect(doc.chargedToIncomeAmount).toBe(396000);
+  expect(doc.chargedToSubsidyAmount).toBe(42000);
+  expect(doc.Total).toBe(438000);
 });

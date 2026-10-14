@@ -39,7 +39,7 @@ afterEach(cleanup);
 async function open() {
   render(<PersonnelTable dataListName="personnelServices" schema={schema} proposalId="proposal-1" />);
   fireEvent.click(screen.getByRole('button', { name: 'Salary Income Allocation' }));
-  await screen.findByText('CPCS Salary Reference Allocation');
+  await screen.findByRole('heading', { name: 'Salary Income Allocation' });
 }
 it('previews two references and saves for all permanent personnel without selecting rows', async () => {
   await open();
@@ -64,6 +64,27 @@ it('shows missing-rate errors and prevents saving an invalid allocation', async 
   expect(screen.getByRole('button', { name: 'Save Allocation' }).disabled).toBe(true);
   expect(mocks.put).not.toHaveBeenCalled();
 });
+it('allows selecting a historical CPCS 1 reference before previewing and saving', async () => {
+  const get = mocks.get.getMockImplementation();
+  mocks.get.mockImplementation(url => url.includes('permanent-income-allocation')
+    ? Promise.resolve({ data: { ...payload, cpcs1Reference: '', references: {
+      cpcs1: [{ id: 'historical', label: 'CPCS 1 — FY 2026 / Initial (Inactive reference)' }],
+      cpcs2: [{ id: 'current', label: 'CPCS 2 FY 2027' }],
+    } } }) : get(url));
+  await open();
+  expect(screen.getByRole('button', { name: 'Preview Allocation' }).disabled).toBe(true);
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: /CPCS 1 reference table/ }));
+  fireEvent.click(screen.getByRole('option', { name: /Inactive reference/ }));
+  expect(screen.getByRole('button', { name: 'Preview Allocation' }).disabled).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Preview Allocation' }));
+  await screen.findByText('Employee One');
+  fireEvent.click(screen.getByRole('button', { name: 'Save Allocation' }));
+  await waitFor(() => expect(mocks.put).toHaveBeenCalledWith(
+    '/personnelServices/permanent-income-allocation/proposal-1',
+    { ...payload, cpcs1Reference: 'historical' },
+    { headers: { 'X-Workflow-Ref': 'proposal-1' } },
+  ));
+});
 it('invalidates the preview when grade matching changes', async () => {
   await open();
   fireEvent.click(screen.getByRole('button', { name: 'Preview Allocation' }));
@@ -73,7 +94,7 @@ it('invalidates the preview when grade matching changes', async () => {
   expect(screen.queryByText('Employee One')).toBeNull();
   expect(screen.getByRole('button', { name: 'Save Allocation' }).disabled).toBe(true);
 });
-it('requires both tables for an unconfigured proposal', async () => {
+it('requires both CPCS reference tables for an unconfigured allocation', async () => {
   const get = mocks.get.getMockImplementation();
   mocks.get.mockImplementation(url => url.includes('permanent-income-allocation')
     ? Promise.resolve({ data: { references: { cpcs1: [], cpcs2: [] } } }) : get(url));
@@ -111,4 +132,43 @@ it('renders all-region funding subcolumns, salary rows, subtotals and grand tota
   const salary = screen.getByText('Regular salary').closest('tr');
   expect(salary.textContent).toContain('₱36,000.00₱360,000.00₱396,000.00');
   expect(document.querySelector('tfoot').textContent).toContain('₱36,000.00₱360,000.00₱396,000.00');
+});
+
+it('previews and saves full salary funding without choosing reference tables', async () => {
+  mocks.post.mockResolvedValue({ data: { updatedCount: 1, chargedCount: 1, monthlySalarySubsidy: 0, monthlyIncome: 33000,
+    personnel: [{ id: 'one', name: 'Full Salary Employee', monthlySalary: 33000, salarySubsidy: 0, income: 33000 }],
+  } });
+  await open();
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Allocation method' }));
+  fireEvent.click(screen.getByRole('option', { name: 'Full salary → Income (100%)' }));
+  expect(screen.queryByRole('combobox', { name: /reference table/ })).toBeNull();
+  expect(screen.queryByRole('combobox', { name: 'Salary table for Step 1 base' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Preview Allocation' }).disabled).toBe(false);
+  expect(screen.getByRole('button', { name: 'Save Allocation' }).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Preview Allocation' }));
+  await screen.findByText('Full Salary Employee');
+  expect(screen.getByRole('columnheader', { name: 'Salary / Income' })).toBeTruthy();
+  expect(mocks.post).toHaveBeenCalledWith(
+    '/personnelServices/permanent-income-allocation/proposal-1/preview',
+    { mode: 'FULL_SALARY', notes: 'Salary' }, { headers: { 'X-Workflow-Ref': 'proposal-1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Allocation' }));
+  await waitFor(() => expect(mocks.put).toHaveBeenCalledWith(
+    '/personnelServices/permanent-income-allocation/proposal-1',
+    { mode: 'FULL_SALARY', notes: 'Salary' }, { headers: { 'X-Workflow-Ref': 'proposal-1' } }));
+});
+
+it('reloads full salary mode and invalidates the preview when switching methods', async () => {
+  const get = mocks.get.getMockImplementation();
+  mocks.get.mockImplementation(url => url.includes('permanent-income-allocation')
+    ? Promise.resolve({ data: { mode: 'FULL_SALARY', notes: '', references: { cpcs1: [], cpcs2: [] } } }) : get(url));
+  await open();
+  expect(screen.getByRole('combobox', { name: 'Allocation method' }).textContent).toContain('Full salary');
+  expect(screen.getByRole('button', { name: 'Preview Allocation' }).disabled).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Preview Allocation' }));
+  await screen.findByText('Employee One');
+  expect(screen.getByRole('button', { name: 'Save Allocation' }).disabled).toBe(false);
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Allocation method' }));
+  fireEvent.click(screen.getByRole('option', { name: 'CPCS 2 minus CPCS 1' }));
+  expect(screen.getByRole('button', { name: 'Save Allocation' }).disabled).toBe(true);
+  expect(screen.getByRole('button', { name: 'Preview Allocation' }).disabled).toBe(true);
 });

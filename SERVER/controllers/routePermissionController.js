@@ -273,7 +273,7 @@ const DEFAULT_ROUTE_PERMISSIONS = [
   },
   {
     path: "/consolidated-personnel-services-reports",
-    label: "Consolidated Personnel Services Reports",
+    label: "Personnel Services Reports",
     group: "Reports",
     requiredPermissions: ["ViewReports"],
     requiredWorkflowRoles: [

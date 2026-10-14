@@ -98,6 +98,8 @@ const PSCOSCustomPageTable = ({
   const [premiumSettings, setPremiumSettings] = useState({
     enabled: false,
     percentage: 10,
+    selectionMode: 'ALL',
+    selectedPersonnelIds: [],
   });
   const [premiumSettingsLoading, setPremiumSettingsLoading] = useState(false);
   const [premiumSettingsSaving, setPremiumSettingsSaving] = useState(false);
@@ -146,9 +148,13 @@ const PSCOSCustomPageTable = ({
         params: { proposalId: effectiveProposalId },
         headers: headerConfig(),
       });
+      const selectedPersonnelIds = response.data.selectedPersonnelIds || [];
+      setSelectedRows(selectedPersonnelIds);
       setPremiumSettings({
         enabled: Boolean(response.data.enabled),
         percentage: Number(response.data.percentage ?? 10),
+        selectionMode: ['SELECTED', 'EXCLUDED'].includes(response.data.selectionMode) ? response.data.selectionMode : 'ALL',
+        selectedPersonnelIds,
         updatedByName: response.data.updatedByName || "",
         updatedAt: response.data.updatedAt || null,
       });
@@ -169,16 +175,29 @@ const PSCOSCustomPageTable = ({
       toast.error("Premium percentage must be from 0 to 100.");
       return;
     }
+    if (premiumSettings.enabled && ['SELECTED', 'EXCLUDED'].includes(premiumSettings.selectionMode) && selectedRows.length === 0) {
+      toast.error("Select at least one COS/JO personnel for premium coverage.");
+      return;
+    }
     setPremiumSettingsSaving(true);
     try {
       const response = await api.put(
         `/cos-personnel/premium-settings/${effectiveProposalId}`,
-        { enabled: premiumSettings.enabled, percentage },
+        {
+          enabled: premiumSettings.enabled,
+          percentage,
+          selectionMode: premiumSettings.selectionMode,
+          selectedPersonnelIds: premiumSettings.selectionMode === 'SELECTED' ? selectedRows : [],
+        },
         { headers: headerConfig() }
       );
+      const selectedPersonnelIds = response.data.selectedPersonnelIds || [];
+      setSelectedRows(selectedPersonnelIds);
       setPremiumSettings({
         enabled: Boolean(response.data.enabled),
         percentage: Number(response.data.percentage),
+        selectionMode: ['SELECTED', 'EXCLUDED'].includes(response.data.selectionMode) ? response.data.selectionMode : 'ALL',
+        selectedPersonnelIds,
         updatedByName: response.data.updatedByName || "",
         updatedAt: response.data.updatedAt || null,
       });
@@ -582,6 +601,30 @@ const PSCOSCustomPageTable = ({
               disabled={locked || !hasWorkflowRef || premiumSettingsLoading || premiumSettingsSaving}
               sx={{ width: 150 }}
             />
+            <TextField
+              select
+              label="Premium coverage"
+              size="small"
+              value={premiumSettings.selectionMode}
+              onChange={(event) => {
+                const selectionMode = event.target.value;
+                setPremiumSettings((current) => ({ ...current, selectionMode }));
+                if (selectionMode === 'ALL') setSelectedRows([]);
+              }}
+              disabled={locked || !hasWorkflowRef || premiumSettingsLoading || premiumSettingsSaving}
+              sx={{ minWidth: 210 }}
+            >
+              <MenuItem value="ALL">All COS/JO personnel</MenuItem>
+              <MenuItem value="SELECTED">Selected personnel only</MenuItem>
+              <MenuItem value="EXCLUDED">Exclude selected personnel (0% premium)</MenuItem>
+            </TextField>
+            {['SELECTED', 'EXCLUDED'].includes(premiumSettings.selectionMode) && (
+              <Chip
+                label={`${selectedRows.length} personnel selected below`}
+                color={selectedRows.length ? 'primary' : 'warning'}
+                variant="outlined"
+              />
+            )}
             <Button
               variant="contained"
               color="success"

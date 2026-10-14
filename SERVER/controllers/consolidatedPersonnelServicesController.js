@@ -481,10 +481,10 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching consolidated Personnel Services data:', error);
+    console.error('Error fetching Personnel Services data:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch consolidated Personnel Services data',
+      message: 'Failed to fetch Personnel Services data',
       error: error.message
     });
   }
@@ -725,7 +725,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
 
     const tmpFilePath = path.join(os.tmpdir(), `ps_report_${Date.now()}.pdf`);
     const tempSignatureImagePaths = [];
-    const recipeOptions = { version: 1.6, author: 'FMIS-BUDGET', title: 'Consolidated Personnel Services Report' };
+    const recipeOptions = { version: 1.6, author: 'FMIS-BUDGET', title: 'Personnel Services Report' };
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
     const { width: PAGE_WIDTH, height: PAGE_HEIGHT } = useRegionMatrix
@@ -820,7 +820,7 @@ const getConsolidatedPersonnelServicesPdf = async (req, res) => {
       }
 
       curY = hy + LINE_H * 1.3;
-      pdfDoc.text(`CONSOLIDATED PERSONNEL SERVICES – ${String(budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`, cx, curY, textOpt({ fontSize: 12, bold: true, align: 'center' }));
+      pdfDoc.text(`PERSONNEL SERVICES – ${String(budgetType || 'INITIAL').toUpperCase()} BUDGET PROPOSAL`, cx, curY, textOpt({ fontSize: 12, bold: true, align: 'center' }));
       curY += LINE_H * 1.2;
       pdfDoc.text(`Fiscal Year: ${safeStr(fiscalYear) || 'All Years'}  |  Budget Type: ${safeStr(budgetType) || 'All'}`, cx, curY, textOpt({ fontSize: 10, align: 'center' }));
       curY += LINE_H * 1.8;

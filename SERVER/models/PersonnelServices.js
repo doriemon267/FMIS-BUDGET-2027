@@ -144,6 +144,7 @@ const personnelServicesSchema = new mongoose.Schema(
     },
     cpcs1MonthlySalary: { type: Number, min: 0 },
     cpcs2MonthlySalary: { type: Number, min: 0 },
+    salarySubsidyMonthlyAmount: { type: Number, min: 0 },
     // Portion already included in monthlySalary, never added again to PS cost.
     monthlySalaryIncrement: {
       type: Number,

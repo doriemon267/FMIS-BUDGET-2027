@@ -39,6 +39,8 @@ import { formatDateToMDY, isValidDate } from '../../utils/formatDate';
 const EXCLUDED_TOTAL_FIELDS = new Set([
   'monthlySalary',
   'monthlySalaryIncrement',
+  'chargedToIncomeMonthlyAmount',
+  'salarySubsidyMonthlyAmount',
   'cpcs1MonthlySalary',
   'cpcs2MonthlySalary',
   'noOfDependent',

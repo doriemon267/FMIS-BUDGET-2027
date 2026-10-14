@@ -45,6 +45,8 @@ const responseFor = workflow => ({
   cpcs2Reference: workflow.permanentIncomeAllocation?.referenceTables?.cpcs2?.id || '',
   cpcs1MatchBy: workflow.permanentIncomeAllocation?.referenceTables?.cpcs1?.matchBy || 'JG',
   cpcs2MatchBy: workflow.permanentIncomeAllocation?.referenceTables?.cpcs2?.matchBy || 'SG',
+  stepReference: workflow.permanentIncomeAllocation?.referenceTables?.stepBase?.id || '',
+  stepMatchBy: workflow.permanentIncomeAllocation?.referenceTables?.stepBase?.matchBy || 'SG',
 });
 
 exports.getPermanentIncomeAllocation = async (req, res) => {
@@ -60,8 +62,8 @@ const applyAllocation = preview => async (req, res) => {
   try {
     const workflow = await getWorkflow(req, true);
     const { monthlyAmount, notes = '', mode = 'ALL_PERMANENT' } = req.body;
-    if (!['CPCS_DIFFERENCE', 'INCREMENT_ONLY', 'ALL_PERMANENT'].includes(mode)) {
-      throw fail(400, 'Select personnel with increments only or all permanent personnel.');
+    if (!['STEP_INCREMENT', 'CPCS_DIFFERENCE', 'INCREMENT_ONLY', 'ALL_PERMANENT', 'FULL_SALARY'].includes(mode)) {
+      throw fail(400, 'Select a valid salary Income allocation method.');
     }
     if (mode === 'ALL_PERMANENT' &&
         (typeof monthlyAmount !== 'number' || !Number.isFinite(monthlyAmount) || monthlyAmount < 0)) {
@@ -75,7 +77,7 @@ const applyAllocation = preview => async (req, res) => {
       updatedBy: userIdOf(req),
       updatedAt: new Date(),
     };
-    if (mode === 'CPCS_DIFFERENCE') config.referenceTables = await loadSalaryReferences(req.body);
+    if (['STEP_INCREMENT', 'CPCS_DIFFERENCE'].includes(mode)) config.referenceTables = await loadSalaryReferences(req.body);
     // Include legacy-linked rows, without expanding to another proposal or year.
     const legacy = await Proposal.find({ workflowRef: workflow._id }).select('_id').lean();
     const scope = {
@@ -96,18 +98,21 @@ const applyAllocation = preview => async (req, res) => {
       }
     });
     if (errors.length) return res.status(400).json({
-      message: `${errors.length} personnel have invalid salary references. ${errors.slice(0, 5).join(' ')}`,
+      message: `${errors.length} personnel have invalid salary data. ${errors.slice(0, 5).join(' ')}`,
       errors,
     });
     const summary = {
       updatedCount: rows.length,
       chargedCount: allocations.filter(row => row.chargedToIncomeEligible).length,
       monthlyIncome: Math.round(allocations.reduce((sum, row) => sum + (row.chargedToIncomeMonthlyAmount || 0), 0) * 100) / 100,
-      monthlySalarySubsidy: Math.round(allocations.reduce((sum, row) => sum + (row.cpcs1MonthlySalary || 0), 0) * 100) / 100,
+      monthlySalarySubsidy: Math.round(allocations.reduce((sum, row) => sum + (row.salarySubsidyMonthlyAmount ?? row.cpcs1MonthlySalary ?? 0), 0) * 100) / 100,
     };
     if (preview) return res.json({ ...summary, personnel: rows.map((row, index) => ({
       id: row._id, name: row.employeeFullName || row.employeeNumber,
       cpcs1: allocations[index].cpcs1MonthlySalary, cpcs2: allocations[index].cpcs2MonthlySalary,
+      salarySubsidy: allocations[index].salarySubsidyMonthlyAmount ?? allocations[index].cpcs1MonthlySalary,
+      monthlySalary: allocations[index].monthlySalary ?? row.monthlySalary,
+      step: row.step,
       income: allocations[index].chargedToIncomeMonthlyAmount,
     })) });
     // Persist the rule first. Saving again safely reapplies it after a partial failure.

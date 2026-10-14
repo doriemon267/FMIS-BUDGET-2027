@@ -73,7 +73,7 @@ const PSPCustomPageTable = ({
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [viewDetailsDialog, setViewDetailsDialog] = useState({ open: false, data: null });
   const [filteredRows, setFilteredRows] = useState([]);
-  const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({ open: false, notes: "", cpcs1Reference: "", cpcs2Reference: "", cpcs1MatchBy: "JG", cpcs2MatchBy: "SG" });
+  const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({ open: false, mode: 'CPCS_DIFFERENCE', notes: "", cpcs1Reference: "", cpcs2Reference: "", cpcs1MatchBy: "JG", cpcs2MatchBy: "SG" });
   const [salaryReferences, setSalaryReferences] = useState({ cpcs1: [], cpcs2: [] });
   const [salaryPreview, setSalaryPreview] = useState(null);
   const [salaryError, setSalaryError] = useState("");
@@ -167,6 +167,19 @@ const PSPCustomPageTable = ({
     }
   }, []);
 
+  const fetchIncomeAllocationMode = useCallback(async () => {
+    if (!(proposalId || workflowRef)) return;
+    try {
+      const { data } = await api.get(`/personnelServices/permanent-income-allocation/${proposalId || workflowRef}`);
+      setChargedToIncomeDialog(previous => ({
+        ...previous,
+        mode: data.mode === 'FULL_SALARY' ? 'FULL_SALARY' : 'CPCS_DIFFERENCE',
+      }));
+    } catch (_error) {
+      // Keep the default CPCS display if no allocation has been saved yet.
+    }
+  }, [proposalId, workflowRef]);
+
   // Initialize column visibility
   useEffect(() => {
     const initialVisibility = {};
@@ -183,6 +196,7 @@ const PSPCustomPageTable = ({
         refreshPersonnelData();
         fetchActiveSettings();
         fetchRATA();
+        fetchIncomeAllocationMode();
       }, 30000); // Refresh every 30 seconds
       setRefreshInterval(interval);
       return () => clearInterval(interval);
@@ -190,7 +204,7 @@ const PSPCustomPageTable = ({
       clearInterval(refreshInterval);
       setRefreshInterval(null);
     }
-  }, [autoRefresh, refreshPersonnelData, refreshInterval, fetchActiveSettings, fetchRATA]);
+  }, [autoRefresh, refreshPersonnelData, refreshInterval, fetchActiveSettings, fetchRATA, fetchIncomeAllocationMode]);
 
   const handleFilterMenuClick = (event) => setFilterMenuAnchor(event.currentTarget);
   const handleFilterMenuClose = () => setFilterMenuAnchor(null);
@@ -213,6 +227,7 @@ const PSPCustomPageTable = ({
       const { data } = await api.get(`/personnelServices/permanent-income-allocation/${proposalId || workflowRef}`);
       setChargedToIncomeDialog({
         open: true,
+        mode: data.mode === 'FULL_SALARY' ? 'FULL_SALARY' : 'CPCS_DIFFERENCE',
         cpcs1Reference: data.cpcs1Reference || "",
         cpcs2Reference: data.cpcs2Reference || "",
         cpcs1MatchBy: data.cpcs1MatchBy || "JG",
@@ -234,7 +249,12 @@ const PSPCustomPageTable = ({
     setChargedToIncomeDialog((prev) => ({ ...prev, open: false }));
   };
 
-  const allocationPayload = () => ({
+  const isFullSalaryAllocation = chargedToIncomeDialog.mode === 'FULL_SALARY';
+  const hasSalaryReferences = isFullSalaryAllocation || Boolean(chargedToIncomeDialog.cpcs1Reference && chargedToIncomeDialog.cpcs2Reference);
+  const allocationPayload = () => isFullSalaryAllocation ? ({
+    mode: 'FULL_SALARY',
+    notes: chargedToIncomeDialog.notes.trim(),
+  }) : ({
     mode: 'CPCS_DIFFERENCE',
     cpcs1Reference: chargedToIncomeDialog.cpcs1Reference,
     cpcs2Reference: chargedToIncomeDialog.cpcs2Reference,
@@ -289,13 +309,14 @@ const PSPCustomPageTable = ({
       await refreshPersonnelData();
       await fetchActiveSettings();
       await fetchRATA();
+      await fetchIncomeAllocationMode();
       toast.success("Data refreshed successfully!");
     } catch (_error) {
       toast.error("Failed to refresh data");
     } finally {
       setLoading(false);
     }
-  }, [refreshPersonnelData, fetchActiveSettings, fetchRATA]);
+  }, [refreshPersonnelData, fetchActiveSettings, fetchRATA, fetchIncomeAllocationMode]);
 
   // Enhanced export function that fetches all data
   const handleExportAllData = useCallback(async () => {
@@ -344,7 +365,8 @@ const PSPCustomPageTable = ({
     refreshPersonnelData();
     fetchActiveSettings();
     fetchRATA();
-  }, [refreshPersonnelData, fetchActiveSettings, fetchRATA]);
+    fetchIncomeAllocationMode();
+  }, [refreshPersonnelData, fetchActiveSettings, fetchRATA, fetchIncomeAllocationMode]);
 
   const handleAddAllPersonnel = useCallback(async (statusOfAppointment) => {
     if (!workflowRef) {
@@ -930,20 +952,28 @@ const PSPCustomPageTable = ({
         fullWidth
       >
         <DialogTitle>
-          CPCS Salary Reference Allocation
+          Salary Income Allocation
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField select fullWidth label="Allocation method" value={chargedToIncomeDialog.mode}
+            disabled={chargedToIncomeLoading} onChange={event => changeSalaryReference('mode', event.target.value)}>
+            <MenuItem value="CPCS_DIFFERENCE">CPCS 2 minus CPCS 1</MenuItem>
+            <MenuItem value="FULL_SALARY">Full salary → Income (100%)</MenuItem>
+          </TextField>
           <Typography variant="body2" color="text.secondary">
-            Applies automatically to all permanent personnel, including those without increases.
-            CPCS 1 monthly salary is funded by Subsidy; CPCS 2 minus CPCS 1 is funded by Income.
-            Matching uses each employee&apos;s grade and step. Other PS benefits retain their amounts.
+            {isFullSalaryAllocation
+              ? 'Charges the entire saved monthly salary to Income. Salary Subsidy is zero; allowances and benefits remain in Subsidy. Applies to all permanent personnel in this proposal, including future additions. No salary reference table is required.'
+              : 'Applies automatically to all permanent personnel, including those without increases. CPCS 1 monthly salary is funded by Subsidy; CPCS 2 minus CPCS 1 is funded by Income. Both tables use the employee grade and step. This method replaces the PS salary with the CPCS 2 reference rate. Other PS benefits retain their amounts.'}
           </Typography>
-          {['cpcs1', 'cpcs2'].map((key, index) => (
+          {!isFullSalaryAllocation && <Typography variant="body2" color="text.secondary">
+            Inactive salary templates can be used as historical references. Selecting a reference here does not change the active salary template in Salary Management.
+          </Typography>}
+          {isFullSalaryAllocation ? null : ['cpcs1', 'cpcs2'].map((key, index) => (
             <Box key={key} sx={{ display: 'flex', gap: 2 }}>
               <TextField select fullWidth required label={`CPCS ${index + 1} reference table`}
                 value={chargedToIncomeDialog[`${key}Reference`]} disabled={chargedToIncomeLoading}
                 onChange={event => changeSalaryReference(`${key}Reference`, event.target.value)}
-                helperText={!salaryReferences[key]?.length ? 'Create an active salary template and its rates in Salary Management.' : undefined}>
+                helperText={!salaryReferences[key]?.length ? 'Create a salary template and its rates in Salary Management. It can remain inactive for reference use.' : undefined}>
                 {(salaryReferences[key] || []).map(table => <MenuItem key={table.id} value={table.id}>{table.label}</MenuItem>)}
               </TextField>
               <TextField select label={`CPCS ${index + 1} grade`} sx={{ minWidth: 130 }}
@@ -953,17 +983,19 @@ const PSPCustomPageTable = ({
               </TextField>
             </Box>
           ))}
-          <Typography variant="body2">Example: CPCS 1 ₱30,000 + Income increase ₱3,000 = CPCS 2 ₱33,000 monthly. Equal rates mean zero Income charge.</Typography>
+          <Typography variant="body2">{isFullSalaryAllocation
+            ? 'Example: saved salary ₱33,000 → ₱33,000 monthly Income (₱396,000 annually), with ₱0 salary Subsidy. Allowances and benefits remain in Subsidy.'
+            : 'Example: CPCS 1 ₱30,000 + Income increase ₱3,000 = CPCS 2 ₱33,000 monthly. Equal rates mean zero Income charge.'}</Typography>
           {salaryError && <Alert severity="error">{salaryError}</Alert>}
           {salaryPreview && <>
-            <Alert severity="success">{salaryPreview.updatedCount} permanent personnel included; {salaryPreview.chargedCount} with increases.
+            <Alert severity="success">{salaryPreview.updatedCount} permanent personnel included; {salaryPreview.chargedCount} charged to Income.
               Monthly salary Subsidy: ₱{Number(salaryPreview.monthlySalarySubsidy).toLocaleString()}; Income: ₱{Number(salaryPreview.monthlyIncome).toLocaleString()}.
             </Alert>
             <Box sx={{ maxHeight: 240, overflow: 'auto' }}>
               <table style={{ width: '100%' }} aria-label="Monthly salary allocation preview">
-                <thead><tr><th>Employee</th><th>CPCS 1 / Subsidy</th><th>CPCS 2</th><th>Income increase</th></tr></thead>
+                <thead><tr><th>Employee</th><th>{isFullSalaryAllocation ? 'Salary / Subsidy' : 'CPCS 1 / Subsidy'}</th><th>{isFullSalaryAllocation ? 'Saved salary' : 'CPCS 2'}</th><th>Salary / Income</th></tr></thead>
                 <tbody>{salaryPreview.personnel?.map(person => <tr key={person.id}>
-                  <td>{person.name}</td><td>{person.cpcs1?.toLocaleString()}</td><td>{person.cpcs2?.toLocaleString()}</td><td>{person.income?.toLocaleString()}</td>
+                  <td>{person.name}</td><td>{(person.salarySubsidy ?? person.cpcs1)?.toLocaleString()}</td><td>{(person.monthlySalary ?? person.cpcs2)?.toLocaleString()}</td><td>{person.income?.toLocaleString()}</td>
                 </tr>)}</tbody>
               </table>
             </Box>
@@ -986,7 +1018,7 @@ const PSPCustomPageTable = ({
           <Button onClick={handleCloseChargedToIncomeDialog} disabled={chargedToIncomeLoading}>
             Cancel
           </Button>
-          <Button onClick={handlePreviewSalary} disabled={chargedToIncomeLoading || locked || !chargedToIncomeDialog.cpcs1Reference || !chargedToIncomeDialog.cpcs2Reference}>Preview Allocation</Button>
+          <Button onClick={handlePreviewSalary} disabled={chargedToIncomeLoading || locked || !hasSalaryReferences}>Preview Allocation</Button>
           <Button
             onClick={handleConfirmChargedToIncome}
             variant="contained"
@@ -1008,7 +1040,11 @@ const PSPCustomPageTable = ({
         proposalId={proposalId || workflowRef}
         onDataChange={setFilteredRows}
         columns={useMemo(() => Object.keys(schema)
-          .filter((key) => (columnVisibility[key] !== false && (schema[key].show === true || key === "action")))
+          .filter((key) => (
+            columnVisibility[key] !== false &&
+            (schema[key].show === true || key === "action") &&
+            (!isFullSalaryAllocation || !['cpcs1MonthlySalary', 'cpcs2MonthlySalary', 'monthlySalaryIncrement'].includes(key))
+          ))
           .map((key) => {
             const fieldSchema = schema[key];
             const column = {
@@ -1042,7 +1078,7 @@ const PSPCustomPageTable = ({
             }
 
             return column;
-          }), [schema, columnVisibility, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, apiPath, dataListName, invalidatePersonnelRelatedQueries])}
+          }), [schema, columnVisibility, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, apiPath, dataListName, invalidatePersonnelRelatedQueries, isFullSalaryAllocation])}
       />
     </>
   );

@@ -171,6 +171,57 @@ function referenceRequest() {
   return { ...request(), body: { mode: 'CPCS_DIFFERENCE', cpcs1Reference: 'base', cpcs2Reference: 'current' } };
 }
 
+function stepRequest() {
+  loadSalaryReferences.mockResolvedValue({ stepBase: {
+    id: 'base', matchBy: 'JG', rows: [{ jg: 5, sg: 10, rates: { 1: 30000, 2: 31000 } }],
+  } });
+  Personnel.find.mockReturnValue({ lean: async () => [
+    { _id: 'step2', employeeFullName: 'Step Two', statusOfAppointment: 'PERMANENT', gradelevel_JG: '5', step: '2', monthlySalary: 31500, annualSalary: 378000, PERA: 24000 },
+    { _id: 'step1', employeeFullName: 'Step One', statusOfAppointment: 'PERMANENT', gradelevel_JG: '5', step: '1', monthlySalary: 30000, annualSalary: 360000 },
+  ] });
+  return { ...request(), body: { mode: 'STEP_INCREMENT', stepReference: 'base', stepMatchBy: 'JG' } };
+}
+
+test('previews step increases using saved salaries with a single reference and no writes', async () => {
+  const req = stepRequest();
+  const res = response();
+  await previewPermanentIncomeAllocation(req, res);
+  expect(loadSalaryReferences).toHaveBeenCalledWith(req.body);
+  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+    updatedCount: 2, chargedCount: 1, monthlyIncome: 1500, monthlySalarySubsidy: 60000,
+    personnel: expect.arrayContaining([expect.objectContaining({ id: 'step2', monthlySalary: 31500, salarySubsidy: 30000, income: 1500 })]),
+  }));
+  expect(workflow.save).not.toHaveBeenCalled();
+  expect(Personnel.bulkWrite).not.toHaveBeenCalled();
+});
+
+test('saves and reloads the step reference while preserving salaries and recalculating proposal funding', async () => {
+  const req = stepRequest();
+  const res = response();
+  await savePermanentIncomeAllocation(req, res);
+  expect(workflow.permanentIncomeAllocation).toMatchObject({ mode: 'STEP_INCREMENT', referenceTables: { stepBase: { id: 'base' } } });
+  const updates = Personnel.bulkWrite.mock.calls[0][0].map(operation => operation.updateOne.update.$set);
+  expect(updates[0]).toMatchObject({ salarySubsidyMonthlyAmount: 30000, chargedToIncomeAmount: 18000, chargedToSubsidyAmount: 384000, Total: 402000 });
+  expect(updates[0]).not.toHaveProperty('monthlySalary');
+  expect(updates[1]).toMatchObject({ chargedToIncomeEligible: false, chargedToIncomeAmount: 0 });
+  expect(recalculateAndSaveProposalTotals).toHaveBeenCalledWith({ workflowRef: proposalId });
+  const reload = response();
+  await getPermanentIncomeAllocation(req, reload);
+  expect(reload.json).toHaveBeenCalledWith(expect.objectContaining({ mode: 'STEP_INCREMENT', stepReference: 'base', stepMatchBy: 'JG' }));
+});
+
+test('a salary below Step 1 blocks the whole allocation before any writes', async () => {
+  const req = stepRequest();
+  Personnel.find.mockReturnValue({ lean: async () => [
+    { _id: 'bad', employeeFullName: 'Wrong Reference', statusOfAppointment: 'PERMANENT', gradelevel_JG: '5', step: '2', monthlySalary: 29000 },
+  ] });
+  const res = response();
+  await savePermanentIncomeAllocation(req, res);
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(workflow.save).not.toHaveBeenCalled();
+  expect(Personnel.bulkWrite).not.toHaveBeenCalled();
+});
+
 test('previews both salaries for all permanent personnel without writes', async () => {
   const req = referenceRequest();
   const res = response();
@@ -209,4 +260,63 @@ test('missing rates block the entire save before any personnel or workflow chang
   expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining('Missing Grade') }));
   expect(workflow.save).not.toHaveBeenCalled();
   expect(Personnel.bulkWrite).not.toHaveBeenCalled();
+});
+
+function fullSalaryRequest() {
+  Personnel.find.mockReturnValue({ lean: async () => [
+    { _id: 'full-one', employeeFullName: 'Full One', statusOfAppointment: 'PERMANENT',
+      monthlySalary: 50000, annualSalary: 600000, PERA: 24000, earnedLeaves: 5000, gsisPremium: 6000, Total: 635000 },
+    { _id: 'full-two', employeeFullName: 'Full Two', statusOfAppointment: 'PERMANENT',
+      monthlySalary: 15000, annualSalary: 180000, uniformALLOWANCE: 6000, Total: 186000 },
+  ] });
+  return { ...request(), body: { mode: 'FULL_SALARY', notes: 'Salary only' } };
+}
+
+test('previews all saved salaries without reference tables or writes', async () => {
+  const req = fullSalaryRequest();
+  const res = response();
+  await previewPermanentIncomeAllocation(req, res);
+  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+    updatedCount: 2, chargedCount: 2, monthlyIncome: 65000, monthlySalarySubsidy: 0,
+    personnel: expect.arrayContaining([expect.objectContaining({ id: 'full-one', monthlySalary: 50000, salarySubsidy: 0, income: 50000 })]),
+  }));
+  expect(loadSalaryReferences).not.toHaveBeenCalled();
+  expect(workflow.save).not.toHaveBeenCalled();
+  expect(Personnel.bulkWrite).not.toHaveBeenCalled();
+});
+
+test('saves and reloads full salary funding, with benefits left in Subsidy', async () => {
+  const req = fullSalaryRequest();
+  await savePermanentIncomeAllocation(req, response());
+  expect(workflow.permanentIncomeAllocation).toMatchObject({ mode: 'FULL_SALARY', monthlyAmount: null });
+  expect(workflow.permanentIncomeAllocation.referenceTables).toBeUndefined();
+  const updates = Personnel.bulkWrite.mock.calls[0][0].map(operation => operation.updateOne.update.$set);
+  expect(updates[0]).toMatchObject({ Total: 635000, chargedToIncomeAmount: 600000, chargedToSubsidyAmount: 35000, salarySubsidyMonthlyAmount: 0 });
+  expect(updates[1]).toMatchObject({ Total: 186000, chargedToIncomeAmount: 180000, chargedToSubsidyAmount: 6000 });
+  expect(updates[0]).not.toHaveProperty('PERA');
+  expect(recalculateAndSaveProposalTotals).toHaveBeenCalledWith({ workflowRef: proposalId });
+  const res = response();
+  await getPermanentIncomeAllocation(req, res);
+  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ mode: 'FULL_SALARY' }));
+});
+
+test('full salary can be configured before any personnel are added', async () => {
+  Personnel.find.mockReturnValue({ lean: async () => [] });
+  await savePermanentIncomeAllocation({ ...request(), body: { mode: 'FULL_SALARY' } }, response());
+  expect(workflow.permanentIncomeAllocation.mode).toBe('FULL_SALARY');
+  expect(workflow.save).toHaveBeenCalled();
+  expect(Personnel.bulkWrite).not.toHaveBeenCalled();
+});
+
+test('invalid salary blocks the entire full-salary save before any writes', async () => {
+  const req = fullSalaryRequest();
+  Personnel.find.mockReturnValue({ lean: async () => [
+    { _id: 'valid', statusOfAppointment: 'PERMANENT', monthlySalary: 30000 },
+    { _id: 'invalid', statusOfAppointment: 'PERMANENT', monthlySalary: -1 },
+  ] });
+  const res = response();
+  await savePermanentIncomeAllocation(req, res);
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(Personnel.bulkWrite).not.toHaveBeenCalled();
+  expect(workflow.save).not.toHaveBeenCalled();
 });

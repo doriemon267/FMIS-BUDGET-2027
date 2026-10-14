@@ -542,7 +542,7 @@ const CustomDrawer = () => {
               },
               {
                 link: '/consolidated-personnel-services-reports',
-                name: reportLinkName('Consolidated Personnel Services Reports'),
+                name: reportLinkName('Personnel Services Reports'),
                 isAllow: checkAccess('/consolidated-personnel-services-reports', true),
                 icon: <LuUsers size={18} />,
               },

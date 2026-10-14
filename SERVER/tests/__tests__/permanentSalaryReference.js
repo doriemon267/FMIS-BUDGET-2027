@@ -15,6 +15,23 @@ test('equal salaries include personnel with zero income and clear a previous inc
   expect(applyPermanentIncomeAllocation({ ...person(), chargedToIncomeAmount: 5000 }, config(30000)))
     .toMatchObject({ chargedToIncomeEligible: false, monthlySalaryIncrement: 0, chargedToIncomeAmount: 0, chargedToSubsidyAmount: 403000 });
 });
+test.each([2, 3, 4, 5, 6, 7, 8])('allocates the CPCS difference to Income at employee Step %i', step => {
+  const allocation = config();
+  const base = 30000 + step * 100;
+  const current = 33000 + step * 200;
+  allocation.referenceTables.cpcs1.rows[0].rates[step] = base;
+  allocation.referenceTables.cpcs2.rows[0].rates[step] = current;
+  const result = applyPermanentIncomeAllocation({ ...person(), step: String(step) }, allocation);
+  expect(result).toMatchObject({
+    cpcs1MonthlySalary: base,
+    cpcs2MonthlySalary: current,
+    monthlySalary: current,
+    chargedToIncomeEligible: true,
+    chargedToIncomeMonthlyAmount: current - base,
+    chargedToIncomeAmount: (current - base) * 12,
+  });
+  expect(result.chargedToSubsidyAmount + result.chargedToIncomeAmount).toBe(result.Total);
+});
 test('casual personnel are unaffected', () => {
   expect(applyPermanentIncomeAllocation({ ...person(), statusOfAppointment: 'CASUAL' }, config())).toEqual({});
 });
