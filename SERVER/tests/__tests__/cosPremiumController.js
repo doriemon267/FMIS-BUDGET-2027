@@ -15,7 +15,7 @@ jest.mock('../../models/NewProposalWorkflow', () => ({
   findById: jest.fn(),
   findByIdAndUpdate: jest.fn(),
 }));
-jest.mock('../../models/MooeProposal', () => ({ updateMany: jest.fn() }));
+jest.mock('../../models/mooeProposals', () => ({ updateMany: jest.fn() }));
 jest.mock('../../utils/recalculateProposalTotals', () => ({
   recalculateAndSaveProposalTotals: jest.fn().mockResolvedValue({}),
 }));
@@ -24,7 +24,7 @@ const COSPersonnel = require('../../models/COSPersonnel');
 const EmployeeMaster = require('../../models/EmployeeList');
 const Settings = require('../../models/Settings');
 const NewProposalWorkflow = require('../../models/NewProposalWorkflow');
-const MOOE = require('../../models/MooeProposal');
+const MOOE = require('../../models/mooeProposals');
 const {
   bulkAddCOSPersonnel,
   deleteCOSPersonnel,

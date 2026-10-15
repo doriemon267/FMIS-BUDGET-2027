@@ -206,7 +206,7 @@ const testOrganizationalSegregation = async (req, res) => {
     }
     // Import models for real data testing
     const PersonnelServices = require('../models/PersonnelServices');
-    const MooeProposal = require('../models/MooeProposal');
+    const MooeProposal = require('../models/mooeProposals');
     const CapitalOutlay = require('../models/CapitalOutlay');
     const COSPersonnel = require('../models/COSPersonnel');
     // Build filters based on selected organizational unit
@@ -218,7 +218,7 @@ const testOrganizationalSegregation = async (req, res) => {
     const [
       personnelData,
       mooeData,
-      CapitalOutlayData,
+      capitalOutlayData,
       cosPersonnelData,
       // Get totals without filters for comparison
       totalPersonnel,
@@ -249,10 +249,10 @@ const testOrganizationalSegregation = async (req, res) => {
         total: totalMooe,
         percentage: totalMooe > 0 ? ((mooeData.length / totalMooe) * 100).toFixed(2) : 0
       },
-      CapitalOutlay: {
-        filtered: CapitalOutlayData.length,
+      capitalOutlay: {
+        filtered: capitalOutlayData.length,
         total: totalCapitalOutlay,
-        percentage: totalCapitalOutlay > 0 ? ((CapitalOutlayData.length / totalCapitalOutlay) * 100).toFixed(2) : 0
+        percentage: totalCapitalOutlay > 0 ? ((capitalOutlayData.length / totalCapitalOutlay) * 100).toFixed(2) : 0
       },
       cosPersonnel: {
         filtered: cosPersonnelData.length,
@@ -280,13 +280,13 @@ const testOrganizationalSegregation = async (req, res) => {
         sampleData: {
           personnel: personnelData.slice(0, 3), // Show first 3 records
           mooe: mooeData.slice(0, 3),
-          CapitalOutlay: CapitalOutlayData.slice(0, 3),
+          capitalOutlay: capitalOutlayData.slice(0, 3),
           cosPersonnel: cosPersonnelData.slice(0, 3)
         }
       },
       segregationEffectiveness: {
         totalRecordsInSystem: totalPersonnel + totalMooe + totalCapitalOutlay + totalCOSPersonnel,
-        filteredRecords: personnelData.length + mooeData.length + CapitalOutlayData.length + cosPersonnelData.length,
+        filteredRecords: personnelData.length + mooeData.length + capitalOutlayData.length + cosPersonnelData.length,
         segregationWorking: true,
         dataSourceConfirmed: "MongoDB Database"
       },

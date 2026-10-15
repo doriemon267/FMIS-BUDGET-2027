@@ -1,7 +1,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 
 const mongoose = require('mongoose');
-const MooeProposal = require('../models/MooeProposal');
+const MooeProposal = require('../models/mooeProposals');
 
 async function connectDatabase() {
   const defaultUri = 'mongodb://127.0.0.1:27017/fmis-budget-september';

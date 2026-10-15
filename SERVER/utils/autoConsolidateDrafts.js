@@ -4,7 +4,7 @@
  */
 
 const PersonnelService = require('../models/PersonnelServices');
-const MooeProposal = require('../models/MooeProposal');
+const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const Proposal = require('../models/Proposal');
@@ -55,7 +55,7 @@ async function consolidateDraftProposal(criteria) {
       totalPersonnelExpenses = draftPersonnel.reduce((sum, item) => {
         const itemTotal = [
           'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive',
-          'medical', 'ChildrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS',
+          'medical', 'childrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS',
           'subsistenceAllowanceST', 'midyearBonus', 'yearEndBonus', 'gsisPremium',
           'philhealthPremium', 'pagibigPremium', 'employeeCompensation', 'loyaltyAward',
           'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance'

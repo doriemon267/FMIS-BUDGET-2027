@@ -14,12 +14,12 @@ exports.addAnnex = async (req, res) => {
   try {
     const { employeeFullName, positionTitle, Department, Division, Amount, region, processBy, processDate, fiscalYear, status } = req.body;
     // Check if the same entry already exists
-    const existingAnnex = await PsAnnex.findOne({ employeeFullName, positionTitle, fiscalYear });
+    const existingAnnex = await PS_Annexes.findOne({ employeeFullName, positionTitle, fiscalYear });
     if (existingAnnex) {
       return res.status(400).json({ field: "employeeFullName", message: "Annex entry for this employee and fiscal year already exists." });
     }
     // Create new Annex entry
-    const newAnnex = new PsAnnex({
+    const newAnnex = new PS_Annexes({
       employeeFullName,
       positionTitle,
       Department,

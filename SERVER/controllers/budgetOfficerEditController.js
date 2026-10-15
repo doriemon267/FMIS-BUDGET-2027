@@ -5,7 +5,7 @@ const ProposalEditLog = require('../models/ProposalEditLog');
 const Proposal = require('../models/Proposal');
 const Income = require('../models/Income');
 const PersonnelServices = require('../models/PersonnelServices');
-const MOOE = require('../models/MooeProposal');
+const MOOE = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const { createNotification, createNotifications } = require('./notificationController');
@@ -210,7 +210,7 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     income: { modified: 0, added: 0, deleted: 0, errors: [] },
     personnelServices: { modified: 0, added: 0, deleted: 0, errors: [] },
     mooe: { modified: 0, added: 0, deleted: 0, errors: [] },
-    CapitalOutlay: { modified: 0, added: 0, deleted: 0, errors: [] }
+    capitalOutlay: { modified: 0, added: 0, deleted: 0, errors: [] }
   };
 
   try {
@@ -438,13 +438,13 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
               proposalId: budgetOfficerEdit.proposalId  // CRITICAL: Link to this proposal
             });
             await newCapitalOutlay.save();
-            results.CapitalOutlay.added++;
+            results.capitalOutlay.added++;
             continue;
           }
 
           if (edit.changeType === 'deleted' && targetId) {
             await CapitalOutlay.findByIdAndDelete(targetId);
-            results.CapitalOutlay.deleted++;
+            results.capitalOutlay.deleted++;
             continue;
           }
 
@@ -472,11 +472,11 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
               { $set: updateData },
               { new: true }
             );
-            if (result) results.CapitalOutlay.modified++;
+            if (result) results.capitalOutlay.modified++;
           }
         } catch (error) {
           console.error(`❌ Error updating CapitalOutlay ${edit._id}:`, error);
-          results.CapitalOutlay.errors.push({ id: edit._id, error: error.message });
+          results.capitalOutlay.errors.push({ id: edit._id, error: error.message });
         }
       }
     }
@@ -485,7 +485,7 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
       income: `${results.income.modified} modified, ${results.income.added} added, ${results.income.deleted} deleted`,
       personnelServices: `${results.personnelServices.modified} modified, ${results.personnelServices.added} added, ${results.personnelServices.deleted} deleted`,
       mooe: `${results.mooe.modified} modified, ${results.mooe.added} added, ${results.mooe.deleted} deleted`,
-      CapitalOutlay: `${results.CapitalOutlay.modified} modified, ${results.CapitalOutlay.added} added, ${results.CapitalOutlay.deleted} deleted`
+      capitalOutlay: `${results.capitalOutlay.modified} modified, ${results.capitalOutlay.added} added, ${results.capitalOutlay.deleted} deleted`
     });
 
     // Recalculate proposal totals after applying edits
@@ -507,7 +507,7 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
             { $match: filterCriteria },
             { $group: { _id: null, total: { $sum: '$total' } } }
           ]),
-          require('../models/MooeProposal').aggregate([
+          require('../models/mooeProposals').aggregate([
             { $match: filterCriteria },
             { $group: { _id: null, total: { $sum: '$amount' } } }
           ]),
@@ -521,7 +521,7 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
             { $group: { _id: null, total: { $sum: { $ifNull: ['$chargedToIncomeAmount', 0] } } } }
           ]),
           // MOOE Income
-          require('../models/MooeProposal').aggregate([
+          require('../models/mooeProposals').aggregate([
             { $match: filterCriteria },
             { $group: { _id: null, total: { $sum: { $ifNull: ['$income', 0] } } } }
           ]),
@@ -554,7 +554,7 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
           projectedIncome: projectedIncomeSum,
           personnelServices: psSum,
           mooe: mooeSum,
-          CapitalOutlay: coSum,
+          capitalOutlay: coSum,
           oldTotalIncome: proposal.totalIncome,
           oldTotalExpenses: proposal.totalExpenses,
           newTotal: newTotal
@@ -688,7 +688,7 @@ const BRD_STATUSES = [
  * Capture initial budget snapshot when proposal first reaches BRD (for version history).
  * Idempotent: only creates if no snapshot exists for this proposal.
  */
-const captureInitialBudgetSnapshotIfNeeded = async (proposal, income, personnelServices, mooe, CapitalOutlay) => {
+const captureInitialBudgetSnapshotIfNeeded = async (proposal, income, personnelServices, mooe, capitalOutlay) => {
   if (!proposal || !proposal._id) return;
   const status = String(proposal.status || '').trim();
   if (!BRD_STATUSES.some(s => status === s)) return;
@@ -696,10 +696,10 @@ const captureInitialBudgetSnapshotIfNeeded = async (proposal, income, personnelS
   if (existing) return;
   const toNum = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : 0;
   const sumIncome = (income || []).reduce((s, i) => s + toNum(i.amount), 0);
-  const psFields = ['annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive', 'medical', 'ChildrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST', 'midyearBonus', 'yearEndBonus', 'gsisPremium', 'philhealthPremium', 'pagibigPremium', 'employeeCompensation', 'loyaltyAward', 'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance'];
+  const psFields = ['annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive', 'medical', 'childrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST', 'midyearBonus', 'yearEndBonus', 'gsisPremium', 'philhealthPremium', 'pagibigPremium', 'employeeCompensation', 'loyaltyAward', 'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance'];
   const sumPS = (arr = []) => arr.reduce((s, p) => s + psFields.reduce((t, f) => t + toNum(p[f]), 0), 0);
   const sumMOOE = (mooe || []).reduce((s, m) => s + toNum(m.amount), 0);
-  const sumCO = (CapitalOutlay || []).reduce((s, c) => s + toNum(c.income) + toNum(c.subsidy), 0);
+  const sumCO = (capitalOutlay || []).reduce((s, c) => s + toNum(c.income) + toNum(c.subsidy), 0);
   await ProposalBudgetSnapshot.create({
     proposalId: proposal._id,
     capturedWhen: 'BRD_RECEIPT',
@@ -717,7 +717,7 @@ const captureInitialBudgetSnapshotIfNeeded = async (proposal, income, personnelS
       income: (income || []).map(doc => ({ ...doc })),
       personnelServices: (personnelServices || []).map(doc => ({ ...doc })),
       mooe: (mooe || []).map(doc => ({ ...doc })),
-      CapitalOutlay: (CapitalOutlay || []).map(doc => ({ ...doc }))
+      capitalOutlay: (capitalOutlay || []).map(doc => ({ ...doc }))
     },
     totals: {
       totalIncome: sumIncome,
@@ -970,7 +970,7 @@ exports.getProposalForEdit = async (req, res) => {
       processBy: proposal.processBy
     };
     
-    const [income, personnelServices, mooe, CapitalOutlayRaw] = await Promise.all([
+    const [income, personnelServices, mooe, capitalOutlayRaw] = await Promise.all([
       Income.find(queryParams).lean(),
       PersonnelServices.find(queryParams).lean(),
       MOOE.find(queryParams).lean(),
@@ -978,8 +978,8 @@ exports.getProposalForEdit = async (req, res) => {
     ]);
     
     // Fetch CapitalOutlayDetails for each CapitalOutlay item
-    const CapitalOutlay = await Promise.all(
-      CapitalOutlayRaw.map(async (co) => {
+    const capitalOutlay = await Promise.all(
+      capitalOutlayRaw.map(async (co) => {
         const details = await CapitalOutlayDetails.find({ 
           capital_outlay_id: co._id 
         }).lean();
@@ -1018,11 +1018,11 @@ exports.getProposalForEdit = async (req, res) => {
       })
     );
     
-    console.log(`Fetched ${CapitalOutlay.length} Capital Outlay items with details`);
+    console.log(`Fetched ${capitalOutlay.length} Capital Outlay items with details`);
 
     // Capture initial budget snapshot for BRD version history (original vs revised) if not yet captured
     try {
-      await captureInitialBudgetSnapshotIfNeeded(proposal, income, personnelServices, mooe, CapitalOutlay);
+      await captureInitialBudgetSnapshotIfNeeded(proposal, income, personnelServices, mooe, capitalOutlay);
     } catch (snapErr) {
       console.warn('ProposalBudgetSnapshot capture failed (non-fatal):', snapErr.message);
     }
@@ -1033,7 +1033,7 @@ exports.getProposalForEdit = async (req, res) => {
       income,
       personnelServices,
       mooe,
-      CapitalOutlay,
+      capitalOutlay,
       hasExistingEdit: !!existingEdit,
       existingEditId: existingEdit?._id
     };
@@ -1044,7 +1044,7 @@ exports.getProposalForEdit = async (req, res) => {
         income: existingEdit.editedIncome,
         personnelServices: existingEdit.editedPersonnelServices,
         mooe: existingEdit.editedMOOE,
-        CapitalOutlay: existingEdit.editedCapitalOutlay
+        capitalOutlay: existingEdit.editedCapitalOutlay
       };
       responseData.editComments = existingEdit.comments;
       responseData.editStatus = existingEdit.status;
@@ -2219,7 +2219,7 @@ exports.getVersionHistory = async (req, res) => {
           income: edit.editedIncome,
           personnelServices: edit.editedPersonnelServices,
           mooe: edit.editedMOOE,
-          CapitalOutlay: edit.editedCapitalOutlay
+          capitalOutlay: edit.editedCapitalOutlay
         }
       };
     });
@@ -2451,7 +2451,7 @@ exports.getComparisonData = async (req, res) => {
       income: compareData(originalIncome, edit.editedIncome),
       personnelServices: compareData(originalPS, edit.editedPersonnelServices),
       mooe: compareData(originalMOOE, edit.editedMOOE),
-      CapitalOutlay: compareData(originalCO, edit.editedCapitalOutlay),
+      capitalOutlay: compareData(originalCO, edit.editedCapitalOutlay),
       changeSummary: edit.getChangeSummary()
     };
     

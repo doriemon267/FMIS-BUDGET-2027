@@ -32,7 +32,7 @@ router.post('/mooe-fix-index', mooeController.fixDatabaseIndex);
 
 router.get('/cleanup-mooe', async (req, res) => {
   try {
-    const MooeProposal = require('../models/MooeProposal');
+    const MooeProposal = require('../models/mooeProposals');
     // Find all 5-02-99-990 entries
     const entries = await MooeProposal.find({ uacsCode: "5-02-99-990" }).lean();
     

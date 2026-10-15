@@ -285,13 +285,13 @@ module.exports = async (req, res, next) => {
             let dbRoles = [];
             if (mainConnection?.readyState === 1) {
               try {
-                const arDoc = await mainConnection.db.collection('AssignedRoles').findOne({ user: pidFromNia });
+                const arDoc = await mainConnection.db.collection('assigned_roles').findOne({ user: pidFromNia });
                 if (arDoc?.roles?.length > 0) {
                   const roleDocs = await mainConnection.db.collection('roles').find({ _id: { $in: arDoc.roles } }).toArray();
                   dbRoles = roleDocs.map(r => String(r.name || '').replace(/\s+/g, '_').toUpperCase());
                 }
               } catch (dbErr) {
-                console.warn('[checkToken_unified] fmis_main role lookup failed:', dbErr.message);
+                console.warn('[check_token_unified] fmis_main role lookup failed:', dbErr.message);
               }
             }
 
@@ -314,7 +314,7 @@ module.exports = async (req, res, next) => {
           }
         }
       } catch (niaErr) {
-        console.warn('[checkToken_unified] NIA API fetch failed:', niaErr.message);
+        console.warn('[check_token_unified] NIA API fetch failed:', niaErr.message);
       }
 
       if (!resolvedUser) {
@@ -339,7 +339,7 @@ module.exports = async (req, res, next) => {
     if (roles.length === 0 && mainConnection?.readyState === 1) {
       try {
         if (isProduction) {
-          const AssignedRole = mainConnection.model('AssignedRoles', new mongoose.Schema({}, { strict: false }), 'AssignedRoles');
+          const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
           const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
 
           const assigned = await AssignedRole.findOne({
@@ -364,7 +364,7 @@ module.exports = async (req, res, next) => {
             roles = roleNames;
           }
         } else {
-          const arDoc = await mainConnection.db.collection('AssignedRoles').findOne({ user: userId });
+          const arDoc = await mainConnection.db.collection('assigned_roles').findOne({ user: userId });
           if (arDoc?.roles?.length > 0) {
             const roleDocs = await mainConnection.db.collection('roles').find({ _id: { $in: arDoc.roles } }).toArray();
             roles = roleDocs.map(r => String(r.name || '').replace(/\s+/g, '_').toUpperCase());

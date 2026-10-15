@@ -449,7 +449,7 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     }
   }
 
-  // Map Item_No to ItemNumber / itemNumber for backend (EmployeeMaster and EmployeeList)
+  // Map Item_No to ItemNumber / itemNumber for backend (employee_master and EmployeeList)
   if (record.Item_No != null && record.Item_No !== '') {
     record.ItemNumber = record.Item_No;
     record.itemNumber = record.Item_No;

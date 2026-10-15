@@ -3,7 +3,7 @@ const BudgetarySupport = require('../models/BudgetarySupport');
 const PersonnelServices = require('../models/PersonnelServices');
 const { splitPersonnelFunding } = require('../utils/personnelIncomeAllocation');
 const CapitalOutlay = require('../models/CapitalOutlay');
-const MooeProposal = require('../models/MooeProposal');
+const mooeProposals = require('../models/mooeProposals');
 const IAsOMCost = require('../models/IAsOMCost');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 
@@ -36,7 +36,7 @@ function calculatePersonnelLineTotal(item) {
     'subsistenceAllowance',
     'additionalMedical',
     'honoraria',
-    'ChildrenAllowance'
+    'childrenAllowance'
   ];
 
   const computedTotal = numericFields.reduce(
@@ -507,9 +507,9 @@ const calculateBudgetarySupport = async (req, res) => {
     }
     // 2. Capital Outlay (B.2) - ENTIRE AMOUNT IS TYPICALLY GOVERNMENT FUNDED
     try {
-      const CapitalOutlays = await CapitalOutlay.find(queryConditions);
+      const capitalOutlays = await CapitalOutlay.find(queryConditions);
 
-      const capitalTotal = CapitalOutlays.reduce((sum, item) => {
+      const capitalTotal = capitalOutlays.reduce((sum, item) => {
         return sum + (Number(item.subsidy) || Number(item.amount) || 0);
       }, 0);
 
@@ -578,7 +578,7 @@ const calculateBudgetarySupport = async (req, res) => {
         }
       }
 
-      const mooeData = await MooeProposal.find(mooeQueryConditions);
+      const mooeData = await mooeProposals.find(mooeQueryConditions);
 
       const mooeTotal = mooeData.reduce((sum, item) => {
         // Add to income tracking

@@ -56,7 +56,7 @@ titleMappingSchema.virtual("displayName").get(function () {
 });
 // Method to check if this mapping is for capital outlay
 titleMappingSchema.methods.isCapitalOutlay = function () {
-  const CapitalOutlayKeywords = [
+  const capitalOutlayKeywords = [
     "capital",
     "outlay",
     "infrastructure",
@@ -68,7 +68,7 @@ titleMappingSchema.methods.isCapitalOutlay = function () {
     "land",
   ];
   const searchText = `${this.lineItem} ${this.sublineItem} ${this.accountingTitle}`.toLowerCase();
-  return CapitalOutlayKeywords.some(keyword => searchText.includes(keyword));
+  return capitalOutlayKeywords.some(keyword => searchText.includes(keyword));
 };
 // Static method to get capital outlay mappings
 titleMappingSchema.statics.getCapitalOutlayMappings = function () {

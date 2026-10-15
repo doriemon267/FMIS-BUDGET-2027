@@ -2,7 +2,7 @@
 const Proposal = require('../models/Proposal');
 const DraftProposal = require('../models/DraftProposal');
 const PersonnelService = require('../models/PersonnelServices');
-const MooeProposal = require('../models/MooeProposal');
+const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const BudgetarySupport = require('../models/BudgetarySupport');
 const Income = require('../models/Income');
@@ -43,7 +43,7 @@ exports.approveAtDivision = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body; // entity: 'personnel' | 'mooe' | 'capital' | 'income'
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -61,7 +61,7 @@ exports.consolidateAtDepartment = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -79,7 +79,7 @@ exports.submitToRegion = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -97,7 +97,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -116,7 +116,7 @@ exports.updateProposalStatus = async (req, res) => {
     const { 
       personnelIds, 
       mooeIds, 
-      CapitalOutlayIds, 
+      capitalOutlayIds, 
       incomeIds, 
       budgetType, 
       processBy,
@@ -186,8 +186,8 @@ exports.updateProposalStatus = async (req, res) => {
         )
       );
     }
-    if (CapitalOutlayIds && Array.isArray(CapitalOutlayIds) && CapitalOutlayIds.length > 0) {
-      const validCapitalIds = CapitalOutlayIds
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0) {
+      const validCapitalIds = capitalOutlayIds
         .filter((id) => {
           const isValid = mongoose.Types.ObjectId.isValid(id);
           if (!isValid) {
@@ -249,7 +249,7 @@ exports.updateProposalStatus = async (req, res) => {
               { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
               { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
               { $toDouble: { $ifNull: ["$medical", 0] } },
-              { $toDouble: { $ifNull: ["$ChildrenAllowance", 0] } },
+              { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
               { $toDouble: { $ifNull: ["$meal", 0] } },
               { $toDouble: { $ifNull: ["$cashGift", 0] } },
               { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
@@ -322,7 +322,7 @@ exports.updateProposalStatus = async (req, res) => {
                   { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
                   { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
                   { $toDouble: { $ifNull: ["$medical", 0] } },
-                  { $toDouble: { $ifNull: ["$ChildrenAllowance", 0] } },
+                  { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
                   { $toDouble: { $ifNull: ["$meal", 0] } },
                   { $toDouble: { $ifNull: ["$cashGift", 0] } },
                   { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
@@ -382,7 +382,7 @@ exports.updateProposalStatus = async (req, res) => {
                   { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
                   { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
                   { $toDouble: { $ifNull: ["$medical", 0] } },
-                  { $toDouble: { $ifNull: ["$ChildrenAllowance", 0] } },
+                  { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
                   { $toDouble: { $ifNull: ["$meal", 0] } },
                   { $toDouble: { $ifNull: ["$cashGift", 0] } },
                   { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
@@ -555,7 +555,7 @@ exports.updateProposalStatus = async (req, res) => {
       isHierarchicallyAggregated: departmentMooeAggregation.length > 0 // Flag for hierarchical aggregation
     }));
     // Calculate Capital Outlay expenses and income
-    const CapitalOutlays = await CapitalOutlay.aggregate([
+    const capitalOutlays = await CapitalOutlay.aggregate([
       { $match: { status, fiscalYear, budgetType, processBy, region } },
       {
         $group: {
@@ -641,8 +641,8 @@ exports.updateProposalStatus = async (req, res) => {
     }
     // Transform Capital Outlay data for proposal summary
     // Use hierarchical aggregation for Department users, otherwise use regular aggregation
-    const CapitalOutlayDataToTransform = departmentCapitalOutlayAggregation.length > 0 ? departmentCapitalOutlayAggregation : CapitalOutlays;
-    const CapitalOutlaysTransformed = CapitalOutlayDataToTransform.map((p) => ({
+    const capitalOutlayDataToTransform = departmentCapitalOutlayAggregation.length > 0 ? departmentCapitalOutlayAggregation : capitalOutlays;
+    const capitalOutlaysTransformed = capitalOutlayDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
       department: p._id.department, // present when department-level aggregation is used
@@ -705,7 +705,7 @@ exports.updateProposalStatus = async (req, res) => {
     const summary = [
       ...personnelTransformed,
       ...mooeTransformed,
-      ...CapitalOutlaysTransformed,
+      ...capitalOutlaysTransformed,
       ...incomeTransformed,
     ];
 
@@ -825,7 +825,7 @@ exports.saveAsDraft = async (req, res) => {
     let {
       personnelIds,
       mooeIds,
-      CapitalOutlayIds,
+      capitalOutlayIds,
       incomeIds,
       budgetarySupportIds,
       fiscalYear,
@@ -890,7 +890,7 @@ exports.saveAsDraft = async (req, res) => {
     }
     // Check if there are any proposals to update
     const totalProposals = (personnelIds?.length || 0) + (mooeIds?.length || 0) +
-                          (CapitalOutlayIds?.length || 0) + (incomeIds?.length || 0) +
+                          (capitalOutlayIds?.length || 0) + (incomeIds?.length || 0) +
                           (budgetarySupportIds?.length || 0);
     if (totalProposals === 0) {
       return res.status(200).json({
@@ -957,8 +957,8 @@ exports.saveAsDraft = async (req, res) => {
       );
       }
     // Update Capital Outlay proposals to Draft status
-    if (CapitalOutlayIds && Array.isArray(CapitalOutlayIds) && CapitalOutlayIds.length > 0) {
-      const validCapitalIds = CapitalOutlayIds
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0) {
+      const validCapitalIds = capitalOutlayIds
         .filter((id) => {
           const isValid = mongoose.Types.ObjectId.isValid(id);
           if (!isValid) {
@@ -1053,7 +1053,7 @@ exports.saveAsDraft = async (req, res) => {
     if (mooeIds && Array.isArray(mooeIds) && mooeIds.length > 0 && typeof mooeResult !== 'undefined') {
       mooeResultObj = mooeResult;
     }
-    if (CapitalOutlayIds && Array.isArray(CapitalOutlayIds) && CapitalOutlayIds.length > 0 && typeof capitalResult !== 'undefined') {
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0 && typeof capitalResult !== 'undefined') {
       capitalResultObj = capitalResult;
     }
     if (budgetarySupportIds && Array.isArray(budgetarySupportIds) && budgetarySupportIds.length > 0 && typeof budgetaryResult !== 'undefined') {
@@ -1066,7 +1066,7 @@ exports.saveAsDraft = async (req, res) => {
     const updatedCounts = {
       personnel: personnelResultObj.modifiedCount || 0,
       mooe: mooeResultObj.modifiedCount || 0,
-      CapitalOutlay: capitalResultObj.modifiedCount || 0,
+      capitalOutlay: capitalResultObj.modifiedCount || 0,
       budgetarySupport: budgetaryResultObj.modifiedCount || 0,
       income: incomeResultObj.modifiedCount || 0
     };
@@ -1075,7 +1075,7 @@ exports.saveAsDraft = async (req, res) => {
     const notUpdatedCounts = {
       personnel: personnelIds && Array.isArray(personnelIds) ? personnelIds.length - (personnelResultObj.modifiedCount || 0) : 0,
       mooe: mooeIds && Array.isArray(mooeIds) ? mooeIds.length - (mooeResultObj.modifiedCount || 0) : 0,
-      CapitalOutlay: CapitalOutlayIds && Array.isArray(CapitalOutlayIds) ? CapitalOutlayIds.length - (capitalResultObj.modifiedCount || 0) : 0,
+      capitalOutlay: capitalOutlayIds && Array.isArray(capitalOutlayIds) ? capitalOutlayIds.length - (capitalResultObj.modifiedCount || 0) : 0,
       budgetarySupport: budgetarySupportIds && Array.isArray(budgetarySupportIds) ? budgetarySupportIds.length - (budgetaryResultObj.modifiedCount || 0) : 0,
       income: incomeIds && Array.isArray(incomeIds) ? incomeIds.length - (incomeResultObj.modifiedCount || 0) : 0
     };
@@ -1430,7 +1430,7 @@ exports.getProposals = async (req, res) => {
 
         // Fields contributing to Personnel Services totals
         const psFields = [
-          'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','ChildrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance','hazardPay','honoraria'
+          'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance','hazardPay','honoraria'
         ];
 
         const norm = (v) => String(v ?? '').trim().toUpperCase();
@@ -2432,7 +2432,7 @@ exports.getAllUserProposals = async (req, res) => {
       return res.status(400).json({ message: 'processBy parameter is required' });
     }
     // Get all proposals for this user
-    const [personnel, mooe, CapitalOutlay, income, drafts] = await Promise.all([
+    const [personnel, mooe, capitalOutlay, income, drafts] = await Promise.all([
       // Regular proposals
       Proposal.find({ 
         processBy, 
@@ -2444,7 +2444,7 @@ exports.getAllUserProposals = async (req, res) => {
       }).lean(),
       Proposal.find({ 
         processBy, 
-        category: 'CapitalOutlay' 
+        category: 'capitalOutlay' 
       }).lean(),
       Proposal.find({ 
         processBy, 
@@ -2459,7 +2459,7 @@ exports.getAllUserProposals = async (req, res) => {
     const categorizedDrafts = {
       personnel: [],
       mooe: [],
-      CapitalOutlay: [],
+      capitalOutlay: [],
       income: []
     };
     drafts.forEach(draft => {
@@ -2472,7 +2472,7 @@ exports.getAllUserProposals = async (req, res) => {
     const result = {
       personnel: [...personnel, ...categorizedDrafts.personnel],
       mooe: [...mooe, ...categorizedDrafts.mooe],
-      CapitalOutlay: [...CapitalOutlay, ...categorizedDrafts.CapitalOutlay],
+      capitalOutlay: [...capitalOutlay, ...categorizedDrafts.capitalOutlay],
       income: [...income, ...categorizedDrafts.income],
       // Include uncategorized drafts if any
       uncategorized: categorizedDrafts.uncategorized || []
@@ -2512,7 +2512,7 @@ exports.updateMissingRegions = async (req, res) => {
           { $set: { region, processBy } }
         );
         break;
-      case "CapitalOutlay":
+      case "capitalOutlay":
         result = await CapitalOutlay.updateMany(
           { _id: { $in: validIds } },
           { $set: { region, processBy } }
@@ -2548,7 +2548,7 @@ function calculatePersonnelTotal(personnel) {
     (Number(personnel.additionalMedical) || 0) +
     (Number(personnel.subsistenceAllowance) || 0) +
     (Number(personnel.medical) || 0) +
-    (Number(personnel.ChildrenAllowance) || 0) +
+    (Number(personnel.childrenAllowance) || 0) +
     (Number(personnel.meal) || 0) +
     (Number(personnel.cashGift) || 0) +
     (Number(personnel.subsistenceAllowanceMDS) || 0) +
@@ -2702,13 +2702,13 @@ exports.getProposalDetails = async (req, res) => {
           proposal.cobExpenditures = "MOOE";
         } else {
           // Check if there are any capital outlay items
-          const CapitalOutlayCount = await CapitalOutlay.countDocuments({
+          const capitalOutlayCount = await CapitalOutlay.countDocuments({
             fiscalYear,
             budgetType,
             processBy,
             region
           });
-          if (CapitalOutlayCount > 0) {
+          if (capitalOutlayCount > 0) {
             proposal.cobExpenditures = "Capital Outlay";
           } else {
             // Check if there are any income items
@@ -2922,7 +2922,7 @@ exports.getAllUserProposals = async (req, res) => {
     }
 
     // Query all collections with the same visibility gate
-    const [personnel, mooe, CapitalOutlay, income, budgetarySupport, drafts] = await Promise.all([
+    const [personnel, mooe, capitalOutlay, income, budgetarySupport, drafts] = await Promise.all([
       PersonnelService.find(visibilityGate).sort({ updatedAt: -1 }),
       MooeProposal.find(visibilityGate).sort({ updatedAt: -1 }),
       CapitalOutlay.find(visibilityGate).sort({ updatedAt: -1 }),
@@ -2934,7 +2934,7 @@ exports.getAllUserProposals = async (req, res) => {
     return res.status(200).json({
       personnel,
       mooe,
-      CapitalOutlay,
+      capitalOutlay,
       income,
       budgetarySupport,
       drafts,
@@ -2998,7 +2998,7 @@ exports.consolidateProposals = async (req, res) => {
     };
     processItems(submittedPersonnel, 'personnel');
     processItems(submittedMooe, 'mooe');
-    processItems(submittedCapital, 'CapitalOutlay');
+    processItems(submittedCapital, 'capitalOutlay');
     processItems(submittedIncome, 'income');
     // Create consolidated proposals for each group
     const bulkOps = [];
@@ -3012,14 +3012,14 @@ exports.consolidateProposals = async (req, res) => {
           totalExpenses = items.reduce((sum, item) => {
             const itemTotal = [
               'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive',
-              'medical', 'ChildrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS',
+              'medical', 'childrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS',
               'subsistenceAllowanceST', 'midyearBonus', 'yearEndBonus', 'gsisPremium',
               'philhealthPremium', 'pagibigPremium', 'employeeCompensation', 'loyaltyAward',
               'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance'
             ].reduce((itemSum, field) => itemSum + (Number(item[field]) || 0), 0);
             return sum + itemTotal;
           }, 0);
-        } else if (category === 'mooe' || category === 'CapitalOutlay') {
+        } else if (category === 'mooe' || category === 'capitalOutlay') {
           totalExpenses = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
         } else if (category === 'income') {
           totalIncome = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -3031,7 +3031,7 @@ exports.consolidateProposals = async (req, res) => {
           cobExpenditures = statusTypes.length === 1 ? statusTypes[0] : 'Personnel Services';
         } else if (category === 'mooe') {
           cobExpenditures = 'MOOE';
-        } else if (category === 'CapitalOutlay') {
+        } else if (category === 'capitalOutlay') {
           cobExpenditures = 'Capital Outlay';
         } else if (category === 'income') {
           cobExpenditures = 'Income';
@@ -3096,7 +3096,7 @@ exports.approveAtDivision = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body; // entity: 'personnel' | 'mooe' | 'capital' | 'income'
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -3114,7 +3114,7 @@ exports.consolidateAtDepartment = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -3132,7 +3132,7 @@ exports.submitToRegion = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -3150,7 +3150,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
     const Model = entity === 'personnel' ? require('../models/PersonnelServices')
-      : entity === 'mooe' ? require('../models/MooeProposal')
+      : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
     const result = await Model.updateMany(
@@ -3169,7 +3169,7 @@ exports.updateProposalStatus = async (req, res) => {
     const { 
       personnelIds, 
       mooeIds, 
-      CapitalOutlayIds, 
+      capitalOutlayIds, 
       incomeIds, 
       budgetType, 
       processBy,
@@ -3239,8 +3239,8 @@ exports.updateProposalStatus = async (req, res) => {
         )
       );
     }
-    if (CapitalOutlayIds && Array.isArray(CapitalOutlayIds) && CapitalOutlayIds.length > 0) {
-      const validCapitalIds = CapitalOutlayIds
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0) {
+      const validCapitalIds = capitalOutlayIds
         .filter((id) => {
           const isValid = mongoose.Types.ObjectId.isValid(id);
           if (!isValid) {
@@ -3302,7 +3302,7 @@ exports.updateProposalStatus = async (req, res) => {
               { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
               { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
               { $toDouble: { $ifNull: ["$medical", 0] } },
-              { $toDouble: { $ifNull: ["$ChildrenAllowance", 0] } },
+              { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
               { $toDouble: { $ifNull: ["$meal", 0] } },
               { $toDouble: { $ifNull: ["$cashGift", 0] } },
               { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
@@ -3375,7 +3375,7 @@ exports.updateProposalStatus = async (req, res) => {
                   { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
                   { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
                   { $toDouble: { $ifNull: ["$medical", 0] } },
-                  { $toDouble: { $ifNull: ["$ChildrenAllowance", 0] } },
+                  { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
                   { $toDouble: { $ifNull: ["$meal", 0] } },
                   { $toDouble: { $ifNull: ["$cashGift", 0] } },
                   { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
@@ -3435,7 +3435,7 @@ exports.updateProposalStatus = async (req, res) => {
                   { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
                   { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
                   { $toDouble: { $ifNull: ["$medical", 0] } },
-                  { $toDouble: { $ifNull: ["$ChildrenAllowance", 0] } },
+                  { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
                   { $toDouble: { $ifNull: ["$meal", 0] } },
                   { $toDouble: { $ifNull: ["$cashGift", 0] } },
                   { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
@@ -3608,7 +3608,7 @@ exports.updateProposalStatus = async (req, res) => {
       isHierarchicallyAggregated: departmentMooeAggregation.length > 0 // Flag for hierarchical aggregation
     }));
     // Calculate Capital Outlay expenses and income
-    const CapitalOutlays = await CapitalOutlay.aggregate([
+    const capitalOutlays = await CapitalOutlay.aggregate([
       { $match: { status, fiscalYear, budgetType, processBy, region } },
       {
         $group: {
@@ -3694,8 +3694,8 @@ exports.updateProposalStatus = async (req, res) => {
     }
     // Transform Capital Outlay data for proposal summary
     // Use hierarchical aggregation for Department users, otherwise use regular aggregation
-    const CapitalOutlayDataToTransform = departmentCapitalOutlayAggregation.length > 0 ? departmentCapitalOutlayAggregation : CapitalOutlays;
-    const CapitalOutlaysTransformed = CapitalOutlayDataToTransform.map((p) => ({
+    const capitalOutlayDataToTransform = departmentCapitalOutlayAggregation.length > 0 ? departmentCapitalOutlayAggregation : capitalOutlays;
+    const capitalOutlaysTransformed = capitalOutlayDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
       department: p._id.department, // present when department-level aggregation is used
@@ -3758,7 +3758,7 @@ exports.updateProposalStatus = async (req, res) => {
     const summary = [
       ...personnelTransformed,
       ...mooeTransformed,
-      ...CapitalOutlaysTransformed,
+      ...capitalOutlaysTransformed,
       ...incomeTransformed,
     ];
 
@@ -3878,7 +3878,7 @@ exports.saveAsDraft = async (req, res) => {
     let {
       personnelIds,
       mooeIds,
-      CapitalOutlayIds,
+      capitalOutlayIds,
       incomeIds,
       budgetarySupportIds,
       fiscalYear,
@@ -3943,7 +3943,7 @@ exports.saveAsDraft = async (req, res) => {
     }
     // Check if there are any proposals to update
     const totalProposals = (personnelIds?.length || 0) + (mooeIds?.length || 0) +
-                          (CapitalOutlayIds?.length || 0) + (incomeIds?.length || 0) +
+                          (capitalOutlayIds?.length || 0) + (incomeIds?.length || 0) +
                           (budgetarySupportIds?.length || 0);
     if (totalProposals === 0) {
       return res.status(200).json({
@@ -4010,8 +4010,8 @@ exports.saveAsDraft = async (req, res) => {
       );
       }
     // Update Capital Outlay proposals to Draft status
-    if (CapitalOutlayIds && Array.isArray(CapitalOutlayIds) && CapitalOutlayIds.length > 0) {
-      const validCapitalIds = CapitalOutlayIds
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0) {
+      const validCapitalIds = capitalOutlayIds
         .filter((id) => {
           const isValid = mongoose.Types.ObjectId.isValid(id);
           if (!isValid) {
@@ -4106,7 +4106,7 @@ exports.saveAsDraft = async (req, res) => {
     if (mooeIds && Array.isArray(mooeIds) && mooeIds.length > 0 && typeof mooeResult !== 'undefined') {
       mooeResultObj = mooeResult;
     }
-    if (CapitalOutlayIds && Array.isArray(CapitalOutlayIds) && CapitalOutlayIds.length > 0 && typeof capitalResult !== 'undefined') {
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0 && typeof capitalResult !== 'undefined') {
       capitalResultObj = capitalResult;
     }
     if (budgetarySupportIds && Array.isArray(budgetarySupportIds) && budgetarySupportIds.length > 0 && typeof budgetaryResult !== 'undefined') {
@@ -4119,7 +4119,7 @@ exports.saveAsDraft = async (req, res) => {
     const updatedCounts = {
       personnel: personnelResultObj.modifiedCount || 0,
       mooe: mooeResultObj.modifiedCount || 0,
-      CapitalOutlay: capitalResultObj.modifiedCount || 0,
+      capitalOutlay: capitalResultObj.modifiedCount || 0,
       budgetarySupport: budgetaryResultObj.modifiedCount || 0,
       income: incomeResultObj.modifiedCount || 0
     };
@@ -4128,7 +4128,7 @@ exports.saveAsDraft = async (req, res) => {
     const notUpdatedCounts = {
       personnel: personnelIds && Array.isArray(personnelIds) ? personnelIds.length - (personnelResultObj.modifiedCount || 0) : 0,
       mooe: mooeIds && Array.isArray(mooeIds) ? mooeIds.length - (mooeResultObj.modifiedCount || 0) : 0,
-      CapitalOutlay: CapitalOutlayIds && Array.isArray(CapitalOutlayIds) ? CapitalOutlayIds.length - (capitalResultObj.modifiedCount || 0) : 0,
+      capitalOutlay: capitalOutlayIds && Array.isArray(capitalOutlayIds) ? capitalOutlayIds.length - (capitalResultObj.modifiedCount || 0) : 0,
       budgetarySupport: budgetarySupportIds && Array.isArray(budgetarySupportIds) ? budgetarySupportIds.length - (budgetaryResultObj.modifiedCount || 0) : 0,
       income: incomeIds && Array.isArray(incomeIds) ? incomeIds.length - (incomeResultObj.modifiedCount || 0) : 0
     };
@@ -4443,7 +4443,7 @@ exports.getProposals = async (req, res) => {
 
         // Fields contributing to Personnel Services totals
         const psFields = [
-          'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','ChildrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance'
+          'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance'
         ];
 
         const toNumber = (val) => {
@@ -5483,7 +5483,7 @@ exports.getAllUserProposals = async (req, res) => {
       return res.status(400).json({ message: 'processBy parameter is required' });
     }
     // Get all proposals for this user
-    const [personnel, mooe, CapitalOutlay, income, drafts] = await Promise.all([
+    const [personnel, mooe, capitalOutlay, income, drafts] = await Promise.all([
       // Regular proposals
       Proposal.find({ 
         processBy, 
@@ -5495,7 +5495,7 @@ exports.getAllUserProposals = async (req, res) => {
       }).lean(),
       Proposal.find({ 
         processBy, 
-        category: 'CapitalOutlay' 
+        category: 'capitalOutlay' 
       }).lean(),
       Proposal.find({ 
         processBy, 
@@ -5510,7 +5510,7 @@ exports.getAllUserProposals = async (req, res) => {
     const categorizedDrafts = {
       personnel: [],
       mooe: [],
-      CapitalOutlay: [],
+      capitalOutlay: [],
       income: []
     };
     drafts.forEach(draft => {
@@ -5523,7 +5523,7 @@ exports.getAllUserProposals = async (req, res) => {
     const result = {
       personnel: [...personnel, ...categorizedDrafts.personnel],
       mooe: [...mooe, ...categorizedDrafts.mooe],
-      CapitalOutlay: [...CapitalOutlay, ...categorizedDrafts.CapitalOutlay],
+      capitalOutlay: [...capitalOutlay, ...categorizedDrafts.capitalOutlay],
       income: [...income, ...categorizedDrafts.income],
       // Include uncategorized drafts if any
       uncategorized: categorizedDrafts.uncategorized || []
@@ -5563,7 +5563,7 @@ exports.updateMissingRegions = async (req, res) => {
           { $set: { region, processBy } }
         );
         break;
-      case "CapitalOutlay":
+      case "capitalOutlay":
         result = await CapitalOutlay.updateMany(
           { _id: { $in: validIds } },
           { $set: { region, processBy } }
@@ -5721,13 +5721,13 @@ exports.getProposalDetails = async (req, res) => {
           proposal.cobExpenditures = "MOOE";
         } else {
           // Check if there are any capital outlay items
-          const CapitalOutlayCount = await CapitalOutlay.countDocuments({
+          const capitalOutlayCount = await CapitalOutlay.countDocuments({
             fiscalYear,
             budgetType,
             processBy,
             region
           });
-          if (CapitalOutlayCount > 0) {
+          if (capitalOutlayCount > 0) {
             proposal.cobExpenditures = "Capital Outlay";
           } else {
             // Check if there are any income items
@@ -5941,7 +5941,7 @@ exports.getAllUserProposals = async (req, res) => {
     }
 
     // Query all collections with the same visibility gate
-    const [personnel, mooe, CapitalOutlay, income, budgetarySupport, drafts] = await Promise.all([
+    const [personnel, mooe, capitalOutlay, income, budgetarySupport, drafts] = await Promise.all([
       PersonnelService.find(visibilityGate).sort({ updatedAt: -1 }),
       MooeProposal.find(visibilityGate).sort({ updatedAt: -1 }),
       CapitalOutlay.find(visibilityGate).sort({ updatedAt: -1 }),
@@ -5953,7 +5953,7 @@ exports.getAllUserProposals = async (req, res) => {
     return res.status(200).json({
       personnel,
       mooe,
-      CapitalOutlay,
+      capitalOutlay,
       income,
       budgetarySupport,
       drafts,
@@ -6017,7 +6017,7 @@ exports.consolidateProposals = async (req, res) => {
     };
     processItems(submittedPersonnel, 'personnel');
     processItems(submittedMooe, 'mooe');
-    processItems(submittedCapital, 'CapitalOutlay');
+    processItems(submittedCapital, 'capitalOutlay');
     processItems(submittedIncome, 'income');
     // Create consolidated proposals for each group
     const bulkOps = [];
@@ -6031,14 +6031,14 @@ exports.consolidateProposals = async (req, res) => {
           totalExpenses = items.reduce((sum, item) => {
             const itemTotal = [
               'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive',
-              'medical', 'ChildrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS',
+              'medical', 'childrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS',
               'subsistenceAllowanceST', 'midyearBonus', 'yearEndBonus', 'gsisPremium',
               'philhealthPremium', 'pagibigPremium', 'employeeCompensation', 'loyaltyAward',
               'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance'
             ].reduce((itemSum, field) => itemSum + (Number(item[field]) || 0), 0);
             return sum + itemTotal;
           }, 0);
-        } else if (category === 'mooe' || category === 'CapitalOutlay') {
+        } else if (category === 'mooe' || category === 'capitalOutlay') {
           totalExpenses = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
         } else if (category === 'income') {
           totalIncome = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -6050,7 +6050,7 @@ exports.consolidateProposals = async (req, res) => {
           cobExpenditures = statusTypes.length === 1 ? statusTypes[0] : 'Personnel Services';
         } else if (category === 'mooe') {
           cobExpenditures = 'MOOE';
-        } else if (category === 'CapitalOutlay') {
+        } else if (category === 'capitalOutlay') {
           cobExpenditures = 'Capital Outlay';
         } else if (category === 'income') {
           cobExpenditures = 'Income';

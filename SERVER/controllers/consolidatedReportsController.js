@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const ExcelJS = require('exceljs');
-const MooeProposal = require('../models/MooeProposal');
+const MooeProposal = require('../models/mooeProposals');
 const Region = require('../models/Region');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -1016,9 +1016,9 @@ const consolidatedReportsController = {
       };
 
       const sealPath = resolveExisting(
-        path.join(__dirname, '../assets/seal.png'),
-        path.join(process.cwd(), 'SERVER/assets/seal.png'),
-        path.join(process.cwd(), 'CLIENT/public/seal.png')
+        path.join(__dirname, '../assets/Seal.png'),
+        path.join(process.cwd(), 'SERVER/assets/Seal.png'),
+        path.join(process.cwd(), 'CLIENT/public/Seal.png')
       );
       const nialogoPath = resolveExisting(
         path.join(__dirname, '../assets/logo.png'),
@@ -1026,9 +1026,9 @@ const consolidatedReportsController = {
         path.join(process.cwd(), 'CLIENT/public/logo.png')
       );
       const bagongPath = resolveExisting(
-        path.join(__dirname, '../assets/bagong-pilipinas.png'),
-        path.join(process.cwd(), 'SERVER/assets/bagong-pilipinas.png'),
-        path.join(process.cwd(), 'CLIENT/public/bagong-pilipinas.png')
+        path.join(__dirname, '../assets/Bagong_Pilipinas.png'),
+        path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'),
+        path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png')
       );
 
       const reportTitle = getConsolidatedMooeTitle(budgetType);

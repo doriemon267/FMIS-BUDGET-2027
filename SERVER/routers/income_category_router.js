@@ -9,7 +9,7 @@ const {
     deleteIncomeCategory,
     getSubcategories,
     getAllCategoriesFiltered,
-  } = require("../controllers/incomeCategoryController");
+  } = require("../controllers/IncomeCategoryController");
   const Router = require("express").Router;
   const isAuth = require('../middleware/is_auth');
   

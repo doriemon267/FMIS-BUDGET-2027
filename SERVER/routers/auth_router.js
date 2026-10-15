@@ -1,4 +1,4 @@
-const { login, getUser, logout } = require("../controllers/authController");
+const { login, getUser, logout } = require("../controllers/auth_controller");
 const isAuth = require("../middleware/is_auth");
 const { validateJoi, Joi } = require("../middleware/validateJoi");
 

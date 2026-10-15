@@ -55,7 +55,7 @@ const getCanonicalEmailFromRequestUser = (req = {}) => {
 };
 
 /**
- * Lookup user from fmis_main.AssignedRoles table
+ * Lookup user from fmis_main.assigned_roles table
  * Restricted based on current user's role permissions
  */
 const lookupUserFromMainDB = async (req, res) => {
@@ -98,8 +98,8 @@ const lookupUserFromMainDB = async (req, res) => {
       // permission in the future.
     }
 
-    // Query the AssignedRoles collection from fmis_main database
-    const AssignedRole = mainConnection.model('AssignedRoles', new mongoose.Schema({}, { strict: false }), 'AssignedRoles');
+    // Query the assigned_roles collection from fmis_main database
+    const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
     // const UserData = mainConnection.model('user_datas',new mongoose.Schema({},{strict:false}),'user_datas');
     const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
 
@@ -159,7 +159,7 @@ const lookupUserFromMainDB = async (req, res) => {
     const userInfo = {
       userId: userData.user,
       userName: userData.fullName || userData.userName || userData.name,
-      // Email is not stored in AssignedRoles; we'll try to enrich it from the budget DB's User collection below.
+      // Email is not stored in assigned_roles; we'll try to enrich it from the budget DB's User collection below.
       roles: roleNames, // Return actual role names, not just IDs
       department: userData.department || userData.departmentName,
       division: userData.division || userData.divisionName,
@@ -217,7 +217,7 @@ const lookupUserFromMainDB = async (req, res) => {
           identifiers.push(String(v).trim());
         }
       };
-      // From AssignedRoles
+      // From assigned_roles
       pushId(userData.user);
       // From request param (in case of type differences)
       pushId(userId);
@@ -311,9 +311,9 @@ const lookupUserFromMainDB = async (req, res) => {
 
       // IMPORTANT:
       // ❌ Huwag nang mag-auto-assign ng default budget role (BUDGET_PREPARER)
-      //     kapag wala talagang tugmang role sa `AssignedRoles`.
+      //     kapag wala talagang tugmang role sa `assigned_roles`.
       //     Ito ang nagdudulot na may lumalabas na role sa UI na hindi naman
-      //     existing sa fmis_main.AssignedRoles.
+      //     existing sa fmis_main.assigned_roles.
       //
       // ✅ Bagong behavior:
       //     - Kapag walang na-detect na 6-step workflow role, iwanan ang
@@ -814,7 +814,7 @@ const getHierarchicalAssignment = async (req, res) => {
     if (!userName || userName.trim() === '') {
       try {
         // Simple user lookup from main DB
-        const AssignedRole = mainConnection.model('AssignedRoles', new mongoose.Schema({}, { strict: false }), 'AssignedRoles');
+        const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
         const userData = await AssignedRole.findOne({
           user: userId
         }).lean();
@@ -857,10 +857,10 @@ const getAllHierarchicalAssignments = async (req, res) => {
   try {
     let userRoles = req.user.Roles || [];
 
-    // If userRoles is empty, try to enrich from fmis_main.AssignedRoles (main DB)
+    // If userRoles is empty, try to enrich from fmis_main.assigned_roles (main DB)
     if ((!userRoles || userRoles.length === 0) && req.user) {
       try {
-        const AssignedRole = mainConnection.model('AssignedRoles', new mongoose.Schema({}, { strict: false }), 'AssignedRoles');
+        const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
         const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
         const queryUser = req.user.id || req.user.userId || req.user.user || req.user.username;
         if (queryUser) {
@@ -1003,7 +1003,7 @@ const getAllHierarchicalAssignments = async (req, res) => {
           if (!userName || userName.trim() === '') {
             try {
               // Simple user lookup from main DB
-              const AssignedRole = mainConnection.model('AssignedRoles', new mongoose.Schema({}, { strict: false }), 'AssignedRoles');
+              const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
               const userData = await AssignedRole.findOne({
                 user: assignment.userId
               }).lean();

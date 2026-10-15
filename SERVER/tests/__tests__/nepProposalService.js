@@ -8,7 +8,7 @@ jest.mock('../../models/PersonnelServices', () => ({
   insertMany: jest.fn(),
   deleteMany: jest.fn()
 }));
-jest.mock('../../models/MooeProposal', () => ({
+jest.mock('../../models/mooeProposals', () => ({
   find: jest.fn(),
   insertMany: jest.fn(),
   deleteMany: jest.fn()
@@ -28,7 +28,7 @@ jest.mock('../../models/HierarchicalUserAssignment', () => ({ find: jest.fn() })
 
 const Income = require('../../models/Income');
 const PersonnelServices = require('../../models/PersonnelServices');
-const MooeProposal = require('../../models/MooeProposal');
+const MooeProposal = require('../../models/mooeProposals');
 const CapitalOutlay = require('../../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../../models/CapitalOutlayDetails');
 const Proposal = require('../../models/Proposal');
@@ -216,7 +216,7 @@ describe('generated NEP line-item cloning', () => {
       income: 90,
       subsidy: 260
     });
-    expect(counts.CapitalOutlay).toBe(1);
+    expect(counts.capitalOutlay).toBe(1);
   });
 });
 

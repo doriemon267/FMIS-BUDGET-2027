@@ -199,7 +199,7 @@ const personnelServicesSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    ChildrenAllowance: {
+    childrenAllowance: {
       type: Number,
       required: true,
     },
@@ -404,7 +404,7 @@ personnelServicesSchema.pre('save', async function() {
   // Calculate total from all numeric fields (25 components per SUBTOTAL formula)
   const numericFields = [
     "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-    "medical", "additionalMedical", "ChildrenAllowance", "meal", "cashGift",
+    "medical", "additionalMedical", "childrenAllowance", "meal", "cashGift",
     "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
     "midyearBonus", "yearEndBonus", "gsisPremium", "providentFund", "philhealthPremium", "pagibigPremium",
     "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 
@@ -440,7 +440,7 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
       // Get all numeric fields (25 components per SUBTOTAL formula)
       const numericFields = [
         "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-        "medical", "ChildrenAllowance", "meal", "cashGift", "additionalMedical",
+        "medical", "childrenAllowance", "meal", "cashGift", "additionalMedical",
         "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
         "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium", 
         "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 

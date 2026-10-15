@@ -4,7 +4,7 @@ const TierRevision = require('../models/TierRevision');
 const User = require('../models/User');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
-const MooeProposal = require('../models/MooeProposal');
+const mooeProposals = require('../models/mooeProposals');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const BudgetCeiling = require('../models/BudgetCeiling');
 const fs = require('fs');
@@ -327,8 +327,8 @@ const getTierData = async (req, res) => {
     if (division) queryConditions.division = division;
 
     const personnelServices = await PersonnelServices.find(queryConditions);
-    const CapitalOutlays = await CapitalOutlay.find(queryConditions);
-    const mooeData = await MooeProposal.find(queryConditions);
+    const capitalOutlays = await CapitalOutlay.find(queryConditions);
+    const mooeData = await mooeProposals.find(queryConditions);
 
     const tierDoc = await Tier.findOne(queryConditions);
 
@@ -352,7 +352,7 @@ const getTierData = async (req, res) => {
       tier2: getTierValue(m._id, 'tier2'),
     }));
 
-    const CapitalOutlayItems = CapitalOutlays.map(c => ({
+    const capitalOutlayItems = capitalOutlays.map(c => ({
       _id: c._id,
       description: c.description,
       tier1: getTierValue(c._id, 'tier1'),
@@ -362,7 +362,7 @@ const getTierData = async (req, res) => {
     res.json({
       personnelServices: personnelItems,
       mooe: mooeItems,
-      CapitalOutlay: CapitalOutlayItems,
+      capitalOutlay: capitalOutlayItems,
     });
 
   } catch (error) {
@@ -1483,7 +1483,7 @@ const generateTierPDF = async (req, res) => {
       const categoryRows = [
         ['Personnel Services', 'personnelServices'],
         ['MOOE', 'mooe'],
-        ['Capital Outlay', 'CapitalOutlay'],
+        ['Capital Outlay', 'capitalOutlay'],
       ];
       const categoryWidth = TABLE_WIDTH / 3;
       if (compliance.hasDetailedCeiling) {
@@ -2010,7 +2010,7 @@ const generateTierExcel = async (req, res) => {
       const expenseCategories = [
         ['Personnel Services', 'personnelServices'],
         ['MOOE', 'mooe'],
-        ['Capital Outlay', 'CapitalOutlay']
+        ['Capital Outlay', 'capitalOutlay']
       ];
       expenseCategories.forEach(([label, key]) => {
         const categoryActual = Number(actual[key] || 0);

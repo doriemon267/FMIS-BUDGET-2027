@@ -212,7 +212,7 @@ const DEFAULT_ROUTE_PERMISSIONS = [
     excludeRoles: [],
   },
   {
-    path: "/ChildrenAllowance",
+    path: "/childrenAllowance",
     label: "Children's Allowance",
     group: "Employee Benefits",
     requiredPermissions: [],

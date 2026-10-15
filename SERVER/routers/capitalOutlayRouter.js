@@ -8,7 +8,7 @@ const {
   getAccountingTitles,
   deleteAllCapitalOutlays,
   bulkUpdateCapitalOutlay,
-} = require("../controllers/CapitalOutlayController");
+} = require("../controllers/capitalOutlayController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
 const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBypass");
@@ -19,19 +19,19 @@ const { submissionWorkflowControl } = require('../middleware/submissionWorkflowC
 const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
 const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 const CapitalOutlay = require("../models/CapitalOutlay"); // New model import
-const CapitalOutlayRouter = Router();
+const capitalOutlayRouter = Router();
 // Apply authentication to all capital outlay routes
-CapitalOutlayRouter.use(isAuth);
-CapitalOutlayRouter.get("/capital-outlays", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllCapitalOutlays);
-CapitalOutlayRouter.post("/capital-outlays", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
-CapitalOutlayRouter.put("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
-CapitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), deleteCapitalOutlay);
-CapitalOutlayRouter.get("/capital-outlay-list", getCapitalOutlayList);
-CapitalOutlayRouter.get("/subline-items", getSublineItems);
-CapitalOutlayRouter.get("/accounting-titles", getAccountingTitles);
-CapitalOutlayRouter.delete("/deleteAllCapitalOutlays", requireDynamicPermission('/categories'), deleteAllCapitalOutlays);
+capitalOutlayRouter.use(isAuth);
+capitalOutlayRouter.get("/capital-outlays", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllCapitalOutlays);
+capitalOutlayRouter.post("/capital-outlays", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
+capitalOutlayRouter.put("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
+capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), deleteCapitalOutlay);
+capitalOutlayRouter.get("/capital-outlay-list", getCapitalOutlayList);
+capitalOutlayRouter.get("/subline-items", getSublineItems);
+capitalOutlayRouter.get("/accounting-titles", getAccountingTitles);
+capitalOutlayRouter.delete("/deleteAllCapitalOutlays", requireDynamicPermission('/categories'), deleteAllCapitalOutlays);
 // Check due date status
-CapitalOutlayRouter.get("/due-date-status", async (req, res) => {
+capitalOutlayRouter.get("/due-date-status", async (req, res) => {
   try {
     const Settings = require("../models/Settings");
     const activeSettings = await Settings.findOne({ isActive: true });
@@ -66,7 +66,7 @@ CapitalOutlayRouter.get("/due-date-status", async (req, res) => {
   }
 });
 // Route to manually seed Capital Outlay chart of accounts
-CapitalOutlayRouter.post("/seed-chart-of-accounts", requireDynamicPermission('/categories'), async (req, res) => {
+capitalOutlayRouter.post("/seed-chart-of-accounts", requireDynamicPermission('/categories'), async (req, res) => {
   res.status(410).json({
     message: "This endpoint is deprecated. Chart of Accounts data now comes directly from the FMIS main database (MONGODB_MAIN_URL). Update the source dataset there if changes are needed.",
   });
@@ -102,7 +102,7 @@ const resolveRegionName = async (regionInput) => {
 };
 
 // Get Capital Outlay by parameters
-CapitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl('read'), async (req, res) => {
+capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl('read'), async (req, res) => {
   try {
     const { proposalId, fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
     const query = {};
@@ -142,7 +142,7 @@ CapitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
       if (division) query.division = division;
     }
     
-    let CapitalOutlay = await CapitalOutlay.find(query).populate('category', 'categoryName').lean();
+    let capitalOutlay = await CapitalOutlay.find(query).populate('category', 'categoryName').lean();
 
     // ✅ ENHANCED FALLBACK: Always merge relevant unlinked records when viewing a proposal,
     // not just when linked records are missing. This ensures centralized/bulk-uploaded capital outlay 
@@ -239,12 +239,12 @@ CapitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
       
       if (unlinkedCapitalOutlay.length > 0) {
         // Merge and deduplicate by _id to avoid showing the same record twice 
-        // (though unlinked records by definition shouldn't be in the first 'CapitalOutlay' array)
-        const existingIds = new Set(CapitalOutlay.map(co => String(co._id)));
+        // (though unlinked records by definition shouldn't be in the first 'capitalOutlay' array)
+        const existingIds = new Set(capitalOutlay.map(co => String(co._id)));
         const uniqueUnlinked = unlinkedCapitalOutlay.filter(co => !existingIds.has(String(co._id)));
         
         if (uniqueUnlinked.length > 0) {
-          CapitalOutlay = [...CapitalOutlay, ...uniqueUnlinked];
+          capitalOutlay = [...capitalOutlay, ...uniqueUnlinked];
         }
       }
     }
@@ -279,7 +279,7 @@ CapitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
                                   userAssignment.regionId?.region;
             const assignedDivision = userAssignment.divisionName;
             
-            const filteredOutlay = CapitalOutlay.filter(co => {
+            const filteredOutlay = capitalOutlay.filter(co => {
               if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
                 return co.division === assignedDivision;
               }
@@ -295,7 +295,7 @@ CapitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
               return false;
             });
             
-            CapitalOutlay = filteredOutlay;
+            capitalOutlay = filteredOutlay;
           }
         } catch (err) {
           console.error('[ORG_FILTER] Error in capital-outlay/getByParams:', err.message);
@@ -303,13 +303,13 @@ CapitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
       }
     }
     
-    res.status(200).json(CapitalOutlay);
+    res.status(200).json(capitalOutlay);
   } catch (error) {
     console.error("Error fetching Capital Outlay by params:", error);
     res.status(500).json({ message: "Failed to fetch Capital Outlay data" });
   }
 });
 // Bulk update Capital Outlay entries
-CapitalOutlayRouter.put("/capital-outlay/bulk-update", requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
-module.exports = CapitalOutlayRouter;
+capitalOutlayRouter.put("/capital-outlay/bulk-update", requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
+module.exports = capitalOutlayRouter;
 

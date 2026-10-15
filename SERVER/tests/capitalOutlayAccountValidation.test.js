@@ -5,7 +5,7 @@ const {
   isMooe502Account,
   selectCapitalOutlayMapping,
   validateCapitalOutlayAccount,
-} = require("../utils/CapitalOutlayAccountValidation");
+} = require("../utils/capitalOutlayAccountValidation");
 
 describe("Capital Outlay account validation", () => {
   test.each([

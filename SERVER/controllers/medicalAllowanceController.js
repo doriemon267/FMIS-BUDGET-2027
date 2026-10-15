@@ -1,5 +1,5 @@
 const MedicalAllowance = require("../models/medicalAllowance");
-const Employee = require("../models/EmployeeMaster");
+const Employee = require("../models/employee_master");
 const Settings = require("../models/Settings");
 const { calculateMedicalAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
 const PersonnelService = require('../models/PersonnelServices');
@@ -50,7 +50,7 @@ async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noO
         "hazardPay",
         "subsistenceAllowance",
         "honoraria",
-        "ChildrenAllowance",
+        "childrenAllowance",
       ];
       personnelService.Total = numericFields.reduce(
         (acc, field) => acc + (Number(personnelService[field]) || 0),

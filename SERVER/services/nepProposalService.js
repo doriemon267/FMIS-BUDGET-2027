@@ -1,6 +1,6 @@
 const Income = require('../models/Income');
 const PersonnelServices = require('../models/PersonnelServices');
-const MooeProposal = require('../models/MooeProposal');
+const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const Proposal = require('../models/Proposal');
@@ -22,7 +22,7 @@ const NEP_GENERATION_MODES = Object.freeze({
 
 const PERSONNEL_NEP_FIELDS = [
   'annualSalary', 'PERA', 'RATA', 'honoraria', 'uniformALLOWANCE',
-  'ChildrenAllowance', 'medical', 'additionalMedical', 'meal',
+  'childrenAllowance', 'medical', 'additionalMedical', 'meal',
   'subsistenceAllowance', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST',
   'loyaltyAward', 'overtimePay', 'productivityIncentive', 'cashGift',
   'midyearBonus', 'yearEndBonus', 'hazardPay', 'retirementBenefits',
@@ -467,8 +467,8 @@ const cloneProposalLineItems = async ({
     income: incomeInserted.length,
     personnel: personnelInserted.length,
     mooe: mooeInserted.length,
-    CapitalOutlay: capitalInserted.length,
-    CapitalOutlayDetails: capitalDetailsInserted.length
+    capitalOutlay: capitalInserted.length,
+    capitalOutlayDetails: capitalDetailsInserted.length
   };
 };
 

@@ -15,7 +15,7 @@ const {
   debugCheckChargedToIncome,
   listChargedToIncome,
   resetChargedToIncome
-} = require("../controllers/personnelServiceController");
+} = require("../controllers/personnel_service_controller");
 // Import the model directly to ensure it's available
 const PersonnelService = require('../models/PersonnelServices');
 const checkDueDate = require("../middleware/checkDueDate");

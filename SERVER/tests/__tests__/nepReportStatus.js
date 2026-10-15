@@ -8,7 +8,7 @@ const context = (remaining, violations = [], hasDetailedCeiling = true) => ({
     totalExpenses: remaining,
     personnelServices: remaining,
     mooe: remaining,
-    CapitalOutlay: remaining
+    capitalOutlay: remaining
   }
 });
 

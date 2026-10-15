@@ -44,7 +44,7 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
       log.error?.(`[DB Indexes] Failed ensuring MOOE proposal lookup index: ${error.message}`);
     }
 
-    const CapitalOutlayCollection = await dropMatchingUniqueIndexes("capitaloutlays", (index) => {
+    const capitalOutlayCollection = await dropMatchingUniqueIndexes("capitaloutlays", (index) => {
       const key = index?.key || {};
       return (
         key.uacsCode === 1 &&
@@ -56,7 +56,7 @@ async function ensureDatabaseIndexes(mongoose, logger = console) {
     });
 
     try {
-      await CapitalOutlayCollection.createIndex(
+      await capitalOutlayCollection.createIndex(
         { proposalId: 1, uacsCode: 1, region: 1, department: 1, fiscalYear: 1, sublineItem: 1, category: 1 },
         {
           unique: true,

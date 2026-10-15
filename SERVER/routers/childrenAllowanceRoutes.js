@@ -9,45 +9,45 @@ const {
   deleteChildrenAllowance,
   syncAllChildrenAllowances,
   getChildrenAllowanceStats,
-} = require("../controllers/ChildrenAllowanceController");
+} = require("../controllers/childrenAllowanceController");
 const checkDueDate = require("../middleware/checkDueDate");
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
-const ChildrenAllowanceRouter = Router();
+const childrenAllowanceRouter = Router();
 // Apply authentication middleware to all routes in this router
-ChildrenAllowanceRouter.use(isAuth);
+childrenAllowanceRouter.use(isAuth);
 // Apply submission workflow control middleware for read operations
-ChildrenAllowanceRouter.use('/children-allowance', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-ChildrenAllowanceRouter.use('/children-allowance/stats', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+childrenAllowanceRouter.use('/children-allowance', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+childrenAllowanceRouter.use('/children-allowance/stats', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 // List all children allowance records
-ChildrenAllowanceRouter.get("/children-allowance", getAllChildrenAllowances);
+childrenAllowanceRouter.get("/children-allowance", getAllChildrenAllowances);
 // Get children allowance statistics (must be before :id route)
-ChildrenAllowanceRouter.get("/children-allowance/stats", getChildrenAllowanceStats);
+childrenAllowanceRouter.get("/children-allowance/stats", getChildrenAllowanceStats);
 // Retrieve a single children allowance record
-ChildrenAllowanceRouter.get("/children-allowance/:id", getChildrenAllowance);
+childrenAllowanceRouter.get("/children-allowance/:id", getChildrenAllowance);
 // Create a new children allowance record
-ChildrenAllowanceRouter.post(
+childrenAllowanceRouter.post(
   "/children-allowance",
   checkDueDate,
   submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }),
   createChildrenAllowance
 );
 // Update an existing children allowance record
-ChildrenAllowanceRouter.put(
+childrenAllowanceRouter.put(
   "/children-allowance/:id",
   checkDueDate,
   submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true }),
   updateChildrenAllowance
 );
 // Delete a children allowance record
-ChildrenAllowanceRouter.delete(
+childrenAllowanceRouter.delete(
   "/children-allowance/:id",
   checkDueDate,
   submissionWorkflowControl('delete', { enforceSubmissionWorkflow: true }),
   deleteChildrenAllowance
 );
 // Synchronize all children allowances with personnel services
-ChildrenAllowanceRouter.post(
+childrenAllowanceRouter.post(
   "/children-allowance/sync-all",
   syncAllChildrenAllowances
 );
-module.exports = ChildrenAllowanceRouter;
+module.exports = childrenAllowanceRouter;

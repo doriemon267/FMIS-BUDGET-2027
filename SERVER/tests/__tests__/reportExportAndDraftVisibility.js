@@ -1,6 +1,6 @@
 const ExcelJS = require('exceljs');
 
-jest.mock('../../models/MooeProposal', () => ({ find: jest.fn() }));
+jest.mock('../../models/mooeProposals', () => ({ find: jest.fn() }));
 
 const consolidatedReportsController = require('../../controllers/consolidatedReportsController');
 const consolidatedPersonnelServicesController = require('../../controllers/consolidatedPersonnelServicesController');

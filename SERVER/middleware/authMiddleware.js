@@ -103,7 +103,7 @@ module.exports = async (req, res, next) => {
     // If roles are empty, lookup from main database
     if (roles.length === 0 && mainConnection?.readyState === 1) {
       try {
-        const arDoc = await mainConnection.db.collection('AssignedRoles').findOne({ 
+        const arDoc = await mainConnection.db.collection('assigned_roles').findOne({ 
           $or: [{ user: userId }, { user: Number(userId) }, { user: userId.toUpperCase() }] 
         });
         if (arDoc?.roles?.length > 0) {

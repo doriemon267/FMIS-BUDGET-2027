@@ -11,7 +11,7 @@ const { isRecordLockedForUser } = require('../utils/workflowRecordEditAccess');
 const {
   validateCapitalOutlayAccount,
   isAllowedCapitalOutlayAccount,
-} = require('../utils/CapitalOutlayAccountValidation');
+} = require('../utils/capitalOutlayAccountValidation');
 
 // Statuses that prevent Budget Preparer from editing Capital Outlay records
 const LOCKED_CAPITAL_STATUSES = [
@@ -147,7 +147,7 @@ exports.getAllCapitalOutlays = async (req, res) => {
 
     console.log(`[CO_FETCH_FILTER] User=${userId} Dept=${activeDept} Roles=${userRoles} ->`, JSON.stringify(query, null, 2));
     const sortQuery = { [orderBy || "createdAt"]: order === "desc" ? -1 : 1 };
-    const [CapitalOutlays, totalRecords] = await Promise.all([
+    const [capitalOutlays, totalRecords] = await Promise.all([
       CapitalOutlay.find(query)
         .populate({
           path: "category",
@@ -160,7 +160,7 @@ exports.getAllCapitalOutlays = async (req, res) => {
       CapitalOutlay.countDocuments(query),
     ]);
     // Format the response to ensure category is properly extracted
-    const formattedOutlays = CapitalOutlays.map((outlay) => {
+    const formattedOutlays = capitalOutlays.map((outlay) => {
       const outlayObj = outlay.toObject();
       // Ensure category is properly formatted
       let categoryData = null;
@@ -183,7 +183,7 @@ exports.getAllCapitalOutlays = async (req, res) => {
       };
     });
     res.status(200).json({
-      CapitalOutlays: formattedOutlays,
+      capitalOutlays: formattedOutlays,
       totalPages: Math.ceil(totalRecords / 100), // Adjust the totalPages calculation if needed
       currentPage: parseInt(page),
       totalRecords,
@@ -419,7 +419,7 @@ exports.addCapitalOutlay = async (req, res) => {
 
     return res.status(201).json({
       message: "Capital outlay added successfully",
-      CapitalOutlay: newOutlay
+      capitalOutlay: newOutlay
     });
   } catch (error) {
     console.error("=== ERROR ADDING CAPITAL OUTLAY ===");
@@ -568,7 +568,7 @@ exports.editCapitalOutlay = async (req, res) => {
       }
     return res.status(200).json({
       message: "Capital outlay updated successfully.",
-      CapitalOutlay: updatedCapitalOutlay,
+      capitalOutlay: updatedCapitalOutlay,
     });
   } catch (error) {
     console.error("Error updating capital outlay:", error);
@@ -643,7 +643,7 @@ exports.getCapitalOutlayList = async (req, res) => {
     if (division) query.division = division;
     
     console.log(`[CO_LIST_DEBUG] User=${userId} Dept=${activeDept} Region=${region}`);
-    let CapitalOutlays = await CapitalOutlay.find(query);
+    let capitalOutlays = await CapitalOutlay.find(query);
     
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
@@ -668,7 +668,7 @@ exports.getCapitalOutlayList = async (req, res) => {
                                 userAssignment.regionId?.region;
           const assignedDivision = userAssignment.divisionName;
           
-          const filteredOutlays = CapitalOutlays.filter(co => {
+          const filteredOutlays = capitalOutlays.filter(co => {
             if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
               return co.division === assignedDivision;
             }
@@ -685,7 +685,7 @@ exports.getCapitalOutlayList = async (req, res) => {
           });
           
           if (filteredOutlays.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
-            CapitalOutlays = filteredOutlays;
+            capitalOutlays = filteredOutlays;
           }
         }
       } catch (err) {
@@ -693,7 +693,7 @@ exports.getCapitalOutlayList = async (req, res) => {
       }
     }
     
-    res.status(200).json(CapitalOutlays);
+    res.status(200).json(capitalOutlays);
   } catch (error) {
     console.error("Error fetching capital outlays:", error);
     res.status(500).json({ error: "Internal Server Error" });

@@ -46,7 +46,7 @@ const DraftProposalSchema = new mongoose.Schema(
     // Add category field
     category: {
       type: String,
-      enum: ['personnel', 'mooe', 'CapitalOutlay', 'income', 'uncategorized'],
+      enum: ['personnel', 'mooe', 'capitalOutlay', 'income', 'uncategorized'],
       default: 'uncategorized'
     }
   },

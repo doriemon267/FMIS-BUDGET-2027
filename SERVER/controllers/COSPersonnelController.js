@@ -2,7 +2,7 @@ const COSPersonnel = require("../models/COSPersonnel");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
 const NewProposalWorkflow = require("../models/NewProposalWorkflow");
-const MOOE = require("../models/MooeProposal");
+const MOOE = require("../models/mooeProposals");
 const { searchFilter, textFilter } = require("../utils/controller_get_process");
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const {

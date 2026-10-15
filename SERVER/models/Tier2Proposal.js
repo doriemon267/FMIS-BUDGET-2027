@@ -80,7 +80,7 @@ const tier2ProposalSchema = new mongoose.Schema({
   categoryBreakdown: {
     personnelServices: { type: Number, default: 0 },
     mooe: { type: Number, default: 0 },
-    CapitalOutlay: { type: Number, default: 0 },
+    capitalOutlay: { type: Number, default: 0 },
     income: { type: Number, default: 0 },
     budgetarySupport: { type: Number, default: 0 }
   },

@@ -28,7 +28,7 @@ const getModelByEntity = (entity) => {
     case 'personnel':
       return require('../models/personnelServices');
     case 'mooe':
-      return require('../models/MooeProposal');
+      return require('../models/mooeProposals');
     case 'capital':
       return require('../models/CapitalOutlay');
     case 'income':

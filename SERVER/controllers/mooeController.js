@@ -1,4 +1,4 @@
-const MooeProposal     = require('../models/MooeProposal');
+const MooeProposal     = require('../models/mooeProposals');
 const ChartOfAccounts  = require('../models/chartOfAccounts');
 const EmployeeList     = require('../models/EmployeeList');
 const COSPersonnel     = require('../models/COSPersonnel');
@@ -176,7 +176,7 @@ exports.getMOOEData = async (req, res) => {
     // }
     // Try to fetch Chart of Accounts, but use fallback if none found
     let chartOfAccounts = [];
-    let MooeProposal = [];
+    let mooeProposals = [];
     let cosPersonnels = [];
     try {
       const results = await Promise.all([
@@ -200,19 +200,19 @@ exports.getMOOEData = async (req, res) => {
         }).lean()
       ]);
       chartOfAccounts = results[0];
-      MooeProposal = results[1];
+      mooeProposals = results[1];
       cosPersonnels = results[2];
       
       console.log('[getMOOEData] Query results:', {
         filter: filter,
-        mooeCount: MooeProposal.length,
-        firstMooe: MooeProposal[0]?.accountingTitle,
+        mooeCount: mooeProposals.length,
+        firstMooe: mooeProposals[0]?.accountingTitle,
         fiscalYear: activeFiscalYear,
         region: region
       });
       
       // If no results with strict filter, try broader query to diagnose
-      if (MooeProposal.length === 0) {
+      if (mooeProposals.length === 0) {
         // console.warn('[getMOOEData] No MOOE data with strict filter, trying fallback query...');
         const fallbackMooe = await MooeProposal.find({
           fiscalYear: activeFiscalYear,
@@ -273,7 +273,7 @@ exports.getMOOEData = async (req, res) => {
       console.error('❌ Database query error:', error);
       // Use empty arrays as fallback
       chartOfAccounts = [];
-      MooeProposal = [];
+      mooeProposals = [];
       cosPersonnels = [];
     }
     // 3. Compute total COS personnel amount
@@ -282,7 +282,7 @@ exports.getMOOEData = async (req, res) => {
     // 4. Build lookup for MOOE amounts
     // 4. Build lookup for MOOE amounts and aggregate if there are multiple proposals with same uacsCode
     const mooeMap = {};
-    for (const row of MooeProposal) {
+    for (const row of mooeProposals) {
       if (!mooeMap[row.uacsCode]) {
         mooeMap[row.uacsCode] = { ...row, _recordCount: 1 };
       } else {
@@ -295,8 +295,8 @@ exports.getMOOEData = async (req, res) => {
       }
     }
     // 5. Determine submission status
-    const status = MooeProposal.length > 0
-      ? MooeProposal[0].status || "Draft"
+    const status = mooeProposals.length > 0
+      ? mooeProposals[0].status || "Draft"
       : "Draft";
     // 6. Assemble entries array, including each proposal's _id as `id`
     const entries = chartOfAccounts.map(row => {
@@ -458,7 +458,7 @@ exports.getMOOEEntries = async (req, res) => {
     }
     
     // 3. Fetch COA, MOOE proposals and COS personnel with proper filtering
-    const [chartOfAccounts, MooeProposal, cosPersonnels] = await Promise.all([
+    const [chartOfAccounts, mooeProposals, cosPersonnels] = await Promise.all([
       ChartOfAccounts.find({
         accountClass: "Expense",
         lineItem: "Maintenance and Other Operating Expenses",
@@ -476,7 +476,7 @@ exports.getMOOEEntries = async (req, res) => {
     // 4. Build a lookup for MOOE proposals
     // 4. Build a lookup for MOOE proposals and aggregate if there are multiple proposals with same uacsCode
     const mooeMap = {};
-    for (const row of MooeProposal) {
+    for (const row of mooeProposals) {
       if (!mooeMap[row.uacsCode]) {
         mooeMap[row.uacsCode] = { ...row, _recordCount: 1 };
       } else {
@@ -1133,7 +1133,7 @@ exports.getMooeList = async (req, res) => {
       filter.fiscalYear = fiscalYear;
     }
     
-    let MooeProposal = await MooeProposal.find(filter);
+    let mooeProposals = await MooeProposal.find(filter);
     
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
     // This ensures Budget Preparers only see proposals from their CURRENT assigned office/division
@@ -1147,7 +1147,7 @@ exports.getMooeList = async (req, res) => {
     
     // SUPER_ADMIN sees only their own records, not all records
     if (isSuperAdmin && userIdString) {
-      MooeProposal = MooeProposal.filter(p => {
+      mooeProposals = mooeProposals.filter(p => {
         const createdBy = String(p.createdBy || p.userId || '');
         return createdBy === userIdString;
       });
@@ -1169,7 +1169,7 @@ exports.getMooeList = async (req, res) => {
                                 userAssignment.regionId?.region;
           const assignedDivision = userAssignment.divisionName;
           
-          const filteredProposals = MooeProposal.filter(p => {
+          const filteredProposals = mooeProposals.filter(p => {
             // CASE 1: User assigned at DIVISION level - only show proposals from that division
             if (assignedDivision && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(userAssignment.assignmentLevel)) {
               return p.division === assignedDivision;
@@ -1195,7 +1195,7 @@ exports.getMooeList = async (req, res) => {
           
           // Only apply filter if it results in proposals
           if (filteredProposals.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
-            MooeProposal = filteredProposals;
+            mooeProposals = filteredProposals;
           }
         }
       } catch (err) {
@@ -1204,7 +1204,7 @@ exports.getMooeList = async (req, res) => {
       }
     }
     
-    res.status(200).json(MooeProposal);
+    res.status(200).json(mooeProposals);
   } catch (error) {
     console.error('Error fetching MOOE list:', error);
     res.status(500).json({ error: 'Internal Server Error' });

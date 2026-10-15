@@ -4,7 +4,7 @@ const User = require('../models/User');
 const Region = require('../models/Region');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const PersonnelServices = require('../models/PersonnelServices');
-const MooeProposal = require('../models/MooeProposal');
+const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const ProposalEditLog = require('../models/ProposalEditLog');
@@ -1438,20 +1438,20 @@ const getCarryForwardSourceCounts = async ({ sourceWorkflowId, sourceLegacyId })
       income: 0,
       personnel: 0,
       mooe: 0,
-      CapitalOutlay: 0,
+      capitalOutlay: 0,
       populatedModules: 0,
       totalRows: 0
     };
   }
 
-  const [income, personnel, mooe, CapitalOutlay] = await Promise.all([
+  const [income, personnel, mooe, capitalOutlay] = await Promise.all([
     Income.countDocuments(sourceQuery),
     PersonnelServices.countDocuments(sourceQuery),
     MooeProposal.countDocuments(sourceQuery),
     CapitalOutlay.countDocuments(sourceQuery)
   ]);
 
-  const counts = { income, personnel, mooe, CapitalOutlay };
+  const counts = { income, personnel, mooe, capitalOutlay };
   const populatedModules = Object.values(counts).filter((count) => Number(count) > 0).length;
   const totalRows = Object.values(counts).reduce((sum, count) => sum + Number(count || 0), 0);
 
@@ -1763,7 +1763,7 @@ const carryForwardInitialProposalData = async ({ fiscalYear, userId, userName, r
     return {
       carriedForward: false,
       source: null,
-      counts: { income: 0, personnel: 0, mooe: 0, CapitalOutlay: 0 }
+      counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 }
     };
   }
 
@@ -1772,7 +1772,7 @@ const carryForwardInitialProposalData = async ({ fiscalYear, userId, userName, r
     return {
       carriedForward: false,
       source,
-      counts: { income: 0, personnel: 0, mooe: 0, CapitalOutlay: 0 }
+      counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 }
     };
   }
 
@@ -1794,7 +1794,7 @@ const carryForwardInitialProposalData = async ({ fiscalYear, userId, userName, r
     income: await cloneIncomeEntries({ sourceQuery, target: targetContext }),
     personnel: await clonePersonnelEntries({ sourceQuery, target: targetContext }),
     mooe: await cloneMooeEntries({ sourceQuery, target: targetContext }),
-    CapitalOutlay: await cloneCapitalOutlayEntries({ sourceQuery, target: targetContext })
+    capitalOutlay: await cloneCapitalOutlayEntries({ sourceQuery, target: targetContext })
   };
 
   return {
@@ -1813,7 +1813,7 @@ const formatCarryForwardMessage = (result) => {
   if (result.counts.income) parts.push(`${result.counts.income} Income`);
   if (result.counts.personnel) parts.push(`${result.counts.personnel} Personnel Services`);
   if (result.counts.mooe) parts.push(`${result.counts.mooe} MOOE`);
-  if (result.counts.CapitalOutlay) parts.push(`${result.counts.CapitalOutlay} Capital Outlay`);
+  if (result.counts.capitalOutlay) parts.push(`${result.counts.capitalOutlay} Capital Outlay`);
 
   if (!parts.length) {
     return `Matched FY ${result.source.sourceFiscalYear} as the previous Initial proposal, but there were no linked line items to carry forward.`;
@@ -1894,12 +1894,12 @@ const syncUnlinkedRecordsToProposal = async ({
       income: incomeResult.modifiedCount || 0,
       personnel: personnelResult.modifiedCount || 0,
       mooe: mooeResult.modifiedCount || 0,
-      CapitalOutlay: capitalResult.modifiedCount || 0,
+      capitalOutlay: capitalResult.modifiedCount || 0,
       total: totalModified
     };
   } catch (err) {
     console.error('[syncUnlinked] Error syncing records to proposal:', err.message);
-    return { income: 0, personnel: 0, mooe: 0, CapitalOutlay: 0, total: 0 };
+    return { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0, total: 0 };
   }
 };
 
@@ -2156,7 +2156,7 @@ exports.createProposal = async (req, res) => {
           toStatus: 'DRAFT',
           performedBy: String(userId),
           performedByName: userName,
-          comment: `Automatically synced ${syncResult.total} unlinked records (${syncResult.income} Income, ${syncResult.personnel} PS, ${syncResult.mooe} MOOE, ${syncResult.CapitalOutlay} CO)`,
+          comment: `Automatically synced ${syncResult.total} unlinked records (${syncResult.income} Income, ${syncResult.personnel} PS, ${syncResult.mooe} MOOE, ${syncResult.capitalOutlay} CO)`,
           timestamp: new Date()
         });
         await proposal.save();
@@ -2168,7 +2168,7 @@ exports.createProposal = async (req, res) => {
     let carryForwardResult = {
       carriedForward: false,
       source: null,
-      counts: { income: 0, personnel: 0, mooe: 0, CapitalOutlay: 0 }
+      counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 }
     };
 
     const shouldCarryForward = normalizedModelType === 'Initial' && carryForwardPreviousYear !== false;
@@ -2206,7 +2206,7 @@ exports.createProposal = async (req, res) => {
         carryForwardResult = {
           carriedForward: false,
           source: null,
-          counts: { income: 0, personnel: 0, mooe: 0, CapitalOutlay: 0 },
+          counts: { income: 0, personnel: 0, mooe: 0, capitalOutlay: 0 },
           warning: carryForwardError.message
         };
       }
@@ -4044,7 +4044,7 @@ exports.updateProposal = async (req, res) => {
     const isNepProposal = String(proposal.modelType || '').toUpperCase() === 'NEP';
     const allowedFields = isNepProposal
       ? ['title', 'description']
-      : ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'CapitalOutlay', 'division', 'department', 'office', 'isCentralOffice', 'projectedCorporateIncome', 'projectedSubsidy'];
+      : ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay', 'division', 'department', 'office', 'isCentralOffice', 'projectedCorporateIncome', 'projectedSubsidy'];
     const updates = {};
     const changes = {}; // Track what changed
 

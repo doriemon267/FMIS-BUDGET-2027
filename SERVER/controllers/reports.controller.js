@@ -1,6 +1,6 @@
 const Settings = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');
-const MOOEProposal = require("../models/MooeProposal");
+const MOOEProposal = require("../models/mooeProposals");
 const CapitalOutlay = require("../models/CapitalOutlay");
 const Category = require("../models/Category");
 const Income = require("../models/Income");
@@ -68,7 +68,7 @@ const getConsolidatedSummary = async (req, res) => {
       "productivityIncentive",
       "medical",
       "additionalMedical",
-      "ChildrenAllowance",
+      "childrenAllowance",
       "meal",
       "cashGift",
       "subsistenceAllowance",

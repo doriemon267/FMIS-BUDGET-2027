@@ -4,7 +4,7 @@ const {
   getPersonnelByParams,
   PersonnelServices,
   getPersonnelHiredBeforeJune1988,
-} = require("../controllers/personnelServiceController_case_sensitive");
+} = require("../controllers/personnel_service_controller_case_sensitive");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

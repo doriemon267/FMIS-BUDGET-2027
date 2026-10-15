@@ -1,5 +1,5 @@
 const CapitalOutlay = require("../models/CapitalOutlay");
-const MOOEProposal = require("../models/MooeProposal");
+const MOOEProposal = require("../models/mooeProposals");
 const PersonnelService = require('../models/PersonnelServices');
 // Kumuha ng combined proposal summary
 // Kumuha ng combined proposal summary
@@ -12,11 +12,11 @@ exports.getProposalSummary = async (req, res) => {
     } else if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length) {
       baseQuery = { ...req.hierarchicalFilters };
     }
-    const CapitalOutlays = await CapitalOutlay.find(baseQuery).lean();
-    const MooeProposal = await MOOEProposal.find(baseQuery).lean();
+    const capitalOutlays = await CapitalOutlay.find(baseQuery).lean();
+    const mooeProposals = await MOOEProposal.find(baseQuery).lean();
     const personnelServices = await PersonnelServices.find(baseQuery).lean();
     // I-format ang data para magkaroon ng property na 'type'
-    const CapitalOutlaysFormatted = CapitalOutlays.map(item => ({
+    const capitalOutlaysFormatted = capitalOutlays.map(item => ({
       type: "Capital Outlay",
       particulars: item.particulars,
       amount: item.cost,
@@ -27,7 +27,7 @@ exports.getProposalSummary = async (req, res) => {
       processBy: item.processBy,
       processDate: item.processDate,
     }));
-    const MooeProposalFormatted = MooeProposal.map(item => ({
+    const mooeProposalsFormatted = mooeProposals.map(item => ({
       type: "MOOE Proposal",
       uacsCode: item.uacsCode,
       amount: item.amount,
@@ -51,8 +51,8 @@ exports.getProposalSummary = async (req, res) => {
       amount: item.Total,
     }));
     const allProposals = [
-      ...CapitalOutlaysFormatted,
-      ...MooeProposalFormatted,
+      ...capitalOutlaysFormatted,
+      ...mooeProposalsFormatted,
       ...personnelServicesFormatted,
     ];
     // I-sort batay sa processDate (pinakabago muna)
@@ -124,12 +124,12 @@ exports.getAnalytics = async (req, res) => {
     ]);
     res.json({
       counts: {
-        CapitalOutlay: capitalCount,
+        capitalOutlay: capitalCount,
         mooeProposal: mooeCount,
         personnelServices: personnelCount,
       },
       totals: {
-        CapitalOutlay: capitalAgg[0] ? capitalAgg[0].totalCost : 0,
+        capitalOutlay: capitalAgg[0] ? capitalAgg[0].totalCost : 0,
         mooeProposal: mooeAgg[0] ? mooeAgg[0].totalAmount : 0,
         personnelServices: personnelAgg[0] ? personnelAgg[0].total : 0,
       }

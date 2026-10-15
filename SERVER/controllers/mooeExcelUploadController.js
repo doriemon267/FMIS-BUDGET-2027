@@ -1,5 +1,5 @@
 const xlsx = require("xlsx");
-const MooeProposal = require("../models/MooeProposal"); // Use correct model
+const MooeProposal = require("../models/mooeProposals"); // Use correct model
 const NewProposalWorkflow = require("../models/NewProposalWorkflow");
 const ChartOfAccounts = require("../models/chartOfAccounts");
 const TitleMapping = require("../models/titleMapping");

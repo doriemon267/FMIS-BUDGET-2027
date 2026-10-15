@@ -459,7 +459,7 @@ proposalSchema.methods.recomputeTotals = async function() {
     const Income = require('./Income');
     const CapitalOutlay = require('./CapitalOutlay');
     const PersonnelServices = require('./PersonnelServices');
-    const MooeProposal = require('./MooeProposal');
+    const MooeProposal = require('./mooeProposals');
 
     const pid = this._id;
     const [incomeRows, coRows, psRows, mooeRows] = await Promise.all([
@@ -481,7 +481,7 @@ proposalSchema.methods.recomputeTotals = async function() {
       income: incomeTotal,
       personnelServices: psTotal,
       mooe: mooeTotal,
-      CapitalOutlay: coTotal
+      capitalOutlay: coTotal
     };
     return this.save();
   } catch (e) {

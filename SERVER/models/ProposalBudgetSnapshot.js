@@ -36,7 +36,7 @@ const proposalBudgetSnapshotSchema = new mongoose.Schema({
     income: { type: Array, default: [] },
     personnelServices: { type: Array, default: [] },
     mooe: { type: Array, default: [] },
-    CapitalOutlay: { type: Array, default: [] }
+    capitalOutlay: { type: Array, default: [] }
   },
   totals: {
     totalIncome: Number,

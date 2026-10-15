@@ -963,7 +963,7 @@ exports.createCompensationSettings = async (req, res) => {
       productivityIncentive: compensationData.productivityIncentive ?? 0,
       // Allowances
       medicalAllowance: compensationData.medicalAllowance ?? 200,
-      ChildrenAllowance: compensationData.ChildrenAllowance ?? 0,
+      childrenAllowance: compensationData.childrenAllowance ?? 0,
       meal: compensationData.meal ?? 200,
       cashGift: compensationData.cashGift ?? 0,
       additionalMedical: compensationData.additionalMedical ?? 0,
@@ -1377,7 +1377,7 @@ exports.updateAdvancedSettings = async (req, res) => {
           "hazardPay",
           "subsistenceAllowance",
           "honoraria",
-          "ChildrenAllowance",
+          "childrenAllowance",
           "earnedLeaves",
         ];
         personnel.philhealthPremium = newPhilhealthPremium;
