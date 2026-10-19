@@ -120,9 +120,8 @@ brdConsolidationSchema.index({ status: 1 });
 brdConsolidationSchema.index({ status: 1, fiscalYear: 1, isCentralOffice: 1 });
 
 // Pre-save middleware to update timestamp
-brdConsolidationSchema.pre('save', function(next) {
+brdConsolidationSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('BRDConsolidation', brdConsolidationSchema);

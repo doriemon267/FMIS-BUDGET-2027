@@ -48,9 +48,8 @@ const departmentDivisionMappingSchema = new mongoose.Schema({
   }
 });
 // Pre-save middleware to update timestamp
-departmentDivisionMappingSchema.pre('save', function(next) {
+departmentDivisionMappingSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 // Static method to get organization structure with divisions
 departmentDivisionMappingSchema.statics.getCompleteOrganizationStructure = async function() {

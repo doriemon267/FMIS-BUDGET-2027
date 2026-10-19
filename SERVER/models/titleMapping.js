@@ -89,13 +89,12 @@ titleMappingSchema.statics.getBySublineItem = function (sublineItem) {
   }).sort({ accountingTitle: 1 });
 };
 // Pre-save middleware to ensure UACS code format
-titleMappingSchema.pre("save", function (next) {
+titleMappingSchema.pre("save", function () {
   // Validate UACS code format (e.g., 5-01-01-010)
   const uacsPattern = /^[0-9]+-[0-9]+-[0-9]+-[0-9]+$/;
   if (!uacsPattern.test(this.uacsCode)) {
     const error = new Error("UACS Code must be in format: X-XX-XX-XXX (e.g., 5-01-01-010)");
-    return next(error);
+    throw error;
   }
-  next();
 });
 module.exports = mongoose.model("TitleMapping", titleMappingSchema);

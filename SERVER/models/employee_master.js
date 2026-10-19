@@ -119,9 +119,8 @@ const EmployeeMasterSchema = mongoose.Schema({
   },
 });
 // Update the updatedAt field on save
-EmployeeMasterSchema.pre('save', function(next) {
+EmployeeMasterSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 const EmployeeMaster = mongoose.model("employee_master", EmployeeMasterSchema);
 module.exports = EmployeeMaster;

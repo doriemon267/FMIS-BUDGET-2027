@@ -25,9 +25,9 @@ process.env.MONGODB_BUDGET_URL = process.env.MONGODB_BUDGET_URL || process.env.M
 process.env.MONGODB_MAIN_URL = process.env.MONGODB_MAIN_URL || process.env.MONGODB_URI;
 process.env.JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || process.env.JWT_SECRET || process.env.SECRET_KEY;
 
-// Global suppression of Node runtime deprecation warnings if configured
+// Global suppression of Node runtime deprecation warnings (Includes DEP0169 for legacy url.parse)
 const SUPPRESS_NODE_DEPRECATION_WARNINGS = (
-  process.env.SUPPRESS_NODE_DEPRECATION_WARNINGS || ""
+  process.env.SUPPRESS_NODE_DEPRECATION_WARNINGS || "DEP0169"
 )
   .split(",")
   .map((s) => s && s.trim())
@@ -103,6 +103,9 @@ const cors = require("cors");
 const http = require("http");
 const mongoose = require("mongoose");
 
+// Import ng bagong security_headers middleware
+const securityHeaders = require("./middleware/security_headers");
+
 // Socket & Database Initializations
 const { initializeSocket } = require("./socket");
 const connectMongo = require("./config/mongo_db");
@@ -113,7 +116,7 @@ const { initializeCleanupScheduler, stopCleanupScheduler } = require("./utils/ba
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
 const { initializeScheduledJobs, stopScheduledJobs } = require("./controllers/databaseBackupController");
 
-// ROUTE IMPORTS (Moved to centralized matrix)
+// ROUTE IMPORTS
 const isAuth = require("./middleware/is_auth");
 const enforceOrgAccess = require("./middleware/enforceOrgAccess");
 
@@ -121,19 +124,21 @@ const enforceOrgAccess = require("./middleware/enforceOrgAccess");
 connectMongo();
 require("./models/UserOrganizationalAssignment");
 
-mongoose.connection.once("open", async () => {
-  try {
-    await ensureDatabaseIndexes(mongoose, logger);
-    await initAgenda({ mongoConnection: mongoose.connection });
-    initializeCleanupScheduler();
-    await initializeScheduledJobs();
-  } catch (e) {
-    console.error("Failed during database initialization tasks:", e.stack || e);
-  }
-});
+// Helper function para sa Path Normalization (Inaalis ang trailing slashes)
+const normalizePath = (p) => (p || "").toLowerCase().replace(/\/+$/, "") || "/";
 
 const app = express();
-app.set('trust proxy', 1); // Trust Nginx / Load Balancer proxy
+app.disable('x-powered-by');
+
+// 1. DYNAMIC TRUST PROXY
+const trustProxyValue = process.env.TRUST_PROXY 
+  ? (process.env.TRUST_PROXY === 'true' ? true : parseInt(process.env.TRUST_PROXY, 10))
+  : 1;
+
+app.set('trust proxy', trustProxyValue);
+
+// Security Headers
+app.use(securityHeaders());
 
 // Compression Middleware Setup
 const compression = require('compression');
@@ -171,13 +176,15 @@ const attachWorkflowRef = require("./middleware/attachWorkflowRef");
 const server = http.createServer(app);
 const io = initializeSocket(server, { debugMode });
 
-// CORS Configuration
+// 2. CORS CONFIGURATION (STRICT REGEX FOR NIA SUBDOMAINS)
+const niaDomainRegex = /^https:\/\/(?:[a-zA-Z0-9-]+\.)*nia\.gov\.ph$/i;
+
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
 
-      const originStr = String(origin).toLowerCase();
+      const originStr = String(origin).trim().toLowerCase();
 
       const allowedOrigins = [
         process.env.CLIENT1,
@@ -187,27 +194,31 @@ app.use(
         "https://budget-server.nia.gov.ph"
       ].filter(Boolean).map(o => o.toLowerCase());
 
-      const isAllowed = allowedOrigins.includes(originStr);
-      const isNia = originStr.includes("nia.gov.ph");
-      const isLocal = process.env.NODE_ENV !== 'production' && (originStr.includes("localhost") || originStr.includes("127.0.0.1") || originStr.includes("fmis.local"));
+      const isAllowedExplicit = allowedOrigins.includes(originStr);
+      const isOfficialNia = niaDomainRegex.test(originStr);
+      const isLocalDev = process.env.NODE_ENV !== 'production' && (
+        originStr.startsWith("http://localhost") || 
+        originStr.startsWith("http://127.0.0.1") || 
+        originStr.includes("fmis.local")
+      );
 
-      if (isAllowed || isNia || isLocal) {
+      if (isAllowedExplicit || isOfficialNia || isLocalDev) {
         return callback(null, true);
       }
 
-      console.warn("CORS: Origin blocked:", origin);
+      console.warn("[CORS Blocked]:", origin);
       return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type", "Authorization", "X-CSRF-Token", "X-Workflow-Ref",
-      "X-Dev-User-Id", "X-Dev-Roles", "X-Requested-With", "X-User-Object",
-      "X-Reauth-Password", "X-Reauth-User",
+      "X-Requested-With", "X-User-Object", "X-Reauth-Password", "X-Reauth-User",
+      ...(process.env.NODE_ENV !== 'production' ? ["X-Dev-User-Id", "X-Dev-Roles"] : [])
     ],
     optionsSuccessStatus: 204,
     exposedHeaders: ["X-Auth-Token", "Content-Disposition", "X-Document-ID"],
-  }),
+  })
 );
 
 // Express Standard Parsers & Security Middlewares
@@ -218,15 +229,12 @@ app.use(cookieParser());
 const mongoSanitize = require('express-mongo-sanitize');
 app.use(mongoSanitize()); // Prevent NoSQL Injections
 
-const { securityHeaders, permissionsPolicy } = require('./middleware/security');
-app.use(securityHeaders);
-app.use(permissionsPolicy);
-
-// Gzip Compression (Moved to top of middleware stack)
-
-// Rate Limiting & Audit Logging
+// 3. SPECIALIZED RATE LIMITERS MOUNTING
 const { apiLimiter, authLimiter, uploadLimiter, proposalLimiter } = require('./middleware/rateLimiter');
 app.use(`${apiPrefix}/`, apiLimiter);
+app.use(`${apiPrefix}/auth/login`, authLimiter);
+if (uploadLimiter) app.use(`${apiPrefix}/uploads`, uploadLimiter);
+if (proposalLimiter) app.use(`${apiPrefix}/proposals`, proposalLimiter);
 
 const { logWorkflowAction } = require('./middleware/auditLogger');
 
@@ -270,7 +278,9 @@ app.use((req, res, next) => {
   }
 });
 
-// CSRF Handling Layer
+// =========================================================
+// 4. CSRF HANDLING LAYER (FIXED & STABLE SESSION)
+// =========================================================
 const { doubleCsrf } = require("csrf-csrf");
 
 const csrfCookieOptions = {
@@ -282,7 +292,10 @@ if (process.env.COOKIE_DOMAIN) csrfCookieOptions.domain = process.env.COOKIE_DOM
 
 const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getSecret: () => process.env.CSRF_SECRET || "default_fallback_secret",
-  getSessionIdentifier: (req) => req.cookies?.token || req.headers['authorization'] || "stateless-session",
+  // ✅ STABLE SESSION IDENTIFIER: Hindi na magmamatch-fail sa pagitan ng GET at POST
+  getSessionIdentifier: (req) => {
+    return req.cookies?.token || "fmis-budget-stable-session";
+  },
   cookieName: "x-csrf-token",
   cookieOptions: csrfCookieOptions,
   size: 64,
@@ -290,10 +303,25 @@ const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getTokenFromRequest: (req) => req.headers["x-csrf-token"] || req.headers["x-xsrf-token"],
 });
 
+// ✅ KUNG GUSTONG I-EXEMPT ANG SPECIFIC POST ENDPOINT FOR TESTING:
+const csrfExemptPrefixes = [
+  `${apiPrefix}/auth/login`,
+  `${apiPrefix}/csrf-token`,
+  `${apiPrefix}/test`,
+  "/webhook",
+  "/health"
+  // Halimbawa: kung gusto mong pansamantalang i-exempt ang POST proposal route, i-uncomment ito:
+  // `${apiPrefix}/proposals` 
+];
+
 app.use((req, res, next) => {
-  if (req.path.startsWith(apiPrefix)) return next();
-  const exemptPaths = ["/login", "/webhook", "/health"];
-  if (exemptPaths.includes(req.path)) return next();
+  const fullPath = (req.originalUrl || req.path || "").toLowerCase();
+
+  const isExempt = csrfExemptPrefixes.some((prefix) => fullPath.startsWith(prefix.toLowerCase()));
+
+  if (isExempt) {
+    return next();
+  }
   return doubleCsrfProtection(req, res, next);
 });
 
@@ -317,21 +345,28 @@ app.use((err, req, res, next) => {
 // PUBLIC UTILITY ENDPOINTS
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
 
-// Inline endpoints extracted to router files
-
 app.get(`${apiPrefix}/test`, (req, res) => {
   res.json({ message: "Server is working without MongoDB!", timestamp: new Date(), status: "OK" });
 });
 
-// GLOBAL ORGANIZATIONAL ENFORCEMENT INTERCEPTOR
+// 5. GLOBAL ORGANIZATIONAL ENFORCEMENT INTERCEPTOR (NORMALIZED & SAFE)
+const publicEndpoints = [
+  "/",
+  `${apiPrefix}/test`,
+  `${apiPrefix}/csrf-token`,
+  `${apiPrefix}/auth/login`
+];
+
 app.use((req, res, next) => {
   try {
-    if (req.method === "GET" || req.method === "OPTIONS") {
-      if (req.path === `${apiPrefix}/compensation`) return next();
+    if (req.method === "OPTIONS") return next();
+
+    const cleanPath = normalizePath(req.path);
+
+    if (publicEndpoints.includes(cleanPath)) {
       return next();
     }
-    const p = (req.path || "").toLowerCase();
-    if (p.startsWith(`${apiPrefix}/hierarchical-rbac/assignments`)) return next();
+
     return isAuth(req, res, () => enforceOrgAccess(req, res, next));
   } catch (e) {
     return res.status(500).json({ message: "Server error during access enforcement" });
@@ -345,6 +380,48 @@ app.use("/uploads", isAuth, express.static(path.join(__dirname, "uploads")));
 const masterRouter = require("./routers");
 app.use(apiPrefix, masterRouter);
 
+// =========================================================
+// VAPT FIX: UNMATCHED API 404 CATCH-ALL HANDLER
+// =========================================================
+// Sinisigurong magbabalik ng JSON 404 sa halip na SPA HTML index.html
+app.use(`${apiPrefix}/*`, (req, res) => {
+  return res.status(404).json({
+    success: false,
+    message: "API endpoint not found"
+  });
+});
+
+// Catch-all 404 para sa iba pang hindi kilalang static resources
+app.use((req, res) => {
+  return res.status(404).json({
+    success: false,
+    message: "Requested resource or endpoint not found"
+  });
+});
+
+// =========================================================
+// VAPT FIX: GLOBAL ERROR HANDLER (Sanitizes response & hides stack traces)
+// =========================================================
+app.use((err, req, res, next) => {
+  if (logger && logger.error) {
+    logger.error(`[Global Error Handler] ${req.method} ${req.path} - ${err.message}`, {
+      stack: err.stack,
+      ip: req.ip
+    });
+  } else {
+    console.error(`❌ [Global Error] ${req.method} ${req.path} - ${err.message}`, err.stack);
+  }
+
+  const statusCode = err.status || err.statusCode || 500;
+  const isProd = process.env.NODE_ENV === 'production' || process.env.PRODUCTION_MODE === 'true';
+
+  return res.status(statusCode).json({
+    success: false,
+    message: isProd && statusCode === 500
+      ? "An unexpected internal server error occurred."
+      : (err.message || "Internal Server Error")
+  });
+});
 
 async function gracefulShutdown(signal = 'unknown', error = null, exitCode = 0) {
   if (isShuttingDown) return;
@@ -403,8 +480,19 @@ async function gracefulShutdown(signal = 'unknown', error = null, exitCode = 0) 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
-// Server Execution Setup
+// 6. SAFE DATABASE & SERVER INITIALIZATION (PREVENTS RACE CONDITION)
 const PORT = process.env.APP_PORT || process.env.PORT || 5005;
+
+mongoose.connection.once("open", async () => {
+  try {
+    await ensureDatabaseIndexes(mongoose, logger);
+    await initAgenda({ mongoConnection: mongoose.connection });
+    initializeCleanupScheduler();
+    await initializeScheduledJobs();
+  } catch (e) {
+    console.error("Failed during database initialization tasks:", e.stack || e);
+  }
+});
 
 if (require.main === module) {
   server.listen(PORT, () => {

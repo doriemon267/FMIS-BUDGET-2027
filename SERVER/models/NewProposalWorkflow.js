@@ -378,7 +378,7 @@ newProposalWorkflowSchema.index(
 );
 
 // Pre-save middleware to set currentAssigneeRole based on status
-newProposalWorkflowSchema.pre('save', function(next) {
+newProposalWorkflowSchema.pre('save', function() {
   const statusToRoleMap = {
     'DRAFT': 'BUDGET PREPARER',
     'FORWARDED_TO_REVIEWER': 'BUDGET REVIEWER',
@@ -395,7 +395,6 @@ newProposalWorkflowSchema.pre('save', function(next) {
   };
 
   this.currentAssigneeRole = statusToRoleMap[this.status] || this.currentAssigneeRole;
-  next();
 });
 // Provide a simple paginate fallback in case mongoose-paginate plugin is not installed
 newProposalWorkflowSchema.statics.paginate = async function(query = {}, options = {}) {

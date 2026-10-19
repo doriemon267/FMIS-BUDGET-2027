@@ -23,9 +23,8 @@ const EventSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-EventSchema.pre('save', function (next) {
+EventSchema.pre('save', function () {
   this.updatedAt = new Date();
-  next();
 });
 
 // Helper: compute next occurrence using rrule if available

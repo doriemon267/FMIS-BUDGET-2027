@@ -61,9 +61,8 @@ const UserOrganizationalAssignmentSchema = new mongoose.Schema({
   }
 });
 // Pre-save middleware to update timestamps
-UserOrganizationalAssignmentSchema.pre('save', function(next) {
+UserOrganizationalAssignmentSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 // Instance methods
 UserOrganizationalAssignmentSchema.methods.hasOfficeAccess = function(officeId) {

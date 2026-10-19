@@ -31,7 +31,7 @@ const incomeSubcategorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 // Pre-save middleware to ensure name field is set
-incomeSubcategorySchema.pre('save', function(next) {
+incomeSubcategorySchema.pre('save', function() {
   // Set the name field to match incomeSubcategoryName
   if (this.incomeSubcategoryName) {
     this.name = this.incomeSubcategoryName;
@@ -55,7 +55,6 @@ incomeSubcategorySchema.pre('save', function(next) {
       });
     }
   }
-  next();
 });
 module.exports = mongoose.models.IncomeSubcategory || 
   mongoose.model("IncomeSubcategory", incomeSubcategorySchema);

@@ -61,17 +61,16 @@ settingsSchema.index({ fiscalYear: 1, budgetType: 1 }, { unique: true });
 
 // ✅ STRICT SEPARATION: Pre-save hook to ensure compensation is never auto-created
 // This is the final safety check - NEW fiscal years should NEVER get auto-linked compensation
-settingsSchema.pre('save', function(next) {
+settingsSchema.pre('save', function() {
   // Only apply this check for NEW documents (not updates)
   if (this.isNew) {
     // Verify: new fiscal years MUST have null compensationSettingsId
     if (this.compensationSettingsId !== null && this.compensationSettingsId !== undefined) {
       const error = new Error('STRICT SEPARATION VIOLATION: New fiscal year settings cannot have compensation auto-linked');
       error.code = 'COMPENSATION_AUTO_LINK_PREVENTED';
-      return next(error);
+      throw error;
     }
   }
-  next();
 });
 
 module.exports = mongoose.model("Settings", settingsSchema);

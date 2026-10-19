@@ -190,10 +190,10 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     default: null
   }
 });
+
 // Update the updatedAt field before saving
-HierarchicalUserAssignmentSchema.pre('save', function(next) {
+HierarchicalUserAssignmentSchema.pre('save', function() {
   this.updatedAt = new Date();
-  next();
 });
 // Static method to get user permissions for access control
 HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(userId, userRoles = []) {

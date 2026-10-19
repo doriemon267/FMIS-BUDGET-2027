@@ -279,7 +279,7 @@ budgetCeilingSchema.virtual('calculatedRemaining').get(function() {
 });
 
 // Pre-save middleware to update totals
-budgetCeilingSchema.pre('save', function(next) {
+budgetCeilingSchema.pre('save', function() {
   // First update individual allocations
   this.allocations.forEach(alloc => {
     // If breakdown is used, ensure the total amount reflects it
@@ -305,8 +305,6 @@ budgetCeilingSchema.pre('save', function(next) {
   
   // Calculate total initial requested
   this.totalInitialRequested = this.allocations.reduce((sum, alloc) => sum + (alloc.initialRequestAmount || 0), 0);
-  
-  next();
 });
 
 // Method to add change to history

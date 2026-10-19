@@ -89,7 +89,7 @@ exports.getMOOEData = async (req, res) => {
                 {
                   department: userDept,
                   fiscalYear: activeFiscalYear,
-                  region: userRegion || region
+                  region: region || userRegion
                 },
                 {
                   $or: [
@@ -132,7 +132,7 @@ exports.getMOOEData = async (req, res) => {
               department: userDept,
               division: userDiv,
               fiscalYear: activeFiscalYear,
-              region: userRegion || region,
+              region: region || userRegion,
               $or: [
                 { originalLevel: 'DIVISION' },
                 { workflowLevel: 'DIVISION' },
@@ -148,7 +148,7 @@ exports.getMOOEData = async (req, res) => {
           if (assignment?.assignmentLevel === 'FULL') {
             if (region) filter.region = region;
           } else if (userRegion || region) {
-            filter.region = userRegion || region;
+            filter.region = region || userRegion;
           }
         }
       } catch (error) {

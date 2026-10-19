@@ -154,11 +154,10 @@ databaseBackupSchema.statics.cleanupExpired = async function() {
   return deletedCount;
 };
 // Pre-save middleware to set default values
-databaseBackupSchema.pre('save', function(next) {
+databaseBackupSchema.pre('save', function() {
   if (this.isNew && !this.name) {
     this.name = `backup_${Date.now()}`;
   }
-  next();
 });
 // Set transform to include virtuals in JSON
 databaseBackupSchema.set('toJSON', { virtuals: true });

@@ -2436,7 +2436,7 @@ const HierarchicalUserAssignmentPage = () => {
         <DialogTitle sx={{ borderBottom: '1px solid rgba(0,0,0,0.08)', fontWeight: 600, color: '#386641' }}>Page Access Settings</DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
           <Typography variant="body2" sx={{ color: 'text.secondary' }} gutterBottom>
-            Select which roles are authorized to access the Hierarchical User Assignments page. (Super Admins always have access).
+            Select which roles are authorized to access the Hierarchical User Assignments page. (Admins always have access).
           </Typography>
           {loadingPageAccess ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>

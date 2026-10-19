@@ -10,11 +10,9 @@ import useInactivityLogout from "../hooks/useInactivityLogout";
 const UserContext = createContext({
   currentUser: null,
   setCurrentUser: async () => {},
-  // New helper: explicitly refetch the latest user profile (roles, hierarchical access, email, etc.)
   refetchUserProfile: async () => {},
   isLoading: false,
   error: null,
-  /** When true: user has SUPER_ADMIN role but ID is not in SUPER_ADMIN_IDS whitelist - block access */
   unauthorizedSuperAdmin: false,
   logout: async () => {},
   hasWorkflowRole: () => false,
@@ -125,7 +123,6 @@ const UserProvider = ({ children }) => {
 
   // --- REDIRECT LOGIC HELPER ---
   const redirectToLogin = useCallback(() => {
-    // Return URL: after login, come back to budget (dashboard)
     const clientOrigin = IS_PRODUCTION
       ? (env("BUDGET_CLIENT_URL_PROD") || window.location.origin)
       : (env("CLIENT_URL_DEV") || window.location.origin);
@@ -140,7 +137,6 @@ const UserProvider = ({ children }) => {
   const handleSetUserInitialization = useCallback(async () => {
     setUnauthorizedSuperAdmin(false);
     const res = await api.get("/api/get-user");
-    // Token is delivered via X-Auth-Token header (not body) to avoid exposure in Network preview
     const headerToken = res.headers?.["x-auth-token"] || res.headers?.["X-Auth-Token"];
     if (headerToken) setAuthToken(headerToken);
     try {
@@ -159,16 +155,17 @@ const UserProvider = ({ children }) => {
     }
   }, [enrichUserWithRoles]);
 
+  // --- FULL LOGOUT HANDLER ---
   const handleLogout = useCallback(async () => {
-    // 1. Clear API sessions
+    // 1. Tawagin ang logout APIs para mabura ang backend sessions at httpOnly 'jwt' cookies
     try {
       await api.get("/api/logout");
       await authApi.get("/logout");
     } catch (e) {
-      console.warn("Logout error:", e.message);
+      console.warn("Logout API warning:", e.message);
     }
 
-    // 2. Clear browser storage (Ito ang fix para ma-logout sa main FMIS at tuluyang burahin ang session)
+    // 2. Linisin ang Local Storage at Session Storage ng Budget App
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("activeWorkflowRef");
@@ -182,14 +179,13 @@ const UserProvider = ({ children }) => {
     setUnauthorizedSuperAdmin(false);
 
     // 4. LOGOUT REDIRECT
-   if (!IS_PRODUCTION) {
-      // TAMA: Itapon ang user sa /logout route ng Main FMIS para ang Main FMIS ang magbura ng sarili nitong Local Storage
+    if (!IS_PRODUCTION) {
+      // DEV ENVIRONMENT:
+      // Dadalhin ang browser sa Main FMIS login page (Port 3000)
       const authBase = env("AUTH_CLIENT_URL_DEV") || "http://localhost:3000";
-      
-      // Ibabato natin siya sa logout path imbes na login
-      window.location.href = `${authBase}/logout`; 
+      window.location.href = `${authBase}/login`;
     } else {
-      // PRODUCTION REDIRECT (NIA SSO)
+      // PRODUCTION ENVIRONMENT (NIA SSO):
       const clientId = env("CLIENT_ID");
       const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
       const currentUrl = `${budgetUrl}/dashboard`;
@@ -217,7 +213,6 @@ const UserProvider = ({ children }) => {
 
   // --- MAIN INITIALIZATION ---
   useEffect(() => {
-    // Read token from URL after auth redirect (?token=, ?access_token=, #access_token=, #token=)
     const url = typeof window !== "undefined" ? window.location : {};
     const params = new URLSearchParams(url.search || "");
     const hash = (url.hash || "").replace(/^#/, "");
@@ -247,7 +242,6 @@ const UserProvider = ({ children }) => {
         let user = res.data?.user;
         
         // --- DETECT MOCK USER ---
-        // If the budget server returns a mock "Dev User", try to get the real one from Auth Server
         const isMock = !user || (user.Username === "909549") || (user.DisplayName && user.DisplayName.toLowerCase().includes("dev user"));
         
         if (isMock) {
@@ -298,7 +292,7 @@ const UserProvider = ({ children }) => {
       }
     };
     fetchUser();
-  }, []);
+  }, [enrichUserWithRoles, redirectToLogin]);
 
   // --- UI HELPERS ---
   const hierarchical = currentUser?.hierarchicalAccess || {};
@@ -311,10 +305,9 @@ const UserProvider = ({ children }) => {
     return workflowRoles.includes(role);
   }, [isSuperAdmin, workflowRoles]);
 
-  // Close warning modal when hook resets due to activity
   closeWarningRef.current = () => setShowInactivityWarning(false);
 
-  // Auto-logout kapag walang activity sa loob ng 15 minuto (may warning 1 min bago)
+  // Auto-logout kapag walang activity sa loob ng 15 minuto
   useInactivityLogout({
     onLogout: handleLogout,
     onWarning: (reset) => {

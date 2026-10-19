@@ -45,20 +45,19 @@ const normalizeRecipientId = (val) => {
 };
 
 // Pre-save hook to ensure normalized recipient ID is set
-NotificationSchema.pre('save', function (next) {
+NotificationSchema.pre('save', function () {
   try {
     if (this.recipientUserId && !this.recipientUserIdNormalized) {
       this.recipientUserIdOriginal = this.recipientUserId;
       this.recipientUserIdNormalized = normalizeRecipientId(this.recipientUserId);
     }
-    next();
   } catch (e) {
-    next(e);
+    throw e;
   }
 });
 
 // Pre-insertMany hook
-NotificationSchema.pre('insertMany', function (next, docs) {
+NotificationSchema.pre('insertMany', function (docs) {
   try {
     docs.forEach(doc => {
       if (doc.recipientUserId && !doc.recipientUserIdNormalized) {
@@ -66,9 +65,8 @@ NotificationSchema.pre('insertMany', function (next, docs) {
         doc.recipientUserIdNormalized = normalizeRecipientId(doc.recipientUserId);
       }
     });
-    next();
   } catch (e) {
-    next(e);
+    throw e;
   }
 });
 

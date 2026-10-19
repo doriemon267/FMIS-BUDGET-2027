@@ -56,9 +56,8 @@ SalaryGradeSchema.index({ cpscTemplate: 1, salary_grade: 1 });
 SalaryGradeSchema.index({ fiscalYear: 1, budgetType: 1, templateName: 1 });
 
 // Update the updatedAt field before saving
-SalaryGradeSchema.pre('save', function(next) {
+SalaryGradeSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('SalaryGrade', SalaryGradeSchema);

@@ -21,14 +21,13 @@ const incomeCategorySchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 // Pre-save middleware to ensure name field is set
-incomeCategorySchema.pre('save', function(next) {
+incomeCategorySchema.pre('save', function() {
   // Set the name field to match incomeCategoryName if not explicitly set
   if (this.incomeCategoryName && !this.name) {
     this.name = this.incomeCategoryName;
   }
   // Update the updatedAt field
   this.updatedAt = new Date();
-  next();
 });
 // Add compound index for region-aware uniqueness
 // This allows same category name in different regions but prevents duplicates within same region

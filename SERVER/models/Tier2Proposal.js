@@ -147,14 +147,13 @@ tier2ProposalSchema.index({ 'createdBy.userId': 1 });
 tier2ProposalSchema.index({ tier2Status: 1 });
 
 // Virtual for calculating adjustment automatically
-tier2ProposalSchema.pre('save', function(next) {
+tier2ProposalSchema.pre('save', function() {
   if (this.tier1Amount !== undefined && this.tier2Amount !== undefined) {
     this.adjustmentAmount = this.tier2Amount - this.tier1Amount;
     if (this.tier1Amount !== 0) {
       this.adjustmentPercentage = ((this.adjustmentAmount / this.tier1Amount) * 100).toFixed(2);
     }
   }
-  next();
 });
 
 module.exports = mongoose.model('Tier2Proposal', tier2ProposalSchema);

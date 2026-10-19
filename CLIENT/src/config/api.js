@@ -27,31 +27,44 @@ const api = axios.create({
 let _csrfToken = null;
 // In-memory dev user (avoid reading sensitive user info from localStorage)
 let _devUser = null;
+
 export function setDevUser(user) {
   _devUser = user;
 }
 
-// Auth token for budget API when auth server is on a different origin (cookie not sent cross-origin).
-// Set from: redirect URL (?token= / #access_token=) or get-user response (auth server returns token).
+// Function to clear cached CSRF token (useful on re-login or CSRF mismatch)
+export function clearCsrfToken() {
+  _csrfToken = null;
+}
+
+// Auth token for budget API when auth server is on a different origin
 let _authToken = null;
 export function setAuthToken(token) {
   _authToken = token || null;
+  clearCsrfToken(); // Reset CSRF token whenever auth state changes
 }
 export function getAuthToken() {
   return _authToken || null;
 }
-const fetchCsrfToken = async () => {
-  if (_csrfToken) return _csrfToken;
+
+// ✅ FIXED: Isinasama na ang Authorization header para hindi mag-mismatch ang Session ID sa server
+const fetchCsrfToken = async (forceRefresh = false) => {
+  if (_csrfToken && !forceRefresh) return _csrfToken;
   try {
-    // Use same origin as api so cookie works. Avoid double /api when SERVER_URL_DEV ends with /api (e.g. https://budget.fmis.local/api)
     const rawBase = IS_PRODUCTION ? "" : env("SERVER_URL_DEV");
     const csrfBase = rawBase ? rawBase.replace(/\/api\/?$/, "") || "" : "";
     const url = csrfBase ? `${csrfBase}${apiPrefix}/csrf-token` : `${apiPrefix}/csrf-token`;
-    const resp = await axios.get(url, { withCredentials: true });
+
+    const headers = {};
+    const authToken = getAuthToken();
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+
+    const resp = await axios.get(url, { withCredentials: true, headers });
     _csrfToken = resp.data && resp.data.csrfToken;
     return _csrfToken;
   } catch (err) {
-    // If CSRF endpoint is not available or request fails, proceed without token
     return null;
   }
 };
@@ -75,8 +88,7 @@ api.interceptors.request.use(
     if (config.url) {
       config.url = normalizeUrl(config.url);
     }
-    // Auth: cookie is sent only to same origin as auth server. When budget API is different origin,
-    // send token in header (set from redirect URL or get-user response).
+
     const authToken = getAuthToken();
     if (authToken && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${authToken}`;
@@ -86,7 +98,7 @@ api.interceptors.request.use(
     const method = (config.method || 'get').toUpperCase();
     if (["POST", "PUT", "DELETE", "PATCH"].includes(method)) {
       const token = await fetchCsrfToken();
-      if (token && !config.headers['X-CSRF-Token']) {
+      if (token) {
         config.headers['X-CSRF-Token'] = token;
       }
     }
@@ -101,15 +113,14 @@ api.interceptors.request.use(
       }
     }
 
-    // Dev-only header: Only inject if we DON'T have a real auth token already
+    // Dev-only header
     if (!IS_PRODUCTION && !authToken) {
       try {
         const currentUser = _devUser;
         if (currentUser) {
-          // Prefer Username (often holds the external employee/user number used for assignments)
           const devUserId = (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.userId || currentUser?.id || currentUser?.userCode || currentUser?.UserCode || currentUser?.Id;
           if (devUserId) {
-          config.headers['X-Dev-User-Id'] = String(devUserId);
+            config.headers['X-Dev-User-Id'] = String(devUserId);
           }
           if (currentUser?.Roles) {
             const rolesArr = Array.isArray(currentUser.Roles) ? currentUser.Roles : [currentUser.Roles];
@@ -130,7 +141,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Retry on transient timeouts with exponential backoff (max 2 retries)
+// Retry on transient timeouts
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -146,7 +157,6 @@ api.interceptors.response.use(
   }
 );
 
-// Detect Super Admin not whitelisted / Role-ID not authorized for environment (show AccessGuard instead of broken dashboard)
 const isUnauthorizedSuperAdminResponse = (res) => {
   if (!res?.data) return false;
   const code = res.data.code;
@@ -165,14 +175,23 @@ const isExpectedReauthFailure = (response) => {
   return /account password|reauth|verification failed/i.test(message);
 };
 
-// Handle auth-related 401/403 by attempting a silent session/user refresh
+// Handle auth-related 401/403 and CSRF token mismatches
 api.interceptors.response.use(undefined, async (error) => {
   const { config, response } = error || {};
   if (!config || !response) return Promise.reject(error);
 
-  // 403/483 Role or ID not authorized for this environment -> show AccessGuard (no broken dashboard in production)
+  // ✅ CSRF TOKEN RETRY LOGIC: Kapag nag-fail ang CSRF token, mag-fetch ng bago at i-retry ang request
+  if (response.status === 403 && response.data?.message === 'Invalid CSRF token' && !config.__isCsrfRetry) {
+    config.__isCsrfRetry = true;
+    clearCsrfToken();
+    const freshToken = await fetchCsrfToken(true);
+    if (freshToken) {
+      config.headers['X-CSRF-Token'] = freshToken;
+      return api.request(config);
+    }
+  }
+
   const isAccessDeniedForEnvironment = (response.status === 403 || response.status === 483) && isUnauthorizedSuperAdminResponse(response);
-  // 403 BUDGET_ROLE_REQUIRED -> user has no budget role, show AccessGuard (don't retry/redirect to SSO loop)
   const isBudgetRoleRequired = response.status === 403 && response.data?.code === 'BUDGET_ROLE_REQUIRED';
   if (isAccessDeniedForEnvironment || isBudgetRoleRequired) {
     if (typeof window.__onUnauthorizedSuperAdmin === 'function') {
@@ -181,17 +200,13 @@ api.interceptors.response.use(undefined, async (error) => {
     return Promise.reject(error);
   }
 
-  // Only try once per request
   if (config.__isRetryRequest) return Promise.reject(error);
 
   if (response.status === 401 || response.status === 403) {
-    // Re-auth endpoints intentionally return 401 on wrong password; do not force login redirect.
     if (response.status === 401 && isExpectedReauthFailure(response)) {
       return Promise.reject(error);
     }
 
-    // NEW: If the user was kicked out, do NOT attempt silent refresh. 
-    // Go straight to the "Sticky" toast and logout.
     if (response.status === 401 && response.data?.expired) {
       const displayMessage = response.data?.error || 'Ang iyong account ay binuksan sa ibang device.';
       toast.error(displayMessage, { 
@@ -213,7 +228,6 @@ api.interceptors.response.use(undefined, async (error) => {
 
     try {
       config.__isRetryRequest = true;
-      // Attempt to refresh user session by calling auth server's get-user endpoint
       const refreshRes = await authApi.get('/get-user');
       const refreshedUser = refreshRes?.data?.user || null;
       if (refreshedUser) {
@@ -227,7 +241,6 @@ api.interceptors.response.use(undefined, async (error) => {
         return api.request(config);
       }
     } catch (refreshErr) {
-      // If refresh also returns Super Admin unauthorized, show AccessGuard
       const refreshRes = refreshErr?.response;
       if (refreshRes && isUnauthorizedSuperAdminResponse(refreshRes)) {
         if (typeof window.__onUnauthorizedSuperAdmin === 'function') {
@@ -235,13 +248,10 @@ api.interceptors.response.use(undefined, async (error) => {
         }
         return Promise.reject(error);
       }
-      // If refresh fails, redirect appropriately for better UX
-      // Redirect: 401 -> login, 403 -> not-authorized (avoids stuck UI)
       if (response.status === 401) {
         const serverError = response.data?.error || response.data?.message;
         const displayMessage = serverError || 'Session expired. Please log in again.';
         
-        // Use a persistent toast (autoClose: false) so they MUST see it
         toast.error(displayMessage, { 
           autoClose: false, 
           closeOnClick: false,
@@ -256,8 +266,6 @@ api.interceptors.response.use(undefined, async (error) => {
             }
           }
         });
-
-        // We removed the automatic setTimeout redirection here to wait for user to close the toast
       } else if (response.status === 403) {
         goTo('/not-authorized');
         toast.error('You do not have permission to perform this action.');
@@ -268,8 +276,6 @@ api.interceptors.response.use(undefined, async (error) => {
   return Promise.reject(error);
 });
 
-// Pages own ordinary API error notifications. Requests without a local notification
-// handler can opt in with showErrorToast: true; auth notifications remain global.
 api.interceptors.response.use(
   (response) => response,
   (error) => {

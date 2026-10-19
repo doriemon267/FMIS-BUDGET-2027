@@ -51,14 +51,13 @@ const CPSCTemplateSchema = new mongoose.Schema({
 CPSCTemplateSchema.index({ templateName: 1, fiscalYear: 1, budgetType: 1 }, { unique: true });
 
 // Update the updatedAt field before saving
-CPSCTemplateSchema.pre('save', function(next) {
+CPSCTemplateSchema.pre('save', function() {
   this.updatedAt = Date.now();
   // Generate template code if not provided
   if (!this.templateCode) {
     const templateNum = this.templateName.replace('CPSC ', '');
     this.templateCode = `CPSC${templateNum}_${this.fiscalYear}_${this.budgetType}`;
   }
-  next();
 });
 
 module.exports = mongoose.model('CPSCTemplate', CPSCTemplateSchema);
