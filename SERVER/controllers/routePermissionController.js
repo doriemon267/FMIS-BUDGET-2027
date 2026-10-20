@@ -518,12 +518,27 @@ exports.getAllAdmin = async (req, res) => {
  */
 exports.update = async (req, res) => {
   const { id } = req.params;
-  const { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, applicableProposalTypes, isActive } =
-    req.body;
+  const allowedFields = [
+    "label",
+    "group",
+    "requiredPermissions",
+    "requiredWorkflowRoles",
+    "excludeRoles",
+    "applicableProposalTypes",
+    "isActive",
+  ];
+  const updates = Object.fromEntries(
+    allowedFields
+      .filter((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))
+      .map((field) => [field, req.body[field]])
+  );
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "No route permission fields were provided." });
+  }
   try {
     const updated = await RoutePermission.findByIdAndUpdate(
       id,
-      { label, group, requiredPermissions, requiredWorkflowRoles, excludeRoles, applicableProposalTypes, isActive },
+      { $set: updates },
       { new: true, runValidators: true }
     );
     if (!updated) {

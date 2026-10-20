@@ -17,6 +17,39 @@ const { mainConnection } = require('../config/mongo_db');
 const { WORKFLOW_ROLES } = require('../constants/workflowConstants');
 const DEBUG = process.env.DEBUG_LOGS === 'true';
 
+const resolveMainDbPositionTitle = async (userIds = []) => {
+  const identifierValues = userIds
+    .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
+    .map((value) => String(value).trim());
+  const stringIds = Array.from(new Set(identifierValues));
+  const numericIds = Array.from(new Set(stringIds
+    .map((value) => Number(value))
+    .filter((value) => !Number.isNaN(value))));
+  const allIds = [...stringIds, ...numericIds];
+  if (allIds.length === 0) return null;
+
+  const UserData = mainConnection.models['user_datas'] ||
+    mainConnection.model('user_datas', new mongoose.Schema({}, { strict: false }), 'user_datas');
+  const directUserIdFields = ['userId', 'userid', 'userID', 'user_id', 'UserId', 'UserID', 'user'];
+  const fallbackIdFields = ['id', 'Id', 'code', 'particularID', 'particularId'];
+  let userDatasDoc = await UserData.findOne({
+    $or: directUserIdFields.map((field) => ({ [field]: { $in: allIds } }))
+  }).lean();
+  if (!userDatasDoc) {
+    userDatasDoc = await UserData.findOne({
+      $or: fallbackIdFields.map((field) => ({ [field]: { $in: allIds } }))
+    }).lean();
+  }
+
+  return userDatasDoc?.positionTitle ||
+    userDatasDoc?.PositionTitle ||
+    userDatasDoc?.position_title ||
+    userDatasDoc?.position ||
+    userDatasDoc?.designation ||
+    userDatasDoc?.Designation ||
+    null;
+};
+
 const getNormalizedAuthenticatedUserIds = (user = {}) => {
   return [
     String(user?.Id || ''),
@@ -167,42 +200,9 @@ const lookupUserFromMainDB = async (req, res) => {
       positionTitle: null
     };
     
-    // 🔍 Try to enrich with positionTitle from user_datas collection (fmis_main DB)
+    // Enrich Position Title from FMIS Main's user_datas collection using the user ID.
     try {
-      const UserData = mainConnection.models['user_datas'] || mainConnection.model('user_datas', new mongoose.Schema({}, { strict: false }), 'user_datas');
-      
-      const identifiers = [];
-      if (userData.user) identifiers.push(userData.user);
-      if (userId) identifiers.push(userId);
-      
-      if (identifiers.length > 0) {
-        // user_datas typically uses string ids or numbers for 'user', 'code', 'id'
-        const stringIds = Array.from(new Set(identifiers.map((v) => String(v).trim())));
-        const numericIds = Array.from(
-          new Set(
-            stringIds
-              .map((v) => {
-                const n = Number(v);
-                return Number.isNaN(n) ? null : n;
-              })
-              .filter((v) => v !== null)
-          )
-        );
-        const allIds = [...stringIds, ...numericIds];
-        
-        const userDatasDoc = await UserData.findOne({
-          $or: [
-            { user: { $in: allIds } },
-            { id: { $in: allIds } },
-            { code: { $in: allIds } },
-            { particularID: { $in: allIds } }
-          ]
-        }).lean();
-
-        if (userDatasDoc && userDatasDoc.positionTitle) {
-          userInfo.positionTitle = userDatasDoc.positionTitle;
-        }
-      }
+      userInfo.positionTitle = await resolveMainDbPositionTitle([userData.user, userId]);
     } catch (userDataErr) {
       if (DEBUG) {
         console.debug('ℹ️ Failed to enrich user positionTitle from user_datas collection:', userDataErr?.message);
@@ -556,11 +556,22 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       }
     }
 
+    let resolvedPositionTitle = positionTitle || null;
+    if (!resolvedPositionTitle) {
+      try {
+        resolvedPositionTitle = await resolveMainDbPositionTitle([userId]);
+      } catch (positionTitleErr) {
+        if (DEBUG) {
+          console.debug('ℹ️ Failed to resolve Position Title while saving assignment:', positionTitleErr?.message);
+        }
+      }
+    }
+
     const assignmentPayload = {
       userId,
       userName,
       email: resolvedEmail,
-      positionTitle: positionTitle || null,
+      positionTitle: resolvedPositionTitle,
       // NEW: Support multiple roles from FMIS main system
       userRoles: req.body.userRoles || [], // Array of roles from FMIS main
       // Keep backward compatibility - primary role (highest in hierarchy)

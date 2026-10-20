@@ -2312,6 +2312,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
                                     email: assignment.email,
+                                    positionTitle: assignment.positionTitle || '',
                                     // NEW: Include multiple roles when editing
                                     userRoles: assignment.userRoles || [],
                                     userRole: assignment.userRole || inferredRole,
@@ -2343,6 +2344,7 @@ const HierarchicalUserAssignmentPage = () => {
                                       if (fmisData) {
                                         if (fmisData.userName) handleFormChange('userName', fmisData.userName);
                                         if (fmisData.email) handleFormChange('email', fmisData.email);
+                                        if (fmisData.positionTitle) handleFormChange('positionTitle', fmisData.positionTitle);
                                         if (fmisData.budgetRoles && fmisData.budgetRoles.length > 0) {
                                           handleFormChange('userRoles', fmisData.budgetRoles);
                                           handleFormChange('userRole', fmisData.budgetRole || fmisData.budgetRoles[0]);

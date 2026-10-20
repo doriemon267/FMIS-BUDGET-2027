@@ -781,7 +781,7 @@ const ComprehensiveReportsPage = () => {
                     <Box>
                       <Typography variant="h6" fontWeight="bold">
                         {section.sectionCode} - {section.sectionName}
-                        {section.sectionCode === "A.2" && <Chip size="small" label="NEW" color="success" sx={{ ml: 1 }} />}
+                        {/* {section.sectionCode === "A.2" && <Chip size="small" label="NEW" color="success" sx={{ ml: 1 }} />} */}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">{section.sectionDescription}</Typography>
                     </Box>

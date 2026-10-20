@@ -72,6 +72,30 @@ const proposalTypeOptions = [
   { id: "GAA", label: "GAA", color: "success" },
 ];
 
+const formatPermissionLabel = (value) => {
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(formatPermissionLabel).filter(Boolean).join(", ");
+
+  const label = value.label || value.name || value.permission || value.action || value.code || value.key || value.value;
+  if (label != null) return String(label);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "Permission details";
+  }
+};
+
+const withRoleChange = (route, roleId, action) => {
+  const assigned = isRoleOptionAssigned(route.requiredWorkflowRoles, roleId);
+  const requiredWorkflowRoles = action === "add"
+    ? assigned
+      ? route.requiredWorkflowRoles || []
+      : [...(route.requiredWorkflowRoles || []), roleId]
+    : removeRoleOptionAliases(route.requiredWorkflowRoles, roleId);
+  return { ...route, requiredWorkflowRoles };
+};
+
 const RoutePermissionManagementPage = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
@@ -89,6 +113,8 @@ const RoutePermissionManagementPage = () => {
 
   const [activeTab, setActiveTab] = useState(0);
   const [selectedRoleForView, setSelectedRoleForView] = useState(roleOptions[0].id);
+  const [permissionSaveStatus, setPermissionSaveStatus] = useState("idle");
+  const routePermissionsQueryKey = ["route-permissions-all"];
 
   // States for Confirmation Dialog
   const [confirmDialog, setConfirmDialog] = useState({
@@ -105,6 +131,7 @@ const RoutePermissionManagementPage = () => {
     maintenanceUpdatedAt,
     maintenanceUpdatedBy,
     refetch: refetchRoutePermissions,
+    syncRoutePermission,
     updateMaintenanceStatus,
     refetchMaintenanceStatus: _refetchMaintenanceStatus,
   } = useRoutePermissions();
@@ -166,11 +193,13 @@ const RoutePermissionManagementPage = () => {
 
   // 1. Fetch all routes from backend
   const { data, isLoading, error } = useQuery({
-    queryKey: ["route-permissions-all"],
+    queryKey: routePermissionsQueryKey,
     queryFn: async () => {
       const res = await api.get("/route-permissions/all");
       return res.data?.routes || res.data?.["route-permissions"] || [];
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   // 2. Mutation to update route permissions
@@ -179,12 +208,38 @@ const RoutePermissionManagementPage = () => {
       const res = await api.put(`/route-permissions/${id}`, updatedData);
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(["route-permissions-all"]);
-      refetchRoutePermissions();
-      setSnackbar({ open: true, message: "Permission updated successfully!", severity: "success" });
+    onMutate: async ({ id, updatedData }) => {
+      await queryClient.cancelQueries({ queryKey: routePermissionsQueryKey });
+      const previousRoutes = queryClient.getQueryData(routePermissionsQueryKey) || [];
+      const previousRoute = previousRoutes.find((route) => route._id === id);
+      const optimisticRoute = previousRoute ? { ...previousRoute, ...updatedData } : null;
+      if (optimisticRoute) {
+        queryClient.setQueryData(routePermissionsQueryKey, (routes = []) =>
+          routes.map((route) => route._id === id ? optimisticRoute : route)
+        );
+        syncRoutePermission(optimisticRoute);
+      }
+      setPermissionSaveStatus("saving");
+      return { previousRoute };
     },
-    onError: (err) => {
+    onSuccess: (result) => {
+      if (result?.route) {
+        queryClient.setQueryData(routePermissionsQueryKey, (routes = []) =>
+          routes.map((route) => route._id === result.route._id ? result.route : route)
+        );
+        syncRoutePermission(result.route);
+      }
+      setPermissionSaveStatus("saved");
+      window.setTimeout(() => setPermissionSaveStatus((status) => status === "saved" ? "idle" : status), 2200);
+    },
+    onError: (err, _variables, context) => {
+      if (context?.previousRoute) {
+        queryClient.setQueryData(routePermissionsQueryKey, (routes = []) =>
+          routes.map((route) => route._id === context.previousRoute._id ? context.previousRoute : route)
+        );
+        syncRoutePermission(context.previousRoute);
+      }
+      setPermissionSaveStatus("idle");
       setSnackbar({
         open: true,
         message: "Failed to update permission: " + (err.response?.data?.error || err.message),
@@ -226,12 +281,33 @@ const RoutePermissionManagementPage = () => {
       const res = await api.post("/route-permissions/bulk-update", data);
       return res.data;
     },
+    onMutate: async ({ routeIds, roleId, action }) => {
+      await queryClient.cancelQueries({ queryKey: routePermissionsQueryKey });
+      const previousRoutes = queryClient.getQueryData(routePermissionsQueryKey) || [];
+      const routeIdSet = new Set(routeIds);
+      const optimisticRoutes = previousRoutes.map((route) =>
+        routeIdSet.has(route._id) ? withRoleChange(route, roleId, action) : route
+      );
+      queryClient.setQueryData(routePermissionsQueryKey, optimisticRoutes);
+      optimisticRoutes.filter((route) => routeIdSet.has(route._id)).forEach(syncRoutePermission);
+      setPermissionSaveStatus("saving");
+      return { previousRoutes, routeIds };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries(["route-permissions-all"]);
-      refetchRoutePermissions();
+      setPermissionSaveStatus("saved");
+      window.setTimeout(() => setPermissionSaveStatus((status) => status === "saved" ? "idle" : status), 2200);
       setSnackbar({ open: true, message: "Bulk update successful!", severity: "success" });
     },
-    onError: (err) => {
+    onError: (err, variables, context) => {
+      if (context?.previousRoutes) {
+        const previousById = new Map(context.previousRoutes.map((route) => [route._id, route]));
+        queryClient.setQueryData(routePermissionsQueryKey, (routes = []) => routes.map((route) => {
+          const previousRoute = context.routeIds.includes(route._id) ? previousById.get(route._id) : null;
+          if (previousRoute) syncRoutePermission(previousRoute);
+          return previousRoute || route;
+        }));
+      }
+      setPermissionSaveStatus("idle");
       setSnackbar({
         open: true,
         message: "Failed bulk update: " + (err.response?.data?.error || err.message),
@@ -329,15 +405,7 @@ const RoutePermissionManagementPage = () => {
 
     updateMutation.mutate({
       id: route._id,
-      updatedData: {
-        label: route.label,
-        group: route.group,
-        requiredPermissions: route.requiredPermissions,
-        excludeRoles: route.excludeRoles,
-        isActive: route.isActive,
-        applicableProposalTypes: route.applicableProposalTypes,
-        requiredWorkflowRoles: newRoles,
-      },
+      updatedData: { requiredWorkflowRoles: newRoles },
     });
   };
 
@@ -352,30 +420,14 @@ const RoutePermissionManagementPage = () => {
 
     updateMutation.mutate({
       id: route._id,
-      updatedData: {
-        label: route.label,
-        group: route.group,
-        requiredPermissions: route.requiredPermissions,
-        excludeRoles: route.excludeRoles,
-        isActive: route.isActive,
-        requiredWorkflowRoles: route.requiredWorkflowRoles,
-        applicableProposalTypes: newTypes,
-      },
+      updatedData: { applicableProposalTypes: newTypes },
     });
   };
 
   const handleToggleActive = (route) => {
     updateMutation.mutate({
       id: route._id,
-      updatedData: {
-        label: route.label,
-        group: route.group,
-        requiredPermissions: route.requiredPermissions,
-        requiredWorkflowRoles: route.requiredWorkflowRoles,
-        applicableProposalTypes: route.applicableProposalTypes,
-        excludeRoles: route.excludeRoles,
-        isActive: !route.isActive,
-      },
+      updatedData: { isActive: !route.isActive },
     });
   };
 
@@ -485,7 +537,7 @@ const RoutePermissionManagementPage = () => {
   }
 
   return (
-    <Box p={3}>
+    <Box p={{ xs: 1.5, md: 3 }}>
       {/* ─── MAINTENANCE MODE CARD ─────────────────────────────────────────── */}
       <Card
         sx={{
@@ -599,7 +651,7 @@ const RoutePermissionManagementPage = () => {
       </Card>
 
       {/* ─── ROUTE PERMISSION MATRIX ────────────────────────────────────────── */}
-      <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", mb: 4 }}>
+      <Card sx={{ borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", mb: 4, overflow: "hidden" }}>
         <CardContent>
           <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2} mb={3}>
             <Box>
@@ -612,11 +664,11 @@ const RoutePermissionManagementPage = () => {
             </Box>
             
             <Box display="flex" alignItems="center" gap={2}>
-              {(updateMutation.isPending || addRouteMutation.isPending || deleteRouteMutation.isPending || syncRoutesMutation.isPending || saveDefaultsMutation.isPending || restoreDefaultsMutation.isPending) && (
+              {(updateMutation.isPending || bulkUpdateMutation.isPending || addRouteMutation.isPending || deleteRouteMutation.isPending || syncRoutesMutation.isPending || saveDefaultsMutation.isPending || restoreDefaultsMutation.isPending || permissionSaveStatus === "saved") && (
                 <Chip
-                  icon={<CircularProgress size={14} color="inherit" />}
-                  label="Saving..."
-                  color="info"
+                  icon={updateMutation.isPending || bulkUpdateMutation.isPending ? <CircularProgress size={14} color="inherit" /> : <MdCheckCircle />}
+                  label={updateMutation.isPending || bulkUpdateMutation.isPending ? "Saving changes…" : permissionSaveStatus === "saved" ? "Changes saved" : "Saving…"}
+                  color={permissionSaveStatus === "saved" && !updateMutation.isPending && !bulkUpdateMutation.isPending ? "success" : "info"}
                   variant="outlined"
                 />
               )}
@@ -703,21 +755,19 @@ const RoutePermissionManagementPage = () => {
             <Tab label="Role Management (By Role)" sx={{ fontWeight: 600, textTransform: "none" }} />
           </Tabs>
 
-          <Alert severity="info" sx={{ mb: 2 }}>
-            For protected Settings pages, an active route with no selected role is
-            restricted to Super Admin. Select only the roles that should see and
-            open the page.
+          <Alert severity="info" sx={{ mb: 2, fontSize: "0.9rem", lineHeight: 1.5 }}>
+            For protected Settings pages, an active route with no selected role is restricted to Super Admin. Select only the roles that should see and open the page. Click a checkbox to save immediately; the matrix updates while the save completes.
           </Alert>
 
           {activeTab === 0 && (
-            <TableContainer component={Paper} sx={{ borderRadius: "8px", border: "1px solid", borderColor: "divider", maxHeight: "65vh" }}>
-            <Table stickyHeader size="small">
+            <TableContainer component={Paper} sx={{ borderRadius: "10px", border: "1px solid #cbd5d1", maxHeight: "68vh", overflowX: "auto" }}>
+            <Table stickyHeader size="small" sx={{ minWidth: 1320, "& .MuiTableCell-root": { py: 1.25 } }}>
               <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "700", minWidth: 280, backgroundColor: "background.paper", zIndex: 3 }}>
+                <TableRow sx={{ "& .MuiTableCell-root": { backgroundColor: "#254f2b", color: "#ffffff", borderColor: "rgba(255,255,255,0.18)" } }}>
+                  <TableCell sx={{ fontWeight: 800, minWidth: 300, zIndex: 3, fontSize: "0.82rem" }}>
                     Route / Page Path
                   </TableCell>
-                  <TableCell align="center" sx={{ fontWeight: "700", minWidth: 100, backgroundColor: "background.paper", zIndex: 3 }}>
+                  <TableCell align="center" sx={{ fontWeight: 800, minWidth: 105, zIndex: 3, fontSize: "0.82rem" }}>
                     Active Status
                   </TableCell>
                   {proposalTypeOptions.map((type) => (
@@ -726,22 +776,19 @@ const RoutePermissionManagementPage = () => {
                       align="center"
                       sx={{
                         fontWeight: "700",
-                        minWidth: 80,
-                        backgroundColor: "background.paper",
+                        minWidth: 92,
                         zIndex: 3,
-                        p: 1,
+                        p: 1.25,
                         borderLeft: type.id === "Initial" ? "1px solid" : "none",
                         borderLeftColor: "divider",
                       }}
                     >
                       <Tooltip title={`${type.label} Proposal Type`}>
                         <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center">
-                          <Typography variant="caption" sx={{ fontSize: "0.75rem", fontWeight: 700, textAlign: "center", lineHeight: 1.2, color: type.color + ".main" }}>
+                          <Typography variant="body2" sx={{ fontSize: "0.78rem", fontWeight: 800, textAlign: "center", lineHeight: 1.25, color: "#ffffff" }}>
                             {type.label}
                           </Typography>
-                          <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "text.disabled", mt: -0.5 }}>
-                            TYPE
-                          </Typography>
+                          <Typography variant="caption" sx={{ fontSize: "0.66rem", fontWeight: 600, color: "rgba(255,255,255,0.76)" }}>Proposal Type</Typography>
                         </Box>
                       </Tooltip>
                     </TableCell>
@@ -753,16 +800,16 @@ const RoutePermissionManagementPage = () => {
                     <TableCell
                       key={role.id}
                       align="center"
-                      sx={{ fontWeight: "700", minWidth: 80, backgroundColor: "background.paper", zIndex: 3, p: 1 }}
+                      sx={{ fontWeight: "700", minWidth: 112, zIndex: 3, p: 1.25 }}
                     >
                       <Tooltip title={role.label}>
                         <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center">
-                          <Typography variant="caption" sx={{ fontSize: "0.75rem", fontWeight: 700, textAlign: "center", lineHeight: 1.2, color: "text.primary" }}>
+                          <Typography variant="body2" sx={{ fontSize: "0.78rem", fontWeight: 800, textAlign: "center", lineHeight: 1.25, color: "#ffffff", minHeight: 32, display: "flex", alignItems: "center", justifyContent: "center" }}>
                             {role.label}
                           </Typography>
                           <Checkbox
                             size="small"
-                            sx={{ p: 0, mt: 0.5 }}
+                            sx={{ p: 0, mt: 0.75, color: "rgba(255,255,255,0.75)", "&.Mui-checked, &.MuiCheckbox-indeterminate": { color: "#b7e4c7" } }}
                             checked={allInRoleAssigned}
                             indeterminate={someInRoleAssigned && !allInRoleAssigned}
                             onChange={() => handleBulkToggle(filteredRoutes, role.id, !allInRoleAssigned)}
@@ -783,33 +830,41 @@ const RoutePermissionManagementPage = () => {
                   </TableRow>
                 ) : (
                   filteredRoutes.map((route) => (
-                    <TableRow key={route._id} hover>
+                    <TableRow key={route._id} hover sx={{ "&:nth-of-type(even)": { backgroundColor: "#f7faf8" }, "& .MuiTableCell-root": { borderColor: "#e0e7e3" } }}>
                       {/* Route Path and Details */}
                       <TableCell>
                         <Box display="flex" alignItems="flex-start" gap={1}>
                           <Box sx={{ flexGrow: 1 }}>
-                            <Typography variant="subtitle2" fontWeight="600" color="text.primary">
+                            <Typography variant="body2" fontWeight={750} color="#17251b" sx={{ fontSize: "0.9rem", mb: 0.2 }}>
                               {route.label}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+                            <Typography variant="body2" color="#475569" fontFamily="monospace" sx={{ fontSize: "0.78rem", wordBreak: "break-all" }}>
                               {route.path}
                             </Typography>
-                            <Box display="flex" gap={0.5} mt={0.5} flexWrap="wrap">
+                            <Box display="flex" gap={0.65} mt={0.8} flexWrap="wrap" alignItems="center">
                               <Chip
                                 label={route.group || "General"}
                                 size="small"
                                 variant="outlined"
-                                sx={{ height: "16px", fontSize: "9px" }}
+                                sx={{ height: 22, fontSize: "0.68rem", fontWeight: 700, color: "#284b31", borderColor: "#a7c4ad", backgroundColor: "#f2f8f3" }}
                               />
-                              {route.requiredPermissions?.length > 0 && (
-                                <Chip
-                                  label={`Req: ${route.requiredPermissions.join(", ")}`}
-                                  size="small"
-                                  color="warning"
-                                  variant="outlined"
-                                  sx={{ height: "16px", fontSize: "9px" }}
-                                />
-                              )}
+                              {(Array.isArray(route.requiredPermissions)
+                                ? route.requiredPermissions
+                                : route.requiredPermissions ? [route.requiredPermissions] : []
+                              ).map((permission, index) => {
+                                  const permissionLabel = formatPermissionLabel(permission);
+                                  return (
+                                    <Tooltip key={`${route._id}-permission-${index}`} title={permissionLabel}>
+                                      <Chip
+                                        label={`Requires: ${permissionLabel}`}
+                                        size="small"
+                                        color="warning"
+                                        variant="outlined"
+                                        sx={{ height: 22, maxWidth: 260, fontSize: "0.68rem", fontWeight: 650, "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" } }}
+                                      />
+                                    </Tooltip>
+                                  );
+                                })}
                               {route.isActive &&
                                 isFailClosedRoute(route.path) &&
                                 (route.requiredWorkflowRoles || []).length === 0 && (
@@ -818,7 +873,7 @@ const RoutePermissionManagementPage = () => {
                                     size="small"
                                     color="error"
                                     variant="outlined"
-                                    sx={{ height: "16px", fontSize: "9px" }}
+                                    sx={{ height: 22, fontSize: "0.68rem", fontWeight: 700 }}
                                   />
                                 )}
                             </Box>

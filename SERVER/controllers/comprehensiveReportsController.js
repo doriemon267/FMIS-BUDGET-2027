@@ -27,6 +27,7 @@ try {
 } catch (e) {
   MuhammaraRecipe = null;
 }
+
 // Define the comprehensive budget structure
 const COMPREHENSIVE_BUDGET_STRUCTURE = {
   "A": {
@@ -65,6 +66,7 @@ const COMPREHENSIVE_BUDGET_STRUCTURE = {
     }
   }
 };
+
 // Personnel Services hierarchical structure
 const PERSONNEL_SERVICES_STRUCTURE = {
   "B.1.1": {
@@ -136,10 +138,9 @@ const PERSONNEL_SERVICES_STRUCTURE = {
     }
   }
 };
+
 /**
  * Add approver scope filter: restrict to proposals with status FORWARDED_TO_APPROVER or RETURNED_TO_APPROVER.
- * When approverProposalFilter is provided and has IDs, only data linked to those proposals is included.
- * When approverProposalFilter is provided but has empty IDs, return early with empty report.
  */
 const getRoleBasedProposalFilterFromRequest = async (req, regionsParam, fiscalYear, budgetType) => {
   const userRoles = req.user?.Roles || [];
@@ -201,7 +202,7 @@ const getRoleBasedProposalFilterFromRequest = async (req, regionsParam, fiscalYe
 
 const applyApproverProposalFilter = (baseQuery, approverProposalFilter) => {
   if (!approverProposalFilter || (!approverProposalFilter.workflowIds?.length && !approverProposalFilter.proposalIds?.length)) {
-    return null; // No filter to apply
+    return null;
   }
   const orConditions = [];
   if (approverProposalFilter.workflowIds?.length) {
@@ -210,7 +211,7 @@ const applyApproverProposalFilter = (baseQuery, approverProposalFilter) => {
   if (approverProposalFilter.proposalIds?.length) {
     orConditions.push({ proposalId: { $in: approverProposalFilter.proposalIds } });
   }
-  return orConditions.length ? { $and: [{ ...baseQuery }, { $or: orConditions }] } : baseQuery;
+  return orConditions.length ? { $and: [{ ...baseQuery }, {$or: orConditions }] } : baseQuery;
 };
 
 const REPORT_RELEASE_WORKFLOW_STATUSES = [
@@ -366,7 +367,7 @@ const applyWorkflowScopeFilter = (baseQuery, scopeFilter) => {
   if (scopeFilter.proposalIds?.length) {
     orConditions.push({ proposalId: { $in: scopeFilter.proposalIds } });
   }
-  return orConditions.length ? { $and: [{ ...baseQuery }, { $or: orConditions }] } : baseQuery;
+  return orConditions.length ? { $and: [{ ...baseQuery }, {$or: orConditions }] } : baseQuery;
 };
 
 const resolvePreparedByInfo = async (workflowDocs) => {
@@ -530,7 +531,6 @@ const resolveWorkflowSignatories = async (workflowDocs) => {
 };
 
 const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters, preparerScope, draftOwnerId }) => {
-  // 1. Get all active/released consolidated proposals to find their merged source IDs
   const activeConsolidatedQuery = {
     isConsolidated: true,
     status: { $in: REPORT_RELEASE_WORKFLOW_STATUSES }
@@ -556,7 +556,6 @@ const getReleasedProposalScopeFilter = async ({ regions, fiscalYear, budgetType,
     }
   });
 
-  // 2. Initialize query with statuses and allowed merged IDs in an $and block to prevent collisions with other filters
   const visibleWorkflowConditions = buildReportWorkflowVisibilityConditions({
     allowedMergedIds,
     draftOwnerId
@@ -643,7 +642,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   const selectedOffices = normalizeList(offices);
   const selectedResponsibilityCenters = normalizeList(responsibilityCenters);
 
-  // For individual reports, prioritize selected filters for header display
   const summaryDepartment =
     groupBy === 'office' && selectedOffices.length > 0
       ? selectedOffices.join(', ')
@@ -654,7 +652,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
       ? selectedResponsibilityCenters.join(', ')
       : (preparerScope?.division || '');
 
-  // Budget Approver: when no proposals passed to them, return empty report (page accessible, data empty)
   const isEmptyApproverScope = approverProposalFilter && !approverProposalFilter.workflowIds?.length && !approverProposalFilter.proposalIds?.length;
   if (isEmptyApproverScope) {
     return {
@@ -671,7 +668,7 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
         totalSubsidy: 0,
         department: summaryDepartment,
         division: summaryDivision,
-        approverNoProposals: true, // Budget Approver: no proposals passed to them yet
+        approverNoProposals: true,
         eligibleForGeneration: false
       },
       sections: []
@@ -716,7 +713,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   const isFinalizedReport = releasedProposalScope.workflowDocs.length > 0
     && releasedProposalScope.workflowDocs.every((workflow) => isFinalizedProposalStatus(workflow.status));
 
-  // Build base query
   const query = {};
   if (regions) {
     const regionList = Array.isArray(regions) ? regions : [regions];
@@ -725,7 +721,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   if (fiscalYear) query.fiscalYear = fiscalYear;
   if (budgetType) query.budgetType = budgetType;
 
-  // View by Office (department) or Responsibility Center (division)
   if (groupBy === 'office' && offices && offices.length > 0) {
     const officeList = Array.isArray(offices) ? offices : [offices];
     query.department = { $in: officeList };
@@ -735,7 +730,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     query.division = { $in: rcList };
   }
 
-  // Preparer scope: restrict to Division or Department
   if (preparerScope) {
     const scopeVal = preparerScope.division || preparerScope.department;
     if (scopeVal) {
@@ -750,7 +744,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     }
   }
 
-  // MOOE & Capital Outlay: use same filters as Region view (region, fiscalYear, budgetType only)
   const mooeQuery = {};
   const coQuery = {};
   if (regions) {
@@ -781,7 +774,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   const mooeQueryFinal = applyApproverProposalFilter(applyWorkflowScopeFilter(mooeQuery, scopeFilter) || mooeQuery, approverProposalFilter) || (applyWorkflowScopeFilter(mooeQuery, scopeFilter) || mooeQuery);
   const coQueryFinal = applyApproverProposalFilter(applyWorkflowScopeFilter(coQuery, scopeFilter) || coQuery, approverProposalFilter) || (applyWorkflowScopeFilter(coQuery, scopeFilter) || coQuery);
 
-  // Fetch data from all sources concurrently
   const [incomeData, psData, mooeData, coData] = await Promise.all([
     Income.find(incomeQuery).lean(),
     PersonnelServices.find(psQuery).lean(),
@@ -789,7 +781,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     CapitalOutlay.find(coQueryFinal).populate('category').lean()
   ]);
 
-  // Initialize comprehensive report structure
   const reportData = {
     summary: {
       reportTitle: "BUDGET SUMMARY REPORT",
@@ -819,8 +810,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     sections: []
   };
 
-  // Keep scope identifiers available to server-side renderers without exposing
-  // internal workflow linkage in the JSON report response.
   Object.defineProperties(reportData.summary, {
     _workflowIds: { value: releasedProposalScope.workflowIds, enumerable: false },
     _proposalIds: { value: releasedProposalScope.proposalIds, enumerable: false }
@@ -832,35 +821,54 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     reportData.summary.totalSubsidy += Number(section.sectionTotalSubsidy) || 0;
   };
 
-  // Process Corporate Income data
   if (Array.isArray(incomeData) && incomeData.length > 0) {
     const incomeSection = await processCorporateIncomeData(incomeData, query);
     reportData.sections.push(incomeSection);
     addSectionTotals(incomeSection);
   }
-  // Process Personnel Services data
+
   if (Array.isArray(psData) && psData.length > 0) {
     const psSection = await processPersonnelServicesData(psData, query);
     reportData.sections.push(psSection);
     reportData.summary.totalEmployees = psSection.totalEmployees;
     addSectionTotals(psSection);
   }
-  // Process MOOE data (always include section; show zero/empty when no data)
+
   const mooeSection = await processMOOEData(Array.isArray(mooeData) ? mooeData : [], query);
   reportData.sections.push(mooeSection);
   addSectionTotals(mooeSection);
-  // Process Capital Outlay data (always include section; show zero/empty when no data)
+
   const coSection = await processCapitalOutlayData(Array.isArray(coData) ? coData : [], query);
   reportData.sections.push(coSection);
   addSectionTotals(coSection);
-  // Get unique regions count
+
+  const totalBudgetarySupport = Number(reportData.summary.totalSubsidy) || 0;
+  if (totalBudgetarySupport > 0) {
+    const budgetarySupportSection = {
+      sectionCode: "A.2",
+      sectionName: "BUDGETARY SUPPORT",
+      sectionDescription: "Government subsidies and budgetary support allocations from all regions",
+      sectionTotal: totalBudgetarySupport,
+      consolidatedData: true,
+      categories: {
+        government_subsidies: {
+          name: "Government Subsidies & Support",
+          description: "Total government funding across all budget categories",
+          totalSubsidy: totalBudgetarySupport,
+          total: totalBudgetarySupport
+        }
+      }
+    };
+    const a1Index = reportData.sections.findIndex((section) => section.sectionCode === "A.1");
+    reportData.sections.splice(a1Index >= 0 ? a1Index + 1 : 0, 0, budgetarySupportSection);
+  }
+
   const allRegions = new Set();
   [...incomeData, ...psData, ...mooeData, ...coData].forEach(item => {
     if (item.region) allRegions.add(item.region);
   });
   reportData.summary.totalRegions = allRegions.size;
 
-  // For individual reports, infer missing Department/Division from filtered data
   const isIndividualView = groupBy === 'office' || groupBy === 'responsibilityCenter';
   if (isIndividualView) {
     const allDepartments = new Set();
@@ -941,15 +949,13 @@ const getComprehensiveReportData = async (req, res) => {
     });
   }
 };
-// Process Corporate Income data
+
 const processCorporateIncomeData = async (incomeData, query) => {
   const regionSet = new Set();
   let sectionTotal = 0;
   let totalEntries = 0;
-  // Check if we should consolidate all regions
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
-    // TRUE Consolidation - sum amounts by category only
     const consolidatedCategories = {};
     incomeData.forEach((income) => {
       regionSet.add(income.region || 'Unspecified');
@@ -969,7 +975,6 @@ const processCorporateIncomeData = async (incomeData, query) => {
       consolidatedCategories[category].regions.add(income.region || 'Unspecified');
       sectionTotal += amount;
     });
-    // Add totalIncome/totalSubsidy for report columns (A.1 = all income)
     Object.values(consolidatedCategories).forEach(category => {
       category.regions = Array.from(category.regions);
       category.totalIncome = category.total;
@@ -988,7 +993,6 @@ const processCorporateIncomeData = async (incomeData, query) => {
       categories: consolidatedCategories
     };
   } else {
-    // Group by region (existing logic for specific region)
     const grouped = {};
     incomeData.forEach((income) => {
       const region = income.region || 'Unspecified';
@@ -1033,15 +1037,13 @@ const processCorporateIncomeData = async (incomeData, query) => {
     };
   }
 };
-// Process Personnel Services data
+
 const processPersonnelServicesData = async (psData, query) => {
   const regionSet = new Set();
   let sectionTotal = 0;
   let totalEmployees = 0;
-  // Check if we should consolidate all regions
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
-    // Consolidate by categories across all regions (NOT by region)
     const consolidatedCategories = {};
     let sectionTotalIncome = 0;
     let sectionTotalSubsidy = 0;
@@ -1049,7 +1051,6 @@ const processPersonnelServicesData = async (psData, query) => {
       regionSet.add(employee.region || 'Unspecified');
       totalEmployees++;
       const empTotal = Number(employee.Total) || 0;
-      // Process each category in the structure
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         if (!consolidatedCategories[categoryKey]) {
           consolidatedCategories[categoryKey] = {
@@ -1099,15 +1100,16 @@ const processPersonnelServicesData = async (psData, query) => {
       });
       sectionTotal += empTotal;
     });
-    // Derive category totalIncome/totalSubsidy from items
+
     Object.values(consolidatedCategories).forEach(cat => {
       cat.totalIncome = Object.values(cat.items).reduce((s, item) => s + (Number(item.income) || 0), 0);
       cat.totalSubsidy = Object.values(cat.items).reduce((s, item) => s + (Number(item.subsidy) || 0), 0);
     });
-    // Recompute section totals from categories so displayed total matches sum of rows (no inconsistency)
+
     sectionTotal = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.total) || 0), 0);
     sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
     sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
+
     return {
       sectionCode: "B.1.1",
       sectionName: "Personnel Services",
@@ -1121,7 +1123,6 @@ const processPersonnelServicesData = async (psData, query) => {
       categories: consolidatedCategories
     };
   } else {
-    // Group by region (existing logic for specific region)
     const grouped = {};
     psData.forEach((employee) => {
       const region = employee.region || 'Unspecified';
@@ -1135,7 +1136,7 @@ const processPersonnelServicesData = async (psData, query) => {
         };
       }
       grouped[region].totalEmployees++;
-      // Process each category in the structure
+
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         if (!grouped[region].categories[categoryKey]) {
           grouped[region].categories[categoryKey] = {
@@ -1145,7 +1146,7 @@ const processPersonnelServicesData = async (psData, query) => {
           };
         }
         const category = grouped[region].categories[categoryKey];
-        // Process each item in the category
+
         Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
           if (!category.items[itemKey]) {
             category.items[itemKey] = {
@@ -1153,24 +1154,19 @@ const processPersonnelServicesData = async (psData, query) => {
               amount: 0
             };
           }
-          // Calculate amount based on field mapping
+
           let amount = 0;
           if (itemData.field) {
-            // Special handling for Salaries and Wages based on statusOfAppointment
             if (categoryKey === '1' && itemKey === 'a') {
-              // Salaries - Regular (Authorized Positions) = Permanent only
               if (String(employee.statusOfAppointment).trim().toUpperCase() === 'PERMANENT') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else if (categoryKey === '1' && itemKey === 'b') {
-              // Casual Personnel = Casual only
               if (String(employee.statusOfAppointment).trim().toUpperCase() === 'CASUAL') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else {
-              // Regular field mapping for other items
               if (itemData.field.includes(',')) {
-                // Handle combined fields (like midyearBonus,yearEndBonus)
                 const fields = itemData.field.split(',');
                 amount = fields.reduce((sum, field) => sum + (Number(employee[field.trim()]) || 0), 0);
               } else {
@@ -1187,10 +1183,11 @@ const processPersonnelServicesData = async (psData, query) => {
           category.totalSubsidy = (category.totalSubsidy || 0) + funding.subsidyAmount;
         });
       });
-      // Calculate employee total
+
       const employeeTotal = Number(employee.Total) || 0;
       sectionTotal += employeeTotal;
     });
+
     return {
       sectionCode: "B.1.1",
       sectionName: "Personnel Services",
@@ -1204,22 +1201,20 @@ const processPersonnelServicesData = async (psData, query) => {
     };
   }
 };
-// Helper to normalize keys to ensure matching regardless of spacing around dashes
+
 const normalizeKey = (str) => {
   if (!str) return 'UNSPECIFIED';
   return str.toString()
-    .replace(/[^a-zA-Z0-9\s]/g, '') // Remove ALL special characters, punctuation, and dashes
-    .replace(/\s+/g, ' ')           // Condense multiple spaces into one
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase();
 };
 
-// Process MOOE data
 const processMOOEData = async (mooeData, query) => {
   const regionSet = new Set();
   let sectionTotal = 0;
   let totalEntries = 0;
-  // When no data, always return consolidated shape so UI always shows MOOE section with table
   const hasData = Array.isArray(mooeData) && mooeData.length > 0;
   if (!hasData) {
     return {
@@ -1235,10 +1230,9 @@ const processMOOEData = async (mooeData, query) => {
       categories: {}
     };
   }
-  // Check if we should consolidate all regions
+
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
-    // TRUE Consolidation - sum amounts by category only; exclude 0 value (only include amount > 0)
     const consolidatedCategories = {};
     mooeData.forEach((proposal) => {
       const income = Number(proposal.income) || 0;
@@ -1248,7 +1242,7 @@ const processMOOEData = async (mooeData, query) => {
       if (amount <= 0) return;
       regionSet.add(proposal.region || 'Unspecified');
       totalEntries++;
-      // Fix: Use sublineItem as the parent category, normalize key
+
       const categoryName = proposal.sublineItem || 'Uncategorized';
       const categoryKey = normalizeKey(categoryName);
       if (!consolidatedCategories[categoryKey]) {
@@ -1286,16 +1280,18 @@ const processMOOEData = async (mooeData, query) => {
       
       sectionTotal += amount;
     });
-    // Remove categories with total 0
+
     Object.keys(consolidatedCategories).forEach(key => {
       if (consolidatedCategories[key].total === 0) delete consolidatedCategories[key];
     });
-    // Convert Set to Array for JSON serialization
+
     Object.values(consolidatedCategories).forEach(cat => {
       cat.regions = Array.from(cat.regions);
     });
+
     const sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
     const sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
+
     return {
       sectionCode: "B.1.2",
       sectionName: "MAINTENANCE AND OTHER OPERATING EXPENSES",
@@ -1309,7 +1305,6 @@ const processMOOEData = async (mooeData, query) => {
       categories: consolidatedCategories
     };
   } else {
-    // Group by region (existing logic for specific region); exclude 0 value
     const grouped = {};
     mooeData.forEach((proposal) => {
       const income = Number(proposal.income) || 0;
@@ -1320,6 +1315,7 @@ const processMOOEData = async (mooeData, query) => {
       const region = proposal.region || 'Unspecified';
       regionSet.add(region);
       totalEntries++;
+
       if (!grouped[region]) {
         grouped[region] = {
           region,
@@ -1357,6 +1353,7 @@ const processMOOEData = async (mooeData, query) => {
       grouped[region].categories[categoryKey].total += amount;
       sectionTotal += amount;
     });
+
     return {
       sectionCode: "B.1.2",
       sectionName: "MAINTENANCE AND OTHER OPERATING EXPENSES",
@@ -1368,12 +1365,11 @@ const processMOOEData = async (mooeData, query) => {
     };
   }
 };
-// Process Capital Outlay data
+
 const processCapitalOutlayData = async (coData, query) => {
   const regionSet = new Set();
   let sectionTotal = 0;
   let totalEntries = 0;
-  // When no data, always return consolidated shape so UI always shows Capital Outlay section with table
   const hasData = Array.isArray(coData) && coData.length > 0;
   if (!hasData) {
     return {
@@ -1389,7 +1385,7 @@ const processCapitalOutlayData = async (coData, query) => {
       categories: {}
     };
   }
-  // Fetch breakdown details (CapitalOutlayDetails) so report shows each row as created, not lumped
+
   const coIds = coData.map((p) => p._id).filter(Boolean);
   const detailsList = coIds.length > 0
     ? await CapitalOutlayDetails.find({ capital_outlay_id: { $in: coIds } }).sort({ createdAt: 1 }).lean()
@@ -1402,13 +1398,11 @@ const processCapitalOutlayData = async (coData, query) => {
     detailsByParent.get(id).push(d);
   });
 
-  // Check if we should consolidate all regions
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
-    // TRUE Consolidation - sum amounts by category; use breakdown rows (CapitalOutlayDetails) when present
     const consolidatedCategories = {};
     coData.forEach((proposal) => {
-      const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
+      const categoryName = proposal.category?.categoryName || proposal.accountingTitle || 'Uncategorized';
       const detailRows = detailsByParent.get(proposal._id.toString()) || [];
 
       if (detailRows.length > 0) {
@@ -1419,7 +1413,7 @@ const processCapitalOutlayData = async (coData, query) => {
           if (amount <= 0) return;
           regionSet.add(proposal.region || 'Unspecified');
           totalEntries++;
-          const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
+          const categoryName = proposal.category?.categoryName || proposal.accountingTitle || 'Uncategorized';
           const categoryKey = normalizeKey(categoryName);
           if (!consolidatedCategories[categoryKey]) {
             consolidatedCategories[categoryKey] = {
@@ -1464,7 +1458,7 @@ const processCapitalOutlayData = async (coData, query) => {
         regionSet.add(proposal.region || 'Unspecified');
         totalEntries++;
         
-        const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
+        const categoryName = proposal.category?.categoryName || proposal.accountingTitle || 'Uncategorized';
         const categoryKey = normalizeKey(categoryName);
         if (!consolidatedCategories[categoryKey]) {
           consolidatedCategories[categoryKey] = {
@@ -1502,15 +1496,17 @@ const processCapitalOutlayData = async (coData, query) => {
         sectionTotal += amount;
       }
     });
-    // Remove categories with total 0
+
     Object.keys(consolidatedCategories).forEach(key => {
       if (consolidatedCategories[key].total === 0) delete consolidatedCategories[key];
     });
     Object.values(consolidatedCategories).forEach(cat => {
       cat.regions = Array.from(cat.regions);
     });
+
     const sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
     const sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
+
     return {
       sectionCode: "B.2",
       sectionName: "CAPITAL OUTLAYS",
@@ -1524,11 +1520,10 @@ const processCapitalOutlayData = async (coData, query) => {
       categories: consolidatedCategories
     };
   } else {
-    // Group by region; use breakdown rows (CapitalOutlayDetails) when present
     const grouped = {};
     coData.forEach((proposal) => {
       const region = proposal.region || 'Unspecified';
-      const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
+      const categoryName = proposal.category?.categoryName || proposal.accountingTitle || 'Uncategorized';
       const detailRows = detailsByParent.get(proposal._id.toString()) || [];
 
       if (detailRows.length > 0) {
@@ -1604,6 +1599,7 @@ const processCapitalOutlayData = async (coData, query) => {
         sectionTotal += amount;
       }
     });
+
     return {
       sectionCode: "B.2",
       sectionName: "CAPITAL OUTLAYS",
@@ -1616,6 +1612,11 @@ const processCapitalOutlayData = async (coData, query) => {
   }
 };
 
+/**
+ * Enhanced Comprehensive Report PDF Generator
+ * Features improved text wrap boundary calculations (preventing column overlaps)
+ * and intelligent word splitting for slashed/hyphenated line items.
+ */
 const getComprehensiveReportPdf = async (req, res) => {
   try {
     if (!MuhammaraRecipe) {
@@ -1642,6 +1643,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     const userRoles = req.user?.Roles || [];
     const isPreparer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_PREPARER') ||
       userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET PREPARER');
+
     if (isPreparer && req.user?.id) {
       const userIdString = String(req.user.id);
       const hua = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
@@ -1655,9 +1657,11 @@ const getComprehensiveReportPdf = async (req, res) => {
         };
       }
     }
+
     const approverProposalFilter = isPreparer
       ? null
       : await getRoleBasedProposalFilterFromRequest(req, regionsParam, fiscalYear, budgetType);
+
     const reportData = await buildComprehensiveReportData({
       regions: regionsParam,
       fiscalYear,
@@ -1695,7 +1699,6 @@ const getComprehensiveReportPdf = async (req, res) => {
     };
     const documentId = generateDocumentId();
 
-    // Create temp file path for PDF output
     const tmpFilePath = path.join(
       os.tmpdir(),
       `comprehensive_report_${Date.now()}.pdf`
@@ -1720,54 +1723,56 @@ const getComprehensiveReportPdf = async (req, res) => {
       recipeOptions.userProtectionFlag = Number.isFinite(userProtectionFlag) ? userProtectionFlag : 0;
     }
 
-    // Create PDF using Muhammara Recipe — A4 portrait (Annex A format)
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, recipeOptions);
 
-    // Folio (8" x 13") dimensions in points (1/72 inch) -> 8 x 13 inches
+    // Folio dimensions (8" x 13" = 576 x 936 pt)
     const PAGE_WIDTH = 576;
     const PAGE_HEIGHT = 936;
 
-    // Standard "Narrow" Margin = 0.5 inch = 36 points
     const MARGIN_SIDE = 36;
     const MARGIN_TOP = 36;
     const MARGIN_BOTTOM = 36;
 
-    // Text layout calculations
     const LINE_HEIGHT = 14;
     const CONTENT_LEFT = MARGIN_SIDE;
     const CONTENT_RIGHT = PAGE_WIDTH - MARGIN_SIDE;
     const CENTER_X = PAGE_WIDTH / 2;
+
     const AMOUNT_COL_X = CONTENT_RIGHT - 10;
+    const INCOME_COL_X = CONTENT_LEFT + 310;
+    const SUBSIDY_COL_X = CONTENT_LEFT + 405;
+    const TOTAL_COL_X = AMOUNT_COL_X;
 
     let currentY = MARGIN_TOP;
     let currentPage = 1;
-    let isFirstPage = true;
 
     const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
 
-    const drawBorder = () => {
-      // Outer page border/margin line disabled as requested to match other print-friendly reports
-    };
-
+    // Enhanced wrapText: handles slashes (/), hyphens (-), and spaces without text truncation or column overlap
     const wrapText = (text, maxWidth, fontSize) => {
-      const words = String(text || '').split(' ');
-      const lines = [];
-      let currentLine = '';
+      if (!text) return [];
+      const str = String(text);
       const getWidth = (t) => {
         try { return pdfDoc.calculateTextDimensions(t, { fontSize }).width; }
         catch (e) { return t.length * (fontSize * 0.55); }
       };
-      words.forEach(word => {
-        let testLine = currentLine ? `${currentLine} ${word}` : word;
+
+      const tokens = str.split(/([ \/-])/);
+      const lines = [];
+      let currentLine = '';
+
+      tokens.forEach(token => {
+        if (!token) return;
+        let testLine = currentLine + token;
         if (getWidth(testLine) > maxWidth) {
-          if (currentLine) {
-            lines.push(currentLine);
-            currentLine = word;
+          if (currentLine.trim()) {
+            lines.push(currentLine.trimEnd());
+            currentLine = token === ' ' ? '' : token;
           } else {
             let part = '';
-            for (let char of word) {
+            for (let char of token) {
               if (getWidth(part + char) > maxWidth) {
-                lines.push(part);
+                if (part) lines.push(part);
                 part = char;
               } else {
                 part += char;
@@ -1779,14 +1784,15 @@ const getComprehensiveReportPdf = async (req, res) => {
           currentLine = testLine;
         }
       });
-      if (currentLine) lines.push(currentLine);
+      if (currentLine.trim()) lines.push(currentLine.trimEnd());
       return lines;
     };
 
     const drawFooter = () => {
-      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - 20, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Doc ID: ${documentId}`, CONTENT_LEFT + 10, PAGE_HEIGHT - 10, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - 10, textOpt({ fontSize: 8 }));
+      pdfDoc.rectangle(CONTENT_LEFT, PAGE_HEIGHT - 28, CONTENT_RIGHT - CONTENT_LEFT, 0.5, { stroke: '#cbd5e1', lineWidth: 0.5 });
+      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 5, PAGE_HEIGHT - 18, textOpt({ fontSize: 8, color: '#64748b' }));
+      pdfDoc.text(`Doc ID: ${documentId}`, CENTER_X, PAGE_HEIGHT - 18, textOpt({ fontSize: 8, color: '#64748b', align: 'center' }));
+      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 10, PAGE_HEIGHT - 18, textOpt({ fontSize: 8, color: '#64748b', align: 'right' }));
     };
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
@@ -1797,9 +1803,6 @@ const getComprehensiveReportPdf = async (req, res) => {
         pageHeight: PAGE_HEIGHT,
       });
     };
-    const regionsStr = reportData.summary.regions != null
-      ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))
-      : '';
 
     const resolveExistingPath = (...candidates) => {
       for (const candidate of candidates) {
@@ -1808,7 +1811,6 @@ const getComprehensiveReportPdf = async (req, res) => {
       return null;
     };
 
-    // Resolve logo paths with server + client + cwd fallbacks
     const sealPath = resolveExistingPath(
       path.join(__dirname, '../assets/Seal.png'),
       path.join(__dirname, '../../CLIENT/public/Seal.png'),
@@ -1835,48 +1837,34 @@ const getComprehensiveReportPdf = async (req, res) => {
     const hasBagong = !!bagongPilipinasPath;
 
     const drawHeader = (includeTitleSection = false) => {
-      // Header section with logos
-      const logoY = currentY + 1;
-      const logoWidth = 44;
-      const logoHeight = 44;
+      const logoY = currentY;
+      const logoWidth = 42;
+      const logoHeight = 42;
       
       if (hasSeal || hasNiaLogo || hasBagong) {
-        // Left side: Seal.png and logo.png side by side
         if (hasSeal) {
-          try {
-            pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoWidth, height: logoHeight });
-          } catch (e) {
-            console.warn('PDF seal logo load failed:', e.message);
-          }
+          try { pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoWidth, height: logoHeight }); }
+          catch (e) { console.warn('PDF seal logo load failed:', e.message); }
         }
         if (hasNiaLogo) {
-          try {
-            pdfDoc.image(nialogoPath, CONTENT_LEFT + logoWidth + 5, logoY, { width: logoWidth, height: logoHeight });
-          } catch (e) {
-            console.warn('PDF NIA logo load failed:', e.message);
-          }
+          try { pdfDoc.image(nialogoPath, CONTENT_LEFT + logoWidth + 4, logoY, { width: logoWidth, height: logoHeight }); }
+          catch (e) { console.warn('PDF NIA logo load failed:', e.message); }
         }
-        // Right side: Bagong_Pilipinas.png
         if (hasBagong) {
-          try {
-            pdfDoc.image(bagongPilipinasPath, CONTENT_RIGHT - logoWidth, logoY, { width: logoWidth, height: logoHeight });
-          } catch (e) {
-            console.warn('PDF Bagong Pilipinas logo load failed:', e.message);
-          }
+          try { pdfDoc.image(bagongPilipinasPath, CONTENT_RIGHT - logoWidth, logoY, { width: logoWidth, height: logoHeight }); }
+          catch (e) { console.warn('PDF Bagong Pilipinas logo load failed:', e.message); }
         }
       }
 
-      // Header text (centered) - align higher near top section
-      const headerTextY = logoY + 8;
-      pdfDoc.text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 9, align: 'center' }));
+      const headerTextY = logoY + 4;
+      pdfDoc.text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 8.5, color: '#334155', align: 'center' }));
       
-      let headerLineY = headerTextY + LINE_HEIGHT * 0.95;
-      pdfDoc.text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 9, bold: true, align: 'center' }));
+      let headerLineY = headerTextY + LINE_HEIGHT * 0.9;
+      pdfDoc.text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 9, bold: true, color: '#1e293b', align: 'center' }));
       
-      headerLineY += LINE_HEIGHT * 0.95;
-      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 9, bold: true, align: 'center', color: '#292e2a' }));
+      headerLineY += LINE_HEIGHT * 0.9;
+      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 9.5, bold: true, align: 'center', color: '#1b4332' }));
       
-      // Department/Division or Region
       const departmentName = safeStr(reportData.summary.department || '');
       const divisionName = safeStr(reportData.summary.division || '');
       const regionsArray = Array.isArray(reportData.summary.regions) ? reportData.summary.regions : [reportData.summary.regions];
@@ -1896,37 +1884,33 @@ const getComprehensiveReportPdf = async (req, res) => {
         }
       }
       
-      headerLineY += LINE_HEIGHT * 0.95;
-      pdfDoc.text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 9, align: 'center' }));
+      headerLineY += LINE_HEIGHT * 0.9;
+      pdfDoc.text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 8.5, color: '#475569', align: 'center' }));
       
-      // ANNEX A (place directly below Bagong Pilipinas logo)
       const annexAY = hasBagong ? (logoY + logoHeight + 2) : (logoY + 6);
-      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 56, annexAY, textOpt({ fontSize: 11, bold: true }));
+      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 54, annexAY, textOpt({ fontSize: 10.5, bold: true, color: '#0f172a' }));
       
-      // Set currentY below all header text
-      currentY = headerLineY + LINE_HEIGHT * 1.1;
+      currentY = headerLineY + LINE_HEIGHT * 1.15;
 
-      // Title section (only on first page or if explicitly requested)
       if (includeTitleSection) {
-        pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 12, bold: true, align: 'center' }));
-        currentY += LINE_HEIGHT * 1.2;
-        pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
+        pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 12, bold: true, color: '#0f172a', align: 'center' }));
+        currentY += LINE_HEIGHT * 1.15;
+        pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 10.5, bold: true, color: '#334155', align: 'center' }));
         currentY += LINE_HEIGHT * 1.1;
         if (reportData.summary.isDraftPreview) {
           pdfDoc.text('DRAFT PREVIEW – NOT YET SUBMITTED', CENTER_X, currentY, textOpt({
-            fontSize: 9,
+            fontSize: 8.5,
             bold: true,
             align: 'center',
-            color: '#555555'
+            color: '#dc2626'
           }));
           currentY += LINE_HEIGHT * 1.1;
         } else {
-          currentY += LINE_HEIGHT * 0.4;
+          currentY += LINE_HEIGHT * 0.3;
         }
       } else {
-        // Continuation page - add simple note
-        pdfDoc.text('(Continued)', CENTER_X, currentY, textOpt({ fontSize: 10, italic: true, align: 'center' }));
-        currentY += LINE_HEIGHT * 1.5;
+        pdfDoc.text('(Continued)', CENTER_X, currentY, textOpt({ fontSize: 9, italic: true, color: '#64748b', align: 'center' }));
+        currentY += LINE_HEIGHT * 1.3;
       }
     };
 
@@ -1935,29 +1919,23 @@ const getComprehensiveReportPdf = async (req, res) => {
       pdfDoc.endPage();
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage++;
-      currentY = MARGIN_TOP + 20; // Start content a bit below the top
-      drawBorder();
+      currentY = MARGIN_TOP + 10;
       drawWatermark();
-      // No header on continuation pages - header only on first page
     };
 
     const ensureSpace = (lines = 1) => {
       const spaceNeeded = lines * LINE_HEIGHT;
-      if (currentY + spaceNeeded > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+      if (currentY + spaceNeeded > PAGE_HEIGHT - MARGIN_BOTTOM - 25) {
         startNewPage();
       }
     };
 
-    // First page — A4 portrait with Annex A format
     pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-    drawBorder();
     drawWatermark();
-    drawHeader(true); // true = include title section on first page
+    drawHeader(true);
 
-    // Personnel statistics section - Get actual counts from PersonnelServices
     const totalEmployees = Number(reportData.summary.totalEmployees) || 0;
     
-    // Build base query filter
     const baseFilter = {};
     if (regionsParam && regionsParam !== 'all') baseFilter.region = regionsParam;
     if (fiscalYear) baseFilter.fiscalYear = fiscalYear;
@@ -1971,25 +1949,20 @@ const getComprehensiveReportPdf = async (req, res) => {
       ];
     }
 
-    // Get actual employee counts from database using statusOfAppointment field
-    // Non-Casual employees (PERMANENT, etc.)
     const filledPositionCount = await PersonnelServices.countDocuments({ 
       ...baseFilter,
       statusOfAppointment: { $regex: '^PERMANENT$', $options: 'i' }
     });
     
-    // Casual employees - search for "CASUAL" (case-insensitive)
     const casualCount = await PersonnelServices.countDocuments({ 
       ...baseFilter,
       statusOfAppointment: { $regex: '^CASUAL$', $options: 'i' }
     });
     
-    // COS (Contract of Service) employees - query from COSPersonnel table
     const cosCount = await COSPersonnel.countDocuments({ 
       ...baseFilter
     });
 
-    // VACANT positions - search in employeeFullName field for "VACANT"
     const vacantCount = await PersonnelServices.countDocuments({ 
       ...baseFilter,
       employeeFullName: { $regex: 'VACANT|To-Be-Filled', $options: 'i' }
@@ -2004,153 +1977,395 @@ const getComprehensiveReportPdf = async (req, res) => {
     const isCentralOffice = regionsArrayCheck.some(r => String(r || '').toLowerCase().includes('central office'));
 
     if (!isCentralOffice) {
-      pdfDoc.text(`No. of System:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`No. of System:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`Responsibility Center:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`Responsibility Center:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`Service Area (HA)`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`Service Area (HA)`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`Firmed - Up S.A. (HA)`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`Firmed - Up S.A. (HA)`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`No. of Farmers:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`No. of Farmers:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`Irrigated Area:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`Irrigated Area:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`  Wet Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`  Wet Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`  Dry Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`  Dry Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`  3rd Crop (QTA)`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`  3rd Crop (QTA)`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`Benefited Area:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`Benefited Area:`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`  Wet Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
+      pdfDoc.text(`  Wet Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
-      pdfDoc.text(`  Dry Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 9 }));
-      currentY += LINE_HEIGHT * 1.5;
+      pdfDoc.text(`  Dry Season`, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 8.5 }));
+      currentY += LINE_HEIGHT * 1.25;
 
       pdfDoc
-        .text(`No. of Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of Authorized Daily Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of Authorized Daily Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of Contractual Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of Contractual Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of Dependents of Qualified Recipients`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
+        .text(`No. of Dependents of Qualified Recipients`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of Qualified Recipients of Medical and Meal Allowance`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }));
-      currentY += LINE_HEIGHT * 1.2;
+        .text(`No. of Qualified Recipients of Medical and Meal Allowance`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }));
+      currentY += LINE_HEIGHT * 1.3;
     } else {
       pdfDoc
-        .text(`No. of  Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of  Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of  Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of  Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of  Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of  Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of  Appointive Casual Employees`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of  Appointive Casual Employees`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
       currentY += LINE_HEIGHT * 0.75;
       pdfDoc
-        .text(`No. of  COS (Contract of Service) Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
-        .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
+        .text(`No. of  COS (Contract of Service) Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5 }))
+        .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 8.5, align: 'right' }));
+      currentY += LINE_HEIGHT * 1.3;
+    }
+
+    const formatPhp = (amount) =>
+      Number(amount || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
+
+    const drawAmountColumnHeaders = () => {
+      pdfDoc.rectangle(CONTENT_LEFT, currentY - 2, CONTENT_RIGHT - CONTENT_LEFT, LINE_HEIGHT + 2, {
+        fill: '#f1f5f9',
+        stroke: '#cbd5e1',
+        lineWidth: 0.5
+      });
+      pdfDoc
+        .text('PROJECTED CORPORATE INCOME', INCOME_COL_X, currentY + 1, textOpt({ fontSize: 6.5, bold: true, align: 'right', color: '#1e293b' }))
+        .text('PROJECTED SUBSIDY', SUBSIDY_COL_X, currentY + 1, textOpt({ fontSize: 6.5, bold: true, align: 'right', color: '#1e293b' }))
+        .text('PROPOSED BUDGET', TOTAL_COL_X, currentY + 1, textOpt({ fontSize: 6.5, bold: true, align: 'right', color: '#1e293b' }));
       currentY += LINE_HEIGHT * 1.2;
+    };
+
+    const getReportCategories = (section) => {
+      const directCategories = Object.entries(section.categories || {});
+      if (directCategories.length > 0) return directCategories;
+
+      const groupedCategories = new Map();
+      (Array.isArray(section.regions) ? section.regions : []).forEach((region) => {
+        Object.entries(region.categories || {}).forEach(([key, category]) => {
+          const normalizedName = normalizeKey(category?.name || key);
+          const categoryKey = normalizedName || key;
+          if (!groupedCategories.has(categoryKey)) {
+            groupedCategories.set(categoryKey, { ...category, name: category?.name || key, items: {}, total: 0, totalIncome: 0, totalSubsidy: 0 });
+          }
+          const target = groupedCategories.get(categoryKey);
+          target.total += Number(category?.total) || 0;
+          target.totalIncome += Number(category?.totalIncome) || 0;
+          target.totalSubsidy += Number(category?.totalSubsidy) || 0;
+
+          const itemEntries = Array.isArray(category?.items)
+            ? category.items.map((item, index) => [String(index), item])
+            : Object.entries(category?.items || {});
+          itemEntries.forEach(([itemKey, item]) => {
+            const itemName = String(item?.name || item?.title || item?.particulars || item?.subcategory || itemKey);
+            const normalizedItemName = normalizeKey(itemName) || itemKey;
+            if (!target.items[normalizedItemName]) {
+              target.items[normalizedItemName] = { ...item, name: itemName, amount: 0, income: 0, subsidy: 0 };
+            }
+            const targetItem = target.items[normalizedItemName];
+            targetItem.amount += Number(item?.amount) || 0;
+            targetItem.income += Number(item?.income) || 0;
+            targetItem.subsidy += Number(item?.subsidy) || 0;
+          });
+        });
+      });
+      return Array.from(groupedCategories.entries());
+    };
+
+    const getCategoryAmounts = (category, sectionCode) => {
+      const itemEntries = Array.isArray(category?.items)
+        ? category.items
+        : Object.values(category?.items || {});
+      const itemTotals = itemEntries.reduce((totals, item) => {
+        totals.income += Number(item?.income) || 0;
+        totals.subsidy += Number(item?.subsidy) || 0;
+        totals.total += Number(item?.amount ?? item?.income ?? item?.subsidy) || 0;
+        return totals;
+      }, { income: 0, subsidy: 0, total: 0 });
+
+      if (sectionCode === 'A.1') {
+        const total = Number(category?.total ?? category?.totalIncome ?? itemTotals.total) || 0;
+        return { income: Number(category?.totalIncome ?? total) || 0, subsidy: 0, total };
+      }
+      if (sectionCode === 'A.2') {
+        const total = Number(category?.total ?? category?.totalSubsidy ?? itemTotals.total) || 0;
+        return { income: 0, subsidy: Number(category?.totalSubsidy ?? total) || 0, total };
+      }
+
+      return {
+        income: Number(category?.totalIncome ?? itemTotals.income) || 0,
+        subsidy: Number(category?.totalSubsidy ?? itemTotals.subsidy) || 0,
+        total: Number(category?.total ?? category?.totalSubsidy ?? category?.totalIncome ?? itemTotals.total) || 0,
+      };
+    };
+
+    const getItemAmounts = (item, sectionCode) => {
+      const total = Number(item?.amount ?? item?.income ?? item?.subsidy) || 0;
+      if (sectionCode === 'A.1') return { income: total, subsidy: 0, total };
+      if (sectionCode === 'A.2') return { income: 0, subsidy: total, total };
+      return {
+        income: Number(item?.income) || 0,
+        subsidy: Number(item?.subsidy) || 0,
+        total,
+      };
+    };
+
+    const drawAmounts = (amounts, fontSize = 8, bold = false) => {
+      pdfDoc
+        .text(formatPhp(amounts.income), INCOME_COL_X, currentY, textOpt({ fontSize, bold, align: 'right' }))
+        .text(formatPhp(amounts.subsidy), SUBSIDY_COL_X, currentY, textOpt({ fontSize, bold, align: 'right' }))
+        .text(formatPhp(amounts.total), TOTAL_COL_X, currentY, textOpt({ fontSize, bold, align: 'right' }));
+    };
+
+    // Render Sources of Funds
+    const sourceSections = (Array.isArray(reportData.sections) ? reportData.sections : [])
+      .filter((section) => String(section?.sectionCode || '').startsWith('A'));
+    if (sourceSections.length > 0) {
+      ensureSpace(3);
+      pdfDoc.text('SOURCES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10.5, bold: true, color: '#0f172a' }));
+      currentY += LINE_HEIGHT * 1.1;
+      drawAmountColumnHeaders();
+
+      const totalSources = { income: 0, subsidy: 0, total: 0 };
+      sourceSections.forEach((section) => {
+        ensureSpace(2);
+        const categories = getReportCategories(section);
+        const sectionAmounts = categories.reduce((totals, [, category]) => {
+          const amounts = getCategoryAmounts(category, section.sectionCode);
+          totals.income += amounts.income;
+          totals.subsidy += amounts.subsidy;
+          totals.total += amounts.total;
+          return totals;
+        }, { income: 0, subsidy: 0, total: 0 });
+        if (section.sectionTotal != null && categories.length === 0) sectionAmounts.total = Number(section.sectionTotal) || 0;
+        totalSources.income += sectionAmounts.income;
+        totalSources.subsidy += sectionAmounts.subsidy;
+        totalSources.total += sectionAmounts.total;
+        
+        pdfDoc.text(
+          `${section.sectionCode} - ${String(section.sectionName || '').toUpperCase()}`,
+          CONTENT_LEFT + 10,
+          currentY,
+          textOpt({ fontSize: 9.5, bold: true, color: '#1e293b' })
+        );
+        drawAmounts(sectionAmounts, 8.5, true);
+        currentY += LINE_HEIGHT * 0.9;
+
+        categories.forEach(([, category]) => {
+          const categoryAmounts = getCategoryAmounts(category, section.sectionCode);
+          const categoryName = String(category.name || '');
+          const categoryLines = wrapText(categoryName, 180, 8.5);
+          ensureSpace(categoryLines.length);
+          categoryLines.forEach((line, lineIdx) => {
+            pdfDoc.text(line, CONTENT_LEFT + 22, currentY, textOpt({ fontSize: 8.5, bold: true }));
+            if (lineIdx === 0) drawAmounts(categoryAmounts, 8);
+            if (lineIdx < categoryLines.length - 1) currentY += LINE_HEIGHT * 0.7;
+          });
+          currentY += LINE_HEIGHT * 0.7;
+
+          const items = Array.isArray(category.items) ? category.items : Object.values(category.items || {});
+          items.forEach((item) => {
+            const itemName = String(item?.particulars || item?.subcategory || item?.name || item?.title || '').trim();
+            const itemAmounts = getItemAmounts(item, section.sectionCode);
+            if (!itemName && itemAmounts.total === 0) return;
+            const itemLines = wrapText(itemName || '—', 160, 8);
+            ensureSpace(itemLines.length);
+            itemLines.forEach((line, lineIdx) => {
+              pdfDoc.text(line, CONTENT_LEFT + 38, currentY, textOpt({ fontSize: 8 }));
+              if (lineIdx === 0) drawAmounts(itemAmounts, 7.5);
+              if (lineIdx < itemLines.length - 1) currentY += LINE_HEIGHT * 0.65;
+            });
+            currentY += LINE_HEIGHT * 0.65;
+          });
+        });
+      });
+
+      ensureSpace(2);
+      pdfDoc.rectangle(CONTENT_LEFT + 8, currentY - 3, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, { stroke: '#0f172a', lineWidth: 0.5 });
+      currentY += LINE_HEIGHT * 0.45;
+      pdfDoc.text('TOTAL SOURCES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true, color: '#0f172a' }));
+      drawAmounts(totalSources, 9, true);
+      
+      pdfDoc.rectangle(CONTENT_LEFT + 8, currentY + 11, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, { stroke: '#0f172a', lineWidth: 0.5 });
+      pdfDoc.rectangle(CONTENT_LEFT + 8, currentY + 13, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, { stroke: '#0f172a', lineWidth: 0.5 });
+      currentY += LINE_HEIGHT * 1.3;
     }
 
     // USES OF FUNDS section header
     ensureSpace(3);
-    pdfDoc.text('USES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true, underline: true }));
-    currentY += LINE_HEIGHT * 1;
-
-    // Render sections with Annex-style hierarchy
-    const formatPhp = (amount) =>
-      Number(amount || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
+    pdfDoc.text('USES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10.5, bold: true, color: '#0f172a' }));
+    currentY += LINE_HEIGHT * 1.1;
 
     const sectionLabelMap = {
       'B.1.1': 'PERSONNEL SERVICES - REGULAR',
-      'B.1.2': 'MAINTENANCE AND OTHER OPERATING EXPENDITURES',
+      'B.1.2': 'MAINTENANCE AND OTHER\nOPERATING EXPENDITURES',
       'B.2': 'CAPITAL OUTLAY (ANNEX E)',
     }; 
 
     const sectionTotalLabelMap = {
       'B.1.1': 'TOTAL PERSONNEL SERVICES (Annex B + Annex C)',
-      'B.1.2': 'TOTAL MAINTENANCE & OTHER OPERATING EXPENDITURES',
+      'B.1.2': 'TOTAL MAINTENANCE & OTHER\nOPERATING EXPENDITURES',
       'B.2': 'TOTAL CAPITAL OUTLAY',
     };
 
     const usesOfFundsSections = (Array.isArray(reportData.sections) ? reportData.sections : [])
       .filter((section) => String(section?.sectionCode || '').startsWith('B'));
-    const sectionsToRender = usesOfFundsSections.length > 0
-      ? usesOfFundsSections
-      : (Array.isArray(reportData.sections) ? reportData.sections : []);
+    const sectionsToRender = usesOfFundsSections;
 
     let sectionNumber = 1;
     let grandTotalAmount = 0;
+    const grandTotalAmounts = { income: 0, subsidy: 0, total: 0 };
 
     sectionsToRender.forEach((section) => {
-      if (!section.categories) return;
+      const categoryEntries = getReportCategories(section);
+      if (categoryEntries.length === 0) return;
 
-      ensureSpace(4); // Ensure space for section header
+      ensureSpace(4);
 
-      const sectionTotal = Number(section.sectionTotal) || 0;
+      const sectionAmounts = categoryEntries.reduce((totals, [, category]) => {
+        const amounts = getCategoryAmounts(category, section.sectionCode);
+        totals.income += amounts.income;
+        totals.subsidy += amounts.subsidy;
+        totals.total += amounts.total;
+        return totals;
+      }, { income: 0, subsidy: 0, total: 0 });
+      if (section.sectionTotalIncome != null) sectionAmounts.income = Number(section.sectionTotalIncome) || 0;
+      if (section.sectionTotalSubsidy != null) sectionAmounts.subsidy = Number(section.sectionTotalSubsidy) || 0;
+      const sectionTotal = Number(section.sectionTotal ?? sectionAmounts.total) || 0;
+      sectionAmounts.total = sectionTotal;
       grandTotalAmount += sectionTotal;
+      grandTotalAmounts.income += sectionAmounts.income;
+      grandTotalAmounts.subsidy += sectionAmounts.subsidy;
+      grandTotalAmounts.total += sectionTotal;
+
       const sectionDisplayName = sectionLabelMap[section.sectionCode] || `${section.sectionName || ''}`.toUpperCase();
       const sectionTotalLabel = sectionTotalLabelMap[section.sectionCode] || `TOTAL ${section.sectionName?.toUpperCase() || 'SECTION'}`;
 
-      // Main section header
-      pdfDoc
-        .text(`${sectionNumber}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 11, bold: true }))
-        .text(
-          sectionDisplayName,
-          CONTENT_LEFT + 25, 
-          currentY,
-          textOpt({ fontSize: 11, bold: true })
-        )
-        .text(
-          formatPhp(sectionTotal),
-          AMOUNT_COL_X,
-          currentY,
-          textOpt({ fontSize: 11, bold: true, align: 'right' })
-        );
-      currentY += LINE_HEIGHT * 0.95;
+      const sectionNameLines = sectionDisplayName.includes('\n')
+        ? sectionDisplayName.split('\n')
+        : wrapText(sectionDisplayName, 180, 10.5);
+      ensureSpace(sectionNameLines.length);
+      const sectionHeaderY = currentY;
+      pdfDoc.text(`${sectionNumber}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10.5, bold: true, color: '#0f172a' }));
+      sectionNameLines.forEach((line, lineIdx) => {
+        pdfDoc.text(line, CONTENT_LEFT + 25, sectionHeaderY + lineIdx * LINE_HEIGHT * 0.78, textOpt({ fontSize: 10.5, bold: true, color: '#0f172a' }));
+      });
+      currentY = sectionHeaderY;
+      drawAmounts(sectionAmounts, 8.5, true);
+      currentY += LINE_HEIGHT * 0.95 + (sectionNameLines.length - 1) * LINE_HEIGHT * 0.78;
 
-      // Render categories and sub-items
-      const categoryEntries = Object.entries(section.categories || {});
-      
-      categoryEntries.forEach(([, category], idx) => {
-        const categoryAmount = Number(
-          category.total ?? category.totalSubsidy ?? category.totalIncome
-        ) || 0;
+      if (section.sectionCode === 'B.2') {
+        drawAmountColumnHeaders();
+        const capitalOutlayCategories = categoryEntries.map(([, category]) => category);
+        const annexETitles = new Map();
+        capitalOutlayCategories.forEach((category) => {
+          const title = String(category?.name || '').trim();
+          const normalizedTitle = title.toLocaleLowerCase();
+          if (!title) return;
+          const amounts = getCategoryAmounts(category, section.sectionCode);
+          const existing = annexETitles.get(normalizedTitle);
+          if (existing) {
+            existing.income += amounts.income;
+            existing.subsidy += amounts.subsidy;
+            existing.total += amounts.total;
+          } else {
+            annexETitles.set(normalizedTitle, { title, ...amounts });
+          }
+        });
 
-        const categoryLines = wrapText(String(category.name || ''), 370, 9);
+        Array.from(annexETitles.values()).forEach(({ title, income, subsidy, total }, idx) => {
+          const titleX = CONTENT_LEFT + 30; // X = 66
+          const titleMaxWidth = 180; // Safe width to avoid overlapping with income column (which starts at X=255)
+          const titleLines = wrapText(title, titleMaxWidth, 8.5);
+          ensureSpace(titleLines.length);
+          pdfDoc.text(`${idx + 1}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5, bold: true }));
+          titleLines.forEach((line, lineIdx) => {
+            pdfDoc.text(line, titleX, currentY, textOpt({ fontSize: 8.5 }));
+            if (lineIdx === 0) drawAmounts({ income, subsidy, total }, 8);
+            if (lineIdx < titleLines.length - 1) currentY += LINE_HEIGHT * 0.78;
+          });
+          currentY += LINE_HEIGHT * 0.78;
+        });
+
+        currentY += LINE_HEIGHT * 0.35;
+        sectionNumber++;
+        return;
+      }
+
+      const isMooeSection = section.sectionCode === 'B.1.2';
+      const isIasCategory = (category) => {
+        const normalizedName = normalizeKey(category?.name || '');
+        return normalizedName.includes('IRRIGATOR') && normalizedName.includes('ASSOCIATION');
+      };
+      const iasEntries = isMooeSection ? categoryEntries.filter(([, category]) => isIasCategory(category)) : [];
+      const regularEntries = isMooeSection ? categoryEntries.filter(([, category]) => !isIasCategory(category)) : categoryEntries;
+      const orderedCategoryEntries = isMooeSection ? [...regularEntries, ...iasEntries] : categoryEntries;
+      const regularMooeTotals = regularEntries.reduce((totals, [, category]) => {
+        const amounts = getCategoryAmounts(category, section.sectionCode);
+        totals.income += amounts.income;
+        totals.subsidy += amounts.subsidy;
+        totals.total += amounts.total;
+        return totals;
+      }, { income: 0, subsidy: 0, total: 0 });
+      let regularSubtotalRendered = false;
+
+      ensureSpace(1);
+      drawAmountColumnHeaders();
+
+      orderedCategoryEntries.forEach(([, category], idx) => {
+        const isIas = isMooeSection && isIasCategory(category);
+        const categoryAmounts = getCategoryAmounts(category, section.sectionCode);
+
+        if (isIas && !regularSubtotalRendered) {
+          ensureSpace(1);
+          pdfDoc.text('Total MOOE - Regular', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9, bold: true, color: '#1e293b' }));
+          drawAmounts(regularMooeTotals, 8, true);
+          currentY += LINE_HEIGHT * 0.9;
+          regularSubtotalRendered = true;
+        }
+
+        const categoryName = isIas
+          ? "Irrigator's Associations (IAs) Operations and Maintenance Cost"
+          : String(category.name || '');
+        const categoryLines = wrapText(categoryName, 180, 8.5);
         ensureSpace(categoryLines.length);
 
-        pdfDoc.text(`${idx + 1}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9, bold: true }));
-        pdfDoc.text(formatPhp(categoryAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+        pdfDoc.text(`${idx + 1}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 8.5, bold: true }));
+        if (!isIas) drawAmounts(categoryAmounts, 8, true);
 
         categoryLines.forEach((line, lineIdx) => {
-          pdfDoc.text(line, CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 9, bold: true }));
+          pdfDoc.text(line, CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 8.5, bold: true }));
           if (lineIdx < categoryLines.length - 1) {
             currentY += LINE_HEIGHT * 0.78;
           }
@@ -2160,20 +2375,34 @@ const getComprehensiveReportPdf = async (req, res) => {
         const itemEntries = Array.isArray(category.items)
           ? category.items.map((item, itemIdx) => [String.fromCharCode(97 + (itemIdx % 26)), item])
           : Object.entries(category.items || {});
+        if (isIas) {
+          itemEntries.sort(([, firstItem], [, secondItem]) => {
+            const getIasOrder = (item) => {
+              const itemName = normalizeKey(item?.name || item?.title || '');
+              if (itemName.includes('NATIONAL IRRIGATION SYSTEM')) return 0;
+              if (itemName.includes('COMMUNAL IRRIGATION SYSTEM')) return 1;
+              return 2;
+            };
+            return getIasOrder(firstItem) - getIasOrder(secondItem);
+          });
+        }
 
         itemEntries.forEach(([itemKey, item], itemIdx) => {
-          const letter = /^[a-z]$/i.test(String(itemKey || ''))
+          const letter = isIas
+            ? String.fromCharCode(97 + (itemIdx % 26))
+            : /^[a-z]$/i.test(String(itemKey || ''))
             ? String(itemKey).toLowerCase()
             : String.fromCharCode(97 + (itemIdx % 26));
-          const itemAmount = Number(item?.amount ?? item?.subsidy ?? item?.income) || 0;
+          const itemAmounts = getItemAmounts(item, section.sectionCode);
+          const itemAmount = itemAmounts.total;
           const itemName = String(item?.name || item?.title || '').trim();
 
           if (itemName || itemAmount > 0) {
-            const itemLines = wrapText(itemName || '—', 340, 8);
+            const itemLines = wrapText(itemName || '—', 150, 8);
             ensureSpace(itemLines.length);
 
             pdfDoc.text(`${letter}.`, CONTENT_LEFT + 45, currentY, textOpt({ fontSize: 8 }));
-            pdfDoc.text(formatPhp(itemAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 8, align: 'right' }));
+            drawAmounts(itemAmounts, 7.5);
 
             itemLines.forEach((line, lineIdx) => {
               pdfDoc.text(line, CONTENT_LEFT + 58, currentY, textOpt({ fontSize: 8 }));
@@ -2184,227 +2413,138 @@ const getComprehensiveReportPdf = async (req, res) => {
             currentY += LINE_HEIGHT * 0.68;
           }
         });
+
+        if (isIas) {
+          ensureSpace(1);
+          pdfDoc.text('Total MOOE - O & M COST (IAs)', CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 8.5, bold: true, color: '#1e293b' }));
+          drawAmounts(categoryAmounts, 8, true);
+          currentY += LINE_HEIGHT * 0.9;
+        }
       });
 
-      // Section total line
-      pdfDoc.rectangle(CONTENT_LEFT + 8, currentY - 3, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, {
-        stroke: '#000000',
-        lineWidth: 0.5
-      });
+      pdfDoc.rectangle(CONTENT_LEFT + 8, currentY - 3, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, { stroke: '#0f172a', lineWidth: 0.5 });
       currentY += LINE_HEIGHT * 0.45;
 
-      pdfDoc
-        .text(`${sectionTotalLabel}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true }))
-        .text(
-          formatPhp(sectionTotal),
-          AMOUNT_COL_X,
-          currentY,
-          textOpt({ fontSize: 10, bold: true, align: 'right' })
-        );
-      currentY += LINE_HEIGHT * 1.15;
+      const sectionTotalLines = sectionTotalLabel.includes('\n')
+        ? sectionTotalLabel.split('\n')
+        : wrapText(sectionTotalLabel, 180, 9.5);
+      ensureSpace(sectionTotalLines.length);
+      const sectionTotalY = currentY;
+      sectionTotalLines.forEach((line, lineIdx) => {
+        pdfDoc.text(line, CONTENT_LEFT + 10, sectionTotalY + lineIdx * LINE_HEIGHT * 0.78, textOpt({ fontSize: 9.5, bold: true, color: '#0f172a' }));
+      });
+      currentY = sectionTotalY;
+      drawAmounts(sectionAmounts, 8, true);
+      currentY += LINE_HEIGHT * 1.15 + (sectionTotalLines.length - 1) * LINE_HEIGHT * 0.78;
 
       sectionNumber++;
     });
 
-    // Grand total at bottom with line above
-    if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM - 30) {
+    if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM - 35) {
       startNewPage();
     }
-    pdfDoc.rectangle(CONTENT_LEFT + 10, currentY - 3, CONTENT_RIGHT - CONTENT_LEFT - 20, 0.5, {
-      stroke: '#000000',
-      lineWidth: 0.5
-    });
+    
+    // Grand total at bottom with double lines below
+    pdfDoc.rectangle(CONTENT_LEFT + 8, currentY - 3, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, { stroke: '#0f172a', lineWidth: 0.5 });
     currentY += LINE_HEIGHT * 0.8;
     
-    pdfDoc
-      .text('TOTAL USES OF FUNDS FOR OPERATION', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 12, bold: true }))
-      .text(
-        grandTotalAmount.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
-        AMOUNT_COL_X,
-        currentY,
-        textOpt({ fontSize: 12, bold: true, align: 'right' })
-      );
-    currentY += LINE_HEIGHT * 2;
+    pdfDoc.text('TOTAL USES OF FUNDS FOR OPERATION', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 11, bold: true, color: '#0f172a' }));
+    drawAmounts({ ...grandTotalAmounts, total: grandTotalAmount }, 9, true);
+    
+    pdfDoc.rectangle(CONTENT_LEFT + 8, currentY + 11, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, { stroke: '#0f172a', lineWidth: 0.5 });
+    pdfDoc.rectangle(CONTENT_LEFT + 8, currentY + 13, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, { stroke: '#0f172a', lineWidth: 0.5 });
+    currentY += LINE_HEIGHT * 2.2;
 
-    // Check if NET INCOME FROM OPERATION section fits on current page (needs only line + underline area)
     if (currentY + (LINE_HEIGHT * 3) > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-      // Not enough space, create new page without header (just border)
       drawFooter();
       pdfDoc.endPage();
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage++;
       currentY = MARGIN_TOP + 20;
-      drawBorder();
       drawWatermark();
     }
 
-    // NET INCOME FROM OPERATION
+    // NET INCOME FROM OPERATION CARD
+    const netIncomeBoxY = currentY - 2;
+    const netIncomeBoxHeight = LINE_HEIGHT * 1.8;
+    pdfDoc.rectangle(CONTENT_LEFT, netIncomeBoxY, CONTENT_RIGHT - CONTENT_LEFT, netIncomeBoxHeight, {
+      fill: '#f8fafc',
+      stroke: '#0f172a',
+      lineWidth: 0.75
+    });
+
     pdfDoc
-      .text('NET INCOME FROM OPERATION', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 12, bold: true }))
+      .text('NET INCOME FROM OPERATION', CONTENT_LEFT + 12, currentY + 4, textOpt({ fontSize: 11, bold: true, color: '#0f172a' }))
       .text(
         grandTotalAmount.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
-        AMOUNT_COL_X,
-        currentY,
-        textOpt({ fontSize: 12, bold: true, align: 'right' })
+        TOTAL_COL_X,
+        currentY + 4,
+        textOpt({ fontSize: 11, bold: true, align: 'right', color: '#0f172a' })
       );
     
-    pdfDoc.rectangle(CONTENT_LEFT + 10, currentY + 10, CONTENT_RIGHT - CONTENT_LEFT - 20, 0.5, {
-      stroke: '#000000',
-      lineWidth: 0.5
-    });
-    currentY += LINE_HEIGHT * 2; // Reduced gap after net income
+    currentY += netIncomeBoxHeight + LINE_HEIGHT * 2;
 
-    // Check if signature blocks fit on current page (needs ~90 points for just the signatures)
     if (currentY + 90 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-      // Not enough space, create new page without header for signatures
       drawFooter();
       pdfDoc.endPage();
       pdfDoc.createPage(PAGE_WIDTH, PAGE_HEIGHT);
       currentPage++;
       currentY = MARGIN_TOP + 20;
-      drawBorder();
       drawWatermark();
     }
 
-    // Signature blocks
-    const sigY = currentY + 40; // Reduced gap for signature line
+    // Signature Blocks
+    const sigY = currentY + 36;
     const preparedByInfo = reportData?.summary?.preparedBy || null;
     const preparedByName = preparedByInfo?.name || 'Budget Preparer';
     const preparedByDesignation = preparedByInfo?.position || 'Budget Preparer';
-    const preparedByUserId = preparedByInfo?.userId || '';
-    
-    const preparedBySignatureLine = preparedByInfo?.hasDigitalSignature
-      ? `E-signature: ${preparedByInfo.signatureAlgorithm || 'Digitally Signed'}${preparedByInfo?.signedAt ? ` • ${new Date(preparedByInfo.signedAt).toLocaleString('en-US')}` : ''}`
-      : 'E-signature: Not available';
-    const preparedByAuthLine = preparedByUserId
-      ? `Authentication: Verified User ID ${preparedByUserId}`
-      : 'Authentication: Verified Budget Preparer account';
     
     const signatories = Array.isArray(reportData?.summary?.signatories) ? reportData.summary.signatories : [];
     const normalizeRoleKey = (value) => String(value || '').replace(/\s+/g, '_').toUpperCase();
     const reviewerSignatory = signatories.find((item) => normalizeRoleKey(item?.workflowRole) === 'BUDGET_REVIEWER');
     const approverSignatory = signatories.find((item) => normalizeRoleKey(item?.workflowRole) === 'BUDGET_APPROVER' || normalizeRoleKey(item?.workflowRole) === 'APPROVER');
 
-    const sigWidth = 140;
+    const sigWidth = 145;
     const sigSpacing = (PAGE_WIDTH - (MARGIN_SIDE * 2) - (sigWidth * 3)) / 2;
     const sig1X = CONTENT_LEFT;
     const sig2X = sig1X + sigWidth + sigSpacing;
     const sig3X = sig2X + sigWidth + sigSpacing;
 
-    pdfDoc.text('Prepared by:', sig1X, currentY, textOpt({ fontSize: 8 }));
-    pdfDoc.text('Noted by:', sig2X, currentY, textOpt({ fontSize: 8 }));
-    pdfDoc.text('Approved by:', sig3X, currentY, textOpt({ fontSize: 8 }));
+    pdfDoc.text('Prepared by:', sig1X, currentY, textOpt({ fontSize: 8.5, color: '#475569' }));
+    pdfDoc.text('Noted by:', sig2X, currentY, textOpt({ fontSize: 8.5, color: '#475569' }));
+    pdfDoc.text('Approved by:', sig3X, currentY, textOpt({ fontSize: 8.5, color: '#475569' }));
 
-    pdfDoc.text('_____________________________', sig1X, sigY, textOpt({ fontSize: 9 }));
-    pdfDoc.text('_____________________________', sig2X, sigY, textOpt({ fontSize: 9 }));
-    pdfDoc.text('_____________________________', sig3X, sigY, textOpt({ fontSize: 9 }));
+    pdfDoc.text('_____________________________', sig1X, sigY, textOpt({ fontSize: 9, color: '#94a3b8' }));
+    pdfDoc.text('_____________________________', sig2X, sigY, textOpt({ fontSize: 9, color: '#94a3b8' }));
+    pdfDoc.text('_____________________________', sig3X, sigY, textOpt({ fontSize: 9, color: '#94a3b8' }));
 
-    // Prepared by Block (No visual signature, just text)
-    pdfDoc.text(preparedByName, sig1X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
-    pdfDoc.text(preparedByDesignation, sig1X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+    pdfDoc.text(preparedByName, sig1X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true, color: '#0f172a' }));
+    pdfDoc.text(preparedByDesignation, sig1X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8, color: '#475569' }));
 
-    // Render Reviewer (Noted by) Block (No visual signature, just text)
     if (reviewerSignatory) {
       const reviewerName = reviewerSignatory?.fullName || 'Budget Reviewer';
       const reviewerDesignation = reviewerSignatory?.position || 'Budget Reviewer';
 
-      pdfDoc.text(reviewerName, sig2X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
-      pdfDoc.text(reviewerDesignation, sig2X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+      pdfDoc.text(reviewerName, sig2X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true, color: '#0f172a' }));
+      pdfDoc.text(reviewerDesignation, sig2X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8, color: '#475569' }));
     } else {
-      pdfDoc.text('Budget Reviewer', sig2X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+      pdfDoc.text('Budget Reviewer', sig2X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8, color: '#475569' }));
     }
 
-    // Render Approver (Approved by) Block (No visual signature, just text)
     if (approverSignatory) {
       const approverName = approverSignatory?.fullName || 'Budget Approver';
       const approverDesignation = approverSignatory?.position || 'Budget Approver';
 
-      pdfDoc.text(approverName, sig3X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
-      pdfDoc.text(approverDesignation, sig3X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+      pdfDoc.text(approverName, sig3X, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true, color: '#0f172a' }));
+      pdfDoc.text(approverDesignation, sig3X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8, color: '#475569' }));
     } else {
-      pdfDoc.text('Budget Approver', sig3X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
+      pdfDoc.text('Budget Approver', sig3X, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8, color: '#475569' }));
     }
 
-    currentY = sigY + LINE_HEIGHT * 5;
-
-    if (signatories.length > 0) {
-      // Fetch QR Code
-      let qrImagePath = null;
-      const docId = reportData?.summary?.documentId || reportData?.documentId || `COMP-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
-      reportData.summary.documentId = docId; // ensure it's saved in the object
-
-      // Temporarily hide the Workflow Digital Signatures Audit box
-      const showSignatureAudit = false;
-      
-      if (showSignatureAudit) {
-        try {
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5005';
-          const verifyUrl = `${frontendUrl}/verify-document?id=${docId}`;
-          
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verifyUrl)}`;
-          qrImagePath = path.join(os.tmpdir(), `qr_${Date.now()}.png`);
-          
-          await new Promise((resolve, reject) => {
-            require('https').get(qrUrl, (response) => {
-              if (response.statusCode === 200) {
-                const file = fs.createWriteStream(qrImagePath);
-                response.pipe(file);
-                file.on('finish', () => { file.close(); resolve(); });
-              } else {
-                reject(new Error(`Failed to fetch QR: ${response.statusCode}`));
-              }
-            }).on('error', reject);
-          });
-          tempSignatureImagePaths.push(qrImagePath);
-        } catch (err) {
-          console.warn('Failed to generate QR code:', err.message);
-          qrImagePath = null;
-        }
-
-        const neededHeight = Math.max((signatories.length + 1.5) * LINE_HEIGHT + 10, 70);
-        if (currentY + neededHeight > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-          startNewPage();
-        }
-
-        const boxTop = currentY;
-        pdfDoc.rectangle(CONTENT_LEFT + 10, boxTop, CONTENT_RIGHT - CONTENT_LEFT - 20, neededHeight, {
-          stroke: '#888888',
-          lineWidth: 0.5,
-          fill: '#fcfcfc'
-        });
-        
-        if (qrImagePath) {
-          pdfDoc.image(qrImagePath, CONTENT_LEFT + 20, boxTop + 5, { width: 60, height: 60, keepAspectRatio: true });
-        }
-
-        const textStartX = qrImagePath ? CONTENT_LEFT + 95 : CONTENT_LEFT + 20;
-        currentY = boxTop + 10;
-
-        pdfDoc.text('Workflow Digital Signatures Audit:', textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#333333' }));
-        currentY += LINE_HEIGHT;
-        pdfDoc.text(`Document ID: ${docId}`, textStartX, currentY, textOpt({ fontSize: 8, bold: true, color: '#2a52be' }));
-        currentY += LINE_HEIGHT;
-
-        signatories.forEach((signatory, index) => {
-          const roleLabel = roleToPositionLabel(signatory.workflowRole || '');
-          const signedDate = signatory?.signedAt ? new Date(signatory.signedAt).toLocaleString('en-US') : 'N/A';
-          const name = signatory.fullName || 'Unknown Signatory';
-          const verifyStatus = signatory?.verificationStatus || 'Unverifiable';
-          
-          pdfDoc.text(`${index + 1}. ${name} (${signatory.position || roleLabel})`, textStartX, currentY, textOpt({ fontSize: 7, bold: true }));
-          pdfDoc.text(`Date: ${signedDate}   |   Status: ${verifyStatus}`, textStartX + 200, currentY, textOpt({ fontSize: 7, color: '#444444' }));
-          
-          currentY += LINE_HEIGHT;
-        });
-        
-        currentY = boxTop + neededHeight + LINE_HEIGHT;
-      }
-    }
+    currentY = sigY + LINE_HEIGHT * 4.5;
     
-    // Final page footer
     drawFooter();
 
-    // Close last page and finalize PDF, then stream file to response
     pdfDoc.endPage().endPDF(async (err) => {
       if (err) {
         console.error('Error finalizing PDF:', err);
@@ -2415,7 +2555,6 @@ const getComprehensiveReportPdf = async (req, res) => {
         });
       }
       
-      // Calculate file hash and save audit log
       try {
         let fileHash = null;
         if (fs.existsSync(tmpFilePath)) {
@@ -2487,7 +2626,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     }
   }
 };
-// Get available regions from all data sources
+
 const getAvailableRegionsComprehensive = async (req, res) => {
   try {
     const [incomeRegions, psRegions, mooeRegions, coRegions] = await Promise.all([
@@ -2511,7 +2650,7 @@ const getAvailableRegionsComprehensive = async (req, res) => {
     });
   }
 };
-// Get available fiscal years from all data sources
+
 const getAvailableFiscalYears = async (req, res) => {
   try {
     const [settingsFiscalYears, incomeFiscalYears, psFiscalYears, mooeFiscalYears, coFiscalYears] = await Promise.all([
@@ -2536,7 +2675,7 @@ const getAvailableFiscalYears = async (req, res) => {
     });
   }
 };
-// Get available budget types from all data sources
+
 const getAvailableBudgetTypes = async (req, res) => {
   try {
     const [settingsBudgetTypes, incomeBudgetTypes, psBudgetTypes, mooeBudgetTypes, coBudgetTypes] = await Promise.all([
@@ -2561,7 +2700,7 @@ const getAvailableBudgetTypes = async (req, res) => {
     });
   }
 };
-// Get active settings
+
 const getActiveSettings = async (req, res) => {
   try {
     const activeSettings = await Settings.findOne({ isActive: true });
@@ -2644,13 +2783,11 @@ const verifyDocumentUpload = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
     
-    // Calculate SHA-256 hash of the uploaded file
     const crypto = require('crypto');
     const hashSum = crypto.createHash('sha256');
     hashSum.update(req.file.buffer);
     const fileHash = hashSum.digest('hex');
 
-    // Find the document in the audit log using the hash
     const auditLog = await ReportAuditLog.findOne({ fileHash }).lean();
     if (!auditLog) {
       return res.status(404).json({ success: false, message: 'Document is altered or invalid. File hash mismatch.' });

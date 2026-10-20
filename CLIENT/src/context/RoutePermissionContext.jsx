@@ -18,6 +18,8 @@ const RoutePermissionContext = createContext({
   getRoutePermission: (_path) => null,
   /** Force re-fetch (call after saving changes in the management UI) */
   refetch: async () => {},
+  /** Apply a saved route permission without refetching the full map */
+  syncRoutePermission: (_route) => {},
   // ─── Maintenance Mode ──────────────────────────────────────────────────────
   isMaintenanceMode: false,
   maintenanceMessage: "",
@@ -105,6 +107,19 @@ export const RoutePermissionProvider = ({ children }) => {
     [permissionMap]
   );
 
+  const syncRoutePermission = useCallback((route) => {
+    if (!route?.path) return;
+    setPermissionMap((previous) => {
+      const next = { ...previous };
+      if (route.isActive === false) {
+        delete next[route.path];
+      } else {
+        next[route.path] = { ...previous[route.path], ...route };
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <RoutePermissionContext.Provider
       value={{
@@ -112,6 +127,7 @@ export const RoutePermissionProvider = ({ children }) => {
         isLoading,
         getRoutePermission,
         refetch: fetchPermissions,
+        syncRoutePermission,
         // Maintenance mode
         isMaintenanceMode,
         maintenanceMessage,
