@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-require('./config/mongo_db'); // Connect to database
+require('../../config/mongo_db'); // Connect to database
 async function fixDatabaseIndex() {
   try {
     // Wait for connection

@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
-const ChartOfAccounts = require('./models/chartOfAccounts');
+const ChartOfAccounts = require('../../models/chartOfAccounts');
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URL || 'mongodb://localhost:27017/budget-fmis')
   .then(() => {

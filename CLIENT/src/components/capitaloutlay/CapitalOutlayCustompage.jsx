@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import TextSearchable from "./TextSearchable";
+import TextSearchable from "../../global/components/TextSearchable";
 
 const mockData = [
   {

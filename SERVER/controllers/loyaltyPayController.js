@@ -403,7 +403,7 @@ exports.getLoyaltyPayStats = async (req, res) => {
         }
         
         if (regionFilter) {
-          const { getEligibleForLoyaltyPay } = require('../controllers/employeelistController');
+          const { getEligibleForLoyaltyPay } = require('../controllers/employeeListController');
           // We can't call the function directly here as it requires req/res
           // Instead, we'll count eligible personnel using the same logic
           const personnelQuery = {

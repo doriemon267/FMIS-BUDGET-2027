@@ -22,14 +22,14 @@ const {
   testHierarchicalConsolidation,
   lookupUserFromMainDB,
   updateAssignmentStatus
-} = require('../controllers/HierarchicalUserAssignmentController');
+} = require('../controllers/hierarchicalUserAssignmentController');
 const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 const { buildResponsibilityCenterId } = require('../utils/responsibilityCenterId');
 
 // NEW: Import new organizational assignment controller
 let newOrgAssignmentController = null;
 try {
-  newOrgAssignmentController = require('../controllers/UserOrganizationalAssignmentController');
+  newOrgAssignmentController = require('../controllers/userOrganizationalAssignmentController');
 } catch (error) {
   console.log('New organizational assignment controller not available, using backward compatibility mode');
 }
@@ -133,7 +133,7 @@ router.post(
   async (req, res) => {
     try {
       // Redirect to hierarchical assignments controller to focus on hierarchical system
-      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      const hierarchicalController = require('../controllers/hierarchicalUserAssignmentController');
       return await hierarchicalController.createOrUpdateHierarchicalAssignment(req, res);
     } catch (error) {
       console.error('Error in organizational assignment creation:', error);
@@ -157,7 +157,7 @@ router.get(
   async (req, res) => {
     try {
       // Redirect to hierarchical assignments controller to focus on hierarchical system
-      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      const hierarchicalController = require('../controllers/hierarchicalUserAssignmentController');
       return await hierarchicalController.getHierarchicalAssignment(req, res);
     } catch (error) {
       console.error('Error getting organizational assignment:', error);
@@ -181,7 +181,7 @@ router.get(
   async (req, res) => {
     try {
       // Redirect to hierarchical assignments controller to focus on hierarchical system
-      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      const hierarchicalController = require('../controllers/hierarchicalUserAssignmentController');
       return await hierarchicalController.getAllHierarchicalAssignments(req, res);
     } catch (error) {
       console.error('Error getting all organizational assignments:', error);
@@ -206,7 +206,7 @@ router.delete(
   async (req, res) => {
     try {
       // Redirect to hierarchical assignments controller to focus on hierarchical system
-      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      const hierarchicalController = require('../controllers/hierarchicalUserAssignmentController');
       return await hierarchicalController.deleteHierarchicalAssignment(req, res);
     } catch (error) {
       console.error('Error deleting organizational assignment:', error);

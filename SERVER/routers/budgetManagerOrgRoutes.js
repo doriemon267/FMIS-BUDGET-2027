@@ -3,7 +3,7 @@ const {
   validateOrganizationalSelection,
   getOrganizationalStats,
   testOrganizationalSegregation
-} = require('../controllers/BudgetManagerOrgController');
+} = require('../controllers/budgetManagerOrgController');
 const Router = require('express').Router;
 const { 
   authenticatedRoute, 

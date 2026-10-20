@@ -1,4 +1,4 @@
-const { getStatus, getStatusById } = require('../controllers/StatusController');
+const { getStatus, getStatusById } = require('../controllers/statusController');
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

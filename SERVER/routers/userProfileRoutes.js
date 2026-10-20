@@ -1,4 +1,4 @@
-const { getCurrentUserProfile } = require('../controllers/UserProfileController');
+const { getCurrentUserProfile } = require('../controllers/userProfileController');
 const Router = require('express').Router;
 const isAuth = require('../middleware/is_auth');
 

@@ -1,7 +1,7 @@
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 
-const { getEligibleForLoyaltyPay } = require("../controllers/EmployeeListController");
+const { getEligibleForLoyaltyPay } = require("../controllers/employeeListController");
 const loyaltyPayRouter = Router();
 // Apply authentication middleware to all routes in this router
 loyaltyPayRouter.use(isAuth);

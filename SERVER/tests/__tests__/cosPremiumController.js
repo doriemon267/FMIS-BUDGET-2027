@@ -31,7 +31,7 @@ const {
   getGrandTotalCOS,
   updateCOSPersonnel,
   updateCOSPremiumSettings,
-} = require('../../controllers/COSPersonnelController');
+} = require('../../controllers/cosPersonnelController');
 
 const createResponse = () => {
   const res = {};

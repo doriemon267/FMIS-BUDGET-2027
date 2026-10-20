@@ -1,6 +1,6 @@
 const Settings = require("../models/Settings");
 const RATA = require("../models/RATA");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeCourtAppearance = require("../models/employeeCourtAppearance");
 const MealAllowance = require("../models/mealAllowance");
 const mongoose = require("mongoose");

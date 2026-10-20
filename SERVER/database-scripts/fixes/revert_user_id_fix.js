@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
-const UserRegionAssignment = require('./models/UserRegionAssignment');
+const UserRegionAssignment = require('../../models/UserRegionAssignment');
 // Load environment variables
 require('dotenv').config();
 // Connect to MongoDB
-require('./config/mongo_db')();
+require('../../config/mongo_db')();
 const revertUserIdFix = async () => {
   try {
     ...');

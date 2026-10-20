@@ -6,7 +6,7 @@ const {
   deleteGroup,
   getCategoriesByGroup,
   getGroupedCategoriesSummary,
-} = require("../controllers/IncomeCategoryGroupController");
+} = require("../controllers/incomeCategoryGroupController");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

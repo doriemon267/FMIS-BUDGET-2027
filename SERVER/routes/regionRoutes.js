@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const regionController = require('../controllers/RegionController');
+const regionController = require('../controllers/regionController');
 // Get all regions
 router.get('/', regionController.getAllRegions);
 // Get region information (equivalences and special regions)

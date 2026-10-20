@@ -5,7 +5,7 @@ const {
   deleteLoyaltyPay,
   getLoyaltyPayStats,
 } = require("../controllers/loyaltyPayController");
-const { getEligibleForLoyaltyPay } = require("../controllers/employeelistController");
+const { getEligibleForLoyaltyPay } = require("../controllers/employeeListController");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

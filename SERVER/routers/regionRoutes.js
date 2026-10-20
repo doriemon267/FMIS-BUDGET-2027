@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const isAuth = require('../middleware/is_auth');
-const regionController = require('../controllers/RegionController');
+const regionController = require('../controllers/regionController');
 // Apply authentication middleware to all routes in this router
 router.use(isAuth);
 // Get all regions

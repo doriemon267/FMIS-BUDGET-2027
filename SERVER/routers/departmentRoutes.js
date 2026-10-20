@@ -1,4 +1,4 @@
-const { getAllDepartment, getDepartmentById, createDepartment, updateDepartment, deleteDepartment } = require('../controllers/DepartmentController');
+const { getAllDepartment, getDepartmentById, createDepartment, updateDepartment, deleteDepartment } = require('../controllers/departmentController');
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

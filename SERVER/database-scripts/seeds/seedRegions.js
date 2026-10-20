@@ -3,6 +3,6 @@
  * Run with: node seedRegions.js
  */
 require('dotenv').config();
-const seedRegions = require('./migrations/seedRegions');
+const seedRegions = require('../../migrations/seedRegions');
 // Run the seeding
 seedRegions();

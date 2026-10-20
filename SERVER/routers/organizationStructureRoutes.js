@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const isAuth = require('../middleware/is_auth');
 const requireDynamicPermission = require('../middleware/requireDynamicPermission');
-const organizationStructureController = require('../controllers/OrganizationStructureController');
+const organizationStructureController = require('../controllers/organizationStructureController');
 
 // Apply authentication middleware
 router.use(isAuth);

@@ -9,7 +9,7 @@ const {
   createPositionTitle,
   updatePositionTitle,
   deletePositionTitle
-} = require('../controllers/PositionTitleController.js');
+} = require('../controllers/positionTitleController.js');
 // Apply authentication to all position routes
 positionrouter.use(isAuth);
 positionrouter.get('/positions', getAllPositionTitles);

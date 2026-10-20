@@ -66,7 +66,7 @@ router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditT
 router.post('/proposals/:id/action', requireDynamicPermission('/proposal'), async (req, res, next) => {
   // Lock enforcement: block workflow actions if proposal is currently locked by a different user
   try {
-    const ProposalLockingService = require('../services/ProposalLockingService');
+    const ProposalLockingService = require('../services/proposalLockingService');
     const lockStatus = await ProposalLockingService.getLockStatus(req.params.id);
     // Determine calling user's ID from auth token (req.user set by isAuth)
     const requestingUserId = String(

@@ -3,7 +3,7 @@ const router = express.Router();
 const isAuth = require('../middleware/is_auth');
 const requireDynamicPermission = require('../middleware/requireDynamicPermission');
 
-const incomeController = require("../controllers/IncomeController");
+const incomeController = require("../controllers/incomeController");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
 const { budgetRoleVisibilityControl } = require("../middleware/budgetRoleVisibilityControl");
 const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');

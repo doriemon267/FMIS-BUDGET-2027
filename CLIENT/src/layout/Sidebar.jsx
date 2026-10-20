@@ -28,7 +28,7 @@ import {
 
 import { useDrawer } from "../context/DrawerContext";
 import { useUser } from "../context/UserContext";
-import LogoutDialog from "./LogoutDialog"; // Tiyaking tama ang path papunta sa component
+import LogoutDialog from "../components/LogoutDialog"; // Tiyaking tama ang path papunta sa component
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import {
   isAccountingRoles,

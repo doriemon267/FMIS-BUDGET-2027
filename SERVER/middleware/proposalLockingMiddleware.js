@@ -1,4 +1,4 @@
-const ProposalLockingService = require('../services/ProposalLockingService');
+const ProposalLockingService = require('../services/proposalLockingService');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 
 /**

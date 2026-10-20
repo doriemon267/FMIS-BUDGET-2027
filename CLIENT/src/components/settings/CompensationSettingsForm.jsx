@@ -39,7 +39,7 @@ import {
   MdCalendarToday,
   MdCategory
 } from "react-icons/md";
-import PesoIcon from "../../icons/PesoIcon";
+import PesoIcon from "../icons/PesoIcon";
 
 // Component for numeric input formatting (for monetary values)
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {

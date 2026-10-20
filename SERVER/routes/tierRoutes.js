@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const tierController = require('../controllers/tierController');
-const { protect } = require('../middleware/auth');
+const protect = require('../middleware/is_auth');
 
 // @desc    Get tier data for a specific context (fiscal year, region, etc.)
 // @route   GET /api/tier

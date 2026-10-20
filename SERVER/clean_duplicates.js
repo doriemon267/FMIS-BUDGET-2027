@@ -9,7 +9,7 @@ async function run() {
     await mongoose.connect('mongodb://172.16.4.98:27017/fmis_budget');
     console.log('Connected to MongoDB');
 
-    const CapitalOutlay = require('./models/capitalOutlay');
+    const CapitalOutlay = require('./models/CapitalOutlay');
 
     // Find duplicates based on the index that failed:
     // proposalId, uacsCode, region, department, fiscalYear, sublineItem, category

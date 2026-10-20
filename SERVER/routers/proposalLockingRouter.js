@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const ProposalLockingService = require('../services/ProposalLockingService');
+const ProposalLockingService = require('../services/proposalLockingService');
 const authMiddleware = require('../middleware/is_auth');
 
 /**

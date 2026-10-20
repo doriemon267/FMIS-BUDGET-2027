@@ -4,7 +4,7 @@ const {
   createSpecialCounselAllowance,
   updateSpecialCounselAllowance,
   deleteSpecialCounselAllowance,
-} = require("../controllers/SpecialCounselAllowanceController");
+} = require("../controllers/specialCounselAllowanceController");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

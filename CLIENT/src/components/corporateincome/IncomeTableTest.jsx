@@ -12,7 +12,7 @@ import {
   Typography
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import api from '../../utils/api';
+import api from '../../config/api';
 
 const IncomeTableTest = () => {
   // Basic state

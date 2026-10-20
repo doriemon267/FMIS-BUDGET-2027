@@ -7,7 +7,7 @@ const {
   getCOSByParams,
   getCOSPremiumSettings,
   updateCOSPremiumSettings
-} = require("../controllers/cospersonnelController");
+} = require("../controllers/cosPersonnelController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
 const isAuth = require('../middleware/is_auth');

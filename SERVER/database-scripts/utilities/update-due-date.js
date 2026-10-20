@@ -1,6 +1,6 @@
 // Script to update due date to allow deletions
 const mongoose = require('mongoose');
-const Settings = require('./models/Settings');
+const Settings = require('../../models/Settings');
 const DB_URL = 'mongodb://172.16.4.98:27017/fmis_budget';
 async function updateDueDate() {
   try {

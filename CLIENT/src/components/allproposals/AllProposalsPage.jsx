@@ -1,11 +1,11 @@
 import React, { useRef, useState, useEffect } from "react";
-import CustomPage from "../../src/components/myproposal/ProposalCustomPage";
-import TextSearchable from "../global/components/TextSearchable";
+import CustomPage from "../myproposal/ProposalCustomPage";
+import TextSearchable from "../../global/components/TextSearchable";
 import {
   ViewMenuItem,
   ApproveMenuItem,
   RejectMenuItem,
-} from "../../src/components/myproposal/ProposalActions";
+} from "../myproposal/ProposalActions";
 import WorkflowStatusBadge from "../workflow/WorkflowStatusBadge";
 import WorkflowActionsRefactored from "../workflow/WorkflowActionsRefactored";
 import WorkflowSummary from "../workflow/WorkflowSummary";

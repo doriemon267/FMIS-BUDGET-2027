@@ -1,4 +1,4 @@
-const { checkUserOrganizationalAccess } = require('../controllers/UserOrganizationalAssignmentController');
+const { checkUserOrganizationalAccess } = require('../controllers/userOrganizationalAssignmentController');
 const { hasFullAccess } = require('./securityMiddleware');
 // Middleware to control proposal access based on user's organizational assignments
 const proposalAccessControl = (operation = 'read') => {

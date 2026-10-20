@@ -584,10 +584,13 @@ async function persistProposalTotals(proposal) {
   
   // DETAILED BREAKDOWN
   console.log('[recalculate] Subsidy breakdown - Individual personnel records:');
-  const allRecords = await PersonnelServices.find({ proposalId: proposal._id }).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeSubsidyAmount').lean();
+  const allRecords = await PersonnelServices.find({ proposalId: proposal._id })
+    .select('_id employeeFullName subsidyAmount chargedToIncomeEligible chargedToIncomeSubsidyAmount')
+    .lean();
   console.log('[recalculate] Total records:', allRecords.length);
   for (const rec of allRecords) {
-    console.log(`  - ${rec.name}: subsidyAmount=${rec.subsidyAmount}, chargedToIncomeEligible=${rec.chargedToIncomeEligible}, chargedToIncomeSubsidyAmount=${rec.chargedToIncomeSubsidyAmount}`);
+    const recordLabel = rec.employeeFullName || String(rec._id);
+    console.log(`  - ${recordLabel}: subsidyAmount=${rec.subsidyAmount}, chargedToIncomeEligible=${rec.chargedToIncomeEligible}, chargedToIncomeSubsidyAmount=${rec.chargedToIncomeSubsidyAmount}`);
   }
 
   proposal.totalIncome = adjustedIncomeTotal;

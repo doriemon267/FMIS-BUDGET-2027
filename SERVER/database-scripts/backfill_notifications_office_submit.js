@@ -26,7 +26,7 @@ const { getUsersWithWorkflowRole } = require('../helpers/workflowRoleManager');
 const getModelByEntity = (entity) => {
   switch (entity) {
     case 'personnel':
-      return require('../models/personnelServices');
+      return require('../models/PersonnelServices');
     case 'mooe':
       return require('../models/mooeProposals');
     case 'capital':
@@ -36,7 +36,7 @@ const getModelByEntity = (entity) => {
     case 'budgetarySupport':
       return require('../models/BudgetarySupport');
     default:
-      return require('../models/personnelServices');
+      return require('../models/PersonnelServices');
   }
 };
 

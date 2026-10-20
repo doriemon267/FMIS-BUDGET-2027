@@ -6,7 +6,7 @@ const {
   getEligibleForLoyaltyPay,
   getEligibleForRetirement,
   getEmployeeStats,
-} = require("../controllers/employeelistController");
+} = require("../controllers/employeeListController");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

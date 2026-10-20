@@ -7,7 +7,7 @@ const {
   updateSubcategoryRegions,
   getSubcategoriesByRegion,
   assignSubcategoryToRegion
-} = require("../controllers/IncomeSubcategoryControllerNew");
+} = require("../controllers/incomeSubcategoryControllerNew");
 const Router = require("express").Router;
 const isAuth = require('../middleware/is_auth');
 

@@ -1,4 +1,4 @@
-const MedicalAllowance = require("../models/medicalAllowance");
+const MedicalAllowance = require("../models/MedicalAllowance");
 const Employee = require("../models/employee_master");
 const Settings = require("../models/Settings");
 const { calculateMedicalAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
