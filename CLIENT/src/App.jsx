@@ -113,7 +113,17 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route path="/proposal" element={<Proposals />} />
+        <Route
+          path="/proposal"
+          element={
+            <ProtectedRoute
+              routeKey="/proposal"
+              requiredWorkflowRoles={["preparer", "superAdmin"]}
+            >
+              <Proposals />
+            </ProtectedRoute>
+          }
+        />
         {/* <Route
           path="/myProposals"
           element={

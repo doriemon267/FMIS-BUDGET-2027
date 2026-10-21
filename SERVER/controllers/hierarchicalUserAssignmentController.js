@@ -17,7 +17,7 @@ const { mainConnection } = require('../config/mongo_db');
 const { WORKFLOW_ROLES } = require('../constants/workflowConstants');
 const DEBUG = process.env.DEBUG_LOGS === 'true';
 
-const resolveMainDbPositionTitle = async (userIds = []) => {
+const resolveMainDbUserData = async (userIds = []) => {
   const identifierValues = userIds
     .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
     .map((value) => String(value).trim());
@@ -41,13 +41,47 @@ const resolveMainDbPositionTitle = async (userIds = []) => {
     }).lean();
   }
 
-  return userDatasDoc?.positionTitle ||
-    userDatasDoc?.PositionTitle ||
-    userDatasDoc?.position_title ||
-    userDatasDoc?.position ||
-    userDatasDoc?.designation ||
-    userDatasDoc?.Designation ||
-    null;
+  return userDatasDoc || null;
+};
+
+const getMainDbUserProfile = async (userIds = []) => {
+  const userData = await resolveMainDbUserData(userIds);
+  if (!userData) return null;
+
+  const firstName = userData.firstName || userData.FirstName || userData.first_name || userData.firstname || userData.first || userData.givenName || '';
+  const middleName = userData.middleName || userData.MiddleName || userData.middle_name || userData.middlename || userData.middle || '';
+  const lastName = userData.lastName || userData.LastName || userData.last_name || userData.lastname || userData.last || userData.surname || '';
+  const suffix = userData.suffix || userData.Suffix || userData.nameSuffix || userData.NameSuffix || '';
+  const fullName = [firstName, middleName, lastName, suffix].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+
+  return {
+    userName:
+      fullName || userData.fullName || userData.FullName || userData.userName || userData.UserName ||
+      userData.name || userData.Name || userData.particular || userData.Particular ||
+      userData.particularName || userData.ParticularName || userData.username ||
+      userData.Username || null,
+    email:
+      userData.email || userData.Email || userData.userEmail || userData.UserEmail ||
+      userData.emailAddress || userData.EmailAddress || userData.mail || null,
+    positionTitle:
+      userData.positionTitle || userData.PositionTitle || userData.position_title ||
+      userData.position || userData.designation || userData.Designation || null,
+  };
+};
+
+const resolveMainDbPositionTitle = async (userIds = []) => {
+  const profile = await getMainDbUserProfile(userIds);
+  return profile?.positionTitle || null;
+};
+
+const resolveMainDbUserName = async (userIds = []) => {
+  const profile = await getMainDbUserProfile(userIds);
+  return profile?.userName || null;
+};
+
+const resolveMainDbUserEmail = async (userIds = []) => {
+  const profile = await getMainDbUserProfile(userIds);
+  return profile?.email || null;
 };
 
 const getNormalizedAuthenticatedUserIds = (user = {}) => {
@@ -191,7 +225,7 @@ const lookupUserFromMainDB = async (req, res) => {
     // Extract relevant user information
     const userInfo = {
       userId: userData.user,
-      userName: userData.fullName || userData.userName || userData.name,
+      userName: userData.fullName || userData.userName || userData.name || userData.particular || userData.Particular,
       // Email is not stored in assigned_roles; we'll try to enrich it from the budget DB's User collection below.
       roles: roleNames, // Return actual role names, not just IDs
       department: userData.department || userData.departmentName,
@@ -200,9 +234,12 @@ const lookupUserFromMainDB = async (req, res) => {
       positionTitle: null
     };
     
-    // Enrich Position Title from FMIS Main's user_datas collection using the user ID.
+    // Enrich missing name, email, and position title from FMIS Main's user_datas.
     try {
-      userInfo.positionTitle = await resolveMainDbPositionTitle([userData.user, userId]);
+      const mainUserProfile = await getMainDbUserProfile([userData.user, userId]);
+      userInfo.userName = mainUserProfile?.userName || userInfo.userName || null;
+      userInfo.email = mainUserProfile?.email || null;
+      userInfo.positionTitle = mainUserProfile?.positionTitle || null;
     } catch (userDataErr) {
       if (DEBUG) {
         console.debug('ℹ️ Failed to enrich user positionTitle from user_datas collection:', userDataErr?.message);
@@ -236,7 +273,7 @@ const lookupUserFromMainDB = async (req, res) => {
         );
         const allIds = [...stringIds, ...numericIds];
 
-        const userDoc = await User.findOne({
+      const userDoc = await User.findOne({
           userId: { $in: allIds }
         }).lean();
 
@@ -398,6 +435,17 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       positionTitle // Support saving position title
     } = req.body;
 
+    let mainUserProfile = null;
+    try {
+      mainUserProfile = await getMainDbUserProfile([userId]);
+    } catch (profileLookupErr) {
+      if (DEBUG) {
+        console.debug('ℹ️ Could not resolve assignment user profile from user_datas:', profileLookupErr?.message);
+      }
+    }
+    const resolvedUserName = userName || mainUserProfile?.userName || null;
+    const resolvedInputEmail = email || mainUserProfile?.email || null;
+
     // Handle backward compatibility: map new field names to old ones
     const effectiveAssignmentLevel = assignmentLevel || accessScope;
     const normalizedEffectiveLevel = (effectiveAssignmentLevel || '').toUpperCase();
@@ -438,7 +486,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       }
     }
 
-    if (!userId || !userName || !email || !normalizedEffectiveLevel) {
+    if (!userId || !resolvedUserName || !resolvedInputEmail || !normalizedEffectiveLevel) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: userId, userName, email, assignmentLevel/accessScope',
@@ -514,7 +562,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     });
     
     // Try to override email with the canonical value from User collection when available
-    let resolvedEmail = email;
+    let resolvedEmail = resolvedInputEmail;
     try {
       const idCandidates = [];
       const pushId = (v) => {
@@ -556,7 +604,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       }
     }
 
-    let resolvedPositionTitle = positionTitle || null;
+    let resolvedPositionTitle = positionTitle || mainUserProfile?.positionTitle || null;
     if (!resolvedPositionTitle) {
       try {
         resolvedPositionTitle = await resolveMainDbPositionTitle([userId]);
@@ -569,7 +617,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
 
     const assignmentPayload = {
       userId,
-      userName,
+      userName: resolvedUserName,
       email: resolvedEmail,
       positionTitle: resolvedPositionTitle,
       // NEW: Support multiple roles from FMIS main system
@@ -803,6 +851,9 @@ const getHierarchicalAssignment = async (req, res) => {
           userDoc?.userEmail ||
           userDoc?.UserEmail ||
           null;
+        if (!latestEmail) {
+          latestEmail = await resolveMainDbUserEmail([userId]);
+        }
       }
 
       if (latestEmail && latestEmail !== assignment.email) {
@@ -840,6 +891,17 @@ const getHierarchicalAssignment = async (req, res) => {
         }
       } catch (lookupError) {
         console.warn(`Failed to lookup userName for ${userId}:`, lookupError.message);
+      }
+      if (!userName) {
+        try {
+          userName = await resolveMainDbUserName([userId]);
+          if (assignmentDoc && userName) {
+            assignmentDoc.userName = userName;
+            await assignmentDoc.save().catch(err => console.warn('Failed to save userName:', err.message));
+          }
+        } catch (profileLookupError) {
+          console.warn(`Failed to lookup user profile for ${userId}:`, profileLookupError.message);
+        }
       }
     }
     
@@ -998,7 +1060,12 @@ const getAllHierarchicalAssignments = async (req, res) => {
             ? canonicalEmailsByUserId.get(normalizedAssignmentUserId)
             : null;
           const isOwnAssignment = authenticatedUserIds.has(normalizedAssignmentUserId);
-          const resolvedEmail = (isOwnAssignment && requestUserEmail) || canonicalEmail || assignment.email;
+          let resolvedEmail = (isOwnAssignment && requestUserEmail) || canonicalEmail || assignment.email;
+          let mainUserProfile = null;
+          if (!resolvedEmail || !assignment.userName) {
+            mainUserProfile = await getMainDbUserProfile([assignment.userId]);
+            resolvedEmail = resolvedEmail || mainUserProfile?.email || null;
+          }
 
           if (resolvedEmail && resolvedEmail !== assignment.email) {
             pendingEmailSyncWrites.push({
@@ -1031,6 +1098,7 @@ const getAllHierarchicalAssignments = async (req, res) => {
               console.warn(`Failed to lookup userName for ${assignment.userId}:`, lookupError.message);
             }
           }
+          userName = userName || mainUserProfile?.userName || null;
           
           // Shape to match UI expectations
           const officeId = assignment.regionId && assignment.departmentId

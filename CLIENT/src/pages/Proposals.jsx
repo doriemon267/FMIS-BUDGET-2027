@@ -3,7 +3,6 @@ import { Navigate } from "react-router-dom";
 import ProposalCustomPage from "../components/proposals/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
 import { useUser } from "../context/UserContext";
-import { hasPermission } from "../utils/permissions";
 import api from "../config/api";
 import logger from "../utils/logger";
 
@@ -12,45 +11,11 @@ const Proposals = () => {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [blockedBySubmission, setBlockedBySubmission] = useState(false);
 
-  const userRoles = useMemo(
-    () => (currentUser?.Roles || []).map((role) => String(role).toUpperCase()),
-    [currentUser]
-  );
-
-  const canOpenCreateProposalPage = useMemo(() => {
-    const isSuperAdminUser =
-      userRoles.includes("SUPER ADMIN") ||
-      userRoles.includes("SUPER_ADMIN") ||
-      userRoles.includes("SUPERADMIN");
-
-    if (isSuperAdminUser) {
-      return true;
-    }
-
-    const hasCreatePermission =
-      hasPermission(currentUser, "CreateProposals") ||
-      hasPermission(currentUser, "EditOwnProposals");
-
-    const hasDisallowedWorkflowRole =
-      userRoles.includes("BUDGET MANAGER") ||
-      userRoles.includes("BUDGET_MANAGER") ||
-      userRoles.includes("BUDGET OFFICER") ||
-      userRoles.includes("BUDGET_OFFICER") ||
-      userRoles.includes("BUDGET APPROVER") ||
-      userRoles.includes("BUDGET_APPROVER") ||
-      userRoles.includes("BUDGET REVIEWER") ||
-      userRoles.includes("BUDGET_REVIEWER") ||
-      userRoles.includes("BUDGET PLANNING ANALYST") ||
-      userRoles.includes("BUDGET_PLANNING_ANALYST");
-
-    return hasCreatePermission && !hasDisallowedWorkflowRole;
-  }, [currentUser, userRoles]);
-
   useEffect(() => {
     let isMounted = true;
 
     const checkSubmittedProposals = async () => {
-      if (!currentUser || !canOpenCreateProposalPage) {
+      if (!currentUser) {
         if (isMounted) setCheckingAccess(false);
         return;
       }
@@ -78,7 +43,7 @@ const Proposals = () => {
     return () => {
       isMounted = false;
     };
-  }, [currentUser, canOpenCreateProposalPage]);
+  }, [currentUser]);
 
   const testSchema = useMemo(
     () => ({
@@ -129,7 +94,7 @@ const Proposals = () => {
     return null;
   }
 
-  if (!canOpenCreateProposalPage || blockedBySubmission) {
+  if (blockedBySubmission) {
     return <Navigate to="/not-authorized" replace />;
   }
   return <ProposalCustomPage dataListName="tests" schema={testSchema} />;

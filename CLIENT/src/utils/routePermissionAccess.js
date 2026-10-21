@@ -116,8 +116,7 @@ export const canAccessRoutePermission = ({
   if (routePermission.isActive === false) return Boolean(fallbackAllow);
 
   const userRoles = getUserRouteRoles(currentUser, additionalRoles);
-  const isSuperAdmin = userRoles.has(normalizeRouteRole("SUPER_ADMIN"));
-  if (isSuperAdmin) return true;
+  // Route permissions are authoritative, including for Super Admin users.
 
   const excludedRoles = routePermission.excludeRoles || [];
   if (
@@ -147,4 +146,3 @@ export const canAccessRoutePermission = ({
     userRoles.has(normalizeRouteRole(role))
   );
 };
-

@@ -4,10 +4,12 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { Navigate } from "react-router-dom";
 import api from "../../config/api";
 
 import PropTypes from "prop-types";
 import { useRegion } from "../../context/RegionContext";
+import { useRoutePermissions } from "../../context/RoutePermissionContext";
 import { IoPersonCircleOutline } from "react-icons/io5";
 import { GrHostMaintenance } from "react-icons/gr";
 import { FaFileContract, FaPesoSign } from "react-icons/fa6";
@@ -123,6 +125,7 @@ const ProposalCustomPage = ({
   description = "",
 }) => {
   const { currentUser } = useUser();
+  const { getRoutePermission } = useRoutePermissions();
   const { activeRegion, loading: isRegionLoading } = useRegion();
   const { readOnly, canCreate } = useUserRestrictions();
   const queryClient = useQueryClient();
@@ -161,6 +164,10 @@ const ProposalCustomPage = ({
   const [activeFiscalYear, setActiveFiscalYear] = useState("");
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("");
   const [activeBudgetType, setActiveBudgetType] = useState("");
+  const proposalRoutePermission = getRoutePermission("/proposal");
+  const isActiveBudgetTypeAllowed =
+    !Array.isArray(proposalRoutePermission?.applicableProposalTypes) ||
+    proposalRoutePermission.applicableProposalTypes.includes(activeBudgetType);
   const [activeDueDate, setActiveDueDate] = useState(null);
   const [isDueDatePassed, setIsDueDatePassed] = useState(true); // Conservative: block until API confirms due date is valid
   const [regionCeilingAmount, setRegionCeilingAmount] = useState(null);
@@ -2087,6 +2094,10 @@ const ProposalCustomPage = ({
       </Box>
     );
   };
+
+  if (activeBudgetType && !isActiveBudgetTypeAllowed) {
+    return <Navigate to="/not-authorized" replace />;
+  }
 
   return (
     <Box sx={{ p: 0, bgcolor: "white", minHeight: "100vh" }}>
