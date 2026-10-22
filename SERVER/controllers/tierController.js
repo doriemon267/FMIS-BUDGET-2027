@@ -377,6 +377,18 @@ const getTierData = async (req, res) => {
  * can show the current version's values instead of "original" API values.
  * Uses same region-matching as getRevisions (ID + name) so we find Tier saved with either.
  */
+// Optional per-tier corporate income split. Only copied when present so legacy
+// subsidy-only rows keep falling back to "all income in Tier 1" on the client.
+const pickTierIncome = (item) => {
+  const out = {};
+  ['tier1Income', 'tier2Income'].forEach((key) => {
+    if (item && item[key] !== undefined && item[key] !== null && item[key] !== '') {
+      out[key] = Number(item[key]) || 0;
+    }
+  });
+  return out;
+};
+
 const getTierSavedItems = async (req, res) => {
   try {
     const { fiscalYear, region, department, division } = req.query;
@@ -535,7 +547,11 @@ const saveTierData = async (req, res) => {
       !Number.isFinite(Number(item?.tier1 ?? 0)) ||
       !Number.isFinite(Number(item?.tier2 ?? 0)) ||
       Number(item?.tier1 ?? 0) < 0 ||
-      Number(item?.tier2 ?? 0) < 0
+      Number(item?.tier2 ?? 0) < 0 ||
+      !Number.isFinite(Number(item?.tier1Income ?? 0)) ||
+      !Number.isFinite(Number(item?.tier2Income ?? 0)) ||
+      Number(item?.tier1Income ?? 0) < 0 ||
+      Number(item?.tier2Income ?? 0) < 0
     );
     if (hasInvalidAmount) {
       return res.status(400).json({ message: 'Tier amounts must be finite, non-negative numbers' });
@@ -549,6 +565,7 @@ const saveTierData = async (req, res) => {
         category: cat,
         tier1: item.tier1 || 0,
         tier2: item.tier2 || 0,
+        ...pickTierIncome(item),
       };
     });
 
@@ -606,6 +623,7 @@ const saveTierData = async (req, res) => {
           category: item.category,
           tier1: item.tier1 || 0,
           tier2: item.tier2 || 0,
+          ...pickTierIncome(item),
           description: item.description || '',
         })),
         createdBy: userObjectId,
@@ -918,6 +936,7 @@ const restoreRevision = async (req, res) => {
           category: i.category,
           tier1: i.tier1 || 0,
           tier2: i.tier2 || 0,
+          ...pickTierIncome(i),
           description: i.description || '',
         })),
         createdBy: userObjectId,
@@ -931,6 +950,7 @@ const restoreRevision = async (req, res) => {
             category: i.category,
             tier1: Number(i.tier1) || 0,
             tier2: Number(i.tier2) || 0,
+            ...pickTierIncome(i),
           }))
         : [];
       tierDoc.items = restoredItems;
@@ -956,6 +976,7 @@ const restoreRevision = async (req, res) => {
           category: i.category,
           tier1: i.tier1,
           tier2: i.tier2,
+          ...pickTierIncome(i),
         })),
         createdBy: userObjectId,
         createdByName: createdByName || undefined,

@@ -21,6 +21,14 @@ const TierItemSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  // Corporate income split per tier. No default so legacy saves (subsidy-only)
+  // stay distinguishable and the client can fall back to the full income in Tier 1.
+  tier1Income: {
+    type: Number,
+  },
+  tier2Income: {
+    type: Number,
+  },
 });
 
 const TierSchema = new mongoose.Schema({

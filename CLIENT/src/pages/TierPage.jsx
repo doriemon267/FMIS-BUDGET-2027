@@ -658,6 +658,8 @@ const TierPage = () => {
           category,
           tier1: Number(v.tier1) || 0,
           tier2: Number(v.tier2) || 0,
+          tier1Income: Number(v.tier1Income) || 0,
+          tier2Income: Number(v.tier2Income) || 0,
           description: v.description || key,
         };
       });
@@ -731,6 +733,8 @@ const TierPage = () => {
           category,
           tier1: Number(v.tier1) || 0,
           tier2: Number(v.tier2) || 0,
+          tier1Income: Number(v.tier1Income) || 0,
+          tier2Income: Number(v.tier2Income) || 0,
           description: v.description || key,
         };
       });

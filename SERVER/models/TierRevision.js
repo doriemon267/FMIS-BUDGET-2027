@@ -6,6 +6,8 @@ const TierRevisionItemSchema = new mongoose.Schema({
   category: { type: String, required: true, enum: ['Personnel', 'MOOE', 'Capital Outlay'] },
   tier1: { type: Number, default: 0 },
   tier2: { type: Number, default: 0 },
+  tier1Income: { type: Number },
+  tier2Income: { type: Number },
 }, { _id: false });
 
 const TierRevisionSchema = new mongoose.Schema({
