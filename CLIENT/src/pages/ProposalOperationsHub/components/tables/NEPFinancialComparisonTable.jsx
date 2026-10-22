@@ -178,7 +178,7 @@ const NEPFinancialComparisonTable = ({
             </TableRow>
           </TableHead>
           <TableBody>
-            {!currentItems.length ? (
+            {!sections.some(section => section.rows.length > 0) ? (
               <TableRow>
                 <TableCell colSpan={columnCount} align="center" sx={{ py: 7 }}>
                   <Typography sx={{ fontWeight: 800 }}>{emptyLabel}</Typography>
@@ -189,6 +189,17 @@ const NEPFinancialComparisonTable = ({
               </TableRow>
             ) : (
               <>
+                {!currentItems.length && (
+                  <TableRow>
+                    <TableCell colSpan={columnCount} sx={{ py: 0.75, borderBottom: 'none' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                        No NEP records are attached yet — locked Initial Proposal values are shown for
+                        reference. NEP fields become editable once NEP records are created for this
+                        proposal.
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
                 {sections.map(section => (
                   <React.Fragment key={section.title}>
                     <TableRow>
