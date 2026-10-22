@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import api from "../config/api";
@@ -47,7 +47,6 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import GenericPdfPreviewDialog from '../components/GenericPdfPreviewDialog';
-import NEPCeilingSummary from "./ProposalOperationsHub/components/NEPCeilingSummary";
 
 const TierPage = () => {
   const navigate = useNavigate();
@@ -56,9 +55,8 @@ const TierPage = () => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const { activeRegion, availableRegions } = useRegion();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const appliedUrlParamsRef = useRef(false);
-  const proposalScopeHydratedRef = useRef(null);
   const pendingDepartmentParamRef = useRef(null);
   const pendingDivisionParamRef = useRef(null);
   const [activeFiscalYear, setActiveFiscalYear] = useState("");
@@ -94,214 +92,7 @@ const TierPage = () => {
   const [viewRevisionLoading, setViewRevisionLoading] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: null });
 
-  const [derivedProposal, setDerivedProposal] = useState(null);
-  const [isProposalScopeLoading, setIsProposalScopeLoading] = useState(false);
-  const [nepReportContext, setNepReportContext] = useState(null);
 
-  const isNepFromUrl = searchParams.get("budgetType")?.toUpperCase() === "NEP";
-  const proposalIdFromUrl = searchParams.get("proposalId");
-
-  const proposalForCeiling = proposalIdFromUrl
-    ? { _id: proposalIdFromUrl, modelType: "NEP" }
-    : (derivedProposal ? { ...derivedProposal, modelType: "NEP" } : null);
-
-  const liveCeilingTotals = useMemo(() => {
-    const report = tierData?.reportSummary;
-    if (!report) return null;
-
-    const sources = report.sourcesOfFunds || {};
-    const uses = report.usesOfFunds || {};
-    const categoryIncome = report.usesCorporateIncome || {};
-    const budgetarySupport = sources.budgetarySupport || {};
-    const personnel = uses["Personnel Services"] || {};
-    const mooe = uses["Maintenance and Other Operating Expenses"] || {};
-    const capitalOutlay = uses["Capital Outlay"] || {};
-
-    return {
-      totalExpenses: Number(sources.proposedBudget || sources.total || 0),
-      proposedBudget: Number(sources.proposedBudget || sources.total || 0),
-      projectedSubsidy: Number(budgetarySupport.total || 0),
-      personnelServices:
-        Number(personnel.total || 0) + Number(categoryIncome["Personnel Services"] || 0),
-      mooe:
-        Number(mooe.total || 0) +
-        Number(categoryIncome["Maintenance and Other Operating Expenses"] || 0),
-      capitalOutlay:
-        Number(capitalOutlay.total || 0) + Number(categoryIncome["Capital Outlay"] || 0),
-      tier1: Number(budgetarySupport.tier1 || 0),
-      tier2: Number(budgetarySupport.tier2 || 0),
-      corporateIncome: Number(sources.corporateIncome || 0),
-    };
-  }, [tierData]);
-
-  useEffect(() => {
-    if (
-      !proposalIdFromUrl ||
-      String(proposalScopeHydratedRef.current || "") === String(proposalIdFromUrl)
-    ) {
-      return;
-    }
-
-    const hasPersistentScope =
-      Boolean(searchParams.get("fiscalYear")) && Boolean(searchParams.get("region"));
-    if (hasPersistentScope) {
-      proposalScopeHydratedRef.current = String(proposalIdFromUrl);
-      return;
-    }
-
-    const getScopeValue = (value, keys = []) => {
-      if (value == null) return "";
-      if (typeof value !== "object") return String(value);
-      for (const key of keys) {
-        if (value[key] != null && value[key] !== "") return String(value[key]);
-      }
-      return "";
-    };
-
-    let cancelled = false;
-    const hydrateProposalScope = async () => {
-      setIsProposalScopeLoading(true);
-      try {
-        const response = await api.get(`/api/allproposal/proposals/${proposalIdFromUrl}`);
-        if (cancelled) return;
-
-        const proposal = response?.data?.data || response?.data?.proposal || response?.data;
-        const next = new URLSearchParams(searchParams);
-        const fiscalYear = getScopeValue(proposal?.fiscalYear);
-        const regionValue = getScopeValue(
-          proposal?.region ||
-            proposal?.regionName ||
-            proposal?.Region ||
-            proposal?.responsibilityCenter,
-          [
-          "_id",
-          "id",
-          "Region",
-          "RegionName",
-          "regionName",
-          "name",
-          ]
-        );
-        const departmentValue = getScopeValue(proposal?.department, [
-          "_id",
-          "id",
-          "Department",
-          "departmentName",
-          "name",
-        ]);
-        const divisionValue = getScopeValue(
-          proposal?.division || proposal?.responsibilityCenter,
-          ["_id", "id", "Division", "divisionName", "name"]
-        );
-
-        if (fiscalYear && !next.get("fiscalYear")) next.set("fiscalYear", fiscalYear);
-        if (regionValue && !next.get("region")) next.set("region", regionValue);
-        if (departmentValue && !next.get("department")) {
-          next.set("department", departmentValue);
-        }
-        if (divisionValue && !next.get("division")) next.set("division", divisionValue);
-
-        proposalScopeHydratedRef.current = String(proposalIdFromUrl);
-        if (next.toString() !== searchParams.toString()) {
-          setSearchParams(next, { replace: true });
-        }
-      } catch (error) {
-        if (cancelled) return;
-        console.error("Error restoring Tier scope from proposal:", error);
-        setSnackbar({
-          open: true,
-          message:
-            error?.response?.data?.message ||
-            "Unable to restore the proposal scope. Return to Proposals and open Tier again.",
-          severity: "error",
-        });
-      } finally {
-        if (!cancelled) setIsProposalScopeLoading(false);
-      }
-    };
-
-    hydrateProposalScope();
-    return () => {
-      cancelled = true;
-    };
-  }, [proposalIdFromUrl, searchParams, setSearchParams]);
-
-  useEffect(() => {
-    // If we have a direct proposalId from URL, no need to derive
-    if (proposalIdFromUrl) {
-      setDerivedProposal(null);
-      return;
-    }
-
-    // Only derive if it's explicitly NEP or if the current Tier data is finalized (indicating NEP phase)
-    if (!isNepFromUrl && tierData?.isFinalized !== true) {
-      setDerivedProposal(null);
-      return;
-    }
-
-    if (!activeFiscalYear || !selectedRegion || selectedRegion === 'ALL') {
-      setDerivedProposal(null);
-      return;
-    }
-
-    const fetchDerivedProposal = async () => {
-      try {
-        const res = await api.get('/api/allproposal/proposals', {
-          params: {
-            fiscalYear: activeFiscalYear,
-            region: selectedRegion,
-            view: 'all-proposals'
-          }
-        });
-        const proposals = res.data?.proposals || [];
-        const matched = proposals.find(p => {
-          const isNep = String(p.modelType || p.budgetType || "").toUpperCase() === "NEP";
-          const selectedDepartmentRecord = departments.find(
-            department => String(department._id) === String(selectedDepartment)
-          );
-          const selectedDepartmentValues = [
-            selectedDepartment,
-            selectedDepartmentRecord?.Department,
-            selectedDepartmentRecord?.name,
-          ].filter(Boolean).map(value => String(value).trim().toLowerCase());
-          const proposalDepartment = String(p.department?._id || p.department || "")
-            .trim()
-            .toLowerCase();
-          const selectedDivisionRecord = divisions.find(
-            division =>
-              String(division._id) === String(selectedDivision) ||
-              String(division.name) === String(selectedDivision)
-          );
-          const selectedDivisionValues = [
-            selectedDivision,
-            selectedDivisionRecord?.name,
-          ].filter(Boolean).map(value => String(value).trim().toLowerCase());
-          const proposalDivision = String(
-            p.division?._id || p.division || p.responsibilityCenter?._id || p.responsibilityCenter || ""
-          ).trim().toLowerCase();
-          const deptMatch =
-            !selectedDepartment || selectedDepartmentValues.includes(proposalDepartment);
-          const divMatch =
-            !selectedDivision || selectedDivisionValues.includes(proposalDivision);
-          return isNep && deptMatch && divMatch;
-        });
-        setDerivedProposal(matched || null);
-      } catch (err) {
-        console.error("Error fetching derived proposal:", err);
-      }
-    };
-    fetchDerivedProposal();
-  }, [
-    isNepFromUrl,
-    proposalIdFromUrl,
-    activeFiscalYear,
-    selectedRegion,
-    selectedDepartment,
-    selectedDivision,
-    tierData?.isFinalized,
-    departments,
-    divisions,
-  ]);
 
   // Budget Officer and Budget Manager: view only. Budget Planning Analyst (and Super Admin) can edit/save.
   const roles = currentUser?.Roles ?? currentUser?.workflowRoles ?? (currentUser?.hierarchicalAccess?.workflowRoles ?? []);
@@ -330,12 +121,9 @@ const TierPage = () => {
     !isSuperAdmin &&
     !isPreparer;
   const isFinalized = tierData?.isFinalized === true;
-  const isNepContext = Boolean(proposalForCeiling || isNepFromUrl);
-  const reportContextAvailable = !isNepContext || Boolean(nepReportContext?.compliance);
-  const reportType = isNepContext ? 'NEP_ALIGNMENT' : 'TIER';
+  // Tier Management is Tier-only; NEP alignment lives on the NEP Proposal page.
+  const reportType = 'TIER';
 
-  // Budget Preparers can edit even if "Finalized" if they are in the NEP adjustment phase.
-  // "Finalized" in Tier tool usually means Tier 1 is locked, but Tier 2/NEP adjustments might still be needed.
   const effectiveReadOnly = (isTierViewOnly || isFinalized) && !isPreparer && !isSuperAdmin && !isAnalyst;
 
   // Compute dirty state without causing setState loops: only set lastSavedJson once when tierData first arrives
@@ -670,7 +458,6 @@ const TierPage = () => {
         department: String(selectedDepartmentName ?? ''),
         division: String(selectedDivisionName ?? ''),
         items: itemsArray,
-        ...(proposalForCeiling?._id && { proposalId: String(proposalForCeiling._id) }),
         createNewVersion: false,
         ...(revisionComment.trim() && { revisionComment: revisionComment.trim() }),
       };
@@ -688,11 +475,6 @@ const TierPage = () => {
       });
       setRevisionComment('');
       queryClient.invalidateQueries({ queryKey: ['tierSavedItems', activeFiscalYear, selectedRegion, selectedDepartmentName, selectedDivisionName] });
-      if (proposalForCeiling?._id) {
-        queryClient.invalidateQueries({
-          queryKey: ['nepCeilingContext', String(proposalForCeiling._id)],
-        });
-      }
       try { await fetchCurrentVersion(); } catch (_) { /* ignore */ }
       if (revisionsDrawerOpen) fetchRevisions();
     } catch (error) {
@@ -745,7 +527,6 @@ const TierPage = () => {
         department: String(selectedDepartmentName ?? ''),
         division: String(selectedDivisionName ?? ''),
         items: itemsArray,
-        ...(proposalForCeiling?._id && { proposalId: String(proposalForCeiling._id) }),
         createNewVersion: true,
         ...(revisionComment.trim() && { revisionComment: revisionComment.trim() }),
       };
@@ -763,11 +544,6 @@ const TierPage = () => {
       });
       setRevisionComment('');
       queryClient.invalidateQueries({ queryKey: ['tierSavedItems', activeFiscalYear, selectedRegion, selectedDepartmentName, selectedDivisionName] });
-      if (proposalForCeiling?._id) {
-        queryClient.invalidateQueries({
-          queryKey: ['nepCeilingContext', String(proposalForCeiling._id)],
-        });
-      }
       try { await fetchCurrentVersion(); } catch (_) { /* ignore */ }
       if (revisionsDrawerOpen) fetchRevisions();
     } catch (error) {
@@ -890,31 +666,6 @@ const TierPage = () => {
     ? (divisions.find(d => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
     : '';
 
-  // Persist the resolved proposal scope so refresh/back-forward navigation can
-  // restore the exact Tier view without depending on transient React state.
-  useEffect(() => {
-    if (!proposalIdFromUrl) return;
-
-    const next = new URLSearchParams(searchParams);
-    if (activeFiscalYear) next.set("fiscalYear", String(activeFiscalYear));
-    if (selectedRegion && selectedRegion !== "ALL") {
-      next.set("region", String(selectedRegion));
-    }
-    if (selectedDepartmentName) next.set("department", String(selectedDepartmentName));
-    if (selectedDivisionName) next.set("division", String(selectedDivisionName));
-
-    if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true });
-    }
-  }, [
-    proposalIdFromUrl,
-    activeFiscalYear,
-    selectedRegion,
-    selectedDepartmentName,
-    selectedDivisionName,
-    searchParams,
-    setSearchParams,
-  ]);
 
   const handleViewPDF = async () => {
     if (!tierData?.reportSummary || !activeFiscalYear) {
@@ -926,7 +677,6 @@ const TierPage = () => {
       setSnackbar({ open: true, message: 'Generating PDF...', severity: 'info' });
       const response = await api.post('/tier/generate-pdf', {
         reportType,
-        proposalId: isNepContext ? proposalForCeiling?._id : undefined,
         fiscalYear: activeFiscalYear,
         region: selectedRegion,
         department: selectedDepartment,
@@ -938,13 +688,10 @@ const TierPage = () => {
         isFinalized: tierData.isFinalized === true,
         version: currentVersion,
         hasUnsavedChanges: isDirty,
-        reportContext: isNepContext ? nepReportContext : undefined,
       }, { responseType: 'blob' });
 
       // Extract filename from Content-Disposition header
-      let filename = isNepContext
-        ? `NEP_Budget_Alignment_${activeFiscalYear}.pdf`
-        : `Tier_Budget_Proposal_${activeFiscalYear}.pdf`;
+      let filename = `Tier_Budget_Proposal_${activeFiscalYear}.pdf`;
       const contentDisposition = response.headers['content-disposition'];
       if (contentDisposition) {
         const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
@@ -990,7 +737,6 @@ const TierPage = () => {
       setSnackbar({ open: true, message: 'Generating Excel...', severity: 'info' });
       const response = await api.post('/tier/export-excel', {
         reportType,
-        proposalId: isNepContext ? proposalForCeiling?._id : undefined,
         fiscalYear: activeFiscalYear,
         region: selectedRegion,
         department: selectedDepartment,
@@ -1001,15 +747,12 @@ const TierPage = () => {
         reportSummary: tierData.reportSummary,
         version: currentVersion,
         hasUnsavedChanges: isDirty,
-        reportContext: isNepContext ? nepReportContext : undefined,
       }, { responseType: 'blob' });
 
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       const link = document.createElement('a');
       link.href = url;
-      let filename = isNepContext
-        ? `NEP_Budget_Alignment_${activeFiscalYear}_${getRegionDisplayName()}_V${currentVersion ?? 'Unversioned'}.xlsx`
-        : `Tier_Budget_Proposal_${activeFiscalYear}_${getRegionDisplayName()}_V${currentVersion ?? 'Unversioned'}.xlsx`;
+      let filename = `Tier_Budget_Proposal_${activeFiscalYear}_${getRegionDisplayName()}_V${currentVersion ?? 'Unversioned'}.xlsx`;
       const contentDisposition = response.headers['content-disposition'];
       const filenameStarMatch = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i);
       const filenameMatch = contentDisposition?.match(/filename="?([^";]+)"?/i);
@@ -1061,12 +804,10 @@ const TierPage = () => {
               component="h1"
               sx={{ fontWeight: 800, fontSize: { xs: '1.6rem', sm: '2rem' }, lineHeight: 1.2 }}
             >
-              {isNepContext ? 'NEP Tier Adjustment' : 'Tier Management'}
+              Tier Management
             </Typography>
             <Typography variant="body1" sx={{ mt: 0.75, color: 'rgba(255,255,255,0.82)' }}>
-              {isNepContext
-                ? 'Align Tier 1 and Tier 2 allocations with the approved BRD ceiling.'
-                : 'View and manage Tier data by region, department, and division.'}
+              View and manage Tier data by region, department, and division.
             </Typography>
           </Box>
           <Button
@@ -1195,9 +936,7 @@ const TierPage = () => {
             {isTierViewOnly && (
               <Chip label="View only (Budget Officer / Manager)" color="default" variant="outlined" size="small" />
             )}
-            {isNepContext ? (
-              <Chip label="NEP Adjustment" color="primary" variant="outlined" size="small" sx={{ fontWeight: 700 }} />
-            ) : isFinalized ? (
+            {isFinalized ? (
               <Chip
                 label={effectiveReadOnly ? "Finalized · Read only" : "Finalized"}
                 color="default"
@@ -1319,79 +1058,36 @@ const TierPage = () => {
                 borderColor: 'divider',
               }}
             >
-              {isNepContext && (
-                <Box
-                  component="aside"
-                  aria-label="NEP report readiness"
-                  sx={{
-                    minWidth: { xs: '100%', sm: 245 },
-                    maxWidth: { sm: 310 },
-                    pr: { sm: 0.75 },
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: 'block', fontWeight: 800, letterSpacing: 0.45, textTransform: 'uppercase' }}
-                  >
-                    Report readiness
-                  </Typography>
-                  <Chip
-                    size="small"
-                    color={nepReportContext?.readiness?.color || 'default'}
-                    variant={nepReportContext?.readiness?.key === 'OVER_CEILING' ? 'filled' : 'outlined'}
-                    label={nepReportContext?.readiness?.label || 'Loading ceiling context…'}
-                    sx={{ mt: 0.4, maxWidth: '100%', fontWeight: 750 }}
-                  />
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.3 }}>
-                    {nepReportContext?.readiness?.helper || 'Report actions become available after the approved ceiling loads.'}
-                  </Typography>
-                </Box>
-              )}
               <Button
                 variant="outlined"
                 color="primary"
                 startIcon={<PictureAsPdfIcon />}
                 onClick={handleViewPDF}
-                disabled={!tierData?.reportSummary || !reportContextAvailable || isGeneratingPdf}
-                sx={{ minWidth: isNepContext ? 210 : 160 }}
+                disabled={!tierData?.reportSummary || isGeneratingPdf}
+                sx={{ minWidth: 160 }}
               >
                 {isGeneratingPdf
                   ? 'Generating...'
-                  : isNepContext
-                    ? 'View NEP Alignment Report'
-                    : 'View Tier Report'}
+                  : 'View Tier Report'}
               </Button>
               <Button
                 variant="outlined"
                 color="primary"
                 startIcon={<TableChartIcon />}
                 onClick={handleExportExcel}
-                disabled={!tierData?.reportSummary || !reportContextAvailable || isExportingExcel}
-                sx={{ minWidth: isNepContext ? 190 : 160 }}
+                disabled={!tierData?.reportSummary || isExportingExcel}
+                sx={{ minWidth: 160 }}
               >
                 {isExportingExcel
                   ? 'Exporting...'
-                  : isNepContext
-                    ? 'Export NEP Alignment'
-                    : 'Export Tier Excel'}
+                  : 'Export Tier Excel'}
               </Button>
             </Box>
           </Box>
         </Box>
       </Paper>
 
-      {isProposalScopeLoading ? (
-        <Box sx={{ p: 3, textAlign: "center", backgroundColor: "action.hover", borderRadius: 1 }}>
-          <CircularProgress size={28} sx={{ mb: 1.5 }} />
-          <Typography variant="body1" sx={{ fontWeight: 700 }}>
-            Restoring proposal scope…
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Loading the fiscal year, region, department, and division for this NEP proposal.
-          </Typography>
-        </Box>
-      ) : !activeFiscalYear ? (
+      {!activeFiscalYear ? (
         <Box sx={{ p: 3, textAlign: "center", backgroundColor: "#f5f5f5", borderRadius: 1 }}>
           <CircularProgress sx={{ mb: 2 }} />
           <Typography variant="body2" color="textSecondary">Loading Tier data...</Typography>
@@ -1407,15 +1103,6 @@ const TierPage = () => {
         </Box>
       ) : (
         <>
-      {proposalForCeiling && (
-        <NEPCeilingSummary
-          proposal={proposalForCeiling}
-          liveTotals={liveCeilingTotals}
-          hasUnsavedChanges={isDirty}
-          showStickyTracker
-          onReportContextChange={setNepReportContext}
-        />
-      )}
           {!effectiveReadOnly && (
             <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
               <Chip size="small" label="Modified rows are highlighted" sx={{ backgroundColor: 'warning.light', fontWeight: 500 }} />
@@ -1432,7 +1119,6 @@ const TierPage = () => {
             divisionName={selectedDivisionName}
             onTierDataChange={setTierData}
             onVersionChange={setCurrentVersion}
-            independentTierEditing={Boolean(proposalForCeiling)}
             readOnly={effectiveReadOnly}
           />
         </>
@@ -1442,7 +1128,7 @@ const TierPage = () => {
         open={pdfViewerOpen}
         onClose={handleClosePdfViewer}
         pdfUrl={pdfBlobUrl}
-        title={isNepContext ? "NEP Budget Alignment Report Preview" : "Tier Budget Proposal Report Preview"}
+        title="Tier Budget Proposal Report Preview"
         downloadFilename={pdfFilename}
       />
 
