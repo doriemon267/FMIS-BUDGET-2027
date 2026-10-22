@@ -48,6 +48,10 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import GenericPdfPreviewDialog from '../components/GenericPdfPreviewDialog';
 
+// Unsaved-changes detection compares only the editable tier values that are saved, not the
+// derived report summary (which also changes when lookups such as income categories load).
+const getTierDirtySignature = (data) => JSON.stringify(data?.displayedItems || data?.items || {});
+
 const TierPage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -132,7 +136,7 @@ const TierPage = () => {
       setIsDirty(false);
       return;
     }
-    const json = JSON.stringify(tierData);
+    const json = getTierDirtySignature(tierData);
     if (lastSavedJsonRef.current === null) {
       lastSavedJsonRef.current = json;
       setLastSavedJson(json);
@@ -463,7 +467,7 @@ const TierPage = () => {
       };
 
       const saveRes = await api.post('/tier/data', saveData);
-      const saved = JSON.stringify(tierData);
+      const saved = getTierDirtySignature(tierData);
       setLastSavedJson(saved);
       lastSavedJsonRef.current = saved;
       setIsDirty(false);
@@ -532,7 +536,7 @@ const TierPage = () => {
       };
 
       const saveRes = await api.post('/tier/data', saveData);
-      const saved = JSON.stringify(tierData);
+      const saved = getTierDirtySignature(tierData);
       setLastSavedJson(saved);
       lastSavedJsonRef.current = saved;
       setIsDirty(false);

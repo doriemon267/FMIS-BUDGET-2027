@@ -991,6 +991,8 @@ const restoreRevision = async (req, res) => {
 };
 
 // Use "Php " in PDF (Helvetica does not support ₱; some viewers show it as ±)
+const { renderTierScopePdf } = require('../utils/tierScopePdf');
+
 const formatTierCurrency = (amount) => {
   const n = Number(amount);
   
@@ -1367,501 +1369,532 @@ const generateTierPDF = async (req, res) => {
       subject: isNepAlignment ? 'NEP Budget Alignment Report' : 'Tier Budget Proposal Report',
     });
 
-    const SUB_COL_WIDTH = 78; 
-    const GROUP_WIDTH = SUB_COL_WIDTH * 5; // Inc, Tier1, Tier2, Total, Bgt
-    const colX = [40]; // Particular
-    const borderX = [35, 240]; 
-    const groupStartBorderX = [240]; 
-
-    groups.forEach((g, i) => {
-      const startX = 240 + (i * GROUP_WIDTH);
-      colX.push(startX + 5); 
-      colX.push(startX + SUB_COL_WIDTH + 5); 
-      colX.push(startX + (SUB_COL_WIDTH * 2) + 5); 
-      colX.push(startX + (SUB_COL_WIDTH * 3) + 5); 
-      colX.push(startX + (SUB_COL_WIDTH * 4) + 5); 
-      
-      borderX.push(startX + SUB_COL_WIDTH);
-      borderX.push(startX + (SUB_COL_WIDTH * 2));
-      borderX.push(startX + (SUB_COL_WIDTH * 3));
-      borderX.push(startX + (SUB_COL_WIDTH * 4));
-      borderX.push(startX + GROUP_WIDTH);
-      groupStartBorderX.push(startX + GROUP_WIDTH);
-    });
-    
-    const TABLE_WIDTH = borderX[borderX.length - 1] - 35;
-    // A proposal-linked NEP report has one data group. Size the page to that
-    // content so the decision summary and allocation table remain centered.
-    const PAGE_WIDTH = isNepAlignment && groups.length === 1
-      ? TABLE_WIDTH + 70
-      : Math.max(1008, TABLE_WIDTH + 70);
-    const PAGE_HEIGHT = 612;
-    const showDraftWatermark = !isNepAlignment && shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
-    const drawReportWatermark = () => {
-      drawMuhammaraDraftWatermark(recipe, {
-        show: showDraftWatermark,
-        pageWidth: PAGE_WIDTH,
-        pageHeight: PAGE_HEIGHT,
+    // Single-scope Tier report mirrors the /tier page (Tier 1/Tier 2/Total with Income and Subsidy).
+    // The multi-region (All Regions) and legacy NEP layouts keep the grouped renderer below.
+    const useScopeLayout = !isNepAlignment && !isAllRegions;
+    if (useScopeLayout) {
+      const SCOPE_PAGE_WIDTH = 1008;
+      const SCOPE_PAGE_HEIGHT = 612;
+      const showScopeDraft = shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
+      const scopeLogo = [
+        path.join(__dirname, '../assets/logo.png'),
+        path.join(__dirname, '../../CLIENT/public/logo.png'),
+      ].find((candidate) => fs.existsSync(candidate)) || null;
+      renderTierScopePdf(recipe, {
+        reportSummary,
+        pageWidth: SCOPE_PAGE_WIDTH,
+        pageHeight: SCOPE_PAGE_HEIGHT,
+        logoPath: scopeLogo,
+        fiscalYear: effectiveFiscalYear,
+        regionDisplay,
+        departmentDisplay,
+        divisionDisplay,
+        versionDisplay: version == null || Number.isNaN(version) ? 'Unversioned' : version,
+        documentId,
+        onPageCreated: () => drawMuhammaraDraftWatermark(recipe, {
+          show: showScopeDraft,
+          pageWidth: SCOPE_PAGE_WIDTH,
+          pageHeight: SCOPE_PAGE_HEIGHT,
+        }),
       });
-      if (!isNepAlignment) return;
-      if (nepReportStatus === 'WORKING COPY – OVER CEILING') {
-        drawMuhammaraDraftWatermark(recipe, {
-          show: true,
-          text: 'WORKING COPY - OVER CEILING',
-          fontSize: 35,
-          color: '#efcccc',
-          pageWidth: PAGE_WIDTH,
-          pageHeight: PAGE_HEIGHT,
-        });
-      } else if (nepReportStatus === 'DRAFT – UNSAVED CHANGES') {
-        drawMuhammaraDraftWatermark(recipe, {
-          show: true,
-          text: 'DRAFT - UNSAVED CHANGES',
-          fontSize: 38,
-          color: '#ead9b8',
-          pageWidth: PAGE_WIDTH,
-          pageHeight: PAGE_HEIGHT,
-        });
-      }
-    };
+    } else {
+      const SUB_COL_WIDTH = 78; 
+      const GROUP_WIDTH = SUB_COL_WIDTH * 5; // Inc, Tier1, Tier2, Total, Bgt
+      const colX = [40]; // Particular
+      const borderX = [35, 240]; 
+      const groupStartBorderX = [240]; 
 
-    recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-    drawReportWatermark();
-    
-    // Header Logo
-    const resolveLogoPath = (name) => {
-      const serverAsset = path.join(__dirname, `../assets/${name}`);
-      if (fs.existsSync(serverAsset)) return serverAsset;
-      const clientAsset = path.join(__dirname, `../../CLIENT/public/${name}`);
-      if (fs.existsSync(clientAsset)) return clientAsset;
-      return null;
-    };
-    try {
-       const l = resolveLogoPath('logo.png');
-       if (l) recipe.image(l, 40, 30, { width: 50, height: 50 });
-    } catch (e) {}
-
-    const title1 = "NATIONAL IRRIGATION ADMINISTRATION";
-    const title2 = isNepAlignment
-      ? `NEP BUDGET ALIGNMENT REPORT FOR FY ${effectiveFiscalYear || 'ALL'}`
-      : `TIER BUDGET PROPOSAL REPORT FOR FY ${effectiveFiscalYear || 'ALL'}`;
-    const versionDisplay = version == null || Number.isNaN(version) ? '—' : version;
-    const title3 = `REGION: ${regionDisplay} | VERSION: ${versionDisplay}`;
-    
-    recipe.text(title1, (PAGE_WIDTH / 2) - (title1.length * 4), 40, { color: [0, 0, 0], fontSize: 14, bold: true });
-    recipe.text(title2, (PAGE_WIDTH / 2) - (title2.length * 3.5), 58, { color: [0, 0, 0], fontSize: 12, bold: true });
-    recipe.text(title3, (PAGE_WIDTH / 2) - (title3.length * 3.5), 72, { color: [0, 0, 0], fontSize: 12, bold: true });
-    
-    if (isNepAlignment) {
-      const compliance = reportContext.compliance || {};
-      const actual = compliance.actual || {};
-      const caps = compliance.caps || {};
-      const initialAmount = Number(reportContext.initial?.amount || 0);
-      const approvedCeiling = Number(caps.totalExpenses || reportContext.ceiling?.amount || 0);
-      const currentAllocation = Number(actual.totalExpenses || 0);
-      const reduction = initialAmount - currentAllocation;
-      const totalVariance = approvedCeiling - currentAllocation;
-      const statusColor = nepReportStatus.startsWith('WORKING')
-        ? '#b42318'
-        : nepReportStatus.startsWith('DRAFT')
-          ? '#9a6700'
-          : nepReportStatus.startsWith('READY')
-            ? '#1b5e20'
-            : '#175cd3';
-
-      recipe.rectangle(35, 91, TABLE_WIDTH, 23, { fill: '#f3f6f2' });
-      recipe.text(`REPORT STATUS: ${nepReportStatus}`, 44, 98, {
-        bold: true, fontSize: 10, color: statusColor
-      });
-      recipe.text(`Scope: ${regionDisplay} / ${departmentDisplay} / ${divisionDisplay}`, 44, 118, {
-        fontSize: 8, color: '#344054'
-      });
-      recipe.text(
-        `Proposal: ${proposalId}  |  Generated: ${new Date().toLocaleString('en-PH')}`,
-        44, 130, { fontSize: 8, color: '#344054' }
-      );
-
-      const metrics = [
-        ['INITIAL', 'REQUEST', initialAmount],
-        ['APPROVED BRD', 'NEP CEILING', approvedCeiling],
-        ['CURRENT NEP', 'ALLOCATION', currentAllocation],
-        ['REDUCTION FROM', 'INITIAL REQUEST', reduction],
-        [totalVariance < -0.009 ? 'AMOUNT TO' : 'REMAINING', totalVariance < -0.009 ? 'REDUCE' : 'CAPACITY', Math.abs(totalVariance)],
-      ];
-      const metricWidth = TABLE_WIDTH / metrics.length;
-      metrics.forEach(([label, secondLine, value], index) => {
-        const x = 35 + (index * metricWidth);
-        recipe.rectangle(x, 145, metricWidth, 52, { fill: index === 1 ? '#eef6ed' : '#fafafa' });
-        recipe.rectangle(x, 145, 0.5, 52, { fill: '#98a2b3' });
-        recipe.text(label, x + 7, 152, { bold: true, fontSize: 8, color: '#475467' });
-        recipe.text(secondLine, x + 7, 162, { bold: true, fontSize: 8, color: '#475467' });
-        recipe.text(formatTierCurrency(value), x + 7, 178, {
-          bold: true, fontSize: 10, color: value < 0 ? '#b42318' : '#101828'
-        });
-      });
-      recipe.rectangle(35 + TABLE_WIDTH, 145, 0.5, 52, { fill: '#98a2b3' });
-      recipe.text('CATEGORY COMPLIANCE', 35, 207, { bold: true, fontSize: 9, color: '#1a472a' });
-      const categoryRows = [
-        ['Personnel Services', 'personnelServices'],
-        ['MOOE', 'mooe'],
-        ['Capital Outlay', 'capitalOutlay'],
-      ];
-      const categoryWidth = TABLE_WIDTH / 3;
-      if (compliance.hasDetailedCeiling) {
-        categoryRows.forEach(([label, key], index) => {
-          const x = 35 + (index * categoryWidth);
-          const categoryActual = Number(actual[key] || 0);
-          const categoryCap = Number(caps[key] || 0);
-          const variance = categoryCap - categoryActual;
-          const isOver = compliance.violations?.some(violation => violation.field === key);
-          recipe.rectangle(x, 219, categoryWidth, 39, { fill: isOver ? '#fef3f2' : '#ffffff' });
-          recipe.text(label, x + 7, 225, { bold: true, fontSize: 8, color: '#101828' });
-          recipe.text(`Actual ${formatTierCurrency(categoryActual)} | Cap ${formatTierCurrency(categoryCap)}`, x + 7, 237, {
-            fontSize: 8, color: '#344054'
-          });
-          recipe.text(`Variance ${formatTierCurrency(variance)} | ${isOver ? 'OVER CEILING' : 'WITHIN CEILING'}`, x + 7, 248, {
-            bold: true, fontSize: 8, color: isOver ? '#b42318' : '#1b5e20'
-          });
-        });
-      } else {
-        recipe.rectangle(35, 219, TABLE_WIDTH, 39, { fill: '#f8f9fa' });
-        recipe.text('PS, MOOE, and Capital Outlay caps were not provided by BRD.', 44, 228, {
-          bold: true, fontSize: 8.5, color: '#344054'
-        });
-        recipe.text('Category limits are shown as Not provided / Not enforced; total ceiling compliance still applies.', 44, 243, {
-          fontSize: 8, color: '#475467'
-        });
-      }
-      const source = reportSummary.sourcesOfFunds || {};
-      const support = source.budgetarySupport || {};
-      recipe.text(
-        `FUNDING MIX  |  Tier 1 ${formatTierCurrency(support.tier1)}  |  Tier 2 ${formatTierCurrency(support.tier2)}  |  Corporate Income ${formatTierCurrency(source.corporateIncome)}  |  Proposed Budget ${formatTierCurrency(source.proposedBudget || source.total)}`,
-        35,
-        270,
-        { bold: true, fontSize: 8, color: '#1a472a' }
-      );
-      recipe.text('ALLOCATION DETAIL', 35, 289, { bold: true, fontSize: 9, color: '#1a472a' });
-    }
-
-    let currentRowY = isNepAlignment ? 302 : 100;
-
-    const drawHeaders = (y) => {
-      // Draw background for entire header (height 50)
-      recipe.rectangle(35, y, TABLE_WIDTH, 50, { fill: '#eaeaea' });
-      
-      // "PARTICULAR" text, centered vertically in the 50px header
-      recipe.text("PARTICULAR", 40, y + 25, { bold: true, fontSize: 10, color: [0, 0, 0] });
-      
       groups.forEach((g, i) => {
         const startX = 240 + (i * GROUP_WIDTH);
-        
-        // Group Name (e.g. GRAND TOTAL) - Row 1
-        const gWidth = recipe.textDimensions(g, { bold: true, fontSize: 8 }).width || (g.length * 4);
-        recipe.text(g, startX + (GROUP_WIDTH / 2) - (gWidth / 2), y + 10, { bold: true, fontSize: 8, color: [0, 0, 0] });
-        
-        // Col 1: Projected Corporate Income [a]
-        recipe.text("PROJECTED CORPORATE", startX + 5, y + 26, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        recipe.text("INCOME [a]", startX + 5, y + 34, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        
-        // Col 2: Projected Subsidy (Spans 3 cols) - Row 2
-        recipe.text("PROJECTED SUBSIDY", startX + SUB_COL_WIDTH + 5, y + 24, { bold: true, fontSize: 7, color: [0, 0, 0] });
-        
-        // Tier 1 - Row 3
-        recipe.text("TIER 1", startX + SUB_COL_WIDTH + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        recipe.text("[b]", startX + SUB_COL_WIDTH + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        
-        // Tier 2 - Row 3
-        recipe.text("TIER 2", startX + (SUB_COL_WIDTH * 2) + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        recipe.text("[c]", startX + (SUB_COL_WIDTH * 2) + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        
-        // Total - Row 3
-        recipe.text("TOTAL", startX + (SUB_COL_WIDTH * 3) + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        recipe.text("[d = b + c]", startX + (SUB_COL_WIDTH * 3) + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        
-        // Col 5: Proposed Budget [e = a + d]
-        recipe.text("PROPOSED", startX + (SUB_COL_WIDTH * 4) + 5, y + 26, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        recipe.text("BUDGET [e = a + d]", startX + (SUB_COL_WIDTH * 4) + 5, y + 34, { bold: true, fontSize: 6, color: [0, 0, 0] });
-        
-        // Horizontal line under PROJECTED SUBSIDY (spans from Tier 1 to Total)
-        recipe.rectangle(startX + SUB_COL_WIDTH, y + 30, SUB_COL_WIDTH * 3, 1, { fill: [0, 0, 0] });
-        
-        // Vertical lines for sub-columns
-        // Between Corporate Income and Tier 1 (starts from y + 16, height 34)
-        recipe.rectangle(startX + SUB_COL_WIDTH, y + 16, 1, 34, { fill: [0, 0, 0] });
-        
-        // Between Tier 1 and Tier 2 (starts from y + 30, height 20)
-        recipe.rectangle(startX + (SUB_COL_WIDTH * 2), y + 30, 1, 20, { fill: [0, 0, 0] });
-        
-        // Between Tier 2 and Total (starts from y + 30, height 20)
-        recipe.rectangle(startX + (SUB_COL_WIDTH * 3), y + 30, 1, 20, { fill: [0, 0, 0] });
-        
-        // Between Total and Proposed Budget (starts from y + 16, height 34)
-        recipe.rectangle(startX + (SUB_COL_WIDTH * 4), y + 16, 1, 34, { fill: [0, 0, 0] });
+        colX.push(startX + 5); 
+        colX.push(startX + SUB_COL_WIDTH + 5); 
+        colX.push(startX + (SUB_COL_WIDTH * 2) + 5); 
+        colX.push(startX + (SUB_COL_WIDTH * 3) + 5); 
+        colX.push(startX + (SUB_COL_WIDTH * 4) + 5); 
+      
+        borderX.push(startX + SUB_COL_WIDTH);
+        borderX.push(startX + (SUB_COL_WIDTH * 2));
+        borderX.push(startX + (SUB_COL_WIDTH * 3));
+        borderX.push(startX + (SUB_COL_WIDTH * 4));
+        borderX.push(startX + GROUP_WIDTH);
+        groupStartBorderX.push(startX + GROUP_WIDTH);
       });
-
-      // Group borders (vertical lines for each group) - height 50
-      groupStartBorderX.forEach(x => {
-        recipe.rectangle(x, y, 1, 50, { fill: [0, 0, 0] });
-      });
-      
-      // Rightmost border for PARTICULAR column
-      recipe.rectangle(240, y, 1, 50, { fill: [0, 0, 0] });
-      
-      // Top border of header
-      recipe.rectangle(35, y, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
-      
-      // Horizontal line under Group Names
-      recipe.rectangle(240, y + 16, TABLE_WIDTH - 205, 1, { fill: [0, 0, 0] });
-      
-      // Bottom border of header
-      recipe.rectangle(35, y + 50, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
-    };
-
-    drawHeaders(currentRowY);
-    currentRowY += 52;
-
-    const getWrappedText = (text, maxLineLength) => {
-      const words = String(text || '').split(' ');
-      let lines = [];
-      let currentLine = '';
-      words.forEach(word => {
-        if ((currentLine + ' ' + word).length > maxLineLength) {
-          if (currentLine) lines.push(currentLine.trim());
-          currentLine = word;
-        } else {
-          currentLine += (currentLine ? ' ' : '') + word;
+    
+      const TABLE_WIDTH = borderX[borderX.length - 1] - 35;
+      // A proposal-linked NEP report has one data group. Size the page to that
+      // content so the decision summary and allocation table remain centered.
+      const PAGE_WIDTH = isNepAlignment && groups.length === 1
+        ? TABLE_WIDTH + 70
+        : Math.max(1008, TABLE_WIDTH + 70);
+      const PAGE_HEIGHT = 612;
+      const showDraftWatermark = !isNepAlignment && shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
+      const drawReportWatermark = () => {
+        drawMuhammaraDraftWatermark(recipe, {
+          show: showDraftWatermark,
+          pageWidth: PAGE_WIDTH,
+          pageHeight: PAGE_HEIGHT,
+        });
+        if (!isNepAlignment) return;
+        if (nepReportStatus === 'WORKING COPY – OVER CEILING') {
+          drawMuhammaraDraftWatermark(recipe, {
+            show: true,
+            text: 'WORKING COPY - OVER CEILING',
+            fontSize: 35,
+            color: '#efcccc',
+            pageWidth: PAGE_WIDTH,
+            pageHeight: PAGE_HEIGHT,
+          });
+        } else if (nepReportStatus === 'DRAFT – UNSAVED CHANGES') {
+          drawMuhammaraDraftWatermark(recipe, {
+            show: true,
+            text: 'DRAFT - UNSAVED CHANGES',
+            fontSize: 38,
+            color: '#ead9b8',
+            pageWidth: PAGE_WIDTH,
+            pageHeight: PAGE_HEIGHT,
+          });
         }
-      });
-      if (currentLine) lines.push(currentLine.trim());
-      return lines;
-    };
+      };
 
-    const drawRow = (title, rowDataMap, isBold = false) => {
-      const lines = getWrappedText(title, 32);
-      const textHeight = Math.max(lines.length * 10, 10);
-      const rowHeight = textHeight + 4; 
+      recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+      drawReportWatermark();
+    
+      // Header Logo
+      const resolveLogoPath = (name) => {
+        const serverAsset = path.join(__dirname, `../assets/${name}`);
+        if (fs.existsSync(serverAsset)) return serverAsset;
+        const clientAsset = path.join(__dirname, `../../CLIENT/public/${name}`);
+        if (fs.existsSync(clientAsset)) return clientAsset;
+        return null;
+      };
+      try {
+         const l = resolveLogoPath('logo.png');
+         if (l) recipe.image(l, 40, 30, { width: 50, height: 50 });
+      } catch (e) {}
 
-      if (currentRowY + rowHeight > PAGE_HEIGHT - 40) {
-        recipe.endPage();
-        recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
-        drawReportWatermark();
-        currentRowY = 40;
-        drawHeaders(currentRowY);
-        currentRowY += 52;
+      const title1 = "NATIONAL IRRIGATION ADMINISTRATION";
+      const title2 = isNepAlignment
+        ? `NEP BUDGET ALIGNMENT REPORT FOR FY ${effectiveFiscalYear || 'ALL'}`
+        : `TIER BUDGET PROPOSAL REPORT FOR FY ${effectiveFiscalYear || 'ALL'}`;
+      const versionDisplay = version == null || Number.isNaN(version) ? '—' : version;
+      const title3 = `REGION: ${regionDisplay} | VERSION: ${versionDisplay}`;
+    
+      recipe.text(title1, (PAGE_WIDTH / 2) - (title1.length * 4), 40, { color: [0, 0, 0], fontSize: 14, bold: true });
+      recipe.text(title2, (PAGE_WIDTH / 2) - (title2.length * 3.5), 58, { color: [0, 0, 0], fontSize: 12, bold: true });
+      recipe.text(title3, (PAGE_WIDTH / 2) - (title3.length * 3.5), 72, { color: [0, 0, 0], fontSize: 12, bold: true });
+    
+      if (isNepAlignment) {
+        const compliance = reportContext.compliance || {};
+        const actual = compliance.actual || {};
+        const caps = compliance.caps || {};
+        const initialAmount = Number(reportContext.initial?.amount || 0);
+        const approvedCeiling = Number(caps.totalExpenses || reportContext.ceiling?.amount || 0);
+        const currentAllocation = Number(actual.totalExpenses || 0);
+        const reduction = initialAmount - currentAllocation;
+        const totalVariance = approvedCeiling - currentAllocation;
+        const statusColor = nepReportStatus.startsWith('WORKING')
+          ? '#b42318'
+          : nepReportStatus.startsWith('DRAFT')
+            ? '#9a6700'
+            : nepReportStatus.startsWith('READY')
+              ? '#1b5e20'
+              : '#175cd3';
+
+        recipe.rectangle(35, 91, TABLE_WIDTH, 23, { fill: '#f3f6f2' });
+        recipe.text(`REPORT STATUS: ${nepReportStatus}`, 44, 98, {
+          bold: true, fontSize: 10, color: statusColor
+        });
+        recipe.text(`Scope: ${regionDisplay} / ${departmentDisplay} / ${divisionDisplay}`, 44, 118, {
+          fontSize: 8, color: '#344054'
+        });
+        recipe.text(
+          `Proposal: ${proposalId}  |  Generated: ${new Date().toLocaleString('en-PH')}`,
+          44, 130, { fontSize: 8, color: '#344054' }
+        );
+
+        const metrics = [
+          ['INITIAL', 'REQUEST', initialAmount],
+          ['APPROVED BRD', 'NEP CEILING', approvedCeiling],
+          ['CURRENT NEP', 'ALLOCATION', currentAllocation],
+          ['REDUCTION FROM', 'INITIAL REQUEST', reduction],
+          [totalVariance < -0.009 ? 'AMOUNT TO' : 'REMAINING', totalVariance < -0.009 ? 'REDUCE' : 'CAPACITY', Math.abs(totalVariance)],
+        ];
+        const metricWidth = TABLE_WIDTH / metrics.length;
+        metrics.forEach(([label, secondLine, value], index) => {
+          const x = 35 + (index * metricWidth);
+          recipe.rectangle(x, 145, metricWidth, 52, { fill: index === 1 ? '#eef6ed' : '#fafafa' });
+          recipe.rectangle(x, 145, 0.5, 52, { fill: '#98a2b3' });
+          recipe.text(label, x + 7, 152, { bold: true, fontSize: 8, color: '#475467' });
+          recipe.text(secondLine, x + 7, 162, { bold: true, fontSize: 8, color: '#475467' });
+          recipe.text(formatTierCurrency(value), x + 7, 178, {
+            bold: true, fontSize: 10, color: value < 0 ? '#b42318' : '#101828'
+          });
+        });
+        recipe.rectangle(35 + TABLE_WIDTH, 145, 0.5, 52, { fill: '#98a2b3' });
+        recipe.text('CATEGORY COMPLIANCE', 35, 207, { bold: true, fontSize: 9, color: '#1a472a' });
+        const categoryRows = [
+          ['Personnel Services', 'personnelServices'],
+          ['MOOE', 'mooe'],
+          ['Capital Outlay', 'capitalOutlay'],
+        ];
+        const categoryWidth = TABLE_WIDTH / 3;
+        if (compliance.hasDetailedCeiling) {
+          categoryRows.forEach(([label, key], index) => {
+            const x = 35 + (index * categoryWidth);
+            const categoryActual = Number(actual[key] || 0);
+            const categoryCap = Number(caps[key] || 0);
+            const variance = categoryCap - categoryActual;
+            const isOver = compliance.violations?.some(violation => violation.field === key);
+            recipe.rectangle(x, 219, categoryWidth, 39, { fill: isOver ? '#fef3f2' : '#ffffff' });
+            recipe.text(label, x + 7, 225, { bold: true, fontSize: 8, color: '#101828' });
+            recipe.text(`Actual ${formatTierCurrency(categoryActual)} | Cap ${formatTierCurrency(categoryCap)}`, x + 7, 237, {
+              fontSize: 8, color: '#344054'
+            });
+            recipe.text(`Variance ${formatTierCurrency(variance)} | ${isOver ? 'OVER CEILING' : 'WITHIN CEILING'}`, x + 7, 248, {
+              bold: true, fontSize: 8, color: isOver ? '#b42318' : '#1b5e20'
+            });
+          });
+        } else {
+          recipe.rectangle(35, 219, TABLE_WIDTH, 39, { fill: '#f8f9fa' });
+          recipe.text('PS, MOOE, and Capital Outlay caps were not provided by BRD.', 44, 228, {
+            bold: true, fontSize: 8.5, color: '#344054'
+          });
+          recipe.text('Category limits are shown as Not provided / Not enforced; total ceiling compliance still applies.', 44, 243, {
+            fontSize: 8, color: '#475467'
+          });
+        }
+        const source = reportSummary.sourcesOfFunds || {};
+        const support = source.budgetarySupport || {};
+        recipe.text(
+          `FUNDING MIX  |  Tier 1 ${formatTierCurrency(support.tier1)}  |  Tier 2 ${formatTierCurrency(support.tier2)}  |  Corporate Income ${formatTierCurrency(source.corporateIncome)}  |  Proposed Budget ${formatTierCurrency(source.proposedBudget || source.total)}`,
+          35,
+          270,
+          { bold: true, fontSize: 8, color: '#1a472a' }
+        );
+        recipe.text('ALLOCATION DETAIL', 35, 289, { bold: true, fontSize: 9, color: '#1a472a' });
       }
 
-      const rowBot = currentRowY + rowHeight;
-      const textStartY = currentRowY + 2;
+      let currentRowY = isNepAlignment ? 302 : 100;
 
-      lines.forEach((line, index) => {
-        recipe.text(line, colX[0], textStartY + (index * 10), { bold: isBold, fontSize: 9, color: [0, 0, 0] });
-      });
+      const drawHeaders = (y) => {
+        // Draw background for entire header (height 50)
+        recipe.rectangle(35, y, TABLE_WIDTH, 50, { fill: '#eaeaea' });
       
-      let colIdx = 1;
-      groups.forEach(g => {
-         const data = rowDataMap[g] || { inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 };
-         const incStr = data.inc ? formatTierCurrency(data.inc) : '-';
-         const t1Str = data.t1 ? formatTierCurrency(data.t1) : '-';
-         const t2Str = data.t2 ? formatTierCurrency(data.t2) : '-';
-         const totStr = data.tot ? formatTierCurrency(data.tot) : '-';
-         const bgtStr = data.bgt ? formatTierCurrency(data.bgt) : '-';
-         
-         const getStrWidth = (str) => {
-            let w = 0;
-            for (let i=0; i < str.length; i++) {
-              if (str[i] === ',' || str[i] === '.' || str[i] === '-' || str[i] === ' ') w += 2.5;
-              else w += 4.5;
-            }
-            return w;
-         };
-
-         recipe.text(incStr, borderX[colIdx + 1] - 5 - getStrWidth(incStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
-         recipe.text(t1Str, borderX[colIdx + 1] - 5 - getStrWidth(t1Str), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
-         recipe.text(t2Str, borderX[colIdx + 1] - 5 - getStrWidth(t2Str), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
-         recipe.text(totStr, borderX[colIdx + 1] - 5 - getStrWidth(totStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
-         recipe.text(bgtStr, borderX[colIdx + 1] - 5 - getStrWidth(bgtStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
-      });
+        // "PARTICULAR" text, centered vertically in the 50px header
+        recipe.text("PARTICULAR", 40, y + 25, { bold: true, fontSize: 10, color: [0, 0, 0] });
       
-      recipe.rectangle(35, rowBot, TABLE_WIDTH, 0.5, { fill: [0, 0, 0] });
-      borderX.forEach(x => {
-        recipe.rectangle(x, currentRowY, 0.5, rowBot - currentRowY, { fill: [0, 0, 0] });
-      });
+        groups.forEach((g, i) => {
+          const startX = 240 + (i * GROUP_WIDTH);
+        
+          // Group Name (e.g. GRAND TOTAL) - Row 1
+          const gWidth = recipe.textDimensions(g, { bold: true, fontSize: 8 }).width || (g.length * 4);
+          recipe.text(g, startX + (GROUP_WIDTH / 2) - (gWidth / 2), y + 10, { bold: true, fontSize: 8, color: [0, 0, 0] });
+        
+          // Col 1: Projected Corporate Income [a]
+          recipe.text("PROJECTED CORPORATE", startX + 5, y + 26, { bold: true, fontSize: 6, color: [0, 0, 0] });
+          recipe.text("INCOME [a]", startX + 5, y + 34, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+          // Col 2: Projected Subsidy (Spans 3 cols) - Row 2
+          recipe.text("PROJECTED SUBSIDY", startX + SUB_COL_WIDTH + 5, y + 24, { bold: true, fontSize: 7, color: [0, 0, 0] });
+        
+          // Tier 1 - Row 3
+          recipe.text("TIER 1", startX + SUB_COL_WIDTH + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
+          recipe.text("[b]", startX + SUB_COL_WIDTH + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+          // Tier 2 - Row 3
+          recipe.text("TIER 2", startX + (SUB_COL_WIDTH * 2) + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
+          recipe.text("[c]", startX + (SUB_COL_WIDTH * 2) + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+          // Total - Row 3
+          recipe.text("TOTAL", startX + (SUB_COL_WIDTH * 3) + 5, y + 38, { bold: true, fontSize: 6, color: [0, 0, 0] });
+          recipe.text("[d = b + c]", startX + (SUB_COL_WIDTH * 3) + 5, y + 46, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+          // Col 5: Proposed Budget [e = a + d]
+          recipe.text("PROPOSED", startX + (SUB_COL_WIDTH * 4) + 5, y + 26, { bold: true, fontSize: 6, color: [0, 0, 0] });
+          recipe.text("BUDGET [e = a + d]", startX + (SUB_COL_WIDTH * 4) + 5, y + 34, { bold: true, fontSize: 6, color: [0, 0, 0] });
+        
+          // Horizontal line under PROJECTED SUBSIDY (spans from Tier 1 to Total)
+          recipe.rectangle(startX + SUB_COL_WIDTH, y + 30, SUB_COL_WIDTH * 3, 1, { fill: [0, 0, 0] });
+        
+          // Vertical lines for sub-columns
+          // Between Corporate Income and Tier 1 (starts from y + 16, height 34)
+          recipe.rectangle(startX + SUB_COL_WIDTH, y + 16, 1, 34, { fill: [0, 0, 0] });
+        
+          // Between Tier 1 and Tier 2 (starts from y + 30, height 20)
+          recipe.rectangle(startX + (SUB_COL_WIDTH * 2), y + 30, 1, 20, { fill: [0, 0, 0] });
+        
+          // Between Tier 2 and Total (starts from y + 30, height 20)
+          recipe.rectangle(startX + (SUB_COL_WIDTH * 3), y + 30, 1, 20, { fill: [0, 0, 0] });
+        
+          // Between Total and Proposed Budget (starts from y + 16, height 34)
+          recipe.rectangle(startX + (SUB_COL_WIDTH * 4), y + 16, 1, 34, { fill: [0, 0, 0] });
+        });
+
+        // Group borders (vertical lines for each group) - height 50
+        groupStartBorderX.forEach(x => {
+          recipe.rectangle(x, y, 1, 50, { fill: [0, 0, 0] });
+        });
       
-      currentRowY = rowBot;
-    };
+        // Rightmost border for PARTICULAR column
+        recipe.rectangle(240, y, 1, 50, { fill: [0, 0, 0] });
+      
+        // Top border of header
+        recipe.rectangle(35, y, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
+      
+        // Horizontal line under Group Names
+        recipe.rectangle(240, y + 16, TABLE_WIDTH - 205, 1, { fill: [0, 0, 0] });
+      
+        // Bottom border of header
+        recipe.rectangle(35, y + 50, TABLE_WIDTH, 1, { fill: [0, 0, 0] });
+      };
 
-    // Calculate aggregated rowDataMap
-    const getRowDataMapForLineItem = (lineItem) => {
-       const map = {};
-       const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
-       
-       if (!isAllRegions) {
-          map['GRAND TOTAL'] = {
-             inc: Number(lineItem.corporateIncome) || 0,
-             t1: Number(lineItem.tier1) || 0,
-             t2: Number(lineItem.tier2) || 0,
-             tot: Number(lineItem.total) || 0,
-             bgt: Number(lineItem.proposedBudget || lineItem.total) || 0
-          };
-          return map;
-       }
-       
-       // Central Office
-       const coData = regionalBreakdown.data['CENTRAL OFFICE']?.[lineItem.lineItemId];
-       if (coData) {
-          map['CENTRAL OFFICE'] = {
-             inc: 0,
-             t1: Number(coData.tier1) || 0,
-             t2: Number(coData.tier2) || 0,
-             tot: Number(coData.total) || 0,
-             bgt: Number(coData.total) || 0
-          };
-       } else {
-          map['CENTRAL OFFICE'] = getEmpty();
-       }
-       
-       // Total Regions
-       let trT1 = 0, trT2 = 0, trTot = 0, trBgt = 0;
-       regionalBreakdown.regions.forEach(r => {
-          if (r !== 'CENTRAL OFFICE' && r !== 'TOTAL REGIONS') {
-             const targetKeys = [
-                String(lineItem.lineItemId || '').trim().toLowerCase().replace(/\s+/g, ' '),
-                String(lineItem.description || '').trim().toLowerCase().replace(/\s+/g, ' '),
-                String(lineItem.name || '').trim().toLowerCase().replace(/\s+/g, ' ')
-             ];
-             const rMap = regionalBreakdown.data[r] || {};
-             const actualKey = Object.keys(rMap).find(k => {
-                const normK = k.trim().toLowerCase().replace(/\s+/g, ' ');
-                return targetKeys.some(tk => tk === normK || tk.endsWith('-' + normK) || normK.endsWith('-' + tk) || tk.includes(normK) || normK.includes(tk));
-             });
-             const rData = actualKey ? rMap[actualKey] : null;
-             if (rData) {
-                trT1 += Number(rData.tier1) || 0;
-                trT2 += Number(rData.tier2) || 0;
-                trTot += Number(rData.total) || 0;
-                trBgt += Number(rData.total) || 0;
-                map[r] = {
-                   inc: 0,
-                   t1: Number(rData.tier1) || 0,
-                   t2: Number(rData.tier2) || 0,
-                   tot: Number(rData.total) || 0,
-                   bgt: Number(rData.total) || 0
-                };
-             } else {
-                map[r] = getEmpty();
-             }
-          }
-       });
-       map['TOTAL REGIONS'] = { inc: 0, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
-       
-       // GRAND TOTAL is sum of Central Office + Total Regions
-       const coItem = map['CENTRAL OFFICE'] || getEmpty();
-       map['GRAND TOTAL'] = {
-          inc: coItem.inc,
-          t1: coItem.t1 + trT1,
-          t2: coItem.t2 + trT2,
-          tot: coItem.tot + trTot,
-          bgt: coItem.bgt + trBgt
-       };
-       
-       return map;
-    };
+      drawHeaders(currentRowY);
+      currentRowY += 52;
 
-    // Calculate aggregated rowDataMap for summary
-    const getRowDataMapForSummary = (summaryName) => {
-       const map = {};
-       const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
-       const { sourcesOfFunds = {}, usesOfFunds = {}, usesCorporateIncome = {} } = reportSummary;
-       const src = sourcesOfFunds;
-       const bs = src.budgetarySupport || {};
-       const ps = usesOfFunds['Personnel Services'] || {};
-       const mooe = usesOfFunds['Maintenance and Other Operating Expenses'] || {};
-       const co = usesOfFunds['Capital Outlay'] || {};
-       
-       let gTotal = getEmpty();
-       if (summaryName === 'CorpIncome') {
-          gTotal = { inc: src.corporateIncome || 0, t1: 0, t2: 0, tot: 0, bgt: src.corporateIncome || 0 };
-       } else if (summaryName === 'BudgetSupport') {
-          gTotal = { inc: 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: bs.total || 0 };
-       } else if (summaryName === 'TotalSources') {
-          gTotal = { inc: src.corporateIncome || 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: src.proposedBudget || src.total || 0 };
-       } else if (summaryName === 'PS') {
-          gTotal = { inc: usesCorporateIncome['Personnel Services'] || 0, t1: ps.tier1 || 0, t2: ps.tier2 || 0, tot: ps.total || 0, bgt: ps.proposedBudget || ps.total || 0 };
-       } else if (summaryName === 'MOOE') {
-          gTotal = { inc: usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0, t1: mooe.tier1 || 0, t2: mooe.tier2 || 0, tot: mooe.total || 0, bgt: mooe.proposedBudget || mooe.total || 0 };
-       } else if (summaryName === 'CO') {
-          gTotal = { inc: usesCorporateIncome['Capital Outlay'] || 0, t1: co.tier1 || 0, t2: co.tier2 || 0, tot: co.total || 0, bgt: co.proposedBudget || co.total || 0 };
-       } else if (summaryName === 'TotalUses') {
-          const totInc = (usesCorporateIncome['Personnel Services'] || 0) + (usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0) + (usesCorporateIncome['Capital Outlay'] || 0);
-          gTotal = { inc: totInc, t1: usesOfFunds.tier1 || 0, t2: usesOfFunds.tier2 || 0, tot: usesOfFunds.total || 0, bgt: usesOfFunds.proposedBudget || usesOfFunds.total || 0 };
-       }
-       
-       map['GRAND TOTAL'] = gTotal;
-       if (!isAllRegions) return map;
-       
-       groups.forEach(g => {
-          if (g === 'GRAND TOTAL') return;
-          if (g === 'CENTRAL OFFICE') {
-             map[g] = getEmpty();
-          } else if (g === 'TOTAL REGIONS') {
-             // Computed after all regions
+      const getWrappedText = (text, maxLineLength) => {
+        const words = String(text || '').split(' ');
+        let lines = [];
+        let currentLine = '';
+        words.forEach(word => {
+          if ((currentLine + ' ' + word).length > maxLineLength) {
+            if (currentLine) lines.push(currentLine.trim());
+            currentLine = word;
           } else {
-             const rSummary = regionalBreakdown.summaryTotals?.[g]?.[summaryName];
-             map[g] = rSummary ? { ...rSummary } : getEmpty();
+            currentLine += (currentLine ? ' ' : '') + word;
           }
-       });
-       
-       // Calculate TOTAL REGIONS by summing all actual regions
-       let trInc = 0, trT1 = 0, trT2 = 0, trTot = 0, trBgt = 0;
-       groups.forEach(g => {
-          if (g !== 'GRAND TOTAL' && g !== 'CENTRAL OFFICE' && g !== 'TOTAL REGIONS') {
-             const item = map[g] || getEmpty();
-             trInc += item.inc || 0;
-             trT1 += item.t1 || 0;
-             trT2 += item.t2 || 0;
-             trTot += item.tot || 0;
-             trBgt += item.bgt || 0;
-          }
-       });
-       map['TOTAL REGIONS'] = { inc: trInc, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
-       
-       // If CENTRAL OFFICE is empty/0, ensure GRAND TOTAL equals TOTAL REGIONS for consistency when filtering all regions
-       const coItem = map['CENTRAL OFFICE'] || getEmpty();
-       if (coItem.tot === 0 && coItem.inc === 0 && coItem.bgt === 0 && (trTot > 0 || trInc > 0)) {
-          map['GRAND TOTAL'] = { inc: trInc, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
-       }
-       
-       return map;
-    };
+        });
+        if (currentLine) lines.push(currentLine.trim());
+        return lines;
+      };
 
-    drawRow('A. SOURCES OF FUNDS', {}, true);
-    drawRow('Projected Corporate Income', getRowDataMapForSummary('CorpIncome'));
-    drawRow('Budgetary Support', getRowDataMapForSummary('BudgetSupport'));
-    drawRow('TOTAL SOURCES OF FUNDS', getRowDataMapForSummary('TotalSources'), true);
-    
-    drawRow('B. USES OF FUNDS', {}, true);
-    
-    const lineItems = reportSummary.lineItems || [];
-    let currentCategory = '';
-    lineItems.forEach(item => {
-       const cat = item.category || '';
-       if (cat !== currentCategory) {
-          currentCategory = cat;
-          drawRow(String(cat), {}, true);
-       }
-       // only draw if total > 0 or whatever logic
-       const catTotal = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
-       if ((cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') && catTotal <= 0) return;
+      const drawRow = (title, rowDataMap, isBold = false) => {
+        const lines = getWrappedText(title, 32);
+        const textHeight = Math.max(lines.length * 10, 10);
+        const rowHeight = textHeight + 4; 
+
+        if (currentRowY + rowHeight > PAGE_HEIGHT - 40) {
+          recipe.endPage();
+          recipe.createPage(PAGE_WIDTH, PAGE_HEIGHT);
+          drawReportWatermark();
+          currentRowY = 40;
+          drawHeaders(currentRowY);
+          currentRowY += 52;
+        }
+
+        const rowBot = currentRowY + rowHeight;
+        const textStartY = currentRowY + 2;
+
+        lines.forEach((line, index) => {
+          recipe.text(line, colX[0], textStartY + (index * 10), { bold: isBold, fontSize: 9, color: [0, 0, 0] });
+        });
+      
+        let colIdx = 1;
+        groups.forEach(g => {
+           const data = rowDataMap[g] || { inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 };
+           const incStr = data.inc ? formatTierCurrency(data.inc) : '-';
+           const t1Str = data.t1 ? formatTierCurrency(data.t1) : '-';
+           const t2Str = data.t2 ? formatTierCurrency(data.t2) : '-';
+           const totStr = data.tot ? formatTierCurrency(data.tot) : '-';
+           const bgtStr = data.bgt ? formatTierCurrency(data.bgt) : '-';
+         
+           const getStrWidth = (str) => {
+              let w = 0;
+              for (let i=0; i < str.length; i++) {
+                if (str[i] === ',' || str[i] === '.' || str[i] === '-' || str[i] === ' ') w += 2.5;
+                else w += 4.5;
+              }
+              return w;
+           };
+
+           recipe.text(incStr, borderX[colIdx + 1] - 5 - getStrWidth(incStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+           recipe.text(t1Str, borderX[colIdx + 1] - 5 - getStrWidth(t1Str), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+           recipe.text(t2Str, borderX[colIdx + 1] - 5 - getStrWidth(t2Str), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+           recipe.text(totStr, borderX[colIdx + 1] - 5 - getStrWidth(totStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+           recipe.text(bgtStr, borderX[colIdx + 1] - 5 - getStrWidth(bgtStr), textStartY, { fontSize: 8, color: [0, 0, 0], bold: isBold }); colIdx++;
+        });
+      
+        recipe.rectangle(35, rowBot, TABLE_WIDTH, 0.5, { fill: [0, 0, 0] });
+        borderX.forEach(x => {
+          recipe.rectangle(x, currentRowY, 0.5, rowBot - currentRowY, { fill: [0, 0, 0] });
+        });
+      
+        currentRowY = rowBot;
+      };
+
+      // Calculate aggregated rowDataMap
+      const getRowDataMapForLineItem = (lineItem) => {
+         const map = {};
+         const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
        
-       const itemLabel = getTierReportLineItemLabel(item, isNepAlignment);
-       const referenceNote = isNepAlignment && item.referenceNote ? ` — ${item.referenceNote}` : '';
-       drawRow(`  ${itemLabel}${referenceNote}`, getRowDataMapForLineItem(item));
-    });
+         if (!isAllRegions) {
+            map['GRAND TOTAL'] = {
+               inc: Number(lineItem.corporateIncome) || 0,
+               t1: Number(lineItem.tier1) || 0,
+               t2: Number(lineItem.tier2) || 0,
+               tot: Number(lineItem.total) || 0,
+               bgt: Number(lineItem.proposedBudget || lineItem.total) || 0
+            };
+            return map;
+         }
+       
+         // Central Office
+         const coData = regionalBreakdown.data['CENTRAL OFFICE']?.[lineItem.lineItemId];
+         if (coData) {
+            map['CENTRAL OFFICE'] = {
+               inc: 0,
+               t1: Number(coData.tier1) || 0,
+               t2: Number(coData.tier2) || 0,
+               tot: Number(coData.total) || 0,
+               bgt: Number(coData.total) || 0
+            };
+         } else {
+            map['CENTRAL OFFICE'] = getEmpty();
+         }
+       
+         // Total Regions
+         let trT1 = 0, trT2 = 0, trTot = 0, trBgt = 0;
+         regionalBreakdown.regions.forEach(r => {
+            if (r !== 'CENTRAL OFFICE' && r !== 'TOTAL REGIONS') {
+               const targetKeys = [
+                  String(lineItem.lineItemId || '').trim().toLowerCase().replace(/\s+/g, ' '),
+                  String(lineItem.description || '').trim().toLowerCase().replace(/\s+/g, ' '),
+                  String(lineItem.name || '').trim().toLowerCase().replace(/\s+/g, ' ')
+               ];
+               const rMap = regionalBreakdown.data[r] || {};
+               const actualKey = Object.keys(rMap).find(k => {
+                  const normK = k.trim().toLowerCase().replace(/\s+/g, ' ');
+                  return targetKeys.some(tk => tk === normK || tk.endsWith('-' + normK) || normK.endsWith('-' + tk) || tk.includes(normK) || normK.includes(tk));
+               });
+               const rData = actualKey ? rMap[actualKey] : null;
+               if (rData) {
+                  trT1 += Number(rData.tier1) || 0;
+                  trT2 += Number(rData.tier2) || 0;
+                  trTot += Number(rData.total) || 0;
+                  trBgt += Number(rData.total) || 0;
+                  map[r] = {
+                     inc: 0,
+                     t1: Number(rData.tier1) || 0,
+                     t2: Number(rData.tier2) || 0,
+                     tot: Number(rData.total) || 0,
+                     bgt: Number(rData.total) || 0
+                  };
+               } else {
+                  map[r] = getEmpty();
+               }
+            }
+         });
+         map['TOTAL REGIONS'] = { inc: 0, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
+       
+         // GRAND TOTAL is sum of Central Office + Total Regions
+         const coItem = map['CENTRAL OFFICE'] || getEmpty();
+         map['GRAND TOTAL'] = {
+            inc: coItem.inc,
+            t1: coItem.t1 + trT1,
+            t2: coItem.t2 + trT2,
+            tot: coItem.tot + trTot,
+            bgt: coItem.bgt + trBgt
+         };
+       
+         return map;
+      };
+
+      // Calculate aggregated rowDataMap for summary
+      const getRowDataMapForSummary = (summaryName) => {
+         const map = {};
+         const getEmpty = () => ({ inc: 0, t1: 0, t2: 0, tot: 0, bgt: 0 });
+         const { sourcesOfFunds = {}, usesOfFunds = {}, usesCorporateIncome = {} } = reportSummary;
+         const src = sourcesOfFunds;
+         const bs = src.budgetarySupport || {};
+         const ps = usesOfFunds['Personnel Services'] || {};
+         const mooe = usesOfFunds['Maintenance and Other Operating Expenses'] || {};
+         const co = usesOfFunds['Capital Outlay'] || {};
+       
+         let gTotal = getEmpty();
+         if (summaryName === 'CorpIncome') {
+            gTotal = { inc: src.corporateIncome || 0, t1: 0, t2: 0, tot: 0, bgt: src.corporateIncome || 0 };
+         } else if (summaryName === 'BudgetSupport') {
+            gTotal = { inc: 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: bs.total || 0 };
+         } else if (summaryName === 'TotalSources') {
+            gTotal = { inc: src.corporateIncome || 0, t1: bs.tier1 || 0, t2: bs.tier2 || 0, tot: bs.total || 0, bgt: src.proposedBudget || src.total || 0 };
+         } else if (summaryName === 'PS') {
+            gTotal = { inc: usesCorporateIncome['Personnel Services'] || 0, t1: ps.tier1 || 0, t2: ps.tier2 || 0, tot: ps.total || 0, bgt: ps.proposedBudget || ps.total || 0 };
+         } else if (summaryName === 'MOOE') {
+            gTotal = { inc: usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0, t1: mooe.tier1 || 0, t2: mooe.tier2 || 0, tot: mooe.total || 0, bgt: mooe.proposedBudget || mooe.total || 0 };
+         } else if (summaryName === 'CO') {
+            gTotal = { inc: usesCorporateIncome['Capital Outlay'] || 0, t1: co.tier1 || 0, t2: co.tier2 || 0, tot: co.total || 0, bgt: co.proposedBudget || co.total || 0 };
+         } else if (summaryName === 'TotalUses') {
+            const totInc = (usesCorporateIncome['Personnel Services'] || 0) + (usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0) + (usesCorporateIncome['Capital Outlay'] || 0);
+            gTotal = { inc: totInc, t1: usesOfFunds.tier1 || 0, t2: usesOfFunds.tier2 || 0, tot: usesOfFunds.total || 0, bgt: usesOfFunds.proposedBudget || usesOfFunds.total || 0 };
+         }
+       
+         map['GRAND TOTAL'] = gTotal;
+         if (!isAllRegions) return map;
+       
+         groups.forEach(g => {
+            if (g === 'GRAND TOTAL') return;
+            if (g === 'CENTRAL OFFICE') {
+               map[g] = getEmpty();
+            } else if (g === 'TOTAL REGIONS') {
+               // Computed after all regions
+            } else {
+               const rSummary = regionalBreakdown.summaryTotals?.[g]?.[summaryName];
+               map[g] = rSummary ? { ...rSummary } : getEmpty();
+            }
+         });
+       
+         // Calculate TOTAL REGIONS by summing all actual regions
+         let trInc = 0, trT1 = 0, trT2 = 0, trTot = 0, trBgt = 0;
+         groups.forEach(g => {
+            if (g !== 'GRAND TOTAL' && g !== 'CENTRAL OFFICE' && g !== 'TOTAL REGIONS') {
+               const item = map[g] || getEmpty();
+               trInc += item.inc || 0;
+               trT1 += item.t1 || 0;
+               trT2 += item.t2 || 0;
+               trTot += item.tot || 0;
+               trBgt += item.bgt || 0;
+            }
+         });
+         map['TOTAL REGIONS'] = { inc: trInc, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
+       
+         // If CENTRAL OFFICE is empty/0, ensure GRAND TOTAL equals TOTAL REGIONS for consistency when filtering all regions
+         const coItem = map['CENTRAL OFFICE'] || getEmpty();
+         if (coItem.tot === 0 && coItem.inc === 0 && coItem.bgt === 0 && (trTot > 0 || trInc > 0)) {
+            map['GRAND TOTAL'] = { inc: trInc, t1: trT1, t2: trT2, tot: trTot, bgt: trBgt };
+         }
+       
+         return map;
+      };
+
+      drawRow('A. SOURCES OF FUNDS', {}, true);
+      drawRow('Projected Corporate Income', getRowDataMapForSummary('CorpIncome'));
+      drawRow('Budgetary Support', getRowDataMapForSummary('BudgetSupport'));
+      drawRow('TOTAL SOURCES OF FUNDS', getRowDataMapForSummary('TotalSources'), true);
     
-    drawRow('TOTAL PERSONNEL SERVICES', getRowDataMapForSummary('PS'), true);
-    drawRow('TOTAL MOOE', getRowDataMapForSummary('MOOE'), true);
-    drawRow('TOTAL CAPITAL OUTLAY', getRowDataMapForSummary('CO'), true);
-    drawRow('TOTAL USES OF FUNDS', getRowDataMapForSummary('TotalUses'), true);
+      drawRow('B. USES OF FUNDS', {}, true);
+    
+      const lineItems = reportSummary.lineItems || [];
+      let currentCategory = '';
+      lineItems.forEach(item => {
+         const cat = item.category || '';
+         if (cat !== currentCategory) {
+            currentCategory = cat;
+            drawRow(String(cat), {}, true);
+         }
+         // only draw if total > 0 or whatever logic
+         const catTotal = Number(item.total) || (Number(item.tier1) || 0) + (Number(item.tier2) || 0);
+         if ((cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') && catTotal <= 0) return;
+       
+         const itemLabel = getTierReportLineItemLabel(item, isNepAlignment);
+         const referenceNote = isNepAlignment && item.referenceNote ? ` — ${item.referenceNote}` : '';
+         drawRow(`  ${itemLabel}${referenceNote}`, getRowDataMapForLineItem(item));
+      });
+    
+      drawRow('TOTAL PERSONNEL SERVICES', getRowDataMapForSummary('PS'), true);
+      drawRow('TOTAL MOOE', getRowDataMapForSummary('MOOE'), true);
+      drawRow('TOTAL CAPITAL OUTLAY', getRowDataMapForSummary('CO'), true);
+      drawRow('TOTAL USES OF FUNDS', getRowDataMapForSummary('TotalUses'), true);
+
+    }
 
     recipe.endPage().endPDF((err) => {
       if (err) {

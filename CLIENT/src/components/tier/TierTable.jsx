@@ -1215,6 +1215,14 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
           surplusDeficit,
           usesCorporateIncome,
           lineItems: reportLineItems,
+          // Corporate income breakdown in page order, used by the Tier PDF Sources of Funds section.
+          incomeBreakdown: groupedIncomeData.map((group) => ({
+            category: group.category,
+            subtotal: group.subtotal,
+            isIsf: group.isIsf,
+            isNetIsf: group.isNetIsf,
+            items: (group.items || []).map((item) => ({ name: item.name, amount: item.amount })),
+          })),
         },
       };
       const sig = JSON.stringify(payload);
@@ -1223,7 +1231,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
         onTierDataChange(payload);
       }
     }
-  }, [allData, sourcesOfFunds, usesOfFunds, surplusDeficit, usesCorporateIncome, reportLineItems, finalizedData, onTierDataChange]);
+  }, [allData, sourcesOfFunds, usesOfFunds, surplusDeficit, usesCorporateIncome, reportLineItems, groupedIncomeData, finalizedData, onTierDataChange]);
 
   if (isLoading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;
