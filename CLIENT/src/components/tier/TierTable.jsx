@@ -629,13 +629,37 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     });
 
     const byRank = (a, b) => (a.rank - b.rank) || (a.firstSeen - b.firstSeen);
+    // Fixed Sources of Funds order (same as the Corporate Income page and the income PDF):
+    // ISF -> Net ISF -> Rent Income -> Water Service Fee -> Miscellaneous Income -> Others -> anything else.
+    const CATEGORY_ORDER = [
+      'irrigation service fees',
+      'net irrigation service fees',
+      'rent income',
+      'water service fee',
+      'miscellaneous income',
+      'others',
+    ];
+    const categoryPriority = (name) => {
+      const lower = norm(name);
+      const idx = CATEGORY_ORDER.findIndex((c) => lower === c || lower.startsWith(c));
+      return idx === -1 ? CATEGORY_ORDER.length : idx;
+    };
     return Array.from(byCategory.values())
-      .sort(byRank)
-      .map(({ category, subtotal, merged }) => ({
-        category,
-        subtotal,
-        items: Array.from(merged.values()).sort(byRank),
-      }));
+      .sort((a, b) => (categoryPriority(a.category) - categoryPriority(b.category)) || byRank(a, b))
+      .map(({ category, subtotal, merged }) => {
+        const lower = norm(category);
+        const isNetIsf = lower.startsWith('net irrigation service fees');
+        const isIsf = !isNetIsf && lower.startsWith('irrigation service fees');
+        const items = Array.from(merged.values()).sort(byRank);
+        return {
+          category,
+          subtotal,
+          isIsf,
+          isNetIsf,
+          // The computed Net ISF line is shown as a single total row, not as a sub-item.
+          items: isNetIsf ? [] : items,
+        };
+      });
   }, [incomeData, incomeCategoryList]);
 
   const groupedMooeData = useMemo(() => {
@@ -1287,8 +1311,15 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
               </TableCell>
             </TableRow>
 
-            {/* Projected Corporate Income - expandable sub-list by category */}
-            {expandableRow('Projected Corporate Income', incomeOpen, setIncomeOpen, sourcesIncome, 'expand income')}
+            {/* 1. CORPORATE INCOME - expandable sub-list by category, total shown below */}
+            <TableRow sx={{ '&:hover': { backgroundColor: 'action.hover' } }}>
+              <TableCell colSpan={COLUMN_COUNT}>
+                <IconButton aria-label="expand income" size="small" onClick={() => setIncomeOpen(!incomeOpen)} sx={{ mr: 0.5 }}>
+                  {incomeOpen ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                </IconButton>
+                <Typography component="span" sx={{ fontWeight: 700 }}>1. CORPORATE INCOME</Typography>
+              </TableCell>
+            </TableRow>
             <TableRow>
               <TableCell style={{ padding: 0 }} colSpan={COLUMN_COUNT}>
                 <Collapse in={incomeOpen} timeout="auto" unmountOnExit>
@@ -1296,29 +1327,53 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
                     <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
                       <TierColGroup />
                       <TableBody>
-                        {groupedIncomeData.map((group) => (
-                          <React.Fragment key={group.category}>
-                            <TableRow>
-                              <TableCell colSpan={COLUMN_COUNT} sx={{ pl: 4, fontWeight: 600, color: 'text.secondary' }}>{group.category}</TableCell>
-                            </TableRow>
-                            {(group.items || []).map((item, idx) => (
-                              <TableRow key={item._id || idx}>
-                                <TableCell sx={{ pl: 6 }}>{item.name || item.particulars || '—'}</TableCell>
-                                {[0, 1, 2, 3].map((i) => <TableCell key={i} align="right">{dash}</TableCell>)}
-                                <TableCell align="right">{formatCurrency(item.amount || 0)}</TableCell>
-                                <TableCell align="right">{formatCurrency(0)}</TableCell>
-                                <TableCell align="right">{formatCurrency(item.amount || 0)}</TableCell>
-                              </TableRow>
-                            ))}
-                            <TableRow sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-                              <TableCell sx={{ pl: 5, fontStyle: 'italic' }}>Subtotal ({group.category})</TableCell>
+                        {groupedIncomeData.map((group) => {
+                          const amountCells = (amount) => (
+                            <>
                               {[0, 1, 2, 3].map((i) => <TableCell key={i} align="right">{dash}</TableCell>)}
-                              <TableCell align="right">{formatCurrency(group.subtotal || 0)}</TableCell>
+                              <TableCell align="right">{formatCurrency(amount || 0)}</TableCell>
                               <TableCell align="right">{formatCurrency(0)}</TableCell>
-                              <TableCell align="right">{formatCurrency(group.subtotal || 0)}</TableCell>
-                            </TableRow>
-                          </React.Fragment>
-                        ))}
+                              <TableCell align="right">{formatCurrency(amount || 0)}</TableCell>
+                            </>
+                          );
+                          if (group.isNetIsf) {
+                            const isfGroup = groupedIncomeData.find((g) => g.isIsf);
+                            const discount = isfGroup ? Math.max(0, (isfGroup.subtotal || 0) - (group.subtotal || 0)) : 0;
+                            return (
+                              <React.Fragment key={group.category}>
+                                {discount > 0 && (
+                                  <TableRow>
+                                    <TableCell sx={{ pl: 4, fontWeight: 600 }}>Less: Discount on ISF</TableCell>
+                                    {amountCells(discount)}
+                                  </TableRow>
+                                )}
+                                <TableRow sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+                                  <TableCell sx={{ pl: 4, fontWeight: 700 }}>{group.category}</TableCell>
+                                  {amountCells(group.subtotal)}
+                                </TableRow>
+                              </React.Fragment>
+                            );
+                          }
+                          return (
+                            <React.Fragment key={group.category}>
+                              <TableRow>
+                                <TableCell colSpan={COLUMN_COUNT} sx={{ pl: 4, fontWeight: 700 }}>{group.category}</TableCell>
+                              </TableRow>
+                              {(group.items || []).map((item, idx) => (
+                                <TableRow key={item._id || idx}>
+                                  <TableCell sx={{ pl: 6 }}>{item.name || item.particulars || '—'}</TableCell>
+                                  {amountCells(item.amount)}
+                                </TableRow>
+                              ))}
+                              <TableRow sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+                                <TableCell sx={{ pl: 5, fontStyle: 'italic' }}>
+                                  {group.isIsf ? 'Total ISF' : `Subtotal (${group.category})`}
+                                </TableCell>
+                                {amountCells(group.subtotal)}
+                              </TableRow>
+                            </React.Fragment>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   ) : (
@@ -1330,13 +1385,31 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
               </TableCell>
             </TableRow>
 
+            <TableRow sx={{ borderTop: '2px solid', borderColor: 'text.primary' }}>
+              <TableCell sx={{ pl: 6, fontWeight: 700 }}>TOTAL-CORPORATE INCOME</TableCell>
+              <AmountCells t={sourcesIncome} wrap={(v) => <strong>{v}</strong>} />
+            </TableRow>
+
+            {/* 2. BUDGETARY SUPPORT */}
             <TableRow>
-              <TableCell>Budgetary Support</TableCell>
+              <TableCell colSpan={COLUMN_COUNT}>
+                <Typography component="span" sx={{ fontWeight: 700, pl: 1 }}>2. BUDGETARY SUPPORT</Typography>
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell colSpan={COLUMN_COUNT} sx={{ pl: 4 }}>Subsidy to the National Irrigation Administration:</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell sx={{ pl: 6 }}>a. Operating Requirements</TableCell>
               <AmountCells t={{ tier1: support.tier1, tier2: support.tier2 }} />
+            </TableRow>
+            <TableRow sx={{ borderTop: '2px solid', borderColor: 'text.primary' }}>
+              <TableCell sx={{ pl: 6, fontWeight: 700 }}>TOTAL BUDGETARY SUPPORT</TableCell>
+              <AmountCells t={{ tier1: support.tier1, tier2: support.tier2 }} wrap={(v) => <strong>{v}</strong>} />
             </TableRow>
 
             <TableRow sx={{ backgroundColor: 'primary.main', color: 'white' }}>
-              <TableCell>{whiteLabel('TOTAL SOURCES OF FUNDS (PROPOSED BUDGET = INCOME + SUBSIDY)')}</TableCell>
+              <TableCell>{whiteLabel('TOTAL SOURCES OF FUNDS')}</TableCell>
               <AmountCells
                 t={{ ...sourcesIncome, tier1: support.tier1, tier2: support.tier2, proposed: sources.proposedBudget }}
                 wrap={whiteTotal}

@@ -91,10 +91,12 @@ describe('TierTable income/subsidy split', () => {
   it('merges duplicate income lines and follows the configured category/subcategory order', async () => {
     const original = responses['/income/getByParams'];
     responses['/income-categories'] = {
+      // Settings order differs on purpose: the fixed Sources of Funds order must win for categories.
       categories: [
-        { _id: 'c1', incomeCategoryName: 'Irrigation Service Fees', incomeSubcategoryName: ['Current Account', 'Back Accounts'] },
-        { _id: 'c2', incomeCategoryName: 'Rent Income', incomeSubcategoryName: ['Rent Income', 'Dorm / RTC / NIA Housing'] },
         { _id: 'c3', incomeCategoryName: 'Miscellaneous Income', incomeSubcategoryName: ['Bid Forms', 'Sales of Scrap'] },
+        { _id: 'c4', incomeCategoryName: 'Water Service Fee', incomeSubcategoryName: ['Aya PSP'] },
+        { _id: 'c2', incomeCategoryName: 'Rent Income', incomeSubcategoryName: ['Rent Income', 'Dorm / RTC / NIA Housing'] },
+        { _id: 'c1', incomeCategoryName: 'Irrigation Service Fees', incomeSubcategoryName: ['Current Account', 'Back Accounts'] },
       ],
     };
     responses['/income/getByParams'] = [
@@ -106,6 +108,8 @@ describe('TierTable income/subsidy split', () => {
       { incomecategory: { _id: 'c2', name: 'Rent Income' }, subcategory: 'Rent Income', amount: 1000 },
       { incomecategory: { _id: 'c1', name: 'Irrigation Service Fees' }, subcategory: 'Back Accounts', amount: 500 },
       { incomecategory: { _id: 'c1', name: 'Irrigation Service Fees' }, subcategory: 'Current Account', amount: 700 },
+      { incomecategory: { _id: 'c4', name: 'Water Service Fee' }, subcategory: 'Aya PSP', amount: 2000 },
+      { particulars: 'Net Irrigation Service Fees', subcategory: 'Computed', isComputed: true, amount: 1130, incomecategory: { name: 'Net Irrigation Service Fees' } },
     ];
     renderTable();
     await screen.findByText('A. SOURCES OF FUNDS');
@@ -115,11 +119,25 @@ describe('TierTable income/subsidy split', () => {
       .map((td) => td.textContent.trim())
       .filter(Boolean);
     expect(labels).toEqual([
-      'Irrigation Service Fees', 'Current Account', 'Back Accounts', 'Subtotal (Irrigation Service Fees)',
+      'Irrigation Service Fees', 'Current Account', 'Back Accounts', 'Total ISF',
+      'Less: Discount on ISF', 'Net Irrigation Service Fees',
       'Rent Income', 'Rent Income', 'Dorm / RTC / NIA Housing', 'Subtotal (Rent Income)',
+      'Water Service Fee', 'Aya PSP', 'Subtotal (Water Service Fee)',
       'Miscellaneous Income', 'Bid Forms', 'Sales of Scrap', 'Subtotal (Miscellaneous Income)',
     ]);
     expect(screen.getAllByText('Dorm / RTC / NIA Housing')).toHaveLength(1);
+    const mainLabels = Array.from(document.querySelectorAll('table > tbody > tr > td:first-child'))
+      .map((td) => td.textContent.trim())
+      .filter(Boolean);
+    const sourcesSection = mainLabels.slice(mainLabels.indexOf('A. SOURCES OF FUNDS'), mainLabels.indexOf('B. USES OF FUNDS'));
+    expect(sourcesSection.filter((l) => !l.startsWith('Irrigation') && !l.includes('Item') && l.length < 60)).toEqual(expect.arrayContaining([
+      '1. CORPORATE INCOME', 'TOTAL-CORPORATE INCOME', '2. BUDGETARY SUPPORT',
+      'Subsidy to the National Irrigation Administration:', 'a. Operating Requirements',
+      'TOTAL BUDGETARY SUPPORT', 'TOTAL SOURCES OF FUNDS',
+    ]));
+    const order = ['1. CORPORATE INCOME', 'TOTAL-CORPORATE INCOME', '2. BUDGETARY SUPPORT', 'Subsidy to the National Irrigation Administration:', 'a. Operating Requirements', 'TOTAL BUDGETARY SUPPORT', 'TOTAL SOURCES OF FUNDS'];
+    const positions = order.map((l) => sourcesSection.indexOf(l));
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
     expect(screen.getAllByText('₱716,100.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('₱180,000.00').length).toBeGreaterThan(0);
     responses['/income/getByParams'] = original;
