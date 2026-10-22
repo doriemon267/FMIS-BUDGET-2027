@@ -124,3 +124,9 @@ SERVER/SERVER/
 
 # Local design previews and evaluation screenshots
 .codex-design-tmp/
+
+# Sensitive credentials and certificates (do not commit)
+PNPKI CREDENTIALS.txt
+SERVER/.env.bak
+CLIENT/.env.*
+SERVER/certs/*.pem
