@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { NumericFormat } from 'react-number-format';
 import {
   Box,
   InputAdornment,
@@ -67,13 +68,22 @@ const NEPFinancialComparisonTable = ({
   const hasFallbackBaseline = !totals.hasDurableBaseline && currentItems.length > 0;
 
   const input = (row, field, displayedValue, label) => (
-    <TextField
+    <NumericFormat
+      customInput={TextField}
+      thousandSeparator=","
+      decimalScale={2}
+      fixedDecimalScale
+      allowNegative={false}
       size="small"
       value={displayedValue || ''}
       placeholder="0.00"
       disabled={!canEdit || row.sourceIndices.length === 0}
       onKeyDown={preventNegativeNumericKey}
-      onChange={event => onEdit(row.sourceIndices, toNonNegativeNumber(event.target.value), field)}
+      onValueChange={(values, sourceInfo) => {
+        if (sourceInfo.source === 'event') {
+          onEdit(row.sourceIndices, toNonNegativeNumber(values.floatValue ?? 0), field);
+        }
+      }}
       aria-label={`${row.label} proposed ${label}`}
       InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment> }}
       inputProps={{ inputMode: 'decimal', style: { textAlign: 'right' } }}

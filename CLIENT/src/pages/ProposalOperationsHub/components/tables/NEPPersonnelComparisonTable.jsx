@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { NumericFormat } from 'react-number-format';
 import {
   Box,
   Chip,
@@ -86,15 +87,22 @@ const NEPPersonnelComparisonTable = ({
     return (
       <Tooltip title="This total is distributed proportionally across contributing personnel records.">
         <Box component="span" sx={{ display: 'block' }}>
-          <TextField
+          <NumericFormat
+            customInput={TextField}
+            thousandSeparator=","
+            decimalScale={2}
+            fixedDecimalScale
+            allowNegative={false}
             size="small"
             value={value || ''}
             placeholder="0.00"
             disabled={!canEdit}
             onKeyDown={preventNegativeNumericKey}
-            onChange={event =>
-              onAllocationChange(row, funding, toNonNegativeNumber(event.target.value))
-            }
+            onValueChange={(values, sourceInfo) => {
+              if (sourceInfo.source === 'event') {
+                onAllocationChange(row, funding, toNonNegativeNumber(values.floatValue ?? 0));
+              }
+            }}
             aria-label={`${row.label} NEP ${label}`}
             InputProps={{
               startAdornment: <InputAdornment position="start">₱</InputAdornment>,
