@@ -1,4 +1,4 @@
-const { buildTierScopeRows, formatAmount } = require('../../utils/tierScopePdf');
+const { buildTierScopeRows, buildRegionalTierSummaries, compareRegions, formatAmount } = require('../../utils/tierScopePdf');
 
 const summary = {
   sourcesOfFunds: {
@@ -61,5 +61,53 @@ describe('Tier scope PDF rows', () => {
     expect(formatAmount(null)).toBe('');
     expect(formatAmount(1234.5)).toBe('1,234.50');
     expect(formatAmount(-50)).toBe('(50.00)');
+  });
+});
+
+describe('All Regions Tier PDF sections', () => {
+  const allSummary = {
+    ...summary,
+    lineItems: summary.lineItems.map((item, i) => ({ ...item, lineItemId: `item-${i}` })),
+  };
+  const regionalBreakdown = {
+    regions: ['REGION X', 'REGION II', 'CENTRAL OFFICE', 'REGION IV-A', 'TOTAL REGIONS'],
+    data: {
+      'REGION II': { PERA: { total: 800 }, 'Traveling Expenses-Local': { total: 200 }, 'Current Account': { total: 150 } },
+    },
+    summaryTotals: {
+      'REGION II': { CorpIncome: { inc: 150 }, PS: { tot: 900 }, MOOE: { tot: 200 }, CO: { tot: 0 } },
+    },
+  };
+
+  test('orders Central Office first and regions by number', () => {
+    const order = ['REGION X', 'CAR', 'REGION II', 'CENTRAL OFFICE', 'REGION IV-A', 'REGION I'].sort(compareRegions);
+    expect(order).toEqual(['CENTRAL OFFICE', 'REGION I', 'REGION II', 'REGION IV-A', 'REGION X', 'CAR']);
+  });
+
+  test('builds one summary per region, skipping TOTAL REGIONS', () => {
+    const sections = buildRegionalTierSummaries({ reportSummary: allSummary, regionalBreakdown });
+    expect(sections.map((s) => s.scopeLabel)).toEqual(['CENTRAL OFFICE', 'REGION II', 'REGION IV-A', 'REGION X']);
+  });
+
+  test('uses regional amounts as Tier 1 subsidy and keeps unmatched amounts visible', () => {
+    const region = buildRegionalTierSummaries({ reportSummary: allSummary, regionalBreakdown })
+      .find((s) => s.scopeLabel === 'REGION II').reportSummary;
+    const rows = buildTierScopeRows(region);
+    const values = (label) => rows.find((r) => r.label === label).values;
+    expect(values('PERA')).toEqual([0, 800, 0, 0, 0, 800, 800]);
+    expect(values('Other items (not itemized)')).toEqual([0, 100, 0, 0, 0, 100, 100]);
+    expect(values('Current Account')).toEqual([null, null, null, null, 150, 0, 150]);
+    expect(values('TOTAL USES OF FUNDS')).toEqual([0, 1100, 0, 0, 0, 1100, 1100]);
+    expect(values('TOTAL SOURCES OF FUNDS')).toEqual([150, 1100, 0, 0, 150, 1100, 1250]);
+  });
+
+  test('applies the Tier split saved for the region', () => {
+    const region = buildRegionalTierSummaries({
+      reportSummary: allSummary,
+      regionalBreakdown,
+      savedTierByRegion: { 'REGION II': { 'item-0': { tier1: 500, tier2: 250, tier1Income: 50, tier2Income: 0 } } },
+    }).find((s) => s.scopeLabel === 'REGION II').reportSummary;
+    const row = buildTierScopeRows(region).find((r) => r.label === 'PERA');
+    expect(row.values).toEqual([50, 500, 0, 250, 50, 750, 800]);
   });
 });

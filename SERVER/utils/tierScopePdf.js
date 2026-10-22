@@ -163,13 +163,191 @@ const buildTierScopeRows = (reportSummary = {}) => {
   return rows;
 };
 
+
+const normKey = (v) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const ROMAN = { I: 1, V: 5, X: 10, L: 50 };
+const romanValue = (text) => {
+  let total = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const cur = ROMAN[text[i]];
+    const next = ROMAN[text[i + 1]] || 0;
+    if (!cur) return null;
+    total += cur < next ? -cur : cur;
+  }
+  return total;
+};
+
+/** Central Office first, then REGION I, II ... XIII in numeric order (suffixes like IV-A kept), then the rest. */
+const compareRegions = (a, b) => {
+  const rank = (name) => {
+    const upper = String(name || '').toUpperCase().trim();
+    if (upper === 'CENTRAL OFFICE') return [0, 0, ''];
+    const arabic = upper.match(/^REGION\s+(\d+)\s*-?\s*([A-Z]?)\b/);
+    if (arabic) return [1, Number(arabic[1]), arabic[2] || ''];
+    const match = upper.match(/^REGION\s+([IVXL]+)(?:\s*-?\s*([A-Z]))?\b/);
+    if (match) {
+      const value = romanValue(match[1]);
+      if (value) return [1, value, match[2] || ''];
+    }
+    return [2, 0, upper];
+  };
+  const ra = rank(a);
+  const rb = rank(b);
+  for (let i = 0; i < 3; i += 1) {
+    if (ra[i] < rb[i]) return -1;
+    if (ra[i] > rb[i]) return 1;
+  }
+  return 0;
+};
+
+const CATEGORY_SUMMARY_KEY = {
+  'Personnel Services': 'PS',
+  [MOOE]: 'MOOE',
+  'Capital Outlay': 'CO',
+};
+
+/**
+ * Build one reportSummary per region for the All Regions Tier PDF.
+ * - Line items follow the order of the All Regions summary from the Tier page.
+ * - Amounts come from the regional proposals (regionalBreakdown). If the region saved a Tier split
+ *   on the /tier page (savedTierByRegion[region][lineItemId]), that split is used; otherwise the
+ *   amount is shown as Tier 1 subsidy, the same default the Tier page uses.
+ * - Amounts in the regional totals that could not be matched to a line item are shown as
+ *   "Other items (not itemized)" so category totals still agree with the regional proposals.
+ */
+const buildRegionalTierSummaries = ({ reportSummary = {}, regionalBreakdown = {}, savedTierByRegion = {} } = {}) => {
+  const lineItems = Array.isArray(reportSummary.lineItems) ? reportSummary.lineItems : [];
+  const breakdown = Array.isArray(reportSummary.incomeBreakdown) ? reportSummary.incomeBreakdown : [];
+  const regions = [...(regionalBreakdown.regions || [])]
+    .filter((r) => r && String(r).toUpperCase() !== 'TOTAL REGIONS')
+    .sort(compareRegions);
+
+  return regions.map((region) => {
+    const regionData = regionalBreakdown.data?.[region] || {};
+    const totals = regionalBreakdown.summaryTotals?.[region] || {};
+    const saved = savedTierByRegion[region] || {};
+    const byKey = {};
+    Object.entries(regionData).forEach(([key, value]) => { byKey[normKey(key)] = value; });
+
+    const findAmount = (item) => {
+      const id = String(item.lineItemId || '');
+      const idTail = id.includes('-') ? id.slice(id.indexOf('-') + 1) : id;
+      const keys = [item.description, item.name, idTail, id].map(normKey).filter(Boolean);
+      for (const key of keys) {
+        if (byKey[key]) return num(byKey[key].total);
+      }
+      return 0;
+    };
+
+    const regionLines = [];
+    const uses = {};
+    USE_CATEGORIES.forEach(({ key }) => {
+      uses[key] = { tier1: 0, tier2: 0, tier1Income: 0, tier2Income: 0 };
+    });
+
+    lineItems.forEach((item) => {
+      if (!item || !uses[item.category]) return;
+      const savedItem = saved[item.lineItemId];
+      let values;
+      if (savedItem) {
+        values = {
+          tier1: num(savedItem.tier1),
+          tier2: num(savedItem.tier2),
+          tier1Income: num(savedItem.tier1Income),
+          tier2Income: num(savedItem.tier2Income),
+        };
+      } else {
+        values = { tier1: findAmount(item), tier2: 0, tier1Income: 0, tier2Income: 0 };
+      }
+      const sum = values.tier1 + values.tier2 + values.tier1Income + values.tier2Income;
+      if (sum <= 0) return;
+      regionLines.push({ ...item, ...values, corporateIncome: values.tier1Income + values.tier2Income, total: values.tier1 + values.tier2 });
+      Object.keys(values).forEach((field) => { uses[item.category][field] += values[field]; });
+    });
+
+    USE_CATEGORIES.forEach(({ key }) => {
+      const expected = num(totals[CATEGORY_SUMMARY_KEY[key]]?.tot);
+      const c = uses[key];
+      const shown = c.tier1 + c.tier2 + c.tier1Income + c.tier2Income;
+      const missing = Math.round((expected - shown) * 100) / 100;
+      if (missing >= 1) {
+        regionLines.push({
+          lineItemId: `${key}-other`,
+          category: key,
+          subCategory: key,
+          description: 'Other items (not itemized)',
+          tier1: missing, tier2: 0, tier1Income: 0, tier2Income: 0,
+        });
+        c.tier1 += missing;
+      }
+    });
+
+    // Corporate income: regional income records matched to the Tier page income lines.
+    const incomeByKey = {};
+    Object.entries(regionData).forEach(([key, value]) => { incomeByKey[normKey(key)] = num(value.total); });
+    const incomeGroups = [];
+    let itemizedIncome = 0;
+    breakdown.forEach((group) => {
+      if (!group || group.isNetIsf) return;
+      const items = (group.items || [])
+        .map((it) => ({ name: it.name, amount: incomeByKey[normKey(it.name)] || 0 }))
+        .filter((it) => it.amount > 0);
+      if (!items.length) return;
+      const subtotal = items.reduce((s, it) => s + it.amount, 0);
+      itemizedIncome += subtotal;
+      incomeGroups.push({ category: group.category, isIsf: group.isIsf, subtotal, items });
+    });
+    const corporateIncome = num(totals.CorpIncome?.inc) || itemizedIncome;
+    const otherIncome = Math.round((corporateIncome - itemizedIncome) * 100) / 100;
+    if (otherIncome >= 1) {
+      incomeGroups.push({ category: 'Other Income', subtotal: otherIncome, items: [{ name: 'Other income (not itemized)', amount: otherIncome }] });
+    }
+
+    const support = {
+      tier1: USE_CATEGORIES.reduce((s, { key }) => s + uses[key].tier1, 0),
+      tier2: USE_CATEGORIES.reduce((s, { key }) => s + uses[key].tier2, 0),
+    };
+    const sumField = (field) => USE_CATEGORIES.reduce((s, { key }) => s + uses[key][field], 0);
+    const totalUses = sumField('tier1') + sumField('tier2') + sumField('tier1Income') + sumField('tier2Income');
+    const proposedBudget = corporateIncome + support.tier1 + support.tier2;
+
+    return {
+      scopeLabel: region,
+      reportSummary: {
+        sourcesOfFunds: {
+          corporateIncome,
+          corporateIncomeTier1: corporateIncome,
+          corporateIncomeTier2: 0,
+          budgetarySupport: { ...support, total: support.tier1 + support.tier2 },
+          proposedBudget,
+        },
+        usesOfFunds: {
+          ...uses,
+          totalTier1: sumField('tier1'),
+          totalTier2: sumField('tier2'),
+          totalTier1Income: sumField('tier1Income'),
+          totalTier2Income: sumField('tier2Income'),
+        },
+        surplusDeficit: proposedBudget - totalUses,
+        lineItems: regionLines,
+        incomeBreakdown: incomeGroups,
+      },
+    };
+  });
+};
+
 /**
  * Draw the report on a muhammara Recipe. Leaves the last page open so the caller can
  * finish with recipe.endPage().endPDF().
  */
 const renderTierScopePdf = (recipe, {
   reportSummary,
-  pageWidth = 1008,
+  // Optional: [{ scopeLabel, reportSummary }] rendered one after another (All Regions report).
+  // Each section starts on a new page; page numbers continue across sections.
+  sections = null,
+  // Folio / long bond paper (8.5 x 13 in) in landscape
+  pageWidth = 936,
   pageHeight = 612,
   logoPath = null,
   fiscalYear,
@@ -183,19 +361,23 @@ const renderTierScopePdf = (recipe, {
 } = {}) => {
   const MARGIN = 30;
   const tableWidth = pageWidth - MARGIN * 2;
-  const amountWidth = 94;
-  const proposedWidth = 116;
+  // Column widths scale with the page; on Folio landscape: amounts 81pt, proposed 101pt, particulars ~290pt.
+  const amountWidth = Math.floor(tableWidth * 0.093);
+  const proposedWidth = Math.floor(tableWidth * 0.115);
   const particularsWidth = tableWidth - amountWidth * 6 - proposedWidth;
   const colWidths = [particularsWidth, ...Array(6).fill(amountWidth), proposedWidth];
   const colX = [];
   colWidths.reduce((x, w) => { colX.push(x); return x + w; }, MARGIN);
   const tableRight = MARGIN + tableWidth;
   const FOOTER_SPACE = 30;
-  const FONT = 7.6;
+  const FONT = 7.4;
   const LINE = 9.6;
 
   let page = 0;
   let y = 0;
+  let sectionPage = 0;
+  let scopeLabel = regionDisplay;
+  const multiSection = Array.isArray(sections) && sections.length > 0;
 
   // Measure with the real Helvetica metrics (muhammara's own right/center alignment drifts at small sizes).
   const fontCache = {};
@@ -229,7 +411,7 @@ const renderTierScopePdf = (recipe, {
 
   const drawFooter = () => {
     const fy = pageHeight - 20;
-    write(`Tier Budget Proposal Report  |  FY ${fiscalYear || '-'}  |  ${regionDisplay}`, MARGIN, fy, { size: 7, color: COLORS.muted });
+    write(`Tier Budget Proposal Report  |  FY ${fiscalYear || '-'}  |  ${scopeLabel}`, MARGIN, fy, { size: 7, color: COLORS.muted });
     if (documentId) write(`Document ID: ${documentId}`, pageWidth / 2, fy, { size: 7, color: COLORS.muted}, 'center');
     write(`Page ${page}`, tableRight, fy, { size: 7, color: COLORS.muted}, 'right');
   };
@@ -258,17 +440,23 @@ const renderTierScopePdf = (recipe, {
     y = top + h1 + h2;
   };
 
+  // The footer of a closing page must show that page's scope, so sections close their own last page.
+  const drawFooterAndClose = () => {
+    drawFooter();
+    recipe.endPage();
+  };
   const startPage = () => {
-    if (page > 0) {
-      drawFooter();
-      recipe.endPage();
-    }
+    drawFooterAndClose();
+    startNewPage();
+  };
+  const startNewPage = () => {
     recipe.createPage(pageWidth, pageHeight);
     page += 1;
+    sectionPage += 1;
     onPageCreated();
 
     y = MARGIN - 6;
-    if (page === 1) {
+    if (sectionPage === 1) {
       if (logoPath) {
         try { recipe.image(logoPath, MARGIN, y, { width: 46, height: 46 }); } catch (_) { /* logo is optional */ }
       }
@@ -276,7 +464,9 @@ const renderTierScopePdf = (recipe, {
       write('NATIONAL IRRIGATION ADMINISTRATION', cx, y, { size: 13, bold: true, color: COLORS.text}, 'center');
       write(`TIER BUDGET PROPOSAL REPORT  ·  FY ${fiscalYear || 'ALL'}`, cx, y + 17, { size: 11, bold: true, color: COLORS.headerFill}, 'center');
       write(
-        `Region: ${regionDisplay}     Department: ${departmentDisplay}     Division: ${divisionDisplay}`,
+        multiSection
+          ? `Region: All     Showing: ${scopeLabel}     Department: ${departmentDisplay}     Division: ${divisionDisplay}`
+          : `Region: ${regionDisplay}     Department: ${departmentDisplay}     Division: ${divisionDisplay}`,
         cx, y + 33, { size: 8.5, color: COLORS.text }, 'center'
       );
       const generated = generatedAt.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
@@ -285,7 +475,7 @@ const renderTierScopePdf = (recipe, {
       }, 'center');
       y += 62;
     } else {
-      write(`TIER BUDGET PROPOSAL REPORT  ·  FY ${fiscalYear || 'ALL'}  ·  ${regionDisplay} (continued)`, MARGIN, y, {
+      write(`TIER BUDGET PROPOSAL REPORT  ·  FY ${fiscalYear || 'ALL'}  ·  ${scopeLabel} (continued)`, MARGIN, y, {
         size: 8.5, bold: true, color: COLORS.headerFill,
       });
       y += 14;
@@ -356,13 +546,21 @@ const renderTierScopePdf = (recipe, {
     y = top + height;
   };
 
-  startPage();
-  buildTierScopeRows(reportSummary).forEach(drawRow);
+  const list = multiSection ? sections : [{ scopeLabel: regionDisplay, reportSummary }];
+  list.forEach((section) => {
+    if (page > 0) drawFooterAndClose();
+    scopeLabel = section.scopeLabel || regionDisplay;
+    sectionPage = 0;
+    startNewPage();
+    buildTierScopeRows(section.reportSummary || {}).forEach(drawRow);
+  });
   drawFooter();
 };
 
 module.exports = {
   buildTierScopeRows,
+  buildRegionalTierSummaries,
+  compareRegions,
   renderTierScopePdf,
   formatAmount,
 };

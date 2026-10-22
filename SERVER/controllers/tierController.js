@@ -991,7 +991,8 @@ const restoreRevision = async (req, res) => {
 };
 
 // Use "Php " in PDF (Helvetica does not support ₱; some viewers show it as ±)
-const { renderTierScopePdf } = require('../utils/tierScopePdf');
+const { renderTierScopePdf, buildRegionalTierSummaries } = require('../utils/tierScopePdf');
+const { getFolioPageSize } = require('../utils/reportPageLayout');
 
 const formatTierCurrency = (amount) => {
   const n = Number(amount);
@@ -1273,6 +1274,44 @@ const resolveNepAlignmentReportRequest = async (req, body) => {
  * Accepts POST body: { fiscalYear, region, department, division, reportSummary }.
  */
 
+
+/**
+ * Saved Tier splits per region for the All Regions PDF: { REGION: { lineItemId: item } }.
+ * Uses the latest saved Tier document whose department/division match the report scope.
+ */
+const loadSavedTierSplitsByRegion = async (fiscalYear, department, division) => {
+  const scopeValue = (value) => {
+    const v = value && typeof value === 'object'
+      ? (value.DepartmentName || value.DivisionName || value.name || '')
+      : value;
+    const text = String(v || '').trim().toLowerCase();
+    return text === 'all' ? '' : text;
+  };
+  const wantDepartment = scopeValue(department);
+  const wantDivision = scopeValue(division);
+  try {
+    const docs = await Tier.find({ fiscalYear: String(fiscalYear) })
+      .select('region department division items updatedAt')
+      .sort({ updatedAt: -1 })
+      .lean();
+    const result = {};
+    (docs || []).forEach((doc) => {
+      const region = String(doc.region || '').trim().toUpperCase();
+      if (!region || region === 'ALL' || result[region]) return;
+      if (scopeValue(doc.department) !== wantDepartment || scopeValue(doc.division) !== wantDivision) return;
+      const items = {};
+      (doc.items || []).forEach((item) => {
+        if (item && item.lineItemId) items[item.lineItemId] = item;
+      });
+      result[region] = items;
+    });
+    return result;
+  } catch (error) {
+    console.error('Unable to load saved Tier splits per region:', error.message);
+    return {};
+  }
+};
+
 const generateTierPDF = async (req, res) => {
   try {
     if (!MuhammaraRecipe) {
@@ -1369,12 +1408,21 @@ const generateTierPDF = async (req, res) => {
       subject: isNepAlignment ? 'NEP Budget Alignment Report' : 'Tier Budget Proposal Report',
     });
 
-    // Single-scope Tier report mirrors the /tier page (Tier 1/Tier 2/Total with Income and Subsidy).
-    // The multi-region (All Regions) and legacy NEP layouts keep the grouped renderer below.
-    const useScopeLayout = !isNepAlignment && !isAllRegions;
+    // Tier report mirrors the /tier page (Tier 1/Tier 2/Total with Income and Subsidy) on Folio paper.
+    // All Regions renders the Grand Total first, then Central Office and each region as its own section.
+    // Only the legacy NEP alignment layout keeps the grouped renderer below.
+    const useScopeLayout = !isNepAlignment;
     if (useScopeLayout) {
-      const SCOPE_PAGE_WIDTH = 1008;
-      const SCOPE_PAGE_HEIGHT = 612;
+      let sections = null;
+      if (isAllRegions) {
+        const savedTierByRegion = await loadSavedTierSplitsByRegion(effectiveFiscalYear, effectiveDepartment, effectiveDivision);
+        sections = [
+          { scopeLabel: 'GRAND TOTAL (ALL REGIONS)', reportSummary },
+          ...buildRegionalTierSummaries({ reportSummary, regionalBreakdown, savedTierByRegion }),
+        ];
+      }
+      // Folio / long bond paper: 8.5 x 13 in, landscape (936 x 612 pt)
+      const { width: SCOPE_PAGE_WIDTH, height: SCOPE_PAGE_HEIGHT } = getFolioPageSize(true);
       const showScopeDraft = shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
       const scopeLogo = [
         path.join(__dirname, '../assets/logo.png'),
@@ -1382,6 +1430,7 @@ const generateTierPDF = async (req, res) => {
       ].find((candidate) => fs.existsSync(candidate)) || null;
       renderTierScopePdf(recipe, {
         reportSummary,
+        sections,
         pageWidth: SCOPE_PAGE_WIDTH,
         pageHeight: SCOPE_PAGE_HEIGHT,
         logoPath: scopeLogo,
