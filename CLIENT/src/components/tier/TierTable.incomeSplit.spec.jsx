@@ -14,6 +14,7 @@ const responses = {
   '/api/consolidated-reports/capital-outlay-data': { data: [] },
   '/income/getByParams': [{ incomecategory: { name: 'Fees' }, particulars: 'Tuition', amount: 1000 }],
   '/personnelServices': { personnelServices: [] },
+  '/income-categories': { categories: [] },
 };
 
 vi.mock('../../config/api', () => ({
@@ -85,5 +86,43 @@ describe('TierTable income/subsidy split', () => {
     expect((await screen.findByLabelText('Traveling Expenses-Local Tier 2 income')).value).toBe('750.00');
     expect(screen.getByLabelText('Traveling Expenses-Local Tier 2 subsidy').value).toBe('674,200.00');
     responses['/api/tier/saved-items'] = { items: [], version: null };
+  });
+
+  it('merges duplicate income lines and follows the configured category/subcategory order', async () => {
+    const original = responses['/income/getByParams'];
+    responses['/income-categories'] = {
+      categories: [
+        { _id: 'c1', incomeCategoryName: 'Irrigation Service Fees', incomeSubcategoryName: ['Current Account', 'Back Accounts'] },
+        { _id: 'c2', incomeCategoryName: 'Rent Income', incomeSubcategoryName: ['Rent Income', 'Dorm / RTC / NIA Housing'] },
+        { _id: 'c3', incomeCategoryName: 'Miscellaneous Income', incomeSubcategoryName: ['Bid Forms', 'Sales of Scrap'] },
+      ],
+    };
+    responses['/income/getByParams'] = [
+      { incomecategory: { _id: 'c3', name: 'Miscellaneous Income' }, subcategory: 'Sales of Scrap', amount: 45000 },
+      { incomecategory: { _id: 'c2', name: 'Rent Income' }, subcategory: 'Dorm / RTC / NIA Housing', amount: 701100 },
+      { incomecategory: { _id: 'c2', name: 'Rent Income' }, subcategory: 'Dorm / RTC / NIA Housing', amount: 15000 },
+      { incomecategory: { _id: 'c3', name: 'Miscellaneous Income' }, subcategory: 'Bid Forms', amount: 30000 },
+      { incomecategory: { _id: 'c3', name: 'Miscellaneous Income' }, subcategory: 'Bid Forms', amount: 150000 },
+      { incomecategory: { _id: 'c2', name: 'Rent Income' }, subcategory: 'Rent Income', amount: 1000 },
+      { incomecategory: { _id: 'c1', name: 'Irrigation Service Fees' }, subcategory: 'Back Accounts', amount: 500 },
+      { incomecategory: { _id: 'c1', name: 'Irrigation Service Fees' }, subcategory: 'Current Account', amount: 700 },
+    ];
+    renderTable();
+    await screen.findByText('A. SOURCES OF FUNDS');
+    fireEvent.click(screen.getByLabelText('expand income'));
+    await screen.findByText('Subtotal (Rent Income)');
+    const labels = Array.from(document.querySelectorAll('tbody tbody tr td:first-child'))
+      .map((td) => td.textContent.trim())
+      .filter(Boolean);
+    expect(labels).toEqual([
+      'Irrigation Service Fees', 'Current Account', 'Back Accounts', 'Subtotal (Irrigation Service Fees)',
+      'Rent Income', 'Rent Income', 'Dorm / RTC / NIA Housing', 'Subtotal (Rent Income)',
+      'Miscellaneous Income', 'Bid Forms', 'Sales of Scrap', 'Subtotal (Miscellaneous Income)',
+    ]);
+    expect(screen.getAllByText('Dorm / RTC / NIA Housing')).toHaveLength(1);
+    expect(screen.getAllByText('₱716,100.00').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('₱180,000.00').length).toBeGreaterThan(0);
+    responses['/income/getByParams'] = original;
+    responses['/income-categories'] = { categories: [] };
   });
 });

@@ -554,18 +554,89 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
   const chargedToIncomePersonnel = results[4].data || EMPTY_LIST;
 
   // Group income by category for Projected Corporate Income sub-list
+  // Income category order as configured in Settings > Income Categories (same order as the Corporate Income page).
+  const { data: incomeCategoryList = EMPTY_LIST } = useQuery({
+    queryKey: ['tierIncomeCategoryOrder'],
+    queryFn: async () => {
+      const res = await api.get('/income-categories', { params: { limit: 1000 } });
+      const list = Array.isArray(res.data) ? res.data : res.data?.categories || res.data?.incomeCategories || [];
+      return Array.isArray(list) ? list : [];
+    },
+    enabled: hasRequiredParams,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+
   const groupedIncomeData = useMemo(() => {
     if (!Array.isArray(incomeData) || incomeData.length === 0) return [];
-    const byCategory = {};
-    incomeData.forEach((item) => {
-      const catName = item?.incomecategory?.name || item?.incomecategory?.incomeCategoryName || item?.category || item?.categoryName || 'Other Income';
-      if (!byCategory[catName]) byCategory[catName] = { category: catName, items: [], subtotal: 0 };
-      const amt = Number(item?.amount) || 0;
-      byCategory[catName].items.push({ ...item, amount: amt, name: item?.particulars || item?.subcategory || 'Item' });
-      byCategory[catName].subtotal += amt;
+    const clean = (v) => String(v ?? '').trim();
+    const norm = (v) => clean(v).replace(/\s+/g, ' ').toLowerCase();
+    const subName = (sub) => (typeof sub === 'object' && sub !== null ? sub.incomeSubcategoryName || sub.name : sub);
+
+    const categoryById = new Map();
+    const categoryByName = new Map();
+    incomeCategoryList.forEach((cat, index) => {
+      const entry = { cat, index };
+      if (cat?._id) categoryById.set(String(cat._id), entry);
+      const nameKey = norm(cat?.incomeCategoryName || cat?.name);
+      if (nameKey && !categoryByName.has(nameKey)) categoryByName.set(nameKey, entry);
     });
-    return Object.values(byCategory);
-  }, [incomeData]);
+
+    const byCategory = new Map();
+    incomeData.forEach((item, itemIndex) => {
+      const catRef = item?.incomecategory;
+      const catName = clean(
+        (typeof catRef === 'object' ? catRef?.name || catRef?.incomeCategoryName : null) ||
+        item?.category || item?.categoryName || 'Other Income'
+      ) || 'Other Income';
+      const catKey = norm(catName);
+      if (!byCategory.has(catKey)) {
+        const catId = typeof catRef === 'object' ? catRef?._id : catRef;
+        const configured = (catId && categoryById.get(String(catId))) || categoryByName.get(catKey);
+        const subcategoryOrder = (configured?.cat?.incomeSubcategoryName ||
+          (typeof catRef === 'object' ? catRef?.incomeSubcategoryName : null) || []);
+        byCategory.set(catKey, {
+          category: catName,
+          rank: configured ? configured.index : Number.MAX_SAFE_INTEGER,
+          firstSeen: itemIndex,
+          subRank: new Map((Array.isArray(subcategoryOrder) ? subcategoryOrder : [])
+            .map((sub, i) => [norm(subName(sub)), i])),
+          merged: new Map(),
+          subtotal: 0,
+        });
+      }
+      const group = byCategory.get(catKey);
+      const amt = Number(item?.amount) || 0;
+      const name = clean(item?.particulars || item?.subcategory) || 'Item';
+      const nameKey = norm(name);
+      const subKey = norm(item?.subcategory || name);
+      // Rows with the same particulars under the same category are merged into one line.
+      if (!group.merged.has(nameKey)) {
+        group.merged.set(nameKey, {
+          ...item,
+          _id: item?._id || `${catKey}-${nameKey}`,
+          name,
+          amount: 0,
+          mergedCount: 0,
+          rank: group.subRank.has(subKey) ? group.subRank.get(subKey) : (group.subRank.has(nameKey) ? group.subRank.get(nameKey) : Number.MAX_SAFE_INTEGER),
+          firstSeen: itemIndex,
+        });
+      }
+      const row = group.merged.get(nameKey);
+      row.amount += amt;
+      row.mergedCount += 1;
+      group.subtotal += amt;
+    });
+
+    const byRank = (a, b) => (a.rank - b.rank) || (a.firstSeen - b.firstSeen);
+    return Array.from(byCategory.values())
+      .sort(byRank)
+      .map(({ category, subtotal, merged }) => ({
+        category,
+        subtotal,
+        items: Array.from(merged.values()).sort(byRank),
+      }));
+  }, [incomeData, incomeCategoryList]);
 
   const groupedMooeData = useMemo(() => {
     return mooeData.reduce((acc, item) => {
