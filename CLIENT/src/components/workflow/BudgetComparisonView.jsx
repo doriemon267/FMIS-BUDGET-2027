@@ -44,6 +44,7 @@ const BudgetComparisonView = ({ fiscalYear, region, regionName }) => {
   const [loading, setLoading] = useState(false);
   const [comparison, setComparison] = useState(null);
   const [expanded, setExpanded] = useState(true);
+  const [expandedRow, setExpandedRow] = useState(null);
 
   useEffect(() => {
     const fetchComparison = async () => {
@@ -167,7 +168,7 @@ const BudgetComparisonView = ({ fiscalYear, region, regionName }) => {
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell sx={{ fontWeight: 600, borderBottom: '2px solid #ddd' }}>Division</TableCell>
+                <TableCell sx={{ fontWeight: 600, borderBottom: '2px solid #ddd' }}>Responsibility Center</TableCell>
                 <TableCell sx={{ fontWeight: 600, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Initial</TableCell>
                 <TableCell sx={{ fontWeight: 600, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Ceiling</TableCell>
                 <TableCell sx={{ fontWeight: 600, textAlign: 'right', borderBottom: '2px solid #ddd' }}>NEP</TableCell>
@@ -177,111 +178,94 @@ const BudgetComparisonView = ({ fiscalYear, region, regionName }) => {
             </TableHead>
             <TableBody>
               {comparison.comparison.map((row, index) => {
+                const rowKey = row._id || row.division || row.department || index;
+                const isRowExpanded = expandedRow === rowKey;
                 const variance = row.variance?.initialVsCeiling || 0;
-                const variancePercent = row.initial.amount > 0 
-                  ? ((variance / row.initial.amount) * 100).toFixed(1)
-                  : 0;
+                const initialAmount = Number(row.initial?.amount) || 0;
+                const variancePercent = initialAmount > 0
+                  ? ((variance / initialAmount) * 100).toFixed(1)
+                  : '0.0';
+                const breakdownRows = [
+                  { label: 'Personnel Services (PS)', initial: row.initial?.breakdown?.personnelServices, ceiling: row.ceiling?.breakdown?.personnelServices },
+                  { label: 'MOOE', initial: row.initial?.breakdown?.mooe, ceiling: row.ceiling?.breakdown?.mooe },
+                  { label: 'Capital Outlay (CO)', initial: row.initial?.breakdown?.capitalOutlay, ceiling: row.ceiling?.breakdown?.capitalOutlay },
+                  { label: 'Corporate Income', initial: row.initial?.income, ceiling: row.ceiling?.income },
+                ];
 
                 return (
-                  <TableRow 
-                    key={row.division || index}
-                    sx={{ '&:hover': { bgcolor: '#fafafa' } }}
-                  >
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 500 }}>{row.division || row.department || `${regionName || region} (Consolidated)`}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>
-                      <Box sx={{ 
-                        bgcolor: '#f8f9fa', 
-                        p: 1, 
-                        borderRadius: 1, 
-                        border: '1px solid #e0e0e0',
-                        mb: 1
-                      }}>
-                        <Box display="flex" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.initial.breakdown?.personnelServices)}</Typography>
+                  <React.Fragment key={rowKey}>
+                    <TableRow hover sx={{ bgcolor: isRowExpanded ? '#f4f8f4' : 'inherit' }}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Tooltip title={isRowExpanded ? 'Hide breakdown' : 'Show breakdown'}>
+                            <IconButton
+                              size="small"
+                              aria-label={`${isRowExpanded ? 'Hide' : 'Show'} breakdown for ${row.division || row.department || 'responsibility center'}`}
+                              aria-expanded={isRowExpanded}
+                              onClick={() => setExpandedRow(isRowExpanded ? null : rowKey)}
+                            >
+                              {isRowExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                            </IconButton>
+                          </Tooltip>
+                          <Typography sx={{ fontWeight: 600 }}>{row.division || row.department || `${regionName || region} (Consolidated)`}</Typography>
                         </Box>
-                        <Box display="flex" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.initial.breakdown?.mooe)}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(initialAmount)}</TableCell>
+                      <TableCell sx={{ textAlign: 'right', color: BRAND_COLORS.warning, fontWeight: 600 }}>{formatCurrency(row.ceiling?.amount)}</TableCell>
+                      <TableCell sx={{ textAlign: 'right', color: BRAND_COLORS.success, fontWeight: 600 }}>{row.nep ? formatCurrency(row.nep.amount) : '-'}</TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                          {variance < 0 ? <TrendingDownIcon sx={{ color: BRAND_COLORS.error, fontSize: 16 }} /> : variance > 0 ? <TrendingUpIcon sx={{ color: BRAND_COLORS.success, fontSize: 16 }} /> : null}
+                          <Typography sx={{ color: variance < 0 ? BRAND_COLORS.error : variance > 0 ? BRAND_COLORS.success : '#666', fontSize: '0.85rem', fontWeight: 600 }}>
+                            {formatCurrency(Math.abs(variance))} ({variancePercent}%)
+                          </Typography>
                         </Box>
-                        <Box display="flex" justifyContent="space-between" mb={row.initial.income > 0 ? 0.5 : 0}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.initial.breakdown?.capitalOutlay)}</Typography>
-                        </Box>
-                        {row.initial.income > 0 && (
-                          <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
-                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(row.initial.income)}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'center' }}>
+                        {row.nep ? (
+                          <Chip
+                            size="small"
+                            label={row.nep.status || 'Draft'}
+                            color={row.nep.status === 'Finalized' || row.nep.status === 'FINALIZED' ? 'success' : row.nep.status?.includes('FORWARDED') ? 'primary' : row.nep.status?.includes('RETURNED') ? 'warning' : 'default'}
+                          />
+                        ) : <Chip size="small" label="Not Created" color="default" variant="outlined" />}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={6} sx={{ p: 0, borderBottom: isRowExpanded ? undefined : 0 }}>
+                        <Collapse in={isRowExpanded} timeout="auto" unmountOnExit>
+                          <Box sx={{ px: { xs: 2, sm: 6 }, py: 1.5, bgcolor: '#f8faf8' }}>
+                            <Typography variant="subtitle2" sx={{ mb: 1, color: BRAND_COLORS.deepGreen, fontWeight: 700 }}>
+                              Budget Breakdown
+                            </Typography>
+                            <Table size="small" sx={{ maxWidth: 760, bgcolor: '#fff', border: '1px solid #e0e7e0' }}>
+                              <TableHead>
+                                <TableRow sx={{ bgcolor: '#edf4ed' }}>
+                                  <TableCell sx={{ fontWeight: 700 }}>Budget Category</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>Initial</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>Ceiling</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {breakdownRows.map(item => (
+                                  <TableRow key={item.label}>
+                                    <TableCell>{item.label}</TableCell>
+                                    <TableCell align="right">{formatCurrency(item.initial)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(item.ceiling)}</TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow sx={{ bgcolor: '#f4f8f4' }}>
+                                  <TableCell sx={{ fontWeight: 700 }}>Total Request / Ceiling</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(initialAmount)}</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(row.ceiling?.amount)}</TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
                           </Box>
-                        )}
-                      </Box>
-                      <Typography sx={{ fontWeight: 600, fontSize: '0.95rem' }}>{formatCurrency(row.initial.amount)}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right', color: BRAND_COLORS.warning, fontWeight: 500 }}>
-                      <Box sx={{ 
-                        bgcolor: '#f8f9fa', 
-                        p: 1, 
-                        borderRadius: 1, 
-                        border: '1px solid #e0e0e0',
-                        mb: 1
-                      }}>
-                        <Box display="flex" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.ceiling.breakdown?.personnelServices)}</Typography>
-                        </Box>
-                        <Box display="flex" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.ceiling.breakdown?.mooe)}</Typography>
-                        </Box>
-                        <Box display="flex" justifyContent="space-between" mb={row.ceiling.income > 0 ? 0.5 : 0}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(row.ceiling.breakdown?.capitalOutlay)}</Typography>
-                        </Box>
-                        {row.ceiling.income > 0 && (
-                          <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
-                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(row.ceiling.income)}</Typography>
-                          </Box>
-                        )}
-                      </Box>
-                      <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: BRAND_COLORS.warning }}>{formatCurrency(row.ceiling.amount)}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right', color: BRAND_COLORS.success, fontWeight: 500 }}>
-                      {row.nep ? formatCurrency(row.nep.amount) : '-'}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                        {variance < 0 ? (
-                          <TrendingDownIcon sx={{ color: BRAND_COLORS.error, fontSize: 16 }} />
-                        ) : variance > 0 ? (
-                          <TrendingUpIcon sx={{ color: BRAND_COLORS.success, fontSize: 16 }} />
-                        ) : null}
-                        <Typography sx={{ 
-                          color: variance < 0 ? BRAND_COLORS.error : variance > 0 ? BRAND_COLORS.success : '#666',
-                          fontSize: '0.85rem'
-                        }}>
-                          {formatCurrency(Math.abs(variance))} ({variancePercent}%)
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'center' }}>
-                      {row.nep ? (
-                        <Chip
-                          size="small"
-                          label={row.nep.status || 'Draft'}
-                          color={
-                            row.nep.status === 'Finalized' || row.nep.status === 'FINALIZED' ? 'success' :
-                            row.nep.status?.includes('FORWARDED') ? 'primary' :
-                            row.nep.status?.includes('RETURNED') ? 'warning' : 'default'
-                          }
-                        />
-                      ) : (
-                        <Chip size="small" label="Not Created" color="default" variant="outlined" />
-                      )}
-                    </TableCell>
-                  </TableRow>
+                        </Collapse>
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
                 );
               })}
               {/* Totals Row */}

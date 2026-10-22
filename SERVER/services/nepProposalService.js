@@ -3,6 +3,7 @@ const PersonnelServices = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
+const Category = require('../models/Category');
 const Proposal = require('../models/Proposal');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 
@@ -275,6 +276,51 @@ const loadSourceRows = async (Model, sourceQuery, embeddedRows = []) => {
   return Array.from(rowsByKey.values());
 };
 
+const resolveCapitalOutlayCategoryNames = async rows => {
+  const categoryIds = Array.from(
+    new Set(
+      rows
+        .map(row => row?.category?._id || row?.category)
+        .filter(category => !category?.categoryName)
+        .map(category => String(category || ''))
+        .filter(categoryId => /^[a-f\d]{24}$/i.test(categoryId))
+    )
+  );
+  const categories = categoryIds.length
+    ? await Category.find({ _id: { $in: categoryIds } }).select('categoryName').lean()
+    : [];
+  const namesById = new Map(categories.map(category => [String(category._id), category.categoryName]));
+
+  return rows.map(row => {
+    const category = row?.category;
+    if (!category || category?.categoryName) return row;
+
+    const categoryId = String(category?._id || category);
+    const categoryName = namesById.get(categoryId);
+    return categoryName
+      ? { ...row, category: { _id: categoryId, categoryName } }
+      : row;
+  });
+};
+
+const loadInitialProposalLineItems = async initialProposals => {
+  const { sourceQuery } = await buildSourceLineQuery(initialProposals);
+  const embeddedIncome = initialProposals.flatMap(proposal => proposal.incomeData || []);
+  const embeddedPersonnel = initialProposals.flatMap(proposal => proposal.personnelData || []);
+  const embeddedMooe = initialProposals.flatMap(proposal => proposal.mooeData || []);
+  const embeddedCapital = initialProposals.flatMap(proposal => proposal.capitalData || []);
+
+  const [income, personnel, mooe, capitalRows] = await Promise.all([
+    loadSourceRows(Income, sourceQuery, embeddedIncome),
+    loadSourceRows(PersonnelServices, sourceQuery, embeddedPersonnel),
+    loadSourceRows(MooeProposal, sourceQuery, embeddedMooe),
+    loadSourceRows(CapitalOutlay, sourceQuery, embeddedCapital)
+  ]);
+  const capitalOutlay = await resolveCapitalOutlayCategoryNames(capitalRows);
+
+  return { income, personnel, mooe, capitalOutlay };
+};
+
 const stripPersonnelWorkflowFields = row => {
   const cloned = { ...row };
   [
@@ -498,6 +544,7 @@ module.exports = {
   normalizeNepGenerationMode,
   buildNepGenerationAssignment,
   resolvePreparerAssignments,
+  loadInitialProposalLineItems,
   cloneProposalLineItems,
   cleanupGeneratedNepData,
   normalizeText

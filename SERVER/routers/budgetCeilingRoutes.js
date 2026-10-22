@@ -207,6 +207,37 @@ router.get('/proposal/:proposalId', isAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/budget-ceiling/regions/:fiscalYear
+ * List initialized NEP ceilings for all regions. Restricted to BRD staff.
+ */
+router.get('/regions/:fiscalYear', isAuth, isBRDStaff, requireDynamicPermission('/nep-ceiling'), async (req, res) => {
+  try {
+    const fiscalYear = Number.parseInt(req.params.fiscalYear, 10);
+    if (!Number.isFinite(fiscalYear)) {
+      return res.status(400).json({ success: false, message: 'Valid fiscal year is required' });
+    }
+
+    const ceilings = await BudgetCeiling.find({
+      fiscalYear,
+      budgetPhase: 'NEP',
+      allocations: { $exists: true, $ne: [] }
+    })
+      .select('region status totalBudgetPool totalAllocated allocations.division allocations.department allocations.initialRequestAmount allocations.ceilingAmount allocations.allocationStatus allocations.nepProposalId allocations.nepProposalStatus')
+      .sort({ region: 1 })
+      .lean();
+
+    return res.json({ success: true, data: ceilings });
+  } catch (error) {
+    console.error('Error fetching initialized NEP ceilings by region:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch initialized NEP ceilings',
+      error: error.message
+    });
+  }
+});
+
+/**
  * GET /api/budget-ceiling/:fiscalYear/:region
  * Get budget ceiling for specific fiscal year and region
  */
@@ -353,13 +384,20 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
           totalIncome: 0,
           totalPS: 0,
           totalMOOE: 0,
-          totalCO: 0
+          totalCO: 0,
+          fundingBreakdown: {
+            personnelServices: { income: 0, subsidy: 0 },
+            mooe: { income: 0, subsidy: 0 },
+            capitalOutlay: { income: 0, subsidy: 0 },
+            corporateIncome: { income: 0, subsidy: 0 }
+          }
         };
       }
       divisionMap[key].proposals.push(p);
       divisionMap[key].totalAmount += p.amount || p.proposedBudget || 0;
       divisionMap[key].totalSubsidy += p.projectedSubsidy || 0;
       divisionMap[key].totalIncome += p.projectedCorporateIncome || 0;
+      divisionMap[key].fundingBreakdown.corporateIncome.income += Number(p.projectedCorporateIncome) || 0;
 
     });
 
@@ -378,7 +416,12 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       const p = resolveSourceProposal(item);
       if (p) {
         const key = p.division || p.department || 'Unassigned';
-        divisionMap[key].totalPS += Number(item.Total ?? item.total) || 0;
+        const total = Number(item.Total ?? item.total) || 0;
+        const income = Math.min(total, Number(item.chargedToIncomeAmount) || 0);
+        const subsidy = Math.max(0, total - income);
+        divisionMap[key].totalPS += total;
+        divisionMap[key].fundingBreakdown.personnelServices.income += income;
+        divisionMap[key].fundingBreakdown.personnelServices.subsidy += subsidy;
         linkedPersonnelWorkflowIds.add(String(p._id));
       }
     });
@@ -387,7 +430,12 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       const p = resolveSourceProposal(item);
       if (p) {
         const key = p.division || p.department || 'Unassigned';
-        divisionMap[key].totalMOOE += Number(item.amount) || 0;
+        const total = Number(item.amount) || 0;
+        const income = Number(item.income) || 0;
+        const subsidy = Number(item.subsidy) || Math.max(0, total - income);
+        divisionMap[key].totalMOOE += total;
+        divisionMap[key].fundingBreakdown.mooe.income += income;
+        divisionMap[key].fundingBreakdown.mooe.subsidy += subsidy;
         linkedMooeWorkflowIds.add(String(p._id));
       }
     });
@@ -396,7 +444,12 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
       const p = resolveSourceProposal(item);
       if (p) {
         const key = p.division || p.department || 'Unassigned';
-        divisionMap[key].totalCO += Number(item.cost ?? item.total) || 0;
+        const total = Number(item.cost ?? item.total) || 0;
+        const income = Number(item.income) || 0;
+        const subsidy = Number(item.subsidy) || Math.max(0, total - income);
+        divisionMap[key].totalCO += total;
+        divisionMap[key].fundingBreakdown.capitalOutlay.income += income;
+        divisionMap[key].fundingBreakdown.capitalOutlay.subsidy += subsidy;
         linkedCapitalWorkflowIds.add(String(p._id));
       }
     });
@@ -412,18 +465,36 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
           (sum, item) => sum + (Number(item.Total ?? item.total) || 0),
           0
         );
+        proposal.personnelData.forEach(item => {
+          const total = Number(item.Total ?? item.total) || 0;
+          const income = Math.min(total, Number(item.chargedToIncomeAmount) || 0);
+          divisionMap[key].fundingBreakdown.personnelServices.income += income;
+          divisionMap[key].fundingBreakdown.personnelServices.subsidy += Math.max(0, total - income);
+        });
       }
       if (!linkedMooeWorkflowIds.has(workflowId) && Array.isArray(proposal.mooeData)) {
         divisionMap[key].totalMOOE += proposal.mooeData.reduce(
           (sum, item) => sum + (Number(item.amount) || 0),
           0
         );
+        proposal.mooeData.forEach(item => {
+          const total = Number(item.amount) || 0;
+          const income = Number(item.income) || 0;
+          divisionMap[key].fundingBreakdown.mooe.income += income;
+          divisionMap[key].fundingBreakdown.mooe.subsidy += Number(item.subsidy) || Math.max(0, total - income);
+        });
       }
       if (!linkedCapitalWorkflowIds.has(workflowId) && Array.isArray(proposal.capitalData)) {
         divisionMap[key].totalCO += proposal.capitalData.reduce(
           (sum, item) => sum + (Number(item.cost ?? item.total) || 0),
           0
         );
+        proposal.capitalData.forEach(item => {
+          const total = Number(item.cost ?? item.total) || 0;
+          const income = Number(item.income) || 0;
+          divisionMap[key].fundingBreakdown.capitalOutlay.income += income;
+          divisionMap[key].fundingBreakdown.capitalOutlay.subsidy += Number(item.subsidy) || Math.max(0, total - income);
+        });
       }
     });
 
@@ -450,6 +521,8 @@ router.post('/initialize', isAuth, isBRDStaff, requireDynamicPermission('/nep-ce
         mooe: div.totalMOOE,
         capitalOutlay: div.totalCO
       },
+      initialFundingBreakdown: div.fundingBreakdown,
+      ceilingFundingBreakdown: JSON.parse(JSON.stringify(div.fundingBreakdown)),
       allocationStatus: 'Pending'
     }));
 
@@ -521,13 +594,6 @@ router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep
       });
     }
 
-    if (ceiling.status === 'Locked') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot modify a locked ceiling'
-      });
-    }
-
     // Find and update the allocation
     const allocation = ceiling.allocations.find(a => a.division === division);
     if (!allocation) {
@@ -537,10 +603,64 @@ router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep
       });
     }
 
+    const nepStatus = String(allocation.nepProposalStatus || '')
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, '_');
+    const editableNepStatuses = new Set([
+      'DRAFT',
+      'RETURNED_TO_PREPARER',
+      'FORWARDED_TO_BRD_ANALYST',
+      'RETURNED_TO_PLANNING_ANALYST'
+    ]);
+    const isEditableLockedAllocation =
+      ceiling.status === 'Locked' &&
+      (!allocation.nepProposalId || editableNepStatuses.has(nepStatus));
+    if (ceiling.status === 'Archived' || (ceiling.status === 'Locked' && !isEditableLockedAllocation)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only allocations whose NEP proposal is still in draft or returned status can be modified after the ceiling is locked'
+      });
+    }
+
     const previousAmount = allocation.ceilingAmount;
-    
+
+    // Keep the published ceiling total aligned with its funding sources.
+    if (req.body.ceilingFundingBreakdown !== undefined) {
+      const fundingBreakdown = req.body.ceilingFundingBreakdown;
+      const normalizeFunding = category => ({
+        income: Math.max(0, Number(fundingBreakdown?.[category]?.income) || 0),
+        subsidy: Math.max(0, Number(fundingBreakdown?.[category]?.subsidy) || 0)
+      });
+      allocation.ceilingFundingBreakdown = {
+        personnelServices: normalizeFunding('personnelServices'),
+        mooe: normalizeFunding('mooe'),
+        capitalOutlay: normalizeFunding('capitalOutlay'),
+        corporateIncome: normalizeFunding('corporateIncome')
+      };
+      allocation.ceilingBreakdown = {
+        personnelServices: allocation.ceilingFundingBreakdown.personnelServices.income +
+          allocation.ceilingFundingBreakdown.personnelServices.subsidy,
+        mooe: allocation.ceilingFundingBreakdown.mooe.income +
+          allocation.ceilingFundingBreakdown.mooe.subsidy,
+        capitalOutlay: allocation.ceilingFundingBreakdown.capitalOutlay.income +
+          allocation.ceilingFundingBreakdown.capitalOutlay.subsidy
+      };
+      allocation.ceilingIncome = allocation.ceilingFundingBreakdown.corporateIncome.income;
+      allocation.ceilingSubsidy =
+        allocation.ceilingFundingBreakdown.personnelServices.subsidy +
+        allocation.ceilingFundingBreakdown.mooe.subsidy +
+        allocation.ceilingFundingBreakdown.capitalOutlay.subsidy;
+      allocation.ceilingAmount = allocation.ceilingIncome + allocation.ceilingSubsidy;
+    } else if (ceilingIncome !== undefined || ceilingSubsidy !== undefined) {
+      allocation.ceilingIncome = Number(ceilingIncome ?? allocation.ceilingIncome) || 0;
+      allocation.ceilingSubsidy = Number(ceilingSubsidy ?? allocation.ceilingSubsidy) || 0;
+      allocation.ceilingAmount = allocation.ceilingIncome + allocation.ceilingSubsidy;
+    } else if (ceilingAmount !== undefined) {
+      allocation.ceilingAmount = Number(ceilingAmount) || 0;
+    }
+
     // Update allocation
-    if (ceilingAmount !== undefined) allocation.ceilingAmount = ceilingAmount;
     if (ceilingBreakdown !== undefined) {
       allocation.ceilingBreakdown = {
         personnelServices: Number(ceilingBreakdown.personnelServices) || 0,
@@ -548,8 +668,6 @@ router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep
         capitalOutlay: Number(ceilingBreakdown.capitalOutlay) || 0
       };
     }
-    if (ceilingSubsidy !== undefined) allocation.ceilingSubsidy = ceilingSubsidy;
-    if (ceilingIncome !== undefined) allocation.ceilingIncome = ceilingIncome;
     if (priority) allocation.priority = priority;
     if (remarks !== undefined) allocation.remarks = remarks;
 
@@ -561,7 +679,7 @@ router.put('/:id/allocation', isAuth, isBRDStaff, requireDynamicPermission('/nep
     ceiling.addChangeHistory('CEILING_SET', {
       division,
       previousAmount,
-      newAmount: ceilingAmount,
+      newAmount: allocation.ceilingAmount,
       changedBy: userId,
       changedByName: userName,
       remarks

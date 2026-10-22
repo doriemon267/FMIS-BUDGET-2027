@@ -71,7 +71,7 @@ const NEPFinancialComparisonTable = ({
       size="small"
       value={displayedValue || ''}
       placeholder="0.00"
-      disabled={!canEdit}
+      disabled={!canEdit || row.sourceIndices.length === 0}
       onKeyDown={preventNegativeNumericKey}
       onChange={event => onEdit(row.sourceIndices, toNonNegativeNumber(event.target.value), field)}
       aria-label={`${row.label} proposed ${label}`}
@@ -108,8 +108,8 @@ const NEPFinancialComparisonTable = ({
         >
           <InfoOutlinedIcon sx={{ mt: 0.1, fontSize: 16, color: 'info.main' }} />
           <Typography variant="caption">
-            Initial detail uses the values loaded at the start of this editing session because a
-            durable historical line snapshot is not available for this module.
+            The original Initial Proposal line items could not be loaded for this module. Locked
+            values are shown as zero until the Initial Proposal source is available.
           </Typography>
         </Box>
       )}

@@ -401,7 +401,7 @@ const NEPCeilingSummary = ({
   const currentAllocation = Number(compliance.actual?.proposedBudget || 0);
   const currentSubsidy = Number(compliance.actual?.projectedSubsidy || 0);
   const currentIncome = Math.max(0, currentAllocation - currentSubsidy);
-  const approvedCeiling = Number(compliance.caps?.totalExpenses || data.ceiling?.amount || 0);
+  const approvedCeiling = Number(compliance.caps?.totalExpenses ?? data.ceiling?.amount ?? 0);
   const remaining = Number(compliance?.remaining?.totalExpenses || 0);
   const isAligned = Math.abs(remaining) <= CURRENCY_TOLERANCE;
   const isTotalOver = remaining < -CURRENCY_TOLERANCE;
@@ -477,10 +477,10 @@ const NEPCeilingSummary = ({
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <FinancialMetric
-            label="Target Ceiling"
+            label="Target Expense Ceiling"
             value={approvedCeiling}
             tone="success"
-            helper="Approved by BRD"
+            helper="Excludes collection-only Corporate Income"
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -508,10 +508,17 @@ const NEPCeilingSummary = ({
       </Grid>
 
       <Grid container spacing={1.25} sx={{ mt: 0 }}>
-        <Grid item xs={12} sm={6}>
-          <FinancialMetric label="Current Income" value={currentIncome} />
+        <Grid item xs={12} sm={4}>
+          <FinancialMetric label="Income Applied to Expenses" value={currentIncome} />
         </Grid>
-        <Grid item xs={12} sm={6}>
+        <Grid item xs={12} sm={4}>
+          <FinancialMetric
+            label="Corporate Income Collection"
+            value={liveTotals?.corporateIncomeCollection ?? data.initial?.income ?? 0}
+            helper="Collection only; not part of expense allocation"
+          />
+        </Grid>
+        <Grid item xs={12} sm={4}>
           <FinancialMetric label="Current Subsidy" value={currentSubsidy} />
         </Grid>
       </Grid>
@@ -554,7 +561,8 @@ const NEPCeilingSummary = ({
           }}
         >
           {[
-            ["Income", liveTotals.projectedCorporateIncome ?? liveTotals.corporateIncome],
+            ["Income Applied", liveTotals.projectedCorporateIncome ?? liveTotals.corporateIncome],
+            ["Corporate Income Collection", liveTotals.corporateIncomeCollection],
             ["Subsidy", liveTotals.projectedSubsidy ?? liveTotals.subsidies],
             ["NEP Total", liveTotals.proposedBudget],
           ].map(([label, value]) => (

@@ -10,6 +10,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   TextField,
   IconButton,
   Tooltip,
@@ -42,6 +43,7 @@ import {
   CompareArrows as CompareIcon,
   PlayArrow as GenerateIcon,
   OpenInNew as OpenInNewIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import api from '../../config/api';
@@ -86,6 +88,82 @@ const BRAND_COLORS = {
   info: '#0288d1',
 };
 
+const FUNDING_CATEGORIES = [
+  { key: 'personnelServices', label: 'Personnel Services (PS)' },
+  { key: 'mooe', label: 'MOOE' },
+  { key: 'capitalOutlay', label: 'Capital Outlay' },
+  { key: 'corporateIncome', label: 'Corporate Income' },
+];
+
+const getAllocationFundingBreakdown = allocation => {
+  const saved = allocation?.ceilingFundingBreakdown || {};
+  const initial = allocation?.initialFundingBreakdown || {};
+  const legacyTotals = allocation?.ceilingBreakdown || {};
+
+  return Object.fromEntries(FUNDING_CATEGORIES.map(({ key }) => {
+    const savedCategory = saved[key];
+    const savedIncome = Number(savedCategory?.income) || 0;
+    const savedSubsidy = Number(savedCategory?.subsidy) || 0;
+    const legacyTotal = Number(legacyTotals[key]) || 0;
+    if (savedCategory && (savedIncome !== 0 || savedSubsidy !== 0 || (key === 'corporateIncome' ? !allocation?.ceilingIncome : legacyTotal === 0))) {
+      return [key, {
+        income: savedIncome,
+        subsidy: savedSubsidy,
+      }];
+    }
+
+    if (key === 'corporateIncome') {
+      return [key, { income: savedIncome || Number(allocation?.ceilingIncome) || 0, subsidy: savedSubsidy }];
+    }
+
+    const ceilingCategoryTotal = legacyTotal;
+    const initialCategory = initial[key] || {};
+    const initialTotal =
+      (Number(initialCategory.income) || 0) + (Number(initialCategory.subsidy) || 0);
+    const incomeShare = initialTotal > 0
+      ? (Number(initialCategory.income) || 0) / initialTotal
+      : 0;
+    const income = ceilingCategoryTotal * incomeShare;
+    return [key, {
+      income,
+      subsidy: Math.max(0, ceilingCategoryTotal - income),
+    }];
+  }));
+};
+
+const getInitialAllocationFundingBreakdown = allocation => {
+  const saved = allocation?.initialFundingBreakdown || {};
+  const legacyTotals = allocation?.initialBreakdown || {};
+
+  return Object.fromEntries(FUNDING_CATEGORIES.map(({ key }) => {
+    const savedCategory = saved[key];
+    const savedIncome = Number(savedCategory?.income) || 0;
+    const savedSubsidy = Number(savedCategory?.subsidy) || 0;
+    const legacyTotal = Number(legacyTotals[key]) || 0;
+    const hasLegacyValue = key === 'corporateIncome'
+      ? Number(allocation?.initialIncome) > 0
+      : legacyTotal > 0;
+    if (savedCategory && (savedIncome !== 0 || savedSubsidy !== 0 || !hasLegacyValue)) {
+      return [key, {
+        income: savedIncome,
+        subsidy: savedSubsidy,
+      }];
+    }
+
+    if (key === 'corporateIncome') {
+      return [key, {
+        income: savedIncome || Number(allocation?.initialIncome) || 0,
+        subsidy: savedSubsidy
+      }];
+    }
+
+    return [key, {
+      income: savedIncome,
+      subsidy: savedSubsidy || legacyTotal,
+    }];
+  }));
+};
+
 const formatCurrency = (amount) => {
   return `₱${(amount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
@@ -96,6 +174,10 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
   const [finalizedSummary, setFinalizedSummary] = useState(null);
   const [editingAllocation, setEditingAllocation] = useState(null);
   const [editValues, setEditValues] = useState({});
+  const [expandedAllocation, setExpandedAllocation] = useState(null);
+  const [allocationSearch, setAllocationSearch] = useState('');
+  const [allocationPage, setAllocationPage] = useState(0);
+  const [allocationRowsPerPage, setAllocationRowsPerPage] = useState(10);
   const [budgetPoolDialogOpen, setBudgetPoolDialogOpen] = useState(false);
   const [newBudgetPool, setNewBudgetPool] = useState(0);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -181,11 +263,10 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
   // Start editing an allocation
   const handleEditAllocation = (allocation) => {
     setEditingAllocation(allocation.division);
+    setExpandedAllocation(allocation._id || allocation.division);
+    const fundingBreakdown = getAllocationFundingBreakdown(allocation);
     setEditValues({
-      ceilingAmount: allocation.ceilingAmount || 0,
-      ps: allocation.ceilingBreakdown?.personnelServices || 0,
-      mooe: allocation.ceilingBreakdown?.mooe || 0,
-      co: allocation.ceilingBreakdown?.capitalOutlay || 0,
+      fundingBreakdown,
       priority: allocation.priority || 'Medium',
       remarks: allocation.remarks || ''
     });
@@ -197,14 +278,26 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
     
     setActionLoading(true);
     try {
+      const fundingBreakdown = editValues.fundingBreakdown || {};
+      const ceilingBreakdown = Object.fromEntries(
+        FUNDING_CATEGORIES.filter(({ key }) => key !== 'corporateIncome').map(({ key }) => [
+          key,
+          (Number(fundingBreakdown[key]?.income) || 0) +
+            (Number(fundingBreakdown[key]?.subsidy) || 0)
+        ])
+      );
+      const ceilingIncome = Number(fundingBreakdown.corporateIncome?.income) || 0;
+      const ceilingSubsidy = Object.keys(ceilingBreakdown).reduce(
+        (sum, key) => sum + (Number(fundingBreakdown[key]?.subsidy) || 0),
+        0
+      );
       const res = await api.put(`/api/budget-ceiling/${ceiling._id}/allocation`, {
         division: editingAllocation,
-        ceilingAmount: editValues.ceilingAmount,
-        ceilingBreakdown: {
-          personnelServices: editValues.ps || 0,
-          mooe: editValues.mooe || 0,
-          capitalOutlay: editValues.co || 0
-        },
+        ceilingAmount: ceilingIncome + ceilingSubsidy,
+        ceilingIncome,
+        ceilingSubsidy,
+        ceilingBreakdown,
+        ceilingFundingBreakdown: fundingBreakdown,
         priority: editValues.priority,
         remarks: editValues.remarks
       });
@@ -308,16 +401,56 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
 
   // Calculate totals
   const getTotals = () => {
-    if (!ceiling?.allocations) return { initial: 0, ceiling: 0, variance: 0 };
+    const emptyFundingBreakdown = Object.fromEntries(
+      FUNDING_CATEGORIES.map(({ key }) => [key, { income: 0, subsidy: 0 }])
+    );
+    const emptyInitialFundingBreakdown = Object.fromEntries(
+      FUNDING_CATEGORIES.map(({ key }) => [key, { income: 0, subsidy: 0 }])
+    );
+    if (!ceiling?.allocations) {
+      return {
+        initial: 0,
+        ceiling: 0,
+        variance: 0,
+        initialFundingBreakdown: emptyInitialFundingBreakdown,
+        fundingBreakdown: emptyFundingBreakdown
+      };
+    }
     
-    return ceiling.allocations.reduce((acc, alloc) => ({
-      initial: acc.initial + (alloc.initialRequestAmount || 0),
-      ceiling: acc.ceiling + (alloc.ceilingAmount || 0),
-      variance: acc.variance + ((alloc.ceilingAmount || 0) - (alloc.initialRequestAmount || 0))
-    }), { initial: 0, ceiling: 0, variance: 0 });
+    return ceiling.allocations.reduce((acc, alloc) => {
+      const fundingBreakdown = getAllocationFundingBreakdown(alloc);
+      const initialFundingBreakdown = getInitialAllocationFundingBreakdown(alloc);
+      FUNDING_CATEGORIES.forEach(({ key }) => {
+        acc.fundingBreakdown[key].income += fundingBreakdown[key].income;
+        acc.fundingBreakdown[key].subsidy += fundingBreakdown[key].subsidy;
+        acc.initialFundingBreakdown[key].income += initialFundingBreakdown[key].income;
+        acc.initialFundingBreakdown[key].subsidy += initialFundingBreakdown[key].subsidy;
+      });
+      acc.initial += Number(alloc.initialRequestAmount) || 0;
+      acc.ceiling += Number(alloc.ceilingAmount) || 0;
+      acc.variance += (Number(alloc.ceilingAmount) || 0) - (Number(alloc.initialRequestAmount) || 0);
+      return acc;
+    }, {
+      initial: 0,
+      ceiling: 0,
+      variance: 0,
+      initialFundingBreakdown: emptyInitialFundingBreakdown,
+      fundingBreakdown: emptyFundingBreakdown
+    });
   };
 
   const totals = getTotals();
+  const allocations = ceiling?.allocations || [];
+  const filteredAllocations = allocations.filter(allocation =>
+    `${allocation.division || ''} ${allocation.department || ''}`
+      .toLowerCase()
+      .includes(allocationSearch.trim().toLowerCase())
+  );
+  const paginatedAllocations = filteredAllocations.slice(
+    allocationPage * allocationRowsPerPage,
+    allocationPage * allocationRowsPerPage + allocationRowsPerPage
+  );
+  const editingAllocationData = allocations.find(allocation => allocation.division === editingAllocation);
   const budgetUtilization = ceiling?.totalBudgetPool > 0 
     ? ((ceiling.totalAllocated / ceiling.totalBudgetPool) * 100).toFixed(1)
     : 0;
@@ -769,260 +902,314 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
 
       {/* Allocations Table */}
       <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
+        <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Box>
+            <Typography variant="h6" sx={{ color: BRAND_COLORS.deepGreen, fontWeight: 700 }}>Allocations</Typography>
+            <Typography variant="body2" color="text.secondary">Expand a responsibility center to compare the initial request and ceiling funding sources.</Typography>
+          </Box>
+          <TextField
+            size="small"
+            value={allocationSearch}
+            onChange={event => {
+              setAllocationSearch(event.target.value);
+              setAllocationPage(0);
+            }}
+            placeholder="Search responsibility center"
+            inputProps={{ 'aria-label': 'Search responsibility center' }}
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+            sx={{ width: { xs: '100%', sm: 320 } }}
+          />
+        </Box>
         <TableContainer>
-          <Table size="small">
+          <Table size="small" sx={{ minWidth: 760 }}>
             <TableHead>
               <TableRow sx={{ bgcolor: BRAND_COLORS.darkGreen }}>
-                <TableCell sx={{ color: '#fff', fontWeight: 600, width: '20%' }}>Division/Dept</TableCell>
+                <TableCell sx={{ color: '#fff', fontWeight: 600, minWidth: 260 }}>Responsibility Center</TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'right' }}>Initial Request</TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'right' }}>Ceiling Amount</TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'right' }}>Variance</TableCell>
-                <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'center' }}>Priority</TableCell>
-                <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'center' }}>Status</TableCell>
-                <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'center', width: '100px' }}>Actions</TableCell>
+                <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'center' }}>Priority / Status</TableCell>
+                <TableCell sx={{ color: '#fff', fontWeight: 600, textAlign: 'center', width: 140 }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {(ceiling?.allocations || []).map((allocation, index) => {
-                const isEditing = editingAllocation === allocation.division;
-                const variance = (allocation.ceilingAmount || 0) - (allocation.initialRequestAmount || 0);
-                const variancePercent = allocation.initialRequestAmount > 0 
-                  ? ((variance / allocation.initialRequestAmount) * 100).toFixed(1)
-                  : 0;
+              {paginatedAllocations.map((allocation, index) => {
+                const allocationKey = allocation._id || allocation.division || index;
+                const isExpanded = expandedAllocation === allocationKey;
+                const nepStatus = String(allocation.nepProposalStatus || '').trim().toUpperCase().replace(/\s+/g, '_');
+                const editableNepStatuses = new Set([
+                  'DRAFT', 'RETURNED_TO_PREPARER', 'FORWARDED_TO_BRD_ANALYST', 'RETURNED_TO_PLANNING_ANALYST'
+                ]);
+                const canEditAllocation = ceiling?.status !== 'Archived' && (
+                  ceiling?.status !== 'Locked' || !allocation.nepProposalId || editableNepStatuses.has(nepStatus)
+                );
+                const variance = (Number(allocation.ceilingAmount) || 0) - (Number(allocation.initialRequestAmount) || 0);
+                const variancePercent = Number(allocation.initialRequestAmount) > 0
+                  ? ((variance / Number(allocation.initialRequestAmount)) * 100).toFixed(1)
+                  : '0.0';
+                const initialFundingBreakdown = getInitialAllocationFundingBreakdown(allocation);
+                const fundingBreakdown = getAllocationFundingBreakdown(allocation);
 
                 return (
-                  <TableRow 
-                    key={allocation.division || index}
-                    sx={{ 
-                      '&:hover': { bgcolor: '#f5f5f5' },
-                      bgcolor: isEditing ? '#fff3e0' : 'inherit'
-                    }}
-                  >
-                    <TableCell>
-                      <Typography sx={{ fontWeight: 500 }}>{allocation.division || allocation.department || `${regionName || region} (Consolidated)`}</Typography>
-                      {allocation.remarks && (
-                        <Typography sx={{ fontSize: '0.75rem', color: '#888' }}>{allocation.remarks}</Typography>
-                      )}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>
-                      <Box sx={{ 
-                        bgcolor: '#f8f9fa', 
-                        p: 1, 
-                        borderRadius: 1, 
-                        border: '1px solid #e0e0e0',
-                        mb: 1
-                      }}>
-                        <Box display="flex" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.initialBreakdown?.personnelServices)}</Typography>
-                        </Box>
-                        <Box display="flex" justifyContent="space-between" mb={0.5}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.initialBreakdown?.mooe)}</Typography>
-                        </Box>
-                        <Box display="flex" justifyContent="space-between" mb={allocation.initialIncome > 0 ? 0.5 : 0}>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.initialBreakdown?.capitalOutlay)}</Typography>
-                        </Box>
-                        {allocation.initialIncome > 0 && (
-                          <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
-                            <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
-                            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(allocation.initialIncome)}</Typography>
-                          </Box>
-                        )}
-                      </Box>
-                      <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: '#333' }}>{formatCurrency(allocation.initialRequestAmount)}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>
-                      {isEditing ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 250, ml: 'auto' }}>
-                          <TextField
+                  <React.Fragment key={allocationKey}>
+                    <TableRow hover sx={{ bgcolor: isExpanded ? '#f2f7f2' : 'inherit' }}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <IconButton
                             size="small"
-                            label="Personnel Services (PS)"
-                            value={editValues.ps}
-                            onChange={(e) => setEditValues(prev => ({ ...prev, ps: parseFloat(e.target.value) || 0 }))}
-                            InputProps={{ 
-                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                              inputComponent: NumericFormatCustom 
-                            }}
-                            inputProps={{ style: { textAlign: 'right' } }}
-                            fullWidth
-                          />
-                          <TextField
-                            size="small"
-                            label="MOOE"
-                            value={editValues.mooe}
-                            onChange={(e) => setEditValues(prev => ({ ...prev, mooe: parseFloat(e.target.value) || 0 }))}
-                            InputProps={{ 
-                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                              inputComponent: NumericFormatCustom 
-                            }}
-                            inputProps={{ style: { textAlign: 'right' } }}
-                            fullWidth
-                          />
-                          <TextField
-                            size="small"
-                            label="Capital Outlay (CO)"
-                            value={editValues.co}
-                            onChange={(e) => setEditValues(prev => ({ ...prev, co: parseFloat(e.target.value) || 0 }))}
-                            InputProps={{ 
-                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                              inputComponent: NumericFormatCustom 
-                            }}
-                            inputProps={{ style: { textAlign: 'right' } }}
-                            fullWidth
-                          />
-                          <Box sx={{ bgcolor: '#e8f5e9', p: 1, borderRadius: 1, border: '1px solid #c8e6c9', mt: 0.5 }}>
-                            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: BRAND_COLORS.deepGreen, display: 'flex', justifyContent: 'space-between' }}>
-                              <span>Grand Total:</span>
-                              <span>{formatCurrency((editValues.ps || 0) + (editValues.mooe || 0) + (editValues.co || 0))}</span>
-                            </Typography>
+                            aria-label={`${isExpanded ? 'Hide' : 'Show'} funding breakdown for ${allocation.division || allocation.department}`}
+                            aria-expanded={isExpanded}
+                            onClick={() => setExpandedAllocation(isExpanded ? null : allocationKey)}
+                          >
+                            {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                          </IconButton>
+                          <Box>
+                            <Typography sx={{ fontWeight: 600 }}>{allocation.division || allocation.department || `${regionName || region} (Consolidated)`}</Typography>
+                            {allocation.remarks && <Typography variant="caption" color="text.secondary">{allocation.remarks}</Typography>}
                           </Box>
                         </Box>
-                      ) : (
-                        <>
-                          <Box sx={{ 
-                            bgcolor: '#f8f9fa', 
-                            p: 1, 
-                            borderRadius: 1, 
-                            border: '1px solid #e0e0e0',
-                            mb: 1
-                          }}>
-                            <Box display="flex" justifyContent="space-between" mb={0.5}>
-                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>PS:</Typography>
-                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.ceilingBreakdown?.personnelServices)}</Typography>
-                            </Box>
-                            <Box display="flex" justifyContent="space-between" mb={0.5}>
-                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>MOOE:</Typography>
-                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.ceilingBreakdown?.mooe)}</Typography>
-                            </Box>
-                            <Box display="flex" justifyContent="space-between" mb={allocation.ceilingIncome > 0 ? 0.5 : 0}>
-                              <Typography variant="caption" sx={{ fontWeight: 600, color: '#666' }}>CO:</Typography>
-                              <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{formatCurrency(allocation.ceilingBreakdown?.capitalOutlay)}</Typography>
-                            </Box>
-                            {allocation.ceilingIncome > 0 && (
-                              <Box display="flex" justifyContent="space-between" pt={0.5} mt={0.5} sx={{ borderTop: '1px dashed #ccc' }}>
-                                <Typography variant="caption" sx={{ fontWeight: 600, color: '#1976d2' }}>Income:</Typography>
-                                <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: '#1976d2' }}>{formatCurrency(allocation.ceilingIncome)}</Typography>
-                              </Box>
-                            )}
-                          </Box>
-                          <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: BRAND_COLORS.deepGreen }}>
-                            {formatCurrency(allocation.ceilingAmount)}
-                          </Typography>
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'right' }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                        {variance < 0 ? (
-                          <TrendingDownIcon sx={{ color: BRAND_COLORS.error, fontSize: 18 }} />
-                        ) : variance > 0 ? (
-                          <TrendingUpIcon sx={{ color: BRAND_COLORS.success, fontSize: 18 }} />
-                        ) : null}
-                        <Typography sx={{ 
-                          color: variance < 0 ? BRAND_COLORS.error : variance > 0 ? BRAND_COLORS.success : '#666',
-                          fontWeight: 500
-                        }}>
-                          {formatCurrency(Math.abs(variance))}
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(allocation.initialRequestAmount)}</TableCell>
+                      <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: BRAND_COLORS.deepGreen }}>{formatCurrency(allocation.ceilingAmount)}</TableCell>
+                      <TableCell sx={{ textAlign: 'right' }}>
+                        <Typography sx={{ color: variance < 0 ? BRAND_COLORS.error : variance > 0 ? BRAND_COLORS.success : '#666', fontWeight: 600 }}>
+                          {formatCurrency(Math.abs(variance))} <Typography component="span" variant="caption">({variancePercent}%)</Typography>
                         </Typography>
-                        <Typography sx={{ fontSize: '0.75rem', color: '#888' }}>
-                          ({variancePercent}%)
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'center' }}>
-                      {isEditing ? (
-                        <Select
-                          size="small"
-                          value={editValues.priority}
-                          onChange={(e) => setEditValues(prev => ({ ...prev, priority: e.target.value }))}
-                          sx={{ minWidth: 100 }}
-                        >
-                          <MenuItem value="Critical">Critical</MenuItem>
-                          <MenuItem value="High">High</MenuItem>
-                          <MenuItem value="Medium">Medium</MenuItem>
-                          <MenuItem value="Low">Low</MenuItem>
-                        </Select>
-                      ) : (
-                        <Chip 
-                          size="small" 
-                          label={allocation.priority || 'Medium'}
-                          color={
-                            allocation.priority === 'Critical' ? 'error' :
-                            allocation.priority === 'High' ? 'warning' :
-                            allocation.priority === 'Low' ? 'default' : 'info'
-                          }
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'center' }}>
-                      <Chip
-                        size="small"
-                        label={allocation.allocationStatus || 'Pending'}
-                        color={
-                          allocation.allocationStatus === 'NEP_Finalized' ? 'success' :
-                          allocation.allocationStatus === 'NEP_Created' ? 'primary' :
-                          allocation.allocationStatus === 'Published' ? 'info' : 'default'
-                        }
-                      />
-                    </TableCell>
-                    <TableCell sx={{ textAlign: 'center' }}>
-                      {ceiling?.status === 'Draft' && (
-                        isEditing ? (
-                          <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                            <Tooltip title="Save">
-                              <IconButton size="small" onClick={handleSaveAllocation} disabled={actionLoading}>
-                                <SaveIcon sx={{ color: BRAND_COLORS.success }} />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Cancel">
-                              <IconButton size="small" onClick={() => { setEditingAllocation(null); setEditValues({}); }}>
-                                <CancelIcon sx={{ color: BRAND_COLORS.error }} />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        ) : (
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'center' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                          <Chip size="small" label={allocation.priority || 'Medium'} color={allocation.priority === 'Critical' ? 'error' : allocation.priority === 'High' ? 'warning' : allocation.priority === 'Low' ? 'default' : 'info'} />
+                          <Chip
+                            size="small"
+                            label={allocation.allocationStatus || 'Pending'}
+                            color={allocation.allocationStatus === 'NEP_Finalized' ? 'success' : allocation.allocationStatus === 'NEP_Created' ? 'primary' : allocation.allocationStatus === 'Published' ? 'info' : 'default'}
+                          />
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {canEditAllocation && (
                           <Tooltip title="Edit Ceiling">
-                            <IconButton size="small" onClick={() => handleEditAllocation(allocation)}>
+                            <IconButton size="small" aria-label={`Edit ceiling for ${allocation.division || allocation.department}`} onClick={() => handleEditAllocation(allocation)}>
                               <EditIcon sx={{ color: BRAND_COLORS.deepGreen }} />
                             </IconButton>
                           </Tooltip>
-                        )
-                      )}
-                      {allocation.nepProposalId && (
-                        <Tooltip title="Open standalone NEP Proposal">
-                          <IconButton
-                            size="small"
-                            aria-label={`Open NEP proposal for ${allocation.division || allocation.department}`}
-                            onClick={() => window.open(`/nep-proposal/${allocation.nepProposalId}`, '_self')}
-                          >
-                            <OpenInNewIcon sx={{ color: BRAND_COLORS.deepGreen, fontSize: 18 }} />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                        )}
+                        {allocation.nepProposalId && (
+                          <Tooltip title="Open NEP Proposal">
+                            <IconButton size="small" aria-label={`Open NEP proposal for ${allocation.division || allocation.department}`} onClick={() => window.open(`/nep-proposal/${allocation.nepProposalId}`, '_self')}>
+                              <OpenInNewIcon sx={{ color: BRAND_COLORS.deepGreen, fontSize: 18 }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell colSpan={6} sx={{ p: 0, borderBottom: isExpanded ? undefined : 0 }}>
+                        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                          <Box sx={{ p: { xs: 1, sm: 2 }, bgcolor: '#f8faf8' }}>
+                            <Typography variant="subtitle2" sx={{ mb: 1, color: BRAND_COLORS.deepGreen, fontWeight: 700 }}>
+                              Funding Breakdown — Initial Request and Ceiling
+                            </Typography>
+                            <Table size="small" sx={{ bgcolor: '#fff', border: '1px solid #e0e7e0' }}>
+                              <TableHead>
+                                <TableRow sx={{ bgcolor: '#edf4ed' }}>
+                                  <TableCell rowSpan={2} sx={{ fontWeight: 700 }}>Budget Category</TableCell>
+                                  <TableCell colSpan={2} align="center" sx={{ fontWeight: 700 }}>Initial Request <Typography component="span" variant="caption">(read-only)</Typography></TableCell>
+                                  <TableCell colSpan={2} align="center" sx={{ fontWeight: 700 }}>Ceiling</TableCell>
+                                </TableRow>
+                                <TableRow sx={{ bgcolor: '#f7faf7' }}>
+                                  {['Income', 'Subsidy', 'Income', 'Subsidy'].map((label, labelIndex) => <TableCell key={`${label}-${labelIndex}`} align="right" sx={{ fontWeight: 600 }}>{label}</TableCell>)}
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {FUNDING_CATEGORIES.map(category => (
+                                  <TableRow key={`${allocation.division}-${category.key}`}>
+                                    <TableCell sx={{ fontWeight: 500 }}>{category.label}</TableCell>
+                                    <TableCell align="right">{formatCurrency(initialFundingBreakdown[category.key]?.income)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(initialFundingBreakdown[category.key]?.subsidy)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(fundingBreakdown[category.key]?.income)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(fundingBreakdown[category.key]?.subsidy)}</TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow sx={{ bgcolor: '#f1f6f1' }}>
+                                  <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(FUNDING_CATEGORIES.reduce((sum, category) => sum + initialFundingBreakdown[category.key].income, 0))}</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(FUNDING_CATEGORIES.reduce((sum, category) => sum + initialFundingBreakdown[category.key].subsidy, 0))}</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(FUNDING_CATEGORIES.reduce((sum, category) => sum + fundingBreakdown[category.key].income, 0))}</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(FUNDING_CATEGORIES.reduce((sum, category) => sum + fundingBreakdown[category.key].subsidy, 0))}</TableCell>
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </Box>
+                        </Collapse>
+                      </TableCell>
+                    </TableRow>
+                  </React.Fragment>
                 );
               })}
-              {/* Totals Row */}
+              {paginatedAllocations.length === 0 && (
+                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 5, color: 'text.secondary' }}>No responsibility centers match your search.</TableCell></TableRow>
+              )}
               <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell sx={{ fontWeight: 700 }}>TOTAL</TableCell>
-                <TableCell sx={{ textAlign: 'right', fontWeight: 700 }}>
-                  {formatCurrency(totals.initial)}
-                </TableCell>
-                <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: BRAND_COLORS.deepGreen }}>
-                  {formatCurrency(totals.ceiling)}
-                </TableCell>
-                <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: totals.variance < 0 ? BRAND_COLORS.error : BRAND_COLORS.success }}>
-                  {formatCurrency(Math.abs(totals.variance))}
-                </TableCell>
-                <TableCell colSpan={3}></TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>TOTAL ({allocations.length} centers)</TableCell>
+                <TableCell sx={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(totals.initial)}</TableCell>
+                <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: BRAND_COLORS.deepGreen }}>{formatCurrency(totals.ceiling)}</TableCell>
+                <TableCell sx={{ textAlign: 'right', fontWeight: 700, color: totals.variance < 0 ? BRAND_COLORS.error : BRAND_COLORS.success }}>{formatCurrency(Math.abs(totals.variance))}</TableCell>
+                <TableCell colSpan={2} />
               </TableRow>
             </TableBody>
           </Table>
         </TableContainer>
+        <TablePagination
+          component="div"
+          count={filteredAllocations.length}
+          page={allocationPage}
+          onPageChange={(_, nextPage) => setAllocationPage(nextPage)}
+          rowsPerPage={allocationRowsPerPage}
+          onRowsPerPageChange={event => {
+            setAllocationRowsPerPage(Number(event.target.value));
+            setAllocationPage(0);
+          }}
+          rowsPerPageOptions={[5, 10, 25, 50]}
+          labelRowsPerPage="Rows per page:"
+        />
       </Paper>
+
+      <Dialog
+        open={Boolean(editingAllocation)}
+        onClose={() => {
+          if (!actionLoading) {
+            setEditingAllocation(null);
+            setEditValues({});
+          }
+        }}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle sx={{ bgcolor: BRAND_COLORS.deepGreen, color: '#fff' }}>
+          Edit Ceiling — {editingAllocationData?.division || editingAllocationData?.department || editingAllocation}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {editingAllocationData && (
+            <>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Initial Request is a read-only baseline. Update the Ceiling Income and Subsidy amounts below.
+              </Alert>
+              <TableContainer sx={{ border: '1px solid #e0e7e0', borderRadius: 1 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#edf4ed' }}>
+                      <TableCell rowSpan={2} sx={{ fontWeight: 700 }}>Budget Category</TableCell>
+                      <TableCell colSpan={2} align="center" sx={{ fontWeight: 700 }}>Initial Request (read-only)</TableCell>
+                      <TableCell colSpan={2} align="center" sx={{ fontWeight: 700 }}>Ceiling (editable)</TableCell>
+                    </TableRow>
+                    <TableRow sx={{ bgcolor: '#f7faf7' }}>
+                      {['Income', 'Subsidy', 'Income', 'Subsidy'].map((label, index) => (
+                        <TableCell key={`${label}-${index}`} align="right" sx={{ fontWeight: 600 }}>{label}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {FUNDING_CATEGORIES.map(category => {
+                      const initialFunding = getInitialAllocationFundingBreakdown(editingAllocationData);
+                      return (
+                        <TableRow key={`edit-${category.key}`}>
+                          <TableCell sx={{ minWidth: 220, fontWeight: 500 }}>{category.label}</TableCell>
+                          <TableCell align="right">{formatCurrency(initialFunding[category.key]?.income)}</TableCell>
+                          <TableCell align="right">{formatCurrency(initialFunding[category.key]?.subsidy)}</TableCell>
+                          {['income', 'subsidy'].map(source => (
+                            <TableCell key={`${category.key}-${source}`} align="right" sx={{ minWidth: 190 }}>
+                              <TextField
+                                size="small"
+                                aria-label={`Ceiling ${category.label} ${source}`}
+                                value={editValues.fundingBreakdown?.[category.key]?.[source] ?? 0}
+                                disabled={category.key === 'corporateIncome' && source === 'subsidy'}
+                                onChange={event => {
+                                  const amount = Math.max(0, Number(event.target.value) || 0);
+                                  setEditValues(previous => ({
+                                    ...previous,
+                                    fundingBreakdown: {
+                                      ...previous.fundingBreakdown,
+                                      [category.key]: {
+                                        ...previous.fundingBreakdown[category.key],
+                                        [source]: amount
+                                      }
+                                    }
+                                  }));
+                                }}
+                                InputProps={{
+                                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                                  inputComponent: NumericFormatCustom
+                                }}
+                                inputProps={{ style: { textAlign: 'right' } }}
+                                sx={{ width: 180 }}
+                              />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '220px 1fr' }, gap: 2, alignItems: 'start' }}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel id="ceiling-priority-label">Priority</InputLabel>
+                  <Select
+                    labelId="ceiling-priority-label"
+                    label="Priority"
+                    value={editValues.priority || 'Medium'}
+                    onChange={event => setEditValues(previous => ({ ...previous, priority: event.target.value }))}
+                  >
+                    <MenuItem value="Critical">Critical</MenuItem>
+                    <MenuItem value="High">High</MenuItem>
+                    <MenuItem value="Medium">Medium</MenuItem>
+                    <MenuItem value="Low">Low</MenuItem>
+                  </Select>
+                </FormControl>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Remarks"
+                  value={editValues.remarks || ''}
+                  onChange={event => setEditValues(previous => ({ ...previous, remarks: event.target.value }))}
+                />
+              </Box>
+              <Paper elevation={0} sx={{ mt: 2, p: 1.5, bgcolor: '#edf6ed', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography sx={{ fontWeight: 700, color: BRAND_COLORS.deepGreen }}>Ceiling Grand Total</Typography>
+                <Typography sx={{ fontWeight: 700, color: BRAND_COLORS.deepGreen, fontFamily: 'monospace' }}>
+                  {formatCurrency(
+                    (Number(editValues.fundingBreakdown?.corporateIncome?.income) || 0) +
+                    FUNDING_CATEGORIES.filter(category => category.key !== 'corporateIncome')
+                      .reduce((sum, category) => sum + (Number(editValues.fundingBreakdown?.[category.key]?.subsidy) || 0), 0)
+                  )}
+                </Typography>
+              </Paper>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            onClick={() => {
+              setEditingAllocation(null);
+              setEditValues({});
+            }}
+            disabled={actionLoading}
+            startIcon={<CancelIcon />}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveAllocation}
+            disabled={actionLoading || !editingAllocationData}
+            startIcon={actionLoading ? <CircularProgress size={16} /> : <SaveIcon />}
+            sx={{ bgcolor: BRAND_COLORS.deepGreen }}
+          >
+            Save Ceiling
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Budget Pool Dialog */}
       <Dialog open={budgetPoolDialogOpen} onClose={() => setBudgetPoolDialogOpen(false)}>

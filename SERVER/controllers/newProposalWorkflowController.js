@@ -28,6 +28,7 @@ const {
   assertNepCeilingCompliance,
   syncNepCeilingWorkflowStatus
 } = require('../services/nepCeilingService');
+const { loadInitialProposalLineItems } = require('../services/nepProposalService');
 
 const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
   'submit-to-reviewer',
@@ -3461,12 +3462,82 @@ exports.getProposalById = async (req, res) => {
       regionName ||
       undefined;
 
+    let initialProposalBaseline = null;
+    if (String(proposal.modelType || '').toUpperCase() === 'NEP') {
+      try {
+        const sourceProposalIds = new Set(
+          (proposal.sourceInitialProposalIds || []).map(sourceId => String(sourceId))
+        );
+
+        // Older NEP proposals may predate sourceInitialProposalIds. Recover the
+        // original Initial IDs from the ceiling allocation that generated them.
+        if (
+          proposal.budgetCeilingId ||
+          proposal.budgetCeilingAllocationId ||
+          sourceProposalIds.size === 0
+        ) {
+          const BudgetCeiling = require('../models/BudgetCeiling');
+          let budgetCeiling = proposal.budgetCeilingId
+            ? await BudgetCeiling.findById(proposal.budgetCeilingId).select('allocations').lean()
+            : null;
+          if (!budgetCeiling) {
+            budgetCeiling = await BudgetCeiling.findOne({
+              'allocations.nepProposalId': proposal._id,
+            })
+              .select('allocations')
+              .lean();
+          }
+
+          const allocation = budgetCeiling?.allocations?.find(
+            item =>
+              (proposal.budgetCeilingAllocationId &&
+                String(item._id) === String(proposal.budgetCeilingAllocationId)) ||
+              String(item.nepProposalId || '') === String(proposal._id)
+          );
+          (allocation?.initialProposalIds || []).forEach(sourceId =>
+            sourceProposalIds.add(String(sourceId))
+          );
+          if (allocation?.initialProposalId) sourceProposalIds.add(String(allocation.initialProposalId));
+        }
+
+        let initialProposals = sourceProposalIds.size
+          ? await NewProposalWorkflow.find({
+            _id: { $in: Array.from(sourceProposalIds) },
+            modelType: 'Initial'
+          }).lean()
+          : [];
+
+        // Last-resort recovery for legacy NEP records without ceiling links.
+        if (initialProposals.length === 0) {
+          const proposalRegion = proposal.region?._id || proposal.region;
+          const initialQuery = {
+            modelType: 'Initial',
+            status: { $in: ['FINALIZED', 'Finalized'] },
+            fiscalYear: Number(proposal.fiscalYear),
+          };
+          if (proposalRegion) initialQuery.region = proposalRegion;
+          if (!/\(consolidated\)/i.test(String(proposal.division || ''))) {
+            if (proposal.division) initialQuery.division = proposal.division;
+            if (proposal.department) initialQuery.department = proposal.department;
+          }
+          initialProposals = await NewProposalWorkflow.find(initialQuery).lean();
+        }
+
+        if (initialProposals.length > 0) {
+          initialProposalBaseline = await loadInitialProposalLineItems(initialProposals);
+        }
+      } catch (baselineError) {
+        console.warn('[getProposalById] Failed to load Initial proposal baseline:', baselineError.message);
+      }
+    }
+
     const mappedProposal = {
       ...proposal.toObject ? proposal.toObject() : proposal,
       responsibilityCenter,
       division: divisionName || proposal.division,
       department: departmentName || proposal.department,
-      budgetType: proposal.modelType
+      budgetType: proposal.modelType,
+      ...(initialProposalBaseline ? { initialProposalBaseline } : {})
     };
 
     res.json({

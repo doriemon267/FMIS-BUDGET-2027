@@ -92,31 +92,21 @@ const getDefinition = (moduleKey, item) => {
   };
 };
 
-const baselineValue = (item, field) => {
-  const title = `${field[0].toUpperCase()}${field.slice(1)}`;
-  const candidates = [
-    item?.[`initial${title}`],
-    item?.[`original${title}`],
-    item?.[`baseline${title}`],
-  ];
-  const explicit = candidates.find(value => value !== undefined && value !== null);
-  return {
-    value: valueOf(explicit ?? item?.[field]),
-    durable: explicit !== undefined,
-  };
-};
-
 export const buildFinancialComparisonSections = ({
   moduleKey,
   initialItems = [],
   currentItems = [],
 }) => {
-  const sections = new Map();
-  currentItems.forEach((item, sourceIndex) => {
+  const getRowIdentity = item => {
     const definition = getDefinition(moduleKey, item);
     const mergeKey = [definition.section, definition.label, definition.code]
       .map(normalize)
       .join('|');
+    return { definition, mergeKey };
+  };
+  const sections = new Map();
+
+  const ensureRow = (definition, mergeKey) => {
     if (!sections.has(definition.section)) sections.set(definition.section, new Map());
     const rows = sections.get(definition.section);
     if (!rows.has(mergeKey)) {
@@ -130,31 +120,47 @@ export const buildFinancialComparisonSections = ({
         nepSubsidy: 0,
         initialAmount: 0,
         proposedAmount: 0,
+        hasInitialBaseline: false,
         hasDurableBaseline: true,
       });
     }
+    return rows.get(mergeKey);
+  };
 
-    const row = rows.get(mergeKey);
-    const initial = initialItems[sourceIndex] || item;
-    row.sourceIndices.push(sourceIndex);
+  // Build the locked side from the Initial proposal's own row identity. The
+  // generated NEP may merge duplicate Capital Outlay rows, so array positions
+  // are not a reliable way to match its rows back to the Initial proposal.
+  initialItems.forEach(item => {
+    const { definition, mergeKey } = getRowIdentity(item);
+    const row = ensureRow(definition, mergeKey);
+    row.hasInitialBaseline = true;
     if (moduleKey === 'income') {
-      const loaded = baselineValue(initial, 'amount');
-      row.initialAmount += loaded.value;
-      row.proposedAmount += valueOf(item.amount);
-      row.hasDurableBaseline = row.hasDurableBaseline && loaded.durable;
+      row.initialAmount += valueOf(item.amount);
     } else {
-      const initialIncome = baselineValue(initial, 'income');
-      const initialSubsidy = baselineValue(initial, 'subsidy');
-      row.initialIncome += initialIncome.value;
-      row.initialSubsidy += initialSubsidy.value;
-      row.nepIncome += valueOf(item.income);
-      row.nepSubsidy += valueOf(item.subsidy);
-      row.hasDurableBaseline =
-        row.hasDurableBaseline && initialIncome.durable && initialSubsidy.durable;
+      row.initialIncome += valueOf(item.income);
+      row.initialSubsidy += valueOf(item.subsidy);
     }
   });
 
-  return Array.from(sections, ([title, rows]) => ({ title, rows: Array.from(rows.values()) }));
+  currentItems.forEach((item, sourceIndex) => {
+    const { definition, mergeKey } = getRowIdentity(item);
+    const row = ensureRow(definition, mergeKey);
+    row.sourceIndices.push(sourceIndex);
+    if (moduleKey === 'income') {
+      row.proposedAmount += valueOf(item.amount);
+    } else {
+      row.nepIncome += valueOf(item.income);
+      row.nepSubsidy += valueOf(item.subsidy);
+    }
+  });
+
+  return Array.from(sections, ([title, rows]) => ({
+    title,
+    rows: Array.from(rows.values()).map(row => ({
+      ...row,
+      hasDurableBaseline: row.hasInitialBaseline && row.hasDurableBaseline,
+    })),
+  }));
 };
 
 export const getFinancialComparisonTotals = (moduleKey, sections) =>

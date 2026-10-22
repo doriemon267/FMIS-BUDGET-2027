@@ -343,13 +343,19 @@ async function computeModuleTotals(filterKeys, proposalId, workflowRefId) {
       onNull: 0
     }
   };
-  const personnelLineTotalExpr = {
-    $cond: [
-      { $gt: [personnelComponentTotalExpr, 0] },
-      personnelComponentTotalExpr,
-      personnelLegacyTotalExpr
-    ]
-  };
+  // NEP editor and ceiling checks use the saved Total as the authoritative
+  // personnel amount. Rebuilding it from components can omit legacy or newly
+  // added components and make submit validation disagree with the page.
+  const personnelLineTotalExpr =
+    String(filterKeys.budgetType || '').toUpperCase() === 'NEP'
+      ? personnelLegacyTotalExpr
+      : {
+          $cond: [
+            { $gt: [personnelComponentTotalExpr, 0] },
+            personnelComponentTotalExpr,
+            personnelLegacyTotalExpr
+          ]
+        };
   // CHANGED: psTotal now INCLUDES all PersonnelServices, including those marked as charged-to-income
   // We handle the charged-to-income deduction separately below
   const psTotal = await tryMatchExcludingChargedToIncome(PersonnelServices, { $sum: personnelLineTotalExpr });
@@ -545,14 +551,18 @@ async function persistProposalTotals(proposal) {
   //   - Income funding: ₱40,000
   //   - Subsidy funding: ₱60,000
   
-  // PROJECTED INCOME = Income model (Corporate Income) + Personnelservices(charged to income total) + mooe(income) + capitaloutlay(income)
-  // Corporate Income (Income model) is now INCLUDED in Projected Income
   const personnelFunding = splitPersonnelFunding(psSubsidyTotal, chargedToIncomeTotal);
   const effectiveChargedToIncomeTotal = personnelFunding.incomeAmount;
-  const adjustedIncomeTotal = (incomeTotal || 0) + effectiveChargedToIncomeTotal + (mooeIncomeTotal || 0) + (coIncomeTotal || 0);
-  
-  // Keep Corporate Income amount for reference
   const corporateIncomeTotal = incomeTotal || 0;
+  const expenseIncomeTotal =
+    effectiveChargedToIncomeTotal + (mooeIncomeTotal || 0) + (coIncomeTotal || 0);
+  // NEP Corporate Income is a collection source, not an expense allocation.
+  // Keep it in the Income module, but only count Income applied to PS/MOOE/CO
+  // when validating the NEP expense ceiling.
+  const adjustedIncomeTotal =
+    String(proposal.budgetType || '').toUpperCase() === 'NEP'
+      ? expenseIncomeTotal
+      : corporateIncomeTotal + expenseIncomeTotal;
   
   const adjustedPsTotal = (psTotal || 0);
   // Personnel costs are funded by two sources: the configured Income allocation
@@ -567,7 +577,10 @@ async function persistProposalTotals(proposal) {
 
   console.log('[recalculate] FINAL CALCULATION:', {
     proposalId: String(proposal._id),
-    corporateIncomeTotal: parseFloat(corporateIncomeTotal).toFixed(2) + ' (included in projected income)',
+    corporateIncomeTotal: parseFloat(corporateIncomeTotal).toFixed(2) +
+      (String(proposal.budgetType || '').toUpperCase() === 'NEP'
+        ? ' (collection only; excluded from expense allocation)'
+        : ' (included in projected income)'),
     chargedToIncomeTotal: parseFloat(effectiveChargedToIncomeTotal).toFixed(2),
     psSubsidyTotal: parseFloat(psSubsidyTotal).toFixed(2),
     adjustedPersonnelSubsidy: parseFloat(adjustedPersonnelSubsidy).toFixed(2),

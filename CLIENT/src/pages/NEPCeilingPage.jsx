@@ -11,6 +11,14 @@ import {
   FormControl,
   Select,
   MenuItem,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  CircularProgress,
 } from '@mui/material';
 import {
   Home as HomeIcon,
@@ -31,6 +39,89 @@ const BRAND_COLORS = {
   darkGreen: '#375e38',
   deepGreen: '#2d5016',
   lightGreen: '#4CAF50',
+};
+
+const ALL_REGIONS_VALUE = '__ALL_REGIONS__';
+
+const formatCurrency = amount =>
+  `₱${(Number(amount) || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const AllRegionsCeilingOverview = ({ fiscalYear, availableRegions, onSelectRegion }) => {
+  const { data: ceilings = [], isLoading, isError } = useQuery({
+    queryKey: ['budgetCeilings', 'allRegions', fiscalYear],
+    queryFn: async () => {
+      const response = await api.get(`/api/budget-ceiling/regions/${fiscalYear}`);
+      return response.data?.data || [];
+    },
+    enabled: Boolean(fiscalYear),
+  });
+
+  if (isLoading) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><CircularProgress sx={{ color: BRAND_COLORS.deepGreen }} /></Box>;
+  }
+
+  if (isError) {
+    return <Paper sx={{ p: 3, color: 'error.main' }}>Hindi makuha ang initialized NEP ceilings. Subukan ulit buksan ang page.</Paper>;
+  }
+
+  return (
+    <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
+      <Box sx={{ p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <Box>
+          <Typography variant="h6" sx={{ color: BRAND_COLORS.deepGreen, fontWeight: 700 }}>Initialized NEP Regions</Typography>
+          <Typography variant="body2" color="text.secondary">
+            FY {fiscalYear} · {ceilings.length} region{ceilings.length === 1 ? '' : 's'} initialized. Buksan ang isang region para pamahalaan ang allocations nito.
+          </Typography>
+        </Box>
+        <Chip label={`${ceilings.length} initialized`} color="success" variant="outlined" />
+      </Box>
+      <TableContainer>
+        <Table size="small" sx={{ minWidth: 850 }}>
+          <TableHead>
+            <TableRow sx={{ bgcolor: BRAND_COLORS.darkGreen }}>
+              {['Region', 'Ceiling Status', 'Responsibility Centers', 'NEP Proposals', 'Initial Request', 'Ceiling Total', ''].map((label, index) => (
+                <TableCell key={`${label}-${index}`} align={index > 1 && index < 6 ? 'right' : 'left'} sx={{ color: '#fff', fontWeight: 700, whiteSpace: 'nowrap' }}>{label}</TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {ceilings.map(ceiling => {
+              const allocations = ceiling.allocations || [];
+              const generatedCount = allocations.filter(allocation => allocation.nepProposalId).length;
+              const finalizedCount = allocations.filter(allocation => String(allocation.nepProposalStatus || '').toUpperCase() === 'FINALIZED').length;
+              const initialTotal = allocations.reduce((sum, allocation) => sum + (Number(allocation.initialRequestAmount) || 0), 0);
+              const ceilingTotal = allocations.reduce((sum, allocation) => sum + (Number(allocation.ceilingAmount) || 0), 0);
+              const region = availableRegions.find(item =>
+                [item.name, item.Region, item.regionName].some(name => name && name === ceiling.region)
+              );
+
+              return (
+                <TableRow key={`${ceiling.region}-${ceiling._id}`} hover>
+                  <TableCell sx={{ fontWeight: 600 }}>{ceiling.region}</TableCell>
+                  <TableCell><Chip size="small" label={ceiling.status || 'Draft'} color={ceiling.status === 'Published' ? 'success' : ceiling.status === 'Locked' ? 'warning' : 'default'} /></TableCell>
+                  <TableCell align="right">{allocations.length}</TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{generatedCount} / {allocations.length}</Typography>
+                    {finalizedCount > 0 && <Typography variant="caption" color="success.main">{finalizedCount} finalized</Typography>}
+                  </TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>{formatCurrency(initialTotal)}</TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap', fontWeight: 700, color: BRAND_COLORS.deepGreen }}>{formatCurrency(ceilingTotal)}</TableCell>
+                  <TableCell align="right">
+                    <Button size="small" variant="outlined" disabled={!region} onClick={() => onSelectRegion(region)} sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}>
+                      Manage Region
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {ceilings.length === 0 && (
+              <TableRow><TableCell colSpan={7} align="center" sx={{ py: 5, color: 'text.secondary' }}>Wala pang region na may initialized NEP ceiling para sa fiscal year na ito.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
+  );
 };
 
 /**
@@ -251,8 +342,12 @@ const NEPCeilingPage = () => {
           {availableRegions && availableRegions.length > 1 ? (
             <FormControl size="small" variant="outlined" sx={{ minWidth: 150 }}>
               <Select
-                value={resolvedRegionString}
+                value={!activeRegion && isBRDStaff ? ALL_REGIONS_VALUE : resolvedRegionString}
                 onChange={(e) => {
+                  if (e.target.value === ALL_REGIONS_VALUE) {
+                    changeActiveRegion(null);
+                    return;
+                  }
                   const region = availableRegions.find(
                     (r) =>
                       r.name === e.target.value ||
@@ -292,6 +387,7 @@ const NEPCeilingPage = () => {
                   }
                 }}
               >
+                {isBRDStaff && <MenuItem value={ALL_REGIONS_VALUE}>All Regions</MenuItem>}
                 {availableRegions.map((r, idx) => {
                   const name = r.name || r.Region || r.regionName;
                   return (
@@ -370,7 +466,13 @@ const NEPCeilingPage = () => {
 
       {/* Main Content */}
       <Box>
-        {activeView === 'ceiling' ? (
+        {!activeRegion && isBRDStaff ? (
+          <AllRegionsCeilingOverview
+            fiscalYear={selectedFiscalYear}
+            availableRegions={availableRegions || []}
+            onSelectRegion={changeActiveRegion}
+          />
+        ) : activeView === 'ceiling' ? (
           <CeilingManagement
             fiscalYear={selectedFiscalYear}
             region={resolvedRegion}

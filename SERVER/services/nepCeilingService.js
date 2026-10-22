@@ -1,13 +1,10 @@
 const BudgetCeiling = require('../models/BudgetCeiling');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const Proposal = require('../models/Proposal');
-const Tier = require('../models/Tier');
-const Region = require('../models/Region');
 const PersonnelServices = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
-const mongoose = require('mongoose');
 
 const MONEY_EPSILON = 0.009;
 
@@ -58,45 +55,6 @@ const buildTierTotalsFromItems = ({ items = [], corporateIncome = 0, categoryInc
   };
 };
 
-const uniqueStrings = values => Array.from(
-  new Set(values.map(value => String(value || '').trim()).filter(Boolean))
-);
-
-const findLinkedTier = async ({ proposal, ceiling, allocation }) => {
-  const direct = await Tier.findOne({ proposalId: proposal._id }).lean();
-  if (direct) return direct;
-
-  const regionValues = uniqueStrings([ceiling.region, proposal.region]);
-  for (const value of [...regionValues]) {
-    if (!mongoose.Types.ObjectId.isValid(value)) continue;
-    const region = await Region.findById(value).select('Region regionName RegionName name').lean();
-    if (region) {
-      regionValues.push(...uniqueStrings([
-        region._id,
-        region.Region,
-        region.regionName,
-        region.RegionName,
-        region.name
-      ]));
-    }
-  }
-
-  const clauses = [
-    { fiscalYear: { $in: uniqueStrings([proposal.fiscalYear, ceiling.fiscalYear]) } },
-    { region: { $in: uniqueStrings(regionValues) } }
-  ];
-  const department = String(allocation.department || proposal.department || '').trim();
-  const division = String(allocation.division || proposal.division || '').trim();
-  clauses.push(department
-    ? { department }
-    : { $or: [{ department: '' }, { department: null }, { department: { $exists: false } }] });
-  clauses.push(division
-    ? { division }
-    : { $or: [{ division: '' }, { division: null }, { division: { $exists: false } }] });
-
-  return Tier.findOne({ $and: clauses }).sort({ updatedAt: -1 }).lean();
-};
-
 const getTierCategoryIncome = async proposal => {
   const legacy = await Proposal.findOne({ workflowRef: proposal._id }).select('_id').lean();
   const proposalIds = [proposal._id, legacy?._id].filter(Boolean);
@@ -122,29 +80,13 @@ const getTierCategoryIncome = async proposal => {
   };
 };
 
-const persistTierTotals = async ({ proposal, totals }) => {
-  await Promise.all([
-    NewProposalWorkflow.findByIdAndUpdate(proposal._id, {
-      amount: totals.proposedBudget,
-      projectedCorporateIncome: totals.income,
-      projectedSubsidy: totals.subsidies,
-      updatedAt: new Date()
-    }),
-    Proposal.findOneAndUpdate(
-      { workflowRef: proposal._id },
-      {
-        totalIncome: totals.income,
-        totalExpenses: totals.expenses,
-        proposedBudget: totals.proposedBudget,
-        projectedCorporateIncome: totals.income,
-        projectedSubsidy: totals.subsidies,
-        updatedAt: new Date()
-      }
-    )
-  ]);
-};
-
 const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
+  const expenseCeiling = roundMoney(
+    finiteNumber(allocation.ceilingBreakdown?.personnelServices) +
+      finiteNumber(allocation.ceilingBreakdown?.mooe) +
+      finiteNumber(allocation.ceilingBreakdown?.capitalOutlay)
+  );
+  const hasDetailedCeiling = expenseCeiling > MONEY_EPSILON;
   const actual = {
     totalExpenses: roundMoney(totals.expenses),
     proposedBudget: roundMoney(totals.proposedBudget),
@@ -154,7 +96,10 @@ const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
     capitalOutlay: roundMoney(totals.capitalOutlay)
   };
   const caps = {
-    totalExpenses: roundMoney(allocation.ceilingAmount),
+    // Corporate Income is a collection source, not an expense allocation.
+    // When category ceilings exist, compare expenses with their sum instead
+    // of ceilingAmount, which also includes collection-only Corporate Income.
+    totalExpenses: hasDetailedCeiling ? expenseCeiling : roundMoney(allocation.ceilingAmount),
     projectedSubsidy: roundMoney(allocation.ceilingSubsidy),
     personnelServices: roundMoney(allocation.ceilingBreakdown?.personnelServices),
     mooe: roundMoney(allocation.ceilingBreakdown?.mooe),
@@ -199,8 +144,6 @@ const buildNepCeilingComplianceReport = ({ totals = {}, allocation = {} }) => {
     });
   }
 
-  const hasDetailedCeiling =
-    caps.personnelServices + caps.mooe + caps.capitalOutlay > MONEY_EPSILON;
   if (hasDetailedCeiling) {
     ['personnelServices', 'mooe', 'capitalOutlay'].forEach(field => {
       if (actual[field] - caps[field] > MONEY_EPSILON) {
@@ -280,17 +223,6 @@ const getNepCeilingContext = async ({ proposalId, recalculate = true }) => {
   if (recalculate) {
     const recalculated = await recalculateAndSaveProposalTotals({ workflowRef: proposal._id });
     totals = recalculated.totals;
-
-    const tier = await findLinkedTier({ proposal, ceiling, allocation });
-    if (tier) {
-      const categoryIncome = await getTierCategoryIncome(proposal);
-      totals = buildTierTotalsFromItems({
-        items: tier.items,
-        corporateIncome: recalculated.totals.income,
-        categoryIncome
-      });
-      await persistTierTotals({ proposal, totals });
-    }
   }
 
   return {

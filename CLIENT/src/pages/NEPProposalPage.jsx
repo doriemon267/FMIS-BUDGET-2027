@@ -64,6 +64,7 @@ const NEPProposalPage = () => {
   const [proposal, setProposal] = useState(null);
   const [ceilingContext, setCeilingContext] = useState(null);
   const [details, setDetails] = useState(EMPTY_DETAILS);
+  const [savedItems, setSavedItems] = useState(EMPTY_DETAILS);
   const [editableItems, setEditableItems] = useState(EMPTY_DETAILS);
   const [changedCategories, setChangedCategories] = useState(new Set());
   const [activeTab, setActiveTab] = useState('income');
@@ -114,6 +115,10 @@ const NEPProposalPage = () => {
     () => ({
       projectedCorporateIncome: liveIncome,
       projectedSubsidy: liveSubsidy,
+      corporateIncomeCollection: editableItems.income.reduce(
+        (sum, item) => sum + (Number(item.amount) || 0),
+        0
+      ),
       proposedBudget: liveIncome + liveSubsidy,
       totalExpenses: liveIncome + liveSubsidy,
       personnelServices: editableItems.personnel.reduce(
@@ -131,7 +136,9 @@ const NEPProposalPage = () => {
     }),
     [editableItems, liveIncome, liveSubsidy]
   );
-  const targetCeiling = Number(ceilingContext?.ceiling?.amount || 0);
+  const targetCeiling = Number(
+    ceilingContext?.compliance?.caps?.totalExpenses ?? ceilingContext?.ceiling?.amount ?? 0
+  );
   const difference = Math.round((targetCeiling - liveTotals.proposedBudget) * 100) / 100;
   const isMatched = Math.abs(difference) <= 0.01;
 
@@ -250,9 +257,18 @@ const NEPProposalPage = () => {
         mooe: toArray(mooe),
         capitalOutlay: toArray(capital),
       };
+      const initialBaseline = loadedProposal.initialProposalBaseline;
+      const lockedDetails =
+        initialBaseline &&
+        ['income', 'personnel', 'mooe', 'capitalOutlay'].every(key =>
+          Array.isArray(initialBaseline[key])
+        )
+          ? initialBaseline
+          : { income: [], personnel: [], mooe: [], capitalOutlay: [] };
       setProposal(loadedProposal);
       setCeilingContext(ceiling.data?.data || null);
-      setDetails(loadedDetails);
+      setDetails(lockedDetails);
+      setSavedItems(loadedDetails);
       setEditableItems(cloneDetails(loadedDetails));
       setChangedCategories(new Set());
     } catch (loadError) {
@@ -323,7 +339,7 @@ const NEPProposalPage = () => {
 
   const resetUnsavedChanges = () => {
     if (!canEdit || changedCategories.size === 0) return;
-    setEditableItems(cloneDetails(details));
+    setEditableItems(cloneDetails(savedItems));
     setChangedCategories(new Set());
     toast.info('Unsaved NEP changes were reset.');
   };
@@ -356,8 +372,9 @@ const NEPProposalPage = () => {
         );
       }
       await Promise.all(requests);
+      setSavedItems(cloneDetails(editableItems));
+      setChangedCategories(new Set());
       toast.success('NEP Income and Subsidy changes saved.');
-      await loadProposal();
     } catch (saveError) {
       toast.error(saveError.response?.data?.message || 'Unable to save NEP changes.');
     } finally {

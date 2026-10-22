@@ -82,6 +82,24 @@ const budgetCeilingSchema = new mongoose.Schema({
       mooe: { type: Number, default: 0 },
       capitalOutlay: { type: Number, default: 0 }
     },
+    initialFundingBreakdown: {
+      personnelServices: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      },
+      mooe: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      },
+      capitalOutlay: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      },
+      corporateIncome: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      }
+    },
     
     // BRD-set ceiling amounts
     ceilingAmount: {
@@ -102,6 +120,24 @@ const budgetCeilingSchema = new mongoose.Schema({
       personnelServices: { type: Number, default: 0 },
       mooe: { type: Number, default: 0 },
       capitalOutlay: { type: Number, default: 0 }
+    },
+    ceilingFundingBreakdown: {
+      personnelServices: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      },
+      mooe: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      },
+      capitalOutlay: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      },
+      corporateIncome: {
+        income: { type: Number, default: 0 },
+        subsidy: { type: Number, default: 0 }
+      }
     },
     
     // Variance tracking
@@ -282,15 +318,6 @@ budgetCeilingSchema.virtual('calculatedRemaining').get(function() {
 budgetCeilingSchema.pre('save', function() {
   // First update individual allocations
   this.allocations.forEach(alloc => {
-    // If breakdown is used, ensure the total amount reflects it
-    if (alloc.ceilingBreakdown && (alloc.ceilingBreakdown.personnelServices > 0 || alloc.ceilingBreakdown.mooe > 0 || alloc.ceilingBreakdown.capitalOutlay > 0)) {
-      alloc.ceilingAmount = (alloc.ceilingBreakdown.personnelServices || 0) + (alloc.ceilingBreakdown.mooe || 0) + (alloc.ceilingBreakdown.capitalOutlay || 0);
-    }
-    
-    if (alloc.initialBreakdown && (alloc.initialBreakdown.personnelServices > 0 || alloc.initialBreakdown.mooe > 0 || alloc.initialBreakdown.capitalOutlay > 0)) {
-      alloc.initialRequestAmount = (alloc.initialBreakdown.personnelServices || 0) + (alloc.initialBreakdown.mooe || 0) + (alloc.initialBreakdown.capitalOutlay || 0);
-    }
-
     alloc.variance = (alloc.ceilingAmount || 0) - (alloc.initialRequestAmount || 0);
     if (alloc.initialRequestAmount > 0) {
       alloc.variancePercent = ((alloc.variance / alloc.initialRequestAmount) * 100).toFixed(2);
