@@ -11,6 +11,8 @@ CLIENT/build/
 CLIENT/dist/
 SERVER/build/
 SERVER/dist/
+# Vite output served by Express; regenerate with `cd CLIENT && npm run build`.
+/SERVER/public/
 
 # Environment variables
 .env
