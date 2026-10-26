@@ -83,6 +83,24 @@ function splitPersonnelFunding(personnelTotalValue, chargedToIncomeValue) {
 // Salary increments are recorded explicitly: an existing monthly rate alone
 // cannot establish whether an employee received an increase.
 function applyPermanentIncomeAllocation(record, config) {
+  if (config?.mode === 'NO_INCOME') {
+    if (String(record.statusOfAppointment || '').trim().toUpperCase() !== 'PERMANENT') return {};
+    const monthlySalary = Math.max(
+      0,
+      toAmount(record.monthlySalary) || toAmount(record.annualSalary) / 12
+    );
+    return {
+      salarySubsidyMonthlyAmount: roundTo2Decimals(monthlySalary),
+      chargedToIncomeEligible: false,
+      chargedToIncomeMonthlyAmount: 0,
+      chargedToIncomeAmount: 0,
+      chargedToSubsidyAmount: 0,
+      chargedToIncomeSubsidyAmount: 0,
+      chargedToIncomeNotes: null,
+      chargedToIncomeTaggedBy: null,
+      chargedToIncomeTaggedAt: null,
+    };
+  }
   if (config?.mode === 'FULL_SALARY') {
     return require('./permanentSalaryReference').applyFullSalary(record, config);
   }

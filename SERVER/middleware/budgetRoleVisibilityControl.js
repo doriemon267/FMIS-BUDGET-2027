@@ -195,6 +195,9 @@ const budgetRoleVisibilityControl = () => {
             {
               $and: [
                 { $or: [
+                  // NewProposalWorkflow stores this role with spaces and uses
+                  // BRD-prefixed status enums; keep these visible to Dashboard stats.
+                  { currentAssigneeRole: 'BUDGET PLANNING ANALYST' },
                   { currentAssigneeRole: 'BUDGET_PLANNING_ANALYST' },
                   { pendingWithRoles: 'BUDGET_PLANNING_ANALYST' }
                 ]},
@@ -205,6 +208,7 @@ const budgetRoleVisibilityControl = () => {
               status: {
                 $in: [
                   'Forwarded to Budget Planning Analyst',
+                    'FORWARDED_TO_BRD_ANALYST',
                   'Forwarded to Analyst', // legacy
                   'FORWARDED_TO_ANALYST'
                 ]
@@ -266,13 +270,16 @@ const budgetRoleVisibilityControl = () => {
                 status: {
                   $in: [
                     'Forwarded to Budget Officer',
+                    'FORWARDED_TO_BRD_OFFICER',
                     'FORWARDED_TO_BUDGET_OFFICER',
                     'Forwarded to Overall Budget Approver',
+                    'FORWARDED_TO_BRD_MANAGER',
                     'Forwarded to Manager', // legacy
                     'FORWARDED_TO_MANAGER',
                     'Officer Approved',
                     'OFFICER_APPROVED',
                     'Finalized',
+                    'FINALIZED',
                     'Approved'
                   ]
                 }
@@ -280,6 +287,7 @@ const budgetRoleVisibilityControl = () => {
               {
                 $and: [
                   { $or: [
+                    { currentAssigneeRole: 'BUDGET OFFICER' },
                     { currentAssigneeRole: 'BUDGET_OFFICER' },
                     { pendingWithRoles: 'BUDGET_OFF_ICER' }
                   ]},
@@ -503,10 +511,12 @@ const budgetRoleVisibilityControl = () => {
                     'Office Verified',
                     'OFFICE VERIFIED',
                     'Forwarded to Overall Budget Approver',
+                    'FORWARDED_TO_BRD_MANAGER',
                     'Forwarded to Manager',
                     'FORWARDED_TO_MANAGER',
                     'Officer Approved',
                     'OFFICER_APPROVED',
+                    'FINALIZED',
                     'Region Approved',
                     'REGION APPROVED'
                   ]
@@ -515,6 +525,7 @@ const budgetRoleVisibilityControl = () => {
               {
                 $and: [
                   { $or: [
+                    { currentAssigneeRole: 'BUDGET MANAGER' },
                     { currentAssigneeRole: 'OVERALL_BUDGET_APPROVER' },
                     { pendingWithRoles: 'OVERALL_BUDGET_APPROVER' }
                   ]},

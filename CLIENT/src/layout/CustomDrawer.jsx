@@ -105,12 +105,13 @@ const CustomDrawer = () => {
 
   const roles = (currentUser?.Roles || []).map(String);
   const workflowRoles = (currentUser?.workflowRoles || currentUser?.hierarchicalAccess?.workflowRoles || []).map(String);
+  const normalizeRole = (role) => String(role || '').toUpperCase().replace(/[\s-]+/g, '_').trim();
 
   const isOverallApprover = roles.some(r => String(r) === JOB_ROLES.BUDGET_MANAGER);
   const isBudgetOfficer = roles.some(r => String(r) === JOB_ROLES.BUDGET_OFFICER);
   const isApprover = checkHasApproverRole(roles, workflowRoles);
   const isReviewer = roles.some(r => String(r) === JOB_ROLES.BUDGET_REVIEWER);
-  const isPreparer = roles.some(r => String(r) === JOB_ROLES.BUDGET_PREPARER);
+  const isPreparer = [...roles, ...workflowRoles].some(r => normalizeRole(r) === JOB_ROLES.BUDGET_PREPARER);
   const isBudgetPlanningAnalyst = roles.some(r => String(r) === JOB_ROLES.BUDGET_PLANNING_ANALYST);
   const isBRDLevel = isBRDLevelUser(currentUser);
 
@@ -491,7 +492,7 @@ const CustomDrawer = () => {
               },
               {
                 link: '/allproposal',
-                name: 'All Proposals',
+                name: isPreparer ? 'My Proposals' : 'All Proposals',
                 isAllow: checkAccess('/allproposal', true),
                 icon: <LuFileText size={18} />,
               },

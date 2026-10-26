@@ -266,16 +266,32 @@ const PersonnelChargedToIncomeTable = ({
         chargedToIncomeEligible: false,
       };
 
-      await updatePersonnelChargedToIncome(payload);
-      toast.success(`${selectedRows.length} employee(s) moved back to Personnel Services`);
-      setSelectedRows([]);
-      setChargedToIncomeDialog({ open: false, mode: 'remove' });
+      const response = await updatePersonnelChargedToIncome(payload);
+      const result = response?.data || {};
+      const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+      const updatedCount = Number(result.updatedCount) || 0;
 
-      // Refresh personnel data
-      refetch();
+      if (updatedCount === 0) {
+        const reason = skipped[0]?.reason;
+        toast.warning(reason ? `Walang naalis: ${reason}` : 'Walang personnel na naalis sa Charged to Income.');
+        return;
+      }
 
-      // Invalidate proposal queries so budget totals update
+      const skippedIds = new Set(skipped.map(item => String(item.id || '')).filter(Boolean));
+      setSelectedRows(selectedRows.filter(id => skippedIds.has(String(id))));
+      setChargedToIncomeDialog({ open: false, mode: 'remove', amount: '', notes: '' });
+
+      if (skipped.length > 0) {
+        toast.warning(`${updatedCount} naalis; ${skipped.length} hindi naalis: ${skipped[0].reason || 'Hindi pinayagan ng server.'}`);
+      } else {
+        toast.success(`${updatedCount} employee(s) moved back to Personnel Services`);
+      }
+
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ['chargedToIncomeList'] });
+      await queryClient.invalidateQueries({ queryKey: ['calculated-budgetary-support'] });
       await queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      await queryClient.invalidateQueries({ queryKey: ['workflowProposals'] });
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to remove charged to income tag');
     } finally {

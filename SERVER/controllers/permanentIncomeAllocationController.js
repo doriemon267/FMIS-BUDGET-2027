@@ -62,7 +62,7 @@ const applyAllocation = preview => async (req, res) => {
   try {
     const workflow = await getWorkflow(req, true);
     const { monthlyAmount, notes = '', mode = 'ALL_PERMANENT' } = req.body;
-    if (!['STEP_INCREMENT', 'CPCS_DIFFERENCE', 'INCREMENT_ONLY', 'ALL_PERMANENT', 'FULL_SALARY'].includes(mode)) {
+    if (!['STEP_INCREMENT', 'CPCS_DIFFERENCE', 'INCREMENT_ONLY', 'ALL_PERMANENT', 'FULL_SALARY', 'NO_INCOME'].includes(mode)) {
       throw fail(400, 'Select a valid salary Income allocation method.');
     }
     if (mode === 'ALL_PERMANENT' &&

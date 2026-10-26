@@ -163,10 +163,14 @@ const ProposalOperationsHub = () => {
   const hasInitializedDefaultTabRef = useRef(false);
 
   const tabs = useMemo(() => {
-    return isBudgetManager || isSuperAdmin
-      ? [...BASE_TABS, { label: "Monitoring", value: "monitoring" }]
+    const roleTabs = isBudgetPreparer
+      ? BASE_TABS.filter((tab) => tab.value !== "all-proposals")
       : BASE_TABS;
-  }, [isBudgetManager, isSuperAdmin]);
+
+    return isBudgetManager || isSuperAdmin
+      ? [...roleTabs, { label: "Monitoring", value: "monitoring" }]
+      : roleTabs;
+  }, [isBudgetManager, isSuperAdmin, isBudgetPreparer]);
 
   const [targetProposalId, setTargetProposalId] = useState(null);
   const [selectedProposal, setSelectedProposal] = useState(null);

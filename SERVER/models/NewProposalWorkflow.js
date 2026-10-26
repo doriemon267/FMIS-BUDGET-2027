@@ -246,7 +246,7 @@ const newProposalWorkflowSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed
   },
   permanentIncomeAllocation: {
-    mode: { type: String, enum: ['INCREMENT_ONLY', 'ALL_PERMANENT', 'CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY'] },
+    mode: { type: String, enum: ['INCREMENT_ONLY', 'ALL_PERMANENT', 'CPCS_DIFFERENCE', 'STEP_INCREMENT', 'FULL_SALARY', 'NO_INCOME'] },
     // Saved rate tables keep the proposal reproducible until the user reapplies references.
     referenceTables: { type: mongoose.Schema.Types.Mixed },
     monthlyAmount: { type: Number, min: 0 },

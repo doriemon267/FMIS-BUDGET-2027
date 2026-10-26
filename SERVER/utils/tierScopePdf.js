@@ -19,6 +19,51 @@ const COLORS = {
   muted: '#5f6b5f',
 };
 
+// Helvetica advance widths in 1/1000 em; avoid character-count alignment estimates.
+const HELVETICA_WIDTHS = {"r":[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584],"b":[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584],"i":[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584],"bi":[278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584]};
+const measurePdfText = (text, size, { bold = false, italic = false } = {}) => {
+  const variant = bold && italic ? 'bi' : bold ? 'b' : italic ? 'i' : 'r';
+  const widths = HELVETICA_WIDTHS[variant];
+  let units = 0;
+  for (const char of String(text)) {
+    const code = char.charCodeAt(0);
+    units += code >= 32 && code <= 126 ? widths[code - 32]
+      : char === '—' ? 1000 : char === '–' ? 556 : char === '·' ? 278 : 600;
+  }
+  return units * size / 1000;
+};
+const fittedPdfSize = (text, maxWidth, size, opts = {}) => {
+  const width = measurePdfText(text, size, opts);
+  return width > maxWidth && width > 0 ? size * Math.max(0, maxWidth - 0.5) / width : size;
+};
+const writePdfText = (recipe, text, x, top, opts = {}, align = 'left') => {
+  const value = String(text);
+  const width = measurePdfText(value, opts.size || 8, opts);
+  const left = align === 'center' ? x - width / 2 : align === 'right' ? x - width : x;
+  recipe.text(value, left, top, { ...opts, font: 'helvetica' });
+};
+const wrapPdfText = (text, maxWidth, size, opts = {}) => {
+  const lines = [];
+  let line = '';
+  for (const word of String(text || '').split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (measurePdfText(next, size, opts) <= maxWidth) {
+      line = next;
+      continue;
+    }
+    if (line) { lines.push(line); line = ''; }
+    for (const char of word) {
+      if (line && measurePdfText(line + char, size, opts) > maxWidth) {
+        lines.push(line);
+        line = '';
+      }
+      line += char;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [''];
+};
+
 const MOOE = 'Maintenance and Other Operating Expenses';
 const USE_CATEGORIES = [
   { key: 'Personnel Services', total: 'TOTAL PERSONNEL SERVICES' },
@@ -127,7 +172,7 @@ const buildTierScopeRows = (reportSummary = {}) => {
         tier2Income: item.tier2Income,
         tier2: item.tier2,
       });
-      rows.push({ kind: 'item', label, indent: sub ? 3 : 2, values });
+      rows.push({ kind: 'item', label, indent: sub ? 3 : 2, lineItemId: item.lineItemId, values });
     });
     const categoryTotals = uses[key] || {};
     rows.push({
@@ -379,32 +424,7 @@ const renderTierScopePdf = (recipe, {
   let scopeLabel = regionDisplay;
   const multiSection = Array.isArray(sections) && sections.length > 0;
 
-  // Measure with the real Helvetica metrics (muhammara's own right/center alignment drifts at small sizes).
-  const fontCache = {};
-  const measure = (text, size, { bold = false, italic = false } = {}) => {
-    const variant = bold && italic ? 'bi' : bold ? 'b' : italic ? 'i' : 'r';
-    try {
-      if (!(variant in fontCache)) {
-        const file = recipe.fonts?.helvetica?.[variant];
-        fontCache[variant] = file && recipe.writer ? recipe.writer.getFontForFile(file) : null;
-      }
-      const font = fontCache[variant];
-      if (font) return font.calculateTextDimensions(String(text), size).xMax;
-    } catch (_) {
-      fontCache[variant] = null;
-    }
-    return String(text).length * size * 0.52;
-  };
-  // align: 'left' | 'right' | 'center' relative to x
-  const write = (text, x, top, opts = {}, align = 'left') => {
-    const value = String(text);
-    let left = x;
-    if (align !== 'left') {
-      const w = measure(value, opts.size || 8, opts);
-      left = align === 'right' ? x - w : x - w / 2;
-    }
-    recipe.text(value, left, top, opts);
-  };
+  const write = (...args) => writePdfText(recipe, ...args);
 
   const vline = (x, top, height, color = COLORS.border, w = 0.5) => recipe.rectangle(x, top, w, height, { fill: color });
   const hline = (top, color = COLORS.border, w = 0.5) => recipe.rectangle(MARGIN, top, tableWidth, w, { fill: color });
@@ -483,23 +503,7 @@ const renderTierScopePdf = (recipe, {
     drawTableHeader();
   };
 
-  const wrap = (text, maxWidth, size) => {
-    const maxChars = Math.max(8, Math.floor(maxWidth / (size * 0.5)));
-    const words = String(text || '').split(/\s+/).filter(Boolean);
-    const lines = [];
-    let line = '';
-    words.forEach((word) => {
-      const next = line ? `${line} ${word}` : word;
-      if (next.length > maxChars && line) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = next;
-      }
-    });
-    if (line) lines.push(line);
-    return lines.length ? lines : [''];
-  };
+  const wrap = wrapPdfText;
 
   const drawRow = (row) => {
     const isSection = row.kind === 'section';
@@ -508,7 +512,7 @@ const renderTierScopePdf = (recipe, {
     const bold = isSection || isGrand || isSubtotal || row.kind === 'heading' || row.bold;
     const size = isSection ? 8.6 : FONT;
     const indent = 6 + (row.indent || 0) * 10;
-    const lines = wrap(row.label, particularsWidth - indent - 6, size);
+    const lines = wrap(row.label, particularsWidth - indent - 6, size, { bold, italic: !!row.italic });
     const height = Math.max(lines.length * LINE + 5, isSection || isGrand ? 17 : 14);
 
     if (y + height > pageHeight - FOOTER_SPACE) startPage();
@@ -529,8 +533,10 @@ const renderTierScopePdf = (recipe, {
         const text = formatAmount(value);
         if (!text) return;
         const right = colX[i + 1] + colWidths[i + 1] - 6;
-        write(text, right, top + (height - LINE) / 2 + 1, {
-          size: FONT, bold: bold || i === 6, color,
+        const amountStyle = { bold: bold || i === 6, color };
+        const amountSize = fittedPdfSize(text, colWidths[i + 1] - 12, FONT, amountStyle);
+        write(text, right, top + (height - amountSize * 1.2) / 2 + 1, {
+          ...amountStyle, size: amountSize,
         }, 'right');
       });
     }
@@ -557,10 +563,240 @@ const renderTierScopePdf = (recipe, {
   drawFooter();
 };
 
+/** Render the All Regions report in readable Folio pages with regional column groups. */
+const renderTierAllRegionsPdf = (recipe, {
+  reportSummary = {},
+  sections = [],
+  pageWidth = 936,
+  pageHeight = 612,
+  logoPath = null,
+  fiscalYear,
+  departmentDisplay = 'All',
+  divisionDisplay = 'All',
+  versionDisplay = '—',
+  documentId = '',
+  generatedAt = new Date(),
+  onPageCreated = () => {},
+} = {}) => {
+  const MARGIN = 30;
+  const tableWidth = pageWidth - MARGIN * 2;
+  const labelWidth = 188;
+  const FOOTER_SPACE = 30;
+  const LINE = 9;
+  let page = 0;
+  let y = 0;
+  let pageScopeLabel = '';
+
+  const write = (...args) => writePdfText(recipe, ...args);
+  const vline = (x, top, height, color = COLORS.border, width = 0.5) =>
+    recipe.rectangle(x, top, width, height, { fill: color });
+  const hline = (top, color = COLORS.border, width = 0.5) =>
+    recipe.rectangle(MARGIN, top, tableWidth, width, { fill: color });
+  const wrap = wrapPdfText;
+  const rowKey = (row, counts) => {
+    const base = row.lineItemId
+      ? `item:${row.lineItemId}`
+      : `${row.kind}:${row.indent || 0}:${row.label}`;
+    const count = counts[base] || 0;
+    counts[base] = count + 1;
+    return `${base}#${count}`;
+  };
+  const addRegionTotals = (regionScopes) => {
+    const scopeRows = regionScopes.map((scope) => {
+      const counts = {};
+      return buildTierScopeRows(scope.reportSummary || {}).map((row) => ({ ...row, _key: rowKey(row, counts) }));
+    });
+    const totalRows = [];
+    const rowsByKey = new Map();
+    scopeRows.forEach((rows) => rows.forEach((row) => {
+      if (!rowsByKey.has(row._key)) {
+        const total = { ...row, values: Array.isArray(row.values) ? row.values.map(() => 0) : undefined };
+        rowsByKey.set(row._key, total);
+        totalRows.push(total);
+      }
+      if (!Array.isArray(row.values)) return;
+      const total = rowsByKey.get(row._key);
+      row.values.forEach((value, index) => {
+        if (value !== null && value !== undefined) total.values[index] += num(value);
+      });
+    }));
+    return totalRows;
+  };
+  const annotateRows = (rows) => {
+    const counts = {};
+    return rows.map((row) => ({ ...row, _key: rowKey(row, counts) }));
+  };
+  const grandTotal = { scopeLabel: 'GRAND TOTAL', rows: annotateRows(buildTierScopeRows(reportSummary)) };
+  const centralOffice = sections.find((section) => section.scopeLabel === 'CENTRAL OFFICE');
+  const regionScopes = sections.filter((section) => section.scopeLabel !== 'CENTRAL OFFICE');
+  const totalRegions = {
+    scopeLabel: 'TOTAL REGIONS',
+    rows: addRegionTotals(regionScopes).map((row) => ({ ...row, _key: row._key })),
+  };
+  const centralScope = centralOffice
+    ? { scopeLabel: centralOffice.scopeLabel, rows: annotateRows(buildTierScopeRows(centralOffice.reportSummary || {})) }
+    : { scopeLabel: 'CENTRAL OFFICE', rows: [] };
+  const namedRegionScopes = regionScopes.map((section) => ({
+    scopeLabel: section.scopeLabel,
+    rows: annotateRows(buildTierScopeRows(section.reportSummary || {})),
+  }));
+  // Two groups per Folio page leave room for full peso amounts at readable sizes.
+  const pageGroups = [];
+  const summaryScopes = [grandTotal, centralScope, totalRegions];
+  for (let i = 0; i < summaryScopes.length; i += 2) {
+    pageGroups.push(summaryScopes.slice(i, i + 2));
+  }
+  for (let i = 0; i < namedRegionScopes.length; i += 2) {
+    pageGroups.push(namedRegionScopes.slice(i, i + 2));
+  }
+
+  const drawFooter = () => {
+    const fy = pageHeight - 20;
+    write(`Tier Budget Proposal Report | FY ${fiscalYear || '-'} | ${pageScopeLabel}`, MARGIN, fy, { size: 7, color: COLORS.muted });
+    if (documentId) write(`Document ID: ${documentId}`, pageWidth / 2, fy, { size: 7, color: COLORS.muted }, 'center');
+    write(`Page ${page}`, pageWidth - MARGIN, fy, { size: 7, color: COLORS.muted }, 'right');
+  };
+  const drawHeader = (scopes) => {
+    const dataWidth = (tableWidth - labelWidth) / scopes.length;
+    const metricWidth = dataWidth / 5;
+    const labelX = MARGIN;
+    const groupX = (index) => MARGIN + labelWidth + index * dataWidth;
+    const top = y;
+    const h1 = 17;
+    const h2 = 31;
+    const totalHeight = h1 + h2;
+    recipe.rectangle(MARGIN, top, tableWidth, totalHeight, { fill: COLORS.headerFill });
+    const headerText = { size: 7.1, bold: true, color: COLORS.headerText };
+    write('PARTICULARS', labelX + 6, top + 20, headerText);
+    vline(MARGIN + labelWidth, top, totalHeight, COLORS.headerLine, 0.8);
+    scopes.forEach((scope, groupIndex) => {
+      const x = groupX(groupIndex);
+      write(scope.scopeLabel, x + dataWidth / 2, top + 5, { ...headerText, size: 7.2 }, 'center');
+      recipe.rectangle(x, top + h1, dataWidth, 0.5, { fill: COLORS.headerLine });
+      const labels = ['CORPORATE\nINCOME', 'TIER 1', 'TIER 2', 'TOTAL', 'PROPOSED\nBUDGET'];
+      labels.forEach((label, metricIndex) => {
+        const mx = x + metricIndex * metricWidth;
+        label.split('\n').forEach((part, lineIndex) => {
+          write(part, mx + metricWidth / 2, top + h1 + 5 + lineIndex * 8, { ...headerText, size: fittedPdfSize(part, metricWidth - 8, 6.2, { bold: true }) }, 'center');
+        });
+        if (metricIndex > 0) vline(mx, top + h1, h2, COLORS.headerLine, 0.4);
+      });
+      vline(x + dataWidth, top, totalHeight, COLORS.headerLine, 0.8);
+    });
+    vline(MARGIN, top, totalHeight, COLORS.headerLine, 0.5);
+    vline(MARGIN + tableWidth, top, totalHeight, COLORS.headerLine, 0.5);
+    hline(top, COLORS.headerLine, 0.6);
+    hline(top + totalHeight, COLORS.headerLine, 0.6);
+    y += totalHeight;
+  };
+  const drawPageTitle = (scopes, firstPage) => {
+    y = MARGIN - 6;
+    if (firstPage && logoPath) {
+      try { recipe.image(logoPath, MARGIN, y, { width: 44, height: 44 }); } catch (_) { /* optional logo */ }
+    }
+    const cx = pageWidth / 2;
+    write('NATIONAL IRRIGATION ADMINISTRATION', cx, y, { size: 12, bold: true, color: COLORS.text }, 'center');
+    write(`TIER BUDGET PROPOSAL REPORT · FY ${fiscalYear || 'ALL'}`, cx, y + 16, { size: 10, bold: true, color: COLORS.headerFill }, 'center');
+    write(`Region: All  Department: ${departmentDisplay}  Division: ${divisionDisplay}`, cx, y + 30, { size: 7.5, color: COLORS.text }, 'center');
+    const generated = generatedAt.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+    write(`Version: ${versionDisplay}  Generated: ${generated}  Amounts in Philippine Pesos`, cx, y + 41, { size: 6.8, color: COLORS.muted }, 'center');
+    pageScopeLabel = scopes.map((scope) => scope.scopeLabel).join(', ');
+    y += 55;
+  };
+  const drawRows = (scopes, orderedRows, rowMaps) => {
+    const dataWidth = (tableWidth - labelWidth) / scopes.length;
+    const metricWidth = dataWidth / 5;
+    const CELL_PAD = 5;
+    // One amount size for the whole page group, including bold totals and deficits.
+    let amountFontSize = 6.7;
+    scopes.forEach((scope) => scope.rows.forEach((row) => {
+      const values = row.values || [];
+      [values[4], values[1], values[3], values[5], values[6]].forEach((value) => {
+        const text = formatAmount(value);
+        if (text) amountFontSize = Math.min(amountFontSize,
+          fittedPdfSize(text, metricWidth - CELL_PAD * 2, 6.7, { bold: true, italic: !!row.italic }));
+      });
+    }));
+    const drawRow = (row) => {
+      const isSection = row.kind === 'section';
+      const isGrand = row.kind === 'grand';
+      const isSubtotal = row.kind === 'subtotal';
+      const bold = isSection || isGrand || isSubtotal || row.kind === 'heading' || row.bold;
+      const fontSize = isSection ? 8 : 6.7;
+      const indent = 6 + (row.indent || 0) * 8;
+      const labelLines = wrap(row.label, labelWidth - indent - 8, fontSize, { bold, italic: !!row.italic });
+      const height = Math.max(labelLines.length * LINE + 4, isSection || isGrand ? 16 : 13);
+      if (y + height > pageHeight - FOOTER_SPACE) {
+        drawFooter();
+        recipe.endPage();
+        recipe.createPage(pageWidth, pageHeight);
+        page += 1;
+        onPageCreated();
+        drawPageTitle(scopes, false);
+        drawHeader(scopes);
+      }
+      const top = y;
+      if (isSection) recipe.rectangle(MARGIN, top, tableWidth, height, { fill: COLORS.sectionFill });
+      if (isSubtotal) recipe.rectangle(MARGIN, top, tableWidth, height, { fill: COLORS.subtotalFill });
+      if (isGrand) recipe.rectangle(MARGIN, top, tableWidth, height, { fill: COLORS.grandFill });
+      const color = isGrand ? COLORS.headerText : COLORS.text;
+      const labelTop = top + (height - labelLines.length * LINE) / 2 + 1;
+      labelLines.forEach((line, index) => write(line, MARGIN + indent, labelTop + index * LINE, {
+        size: fontSize, bold, italic: !!row.italic, color,
+      }));
+      scopes.forEach((scope, groupIndex) => {
+        const valueRow = rowMaps[groupIndex].get(row._key);
+        const values = valueRow?.values || [];
+        const metrics = [values[4], values[1], values[3], values[5], values[6]];
+        metrics.forEach((value, metricIndex) => {
+          const text = formatAmount(value);
+          if (!text) return;
+          const right = MARGIN + labelWidth + groupIndex * dataWidth + (metricIndex + 1) * metricWidth - CELL_PAD;
+          write(text, right, top + (height - amountFontSize * 1.2) / 2 + 1, {
+            size: amountFontSize, bold: bold || metricIndex === 4, color,
+          }, 'right');
+        });
+      });
+      vline(MARGIN, top, height);
+      vline(MARGIN + labelWidth, top, height, COLORS.strongBorder, 0.7);
+      scopes.forEach((_, groupIndex) => {
+        const start = MARGIN + labelWidth + groupIndex * dataWidth;
+        for (let i = 1; i < 5; i += 1) vline(start + i * metricWidth, top, height, COLORS.border, 0.35);
+        vline(start + dataWidth, top, height, COLORS.strongBorder, 0.7);
+      });
+      if (isSubtotal || isGrand) hline(top, COLORS.strongBorder, 0.7);
+      hline(top + height, isGrand ? COLORS.strongBorder : COLORS.border, isGrand ? 0.7 : 0.4);
+      y = top + height;
+    };
+    orderedRows.forEach(drawRow);
+  };
+
+  pageGroups.forEach((scopes, groupPageIndex) => {
+    const rowMaps = scopes.map((scope) => new Map(scope.rows.map((row) => [row._key, row])));
+    const orderedRows = [];
+    const seen = new Set();
+    scopes.forEach((scope) => scope.rows.forEach((row) => {
+      if (!seen.has(row._key)) {
+        seen.add(row._key);
+        orderedRows.push(row);
+      }
+    }));
+    recipe.createPage(pageWidth, pageHeight);
+    page += 1;
+    onPageCreated();
+    drawPageTitle(scopes, groupPageIndex === 0);
+    drawHeader(scopes);
+    drawRows(scopes, orderedRows, rowMaps);
+    drawFooter();
+    if (groupPageIndex < pageGroups.length - 1) recipe.endPage();
+  });
+};
+
 module.exports = {
   buildTierScopeRows,
   buildRegionalTierSummaries,
   compareRegions,
   renderTierScopePdf,
+  renderTierAllRegionsPdf,
   formatAmount,
 };

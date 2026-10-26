@@ -176,6 +176,10 @@ const BRD_OR_FINALIZED_STATUSES = [
   'FORWARDED_TO_BRD_ANALYST',
   'FORWARDED_TO_BRD_OFFICER',
   'FORWARDED_TO_BRD_MANAGER',
+  // Older workflow records persisted the display labels as their status.
+  'Forwarded to Budget Planning Analyst',
+  'Forwarded to Budget Officer',
+  'Forwarded to Overall Budget Approver',
 ];
 
 /**
@@ -991,7 +995,7 @@ const restoreRevision = async (req, res) => {
 };
 
 // Use "Php " in PDF (Helvetica does not support ₱; some viewers show it as ±)
-const { renderTierScopePdf, buildRegionalTierSummaries } = require('../utils/tierScopePdf');
+const { renderTierScopePdf, renderTierAllRegionsPdf, buildRegionalTierSummaries } = require('../utils/tierScopePdf');
 const { getFolioPageSize } = require('../utils/reportPageLayout');
 
 const formatTierCurrency = (amount) => {
@@ -1044,7 +1048,14 @@ const PS_STRUCTURE_GETTERS = {
 const getRegionalTierBreakdown = async (fiscalYear, department, division) => {
   const fyStr = String(fiscalYear);
   const buildQuery = (extraFields = {}) => {
-    const q = { fiscalYear: fyStr, budgetType: 'Initial', ...extraFields };
+    const q = {
+      fiscalYear: fyStr,
+      budgetType: 'Initial',
+      status: {
+        $in: BRD_OR_FINALIZED_STATUSES,
+      },
+      ...extraFields,
+    };
     if (department) {
       const d = String(department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       q.department = new RegExp('^' + d + '$', 'i');
@@ -1408,19 +1419,15 @@ const generateTierPDF = async (req, res) => {
       subject: isNepAlignment ? 'NEP Budget Alignment Report' : 'Tier Budget Proposal Report',
     });
 
-    // Tier report mirrors the /tier page (Tier 1/Tier 2/Total with Income and Subsidy) on Folio paper.
-    // All Regions renders the Grand Total first, then Central Office and each region as its own section.
-    // Only the legacy NEP alignment layout keeps the grouped renderer below.
+    // Tier report mirrors the /tier page for a single scope. All Regions uses
+    // grouped columns, matching the regional layout in the Excel report.
+    let allRegionSections = [];
+    if (isAllRegions && !isNepAlignment) {
+      const savedTierByRegion = await loadSavedTierSplitsByRegion(effectiveFiscalYear, effectiveDepartment, effectiveDivision);
+      allRegionSections = buildRegionalTierSummaries({ reportSummary, regionalBreakdown, savedTierByRegion });
+    }
     const useScopeLayout = !isNepAlignment;
     if (useScopeLayout) {
-      let sections = null;
-      if (isAllRegions) {
-        const savedTierByRegion = await loadSavedTierSplitsByRegion(effectiveFiscalYear, effectiveDepartment, effectiveDivision);
-        sections = [
-          { scopeLabel: 'GRAND TOTAL (ALL REGIONS)', reportSummary },
-          ...buildRegionalTierSummaries({ reportSummary, regionalBreakdown, savedTierByRegion }),
-        ];
-      }
       // Folio / long bond paper: 8.5 x 13 in, landscape (936 x 612 pt)
       const { width: SCOPE_PAGE_WIDTH, height: SCOPE_PAGE_HEIGHT } = getFolioPageSize(true);
       const showScopeDraft = shouldShowDraftWatermark({ isFinalized: isFinalizedFromBody === true });
@@ -1428,9 +1435,8 @@ const generateTierPDF = async (req, res) => {
         path.join(__dirname, '../assets/logo.png'),
         path.join(__dirname, '../../CLIENT/public/logo.png'),
       ].find((candidate) => fs.existsSync(candidate)) || null;
-      renderTierScopePdf(recipe, {
+      const pdfOptions = {
         reportSummary,
-        sections,
         pageWidth: SCOPE_PAGE_WIDTH,
         pageHeight: SCOPE_PAGE_HEIGHT,
         logoPath: scopeLogo,
@@ -1445,7 +1451,12 @@ const generateTierPDF = async (req, res) => {
           pageWidth: SCOPE_PAGE_WIDTH,
           pageHeight: SCOPE_PAGE_HEIGHT,
         }),
-      });
+      };
+      if (isAllRegions) {
+        renderTierAllRegionsPdf(recipe, { ...pdfOptions, sections: allRegionSections });
+      } else {
+        renderTierScopePdf(recipe, pdfOptions);
+      }
     } else {
       const SUB_COL_WIDTH = 78; 
       const GROUP_WIDTH = SUB_COL_WIDTH * 5; // Inc, Tier1, Tier2, Total, Bgt
