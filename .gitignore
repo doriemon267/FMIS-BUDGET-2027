@@ -1,3 +1,9 @@
+# Only include CLIENT, SERVER, and this .gitignore at repository root
+/*
+!/CLIENT/
+!/SERVER/
+!/.gitignore
+
 # Dependencies
 node_modules/
 CLIENT/node_modules/
@@ -132,3 +138,11 @@ PNPKI CREDENTIALS.txt
 SERVER/.env.bak
 CLIENT/.env.*
 SERVER/certs/*.pem
+
+# Keep environment files private at every level; allow sanitized templates only.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example

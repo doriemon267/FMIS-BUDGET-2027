@@ -83,6 +83,7 @@ function securityHeaders() {
         // blob: covers generated previews; data: covers inline icons.
         imgSrc: ["'self'", "data:", "blob:", ...list(process.env.CSP_IMG_SRC)],
 
+  
         connectSrc: ["'self'", ...list(process.env.CSP_CONNECT_SRC)],
 
         // PDF reports are previewed in <iframe src="blob:...">.
