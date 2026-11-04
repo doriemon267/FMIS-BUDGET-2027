@@ -8,7 +8,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "react-hot-toast";
 import { FaEdit } from "react-icons/fa";
@@ -102,6 +102,12 @@ const CustomCreateUpdateDialog = ({
           return acc;
         }, {}),
   });
+
+  const salaryGradeValue = watch("gradelevel_SG");
+  const payGradeValue = watch("gradelevel_PG");
+  const jobGradeValue = watch("gradelevel_JG");
+  const salaryStepValue = watch("step");
+  const salaryLookupSequence = useRef(0);
   
   // Watch for isGlobal changes to clear regions when global is checked
   const isGlobalValue = watch("isGlobal");
@@ -111,6 +117,111 @@ const CustomCreateUpdateDialog = ({
       setValue("regions", []);
     }
   }, [isGlobalValue, setValue]);
+
+  // Keep the Permanent PS salary in sync with the active salary mapping.
+  // This is intentionally limited to existing Permanent personnel records.
+  useEffect(() => {
+    if (
+      !isOpen ||
+      !isEditMode ||
+      String(row?.statusOfAppointment || "").trim().toUpperCase() !== "PERMANENT"
+    ) return undefined;
+
+    const timer = setTimeout(async () => {
+      const requestId = ++salaryLookupSequence.current;
+      const step = parseInt(String(salaryStepValue || row?.step || "1"), 10);
+      const salaryGrade = parseInt(String(salaryGradeValue || ""), 10);
+      const payGrade = parseInt(String(payGradeValue || ""), 10);
+      const jobGrade = parseInt(String(jobGradeValue || "").replace(/^JG-?/i, ""), 10);
+      if (!Number.isInteger(step) || step < 1 || step > 8) return;
+
+      const changedFromOriginal = (current, original) =>
+        current != null && String(current).trim() !== String(original ?? "").trim();
+      const lookupBy = changedFromOriginal(salaryGradeValue, row?.gradelevel_SG)
+        ? "salaryGrade"
+        : changedFromOriginal(payGradeValue, row?.gradelevel_PG)
+          ? "cpcs2PayGrade"
+          : changedFromOriginal(jobGradeValue, row?.gradelevel_JG)
+            ? "cpcs1JobGrade"
+            : "salaryGrade";
+
+      try {
+        const { data: cpcsSettings } = await api.get("/cpcs-salary/use-cpcs");
+        const cpcs2AppointmentTypes = Array.isArray(cpcsSettings?.cpcs2AppointmentTypes)
+          ? cpcsSettings.cpcs2AppointmentTypes.map((value) => String(value).toUpperCase())
+          : ["PERMANENT"];
+        const useCpcs2 = Boolean(cpcsSettings?.useCPCSForEmployeeAdd) &&
+          cpcs2AppointmentTypes.includes("PERMANENT");
+
+        let monthlySalary;
+        if (useCpcs2) {
+          const filterValue = lookupBy === "salaryGrade"
+            ? salaryGrade
+            : lookupBy === "cpcs2PayGrade"
+              ? payGrade
+              : jobGrade;
+          if (!Number.isInteger(filterValue)) return;
+          const filterName = lookupBy === "salaryGrade"
+            ? "salaryGrade"
+            : lookupBy;
+          const { data } = await api.get("/cpcs-salary/table", {
+            params: { [filterName]: filterValue, limit: 100, offset: 0 },
+          });
+          const rows = Array.isArray(data?.rows) ? data.rows : [];
+          const rowMatchesCurrentMapping = (item) =>
+            (Number.isInteger(salaryGrade) && Number(item.salaryGrade) === salaryGrade) ||
+            (Number.isInteger(payGrade) && Number(item.cpcs2PayGrade) === payGrade);
+          const mapping = rows.find(rowMatchesCurrentMapping) || rows[0];
+          if (!mapping) return;
+          monthlySalary = mapping[`step${step}`];
+          if (monthlySalary == null || !Number.isFinite(Number(monthlySalary))) return;
+          if (requestId !== salaryLookupSequence.current) return;
+          setValue("gradelevel_SG", String(mapping.salaryGrade), { shouldDirty: true });
+          setValue("gradelevel_JG", String(mapping.cpcs1JobGrade), { shouldDirty: true });
+          setValue("gradelevel_PG", String(mapping.cpcs2PayGrade), { shouldDirty: true });
+        } else {
+          if (!Number.isInteger(salaryGrade)) return;
+          const { data } = await api.get("/salary-grades", {
+            params: { salary_grade: salaryGrade },
+          });
+          const mapping = Array.isArray(data?.grades) ? data.grades[0] : null;
+          const rates = mapping?.rates || {};
+          monthlySalary = rates[String(step)] ?? rates[step];
+          if (monthlySalary == null || !Number.isFinite(Number(monthlySalary))) return;
+          if (requestId !== salaryLookupSequence.current) return;
+          if (mapping?.job_grade != null) {
+            setValue("gradelevel_JG", String(mapping.job_grade), { shouldDirty: true });
+          }
+        }
+
+        if (requestId === salaryLookupSequence.current) {
+          setValue("monthlySalary", Number(monthlySalary), {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          setValue("annualSalary", Number(monthlySalary) * 12, { shouldDirty: true });
+          setValue("midyearBonus", Number(monthlySalary), { shouldDirty: true });
+          setValue("yearEndBonus", Number(monthlySalary), { shouldDirty: true });
+        }
+      } catch (error) {
+        console.error("Failed to recompute Permanent monthly salary:", error);
+      }
+    }, 200);
+
+    return () => {
+      clearTimeout(timer);
+      salaryLookupSequence.current += 1;
+    };
+  }, [
+    isOpen,
+    isEditMode,
+    row,
+    salaryGradeValue,
+    payGradeValue,
+    jobGradeValue,
+    salaryStepValue,
+    setValue,
+  ]);
 
   const mutation = useMutation({
     mutationFn: async (data) => {

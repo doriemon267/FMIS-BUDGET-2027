@@ -47,6 +47,11 @@ const PersonnelServicesPage = () => {
       label: "SG",
       show: true,
     },
+    gradelevel_PG: {
+      type: "text",
+      label: "PG",
+      show: true,
+    },
     step: {
       type: "text",
       label: "STEP",

@@ -322,6 +322,7 @@ const calculateBudgetarySupport = async (req, res) => {
     let queryConditions = {};
     if (fiscalYear) queryConditions.fiscalYear = fiscalYear;
     if (budgetType) queryConditions.budgetType = budgetType;
+    if (region) queryConditions.region = region;
     
     // Apply submission workflow filtering for proper data isolation
     // This ensures department users only see SUBMITTED division data, not draft data
@@ -536,6 +537,7 @@ const calculateBudgetarySupport = async (req, res) => {
       const mooeQueryConditions = {};
       if (fiscalYear) mooeQueryConditions.fiscalYear = fiscalYear;
       if (budgetType) mooeQueryConditions.budgetType = budgetType;
+      if (region) mooeQueryConditions.region = region;
       
       // Apply same submission workflow filtering for MOOE data
       if (req.submissionWorkflowFilters) {

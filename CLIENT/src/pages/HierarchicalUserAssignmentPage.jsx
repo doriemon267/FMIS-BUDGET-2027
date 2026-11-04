@@ -171,6 +171,15 @@ const HierarchicalUserAssignmentPage = () => {
     workflowRoles: null
   });
 
+  const normalizedBudgetRoles = new Set(
+    [...(formData.userRoles || []), formData.userRole]
+      .filter(Boolean)
+      .map((role) => String(role).toUpperCase().replace(/\s+/g, '_').trim())
+  );
+  const hasBudgetPreparerRole = normalizedBudgetRoles.has('BUDGET_PREPARER');
+  const hasBudgetPlanningAnalystRole = normalizedBudgetRoles.has('BUDGET_PLANNING_ANALYST');
+  const isAnalystOnlyAssignment = hasBudgetPlanningAnalystRole && !hasBudgetPreparerRole;
+
   // UI state
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -631,7 +640,7 @@ const HierarchicalUserAssignmentPage = () => {
     }
 
     // Validate Budget Planning Analyst region selection
-    if (formData.userRole === 'BUDGET_PLANNING_ANALYST' && !formData.isNIAWide && formData.assignedRegions.length === 0) {
+    if (hasBudgetPlanningAnalystRole && !formData.isNIAWide && formData.assignedRegions.length === 0) {
       setSnackbar({
         open: true,
         message: 'Budget Planning Analyst must be assigned to at least one region or have NIA-Wide access',
@@ -649,8 +658,7 @@ const HierarchicalUserAssignmentPage = () => {
           : formData.assignmentLevel;
 
     // Validate based on normalized level (skip org validation for BPA - Department/Division optional)
-    const isBPA = formData.userRole === 'BUDGET_PLANNING_ANALYST';
-    if (!isBPA && normalizedLevel === 'RESPONSIBILITY_CENTER' && (!formData.officeId || !formData.responsibilityCenterName)) {
+    if (hasBudgetPreparerRole && normalizedLevel === 'RESPONSIBILITY_CENTER' && (!formData.officeId || !formData.responsibilityCenterName)) {
       setSnackbar({
         open: true,
         message: 'Responsibility Center assignment requires Office and Responsibility Center',
@@ -659,7 +667,7 @@ const HierarchicalUserAssignmentPage = () => {
       return;
     }
 
-    if (!isBPA && normalizedLevel === 'OFFICE' && !formData.officeId) {
+    if (hasBudgetPreparerRole && normalizedLevel === 'OFFICE' && !formData.officeId) {
       setSnackbar({
         open: true,
         message: 'Office assignment requires Office selection',
@@ -683,7 +691,7 @@ const HierarchicalUserAssignmentPage = () => {
     };
 
     // Add Budget Planning Analyst region configuration
-    if (formData.userRole === 'BUDGET_PLANNING_ANALYST') {
+    if (hasBudgetPlanningAnalystRole) {
       payload.isNIAWide = formData.isNIAWide;
       // Only include valid region IDs (filter out empty or invalid values)
       payload.assignedRegions = formData.isNIAWide 
@@ -1352,7 +1360,7 @@ const HierarchicalUserAssignmentPage = () => {
               )}
 
               {/* Budget Planning Analyst - Region Selection */}
-              {formData.userRole === 'BUDGET_PLANNING_ANALYST' && (
+              {hasBudgetPlanningAnalystRole && (
                 <>
                   <Grid item xs={12}>
                     <Alert severity="info" icon={<InfoIcon />}>
@@ -1603,7 +1611,7 @@ const HierarchicalUserAssignmentPage = () => {
 
               {/* Hide generic assignment level selector for BUDGET_PLANNING_ANALYST.
                   BPA uses region + (optional) Central Office Dept/Division instead. */}
-              {formData.userRole !== 'BUDGET_PLANNING_ANALYST' && (
+              {!isAnalystOnlyAssignment && (
                 <Grid item xs={12}>
                   <Autocomplete
                     options={ACCESS_LEVELS}
@@ -1642,7 +1650,7 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageSettings: false
                       });
                       // Update user role - default to PREPARER for OWN_ONLY
-                      handleFormChange('userRole', 'BUDGET_PREPARER');
+                      handleFormChange('userRole', hasBudgetPlanningAnalystRole ? 'BUDGET_PLANNING_ANALYST' : 'BUDGET_PREPARER');
                     } else if (isRC) {
                       // Only RC roles allowed
                       setRole('divisionCreator', !!nextRoles.divisionCreator);
@@ -1758,7 +1766,7 @@ const HierarchicalUserAssignmentPage = () => {
               </Grid>
               )}
 
-              {formData.userRole !== 'BUDGET_PLANNING_ANALYST' && (formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'RESPONSIBILITY_CENTER') && (
+              {!isAnalystOnlyAssignment && (formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'RESPONSIBILITY_CENTER') && (
                 <Grid item xs={12}>
                   <Autocomplete
                     options={organizationStructure?.availableUnits?.offices || []}
@@ -1864,7 +1872,7 @@ const HierarchicalUserAssignmentPage = () => {
                 </Grid>
               )}
 
-              {formData.userRole !== 'BUDGET_PLANNING_ANALYST' && formData.assignmentLevel === 'RESPONSIBILITY_CENTER' && (
+              {!isAnalystOnlyAssignment && formData.assignmentLevel === 'RESPONSIBILITY_CENTER' && (
                 <Grid item xs={12}>
                   <Autocomplete
                     disabled={!formData.officeId}

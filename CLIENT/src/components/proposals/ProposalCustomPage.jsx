@@ -382,9 +382,21 @@ const ProposalCustomPage = ({
   const fiscalYearForCalc = selectedFiscalYear || activeFiscalYear;
   const hasValidParams = !!(fiscalYearForCalc && activeBudgetType);
   const { data: calculatedBudgetarySupport } = useQuery({
-    queryKey: ['calculated-budgetary-support', fiscalYearForCalc, activeBudgetType],
+    queryKey: [
+      'calculated-budgetary-support',
+      fiscalYearForCalc,
+      activeBudgetType,
+      activeRegionKey,
+      primaryAccessibleDepartment,
+      primaryAccessibleDivision,
+      currentUser?.id || currentUser?._id,
+    ],
     queryFn: () => api.get('/budgetary-support/calculate', {
-      params: { fiscalYear: Number(fiscalYearForCalc), budgetType: activeBudgetType },
+      params: {
+        fiscalYear: Number(fiscalYearForCalc),
+        budgetType: activeBudgetType,
+        ...(activeRegionKey ? { region: activeRegionKey } : {}),
+      },
       timeout: 12000
     }).then(r => r.data),
     enabled: hasValidParams,
@@ -723,103 +735,109 @@ const ProposalCustomPage = ({
   const [saveStatus, setSaveStatus] = useState("saved"); // 'saved', 'saving', 'error'
   const [validationErrors, setValidationErrors] = useState({});
 
-  // Single source of truth for active proposal loading and region context switching
+  // Load a proposal only when it belongs to the currently selected region and fiscal year.
   useEffect(() => {
     if (typeof window === "undefined" || isRegionLoading) return;
-    
-    // If the region has finished loading but activeRegionName is null/empty,
-    // it means the user has selected "ALL REGIONS" or has no region assigned.
-    // In this case, we MUST NOT tie the user to an active draft, because drafts belong to specific regions.
-    if (!activeRegionName) {
-      console.log("[loadProposalContext] activeRegionName is empty (ALL REGIONS). Clearing active proposal.");
-      setCurrentProposalId(null);
+
+    const fiscalYearToUse = String(selectedFiscalYear || activeFiscalYear || "").trim();
+    const clearStoredWorkflowRef = () => {
       try {
         sessionStorage.removeItem("activeWorkflowRef");
         localStorage.removeItem("activeWorkflowRef");
       } catch (_) {}
+    };
+
+    // Clear the previous context immediately so child tables cannot reuse its ID.
+    const storedWorkflowRef =
+      sessionStorage.getItem("activeWorkflowRef") ||
+      localStorage.getItem("activeWorkflowRef");
+    setCurrentProposalId(null);
+    setIsResumingDraft(true);
+    clearStoredWorkflowRef();
+
+    // Proposals are scoped to both a region and fiscal year.
+    if (!activeRegionName) {
+      console.log("[loadProposalContext] No active region. Clearing active proposal.");
       setIsResumingDraft(false);
       return;
     }
-    
-    const loadProposalContext = async () => {
-      console.log("[loadProposalContext] activeRegionName:", activeRegionName);
-      try {
-        const storedWorkflowRef =
-          sessionStorage.getItem("activeWorkflowRef") ||
-          localStorage.getItem("activeWorkflowRef");
-        
-        console.log("[loadProposalContext] storedWorkflowRef:", storedWorkflowRef);
 
-        // If we have a stored proposal, let's verify if it matches the current active region
+    // Wait for fiscal-year and budget-type settings before resolving a draft.
+    if (!fiscalYearToUse || !activeBudgetType) return;
+
+    let cancelled = false;
+    const loadProposalContext = async () => {
+      try {
+        // Reuse a stored proposal only if its region and fiscal year still match.
         if (storedWorkflowRef) {
           try {
             const verifyRes = await api.get(`/api/allproposal/proposals/${storedWorkflowRef}`);
             if (verifyRes.data?.success && verifyRes.data?.data) {
               const proposal = verifyRes.data.data;
               const proposalRegion = proposal.regionName || proposal.region || proposal.Region || proposal.RegionName || "CENTRAL OFFICE";
-              console.log("[loadProposalContext] proposalRegion:", proposalRegion);
-              
-              // If region matches (or if activeRegionName is not fully loaded yet), we keep it
-              if (!activeRegionName || String(proposalRegion).toUpperCase() === String(activeRegionName).toUpperCase()) {
-                console.log("[loadProposalContext] Region MATCHES or activeRegionName is null. Keeping stored ref.");
+              const proposalFiscalYear = String(proposal.fiscalYear ?? proposal.FiscalYear ?? "").trim();
+              const matchesRegion = String(proposalRegion).toUpperCase() === String(activeRegionName).toUpperCase();
+              const matchesFiscalYear = proposalFiscalYear === fiscalYearToUse;
+              const matchesBudgetType = String(proposal.modelType || proposal.budgetType || "").toUpperCase() === String(activeBudgetType).toUpperCase();
+
+              if (!cancelled && matchesRegion && matchesFiscalYear && matchesBudgetType) {
                 setCurrentProposalId(storedWorkflowRef);
+                sessionStorage.setItem("activeWorkflowRef", storedWorkflowRef);
+                localStorage.setItem("activeWorkflowRef", storedWorkflowRef);
                 setIsResumingDraft(false);
-                return; // Everything is consistent!
-              } else {
-                console.log("[loadProposalContext] Region MISMATCH! Clearing stored ref.");
+                return;
               }
             }
-          } catch (err) {
-            console.error("[loadProposalContext] Error verifying stored proposal:", err);
+          } catch (error) {
+            console.warn("[loadProposalContext] Could not verify stored proposal:", error);
           }
         }
 
-        console.log("[loadProposalContext] Fetching latest draft for region:", activeRegionName);
-        // If we get here, either we had no stored proposal, or it didn't match the current region, or it failed to verify.
-        // We must fetch the latest draft for the current region!
+        // Search only in the selected fiscal year so a draft from another year is never linked.
         const fetchRes = await api.get("/api/allproposal/proposals", {
-          params: { view: "my-proposals", limit: 1, region: activeRegionName || undefined },
+          params: {
+            view: "my-proposals",
+            limit: 1,
+            region: activeRegionName,
+            fiscalYear: fiscalYearToUse,
+            modelType: activeBudgetType,
+          },
         });
-        
-        console.log("[loadProposalContext] Fetch result:", fetchRes.data);
+
+        if (cancelled) return;
         if (fetchRes.data?.success && Array.isArray(fetchRes.data?.proposals) && fetchRes.data.proposals.length > 0) {
           const latest = fetchRes.data.proposals[0];
           const status = String(latest.status || "").toUpperCase();
-          if (latest._id && (status === "DRAFT" || status === "RETURNED_TO_PREPARER" || status.includes("RETURNED"))) {
-            console.log("[loadProposalContext] Found draft for region, saving to localStorage:", latest._id);
+          const latestFiscalYear = String(latest.fiscalYear ?? latest.FiscalYear ?? "").trim();
+          const latestBudgetType = String(latest.modelType || latest.budgetType || "").toUpperCase();
+          if (
+            latest._id &&
+            latestFiscalYear === fiscalYearToUse &&
+            latestBudgetType === String(activeBudgetType).toUpperCase() &&
+            (status === "DRAFT" || status === "RETURNED_TO_PREPARER" || status.includes("RETURNED"))
+          ) {
             setCurrentProposalId(latest._id);
-            try {
-              sessionStorage.setItem("activeWorkflowRef", latest._id);
-              localStorage.setItem("activeWorkflowRef", latest._id);
-            } catch (_) {}
+            sessionStorage.setItem("activeWorkflowRef", latest._id);
+            localStorage.setItem("activeWorkflowRef", latest._id);
             setIsResumingDraft(false);
-            return; // Found a valid draft for this region!
+            return;
           }
         }
 
-        console.log("[loadProposalContext] No draft found. Clearing states and storage.");
-        // If we get here, no draft exists for this region!
-        setCurrentProposalId(null);
-        try {
-          sessionStorage.removeItem("activeWorkflowRef");
-          localStorage.removeItem("activeWorkflowRef");
-        } catch (_) {}
-        
-      } catch (err) {
-        console.error("[loadProposalContext] Fatal error:", err);
-        // Fallback: clear everything if a fatal error occurs
-        setCurrentProposalId(null);
-        try {
-          sessionStorage.removeItem("activeWorkflowRef");
-          localStorage.removeItem("activeWorkflowRef");
-        } catch (_) {}
+      } catch (error) {
+        if (!cancelled) {
+          console.error("[loadProposalContext] Failed to load proposal:", error);
+        }
       } finally {
-        setIsResumingDraft(false);
+        if (!cancelled) setIsResumingDraft(false);
       }
     };
 
     loadProposalContext();
-  }, [activeRegionName, isRegionLoading]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRegionName, activeBudgetType, isRegionLoading, selectedFiscalYear, activeFiscalYear]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2145,7 +2163,7 @@ const ProposalCustomPage = ({
               gutterBottom
               sx={{ 
                 fontWeight: 900, 
-                fontSize: "1.8rem", 
+                fontSize: "2.8rem",
                 m: 0,
                 textShadow: "0 2px 8px rgba(0,0,0,0.3)",
                 letterSpacing: "-0.5px"
@@ -3450,8 +3468,6 @@ const ProposalCustomPage = ({
               <IncomeTable
                 proposalId={
                   currentProposalId ||
-                  sessionStorage.getItem("activeWorkflowRef") ||
-                  localStorage.getItem("activeWorkflowRef") ||
                   (dataListName !== "tests" ? dataListName : undefined)
                 }
                 region={activeRegion}
@@ -3472,8 +3488,6 @@ const ProposalCustomPage = ({
                 locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
-                  sessionStorage.getItem("activeWorkflowRef") ||
-                  localStorage.getItem("activeWorkflowRef") ||
                   (dataListName !== "tests" ? dataListName : undefined)
                 }
               />
@@ -3488,8 +3502,6 @@ const ProposalCustomPage = ({
                 locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
-                  sessionStorage.getItem("activeWorkflowRef") ||
-                  localStorage.getItem("activeWorkflowRef") ||
                   (dataListName !== "tests" ? dataListName : undefined)
                 }
               />
@@ -3504,8 +3516,6 @@ const ProposalCustomPage = ({
                 locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
-                  sessionStorage.getItem("activeWorkflowRef") ||
-                  localStorage.getItem("activeWorkflowRef") ||
                   (dataListName !== "tests" ? dataListName : undefined)
                 }
               />
@@ -3520,8 +3530,6 @@ const ProposalCustomPage = ({
                 locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
-                  sessionStorage.getItem("activeWorkflowRef") ||
-                  localStorage.getItem("activeWorkflowRef") ||
                   (dataListName !== "tests" ? dataListName : undefined)
                 }
               />
@@ -3536,8 +3544,6 @@ const ProposalCustomPage = ({
                 locked={isEffectivelyReadOnly}
                 proposalId={
                   currentProposalId ||
-                  sessionStorage.getItem("activeWorkflowRef") ||
-                  localStorage.getItem("activeWorkflowRef") ||
                   (dataListName !== "tests" ? dataListName : undefined)
                 }
               />
@@ -3553,8 +3559,6 @@ const ProposalCustomPage = ({
                   locked={isEffectivelyReadOnly}
                   proposalId={
                     currentProposalId ||
-                    sessionStorage.getItem("activeWorkflowRef") ||
-                    localStorage.getItem("activeWorkflowRef") ||
                     (dataListName !== "tests" ? dataListName : undefined)
                   }
                 />
@@ -3567,8 +3571,6 @@ const ProposalCustomPage = ({
                   locked={isEffectivelyReadOnly}
                   proposalId={
                     currentProposalId ||
-                    sessionStorage.getItem("activeWorkflowRef") ||
-                    localStorage.getItem("activeWorkflowRef") ||
                     (dataListName !== "tests" ? dataListName : undefined)
                   }
                 />

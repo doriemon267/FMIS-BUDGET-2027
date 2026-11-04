@@ -92,6 +92,9 @@ const personnelServicesSchema = new mongoose.Schema(
     gradelevel_SG: {
       type: String,
     },
+    gradelevel_PG: {
+      type: String,
+    },
     step: {
       type: String,
     },

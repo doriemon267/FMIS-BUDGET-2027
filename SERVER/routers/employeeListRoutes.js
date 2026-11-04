@@ -21,6 +21,14 @@ const employeeRouter = Router();
 // Apply authentication middleware to all routes in this router
 employeeRouter.use(isAuth);
 
+// Expose only the public UI feature flag; never return server environment values.
+employeeRouter.get("/public-config", (_req, res) => {
+  res.json({
+    hideEmployeeSalaryExport:
+      String(process.env.HIDE_EMPLOYEE_SALARY_EXPORT || "false").toLowerCase() === "true",
+  });
+});
+
 // Load hierarchical assignments for all routes
 employeeRouter.use(loadHierarchicalAssignment);
 

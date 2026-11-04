@@ -1596,6 +1596,10 @@ exports.updatePersonnelService = async (req, res) => {
 
     const allowedFields = [
       "employeeFullName",
+      "gradelevel_SG",
+      "gradelevel_PG",
+      "gradelevel_JG",
+      "step",
       "monthlySalaryIncrement",
       "noOfDependent",
       "hazardPay",
@@ -1661,6 +1665,92 @@ exports.updatePersonnelService = async (req, res) => {
         error: "Access denied",
         message: "You don't have permission to update this personnel service record"
       });
+    }
+
+    // Re-resolve Permanent salary on the server whenever its grade or step changes.
+    // The frontend preview is helpful, but the persisted salary must come from the
+    // active salary mapping and must not trust a client-submitted monthlySalary.
+    const salaryFields = ["gradelevel_SG", "gradelevel_PG", "gradelevel_JG", "step"];
+    const salaryFieldsChanged = salaryFields.some((field) =>
+      filteredUpdateFields[field] !== undefined &&
+      String(filteredUpdateFields[field] ?? "").trim() !== String(personnelServices[field] ?? "").trim()
+    );
+    if (
+      salaryFieldsChanged &&
+      String(personnelServices.statusOfAppointment || "").trim().toUpperCase() === "PERMANENT"
+    ) {
+      const salaryGradeValue = filteredUpdateFields.gradelevel_SG ?? personnelServices.gradelevel_SG;
+      const payGradeValue = filteredUpdateFields.gradelevel_PG ?? personnelServices.gradelevel_PG;
+      const jobGradeValue = filteredUpdateFields.gradelevel_JG ?? personnelServices.gradelevel_JG;
+      const step = parseInt(String(filteredUpdateFields.step ?? personnelServices.step ?? "1"), 10);
+      const salaryGrade = parseInt(String(salaryGradeValue ?? ""), 10);
+      const payGrade = parseInt(String(payGradeValue ?? ""), 10);
+      const jobGrade = parseInt(String(jobGradeValue ?? "").replace(/^JG-?/i, ""), 10);
+      if (!Number.isInteger(step) || step < 1 || step > 8) {
+        return res.status(400).json({ message: "Salary step must be between 1 and 8." });
+      }
+
+      const CPCSSalarySettings = require("../models/CPCSSalarySettings");
+      const cpcsSettings = await CPCSSalarySettings.findOne().lean();
+      const cpcs2AppointmentTypes = Array.isArray(cpcsSettings?.cpcs2AppointmentTypes)
+        ? cpcsSettings.cpcs2AppointmentTypes.map((value) => String(value).toUpperCase())
+        : ["PERMANENT"];
+      const useCpcs2 = Boolean(cpcsSettings?.useCPCSForEmployeeAdd) &&
+        cpcs2AppointmentTypes.includes("PERMANENT");
+
+      let mappedSalary;
+      if (useCpcs2) {
+        const CPCSSalaryTable = require("../models/CPCSSalaryTable");
+        const originalValue = (field) => String(personnelServices[field] ?? "").trim();
+        const changed = (field, value) =>
+          value != null && String(value).trim() !== originalValue(field);
+        let mapping;
+        if (changed("gradelevel_SG", salaryGradeValue) && Number.isInteger(salaryGrade)) {
+          mapping = await CPCSSalaryTable.findOne({ salaryGrade }).lean();
+        } else if (changed("gradelevel_PG", payGradeValue) && Number.isInteger(payGrade)) {
+          mapping = await CPCSSalaryTable.findOne({ cpcs2PayGrade: payGrade }).lean();
+        } else if (Number.isInteger(jobGrade)) {
+          const mappings = await CPCSSalaryTable.find({ cpcs1JobGrade: jobGrade }).lean();
+          mapping = mappings.find((row) => Number(row.salaryGrade) === salaryGrade) ||
+            mappings.find((row) => Number(row.cpcs2PayGrade) === payGrade) ||
+            mappings[0];
+        }
+        if (!mapping && Number.isInteger(salaryGrade)) {
+          mapping = await CPCSSalaryTable.findOne({ salaryGrade }).lean();
+        }
+        mappedSalary = mapping?.[`step${step}`];
+        if (!mapping || mappedSalary == null) {
+          return res.status(400).json({ message: "No CPCS salary mapping found for the selected SG/PG/JG and step." });
+        }
+        filteredUpdateFields.gradelevel_SG = String(mapping.salaryGrade);
+        filteredUpdateFields.gradelevel_JG = String(mapping.cpcs1JobGrade);
+        filteredUpdateFields.gradelevel_PG = String(mapping.cpcs2PayGrade);
+      } else {
+        const SalarySelection = require("../models/SalarySelection");
+        let mapping;
+        if (Number.isInteger(salaryGrade)) {
+          mapping = await SalarySelection.findOne({ salary_grade: String(salaryGrade) });
+        }
+        if (!mapping && Number.isInteger(jobGrade)) {
+          mapping = await SalarySelection.findOne({ job_grade: String(jobGrade) });
+        }
+        const rates = mapping?.rates;
+        mappedSalary = rates?.get?.(String(step)) ?? rates?.[String(step)];
+        if (!mapping || mappedSalary == null) {
+          return res.status(400).json({ message: "No salary mapping found for the selected SG/JG and step." });
+        }
+        filteredUpdateFields.gradelevel_SG = String(mapping.salary_grade);
+        filteredUpdateFields.gradelevel_JG = String(mapping.job_grade);
+      }
+
+      const resolvedMonthlySalary = Number(mappedSalary);
+      if (!Number.isFinite(resolvedMonthlySalary) || resolvedMonthlySalary < 0) {
+        return res.status(400).json({ message: "The selected salary mapping returned an invalid monthly salary." });
+      }
+      filteredUpdateFields.monthlySalary = resolvedMonthlySalary;
+      filteredUpdateFields.annualSalary = roundTo2Decimals(resolvedMonthlySalary * 12);
+      filteredUpdateFields.midyearBonus = resolvedMonthlySalary;
+      filteredUpdateFields.yearEndBonus = resolvedMonthlySalary;
     }
 
     if (filteredUpdateFields.monthlySalaryIncrement !== undefined &&

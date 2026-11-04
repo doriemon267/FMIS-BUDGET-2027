@@ -40,12 +40,15 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import GroupIcon from "@mui/icons-material/Group";
 import LocationIcon from "@mui/icons-material/LocationOn";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import { useThemeContext } from "../context/ThemeContext";
 import { useRegion } from "../context/RegionContext";
 import { useUser } from "../context/UserContext";
+import * as XLSX from "xlsx";
 
 const EmployeeList = () => {
   const theme = useTheme();
+  const [showEmployeeSalaryExport, setShowEmployeeSalaryExport] = useState(false);
   const { mode } = useThemeContext();
   const { activeRegion, availableRegions, changeActiveRegion } = useRegion();
   const { currentUser } = useUser();
@@ -74,9 +77,27 @@ const EmployeeList = () => {
     inactive: 0,
   });
 
+  useEffect(() => {
+    let isMounted = true;
+    api.get("/public-config")
+      .then(({ data }) => {
+        if (isMounted) {
+          setShowEmployeeSalaryExport(!data?.hideEmployeeSalaryExport);
+        }
+      })
+      .catch(() => {
+        // Preserve the existing UI if the optional feature-config request fails.
+        if (isMounted) setShowEmployeeSalaryExport(true);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // State to trigger refreshes
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isCopying, setIsCopying] = useState(false);
+  const [isExportingMissingSalary, setIsExportingMissingSalary] = useState(false);
 
   // Get user's hierarchical access information
   let userAccessLevel = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel || 'REGION';
@@ -235,6 +256,119 @@ const EmployeeList = () => {
   // Refresh stats when employee data changes
   const refreshStats = () => {
     setRefreshTrigger((prev) => prev + 1);
+  };
+
+  const handleExportMissingSalary = async () => {
+    const regionName = activeRegion?.name || activeRegion?.regionName || activeRegion?.Region;
+    if (!regionName) {
+      toast.error("Pumili muna ng region bago mag-export.");
+      return;
+    }
+
+    try {
+      setIsExportingMissingSalary(true);
+      const response = await api.get("/employees", {
+        params: {
+          region: regionName,
+          page: 1,
+          // The API treats limits above 10,000 as an unpaginated export request.
+          limit: 10001,
+          orderBy: "EmployeeFullName",
+          order: "asc",
+        },
+      });
+      const employees = Array.isArray(response.data?.employees) ? response.data.employees : [];
+      const employeesMissingSalary = employees.filter((employee) => {
+        const name = String(employee.EmployeeFullName || "").trim().toUpperCase();
+        const isVacant = employee.isVacant || name === "VACANT" || name === "TO-BE-FILLED";
+        const rawRate = employee.Rate;
+        const rate = rawRate == null || String(rawRate).trim() === ""
+          ? NaN
+          : Number(String(rawRate).replace(/[₱,\s]/g, ""));
+        // The employee endpoint may already return a populated Rate even when
+        // salary-table recomputation is still needed. Keep every non-vacant
+        // employee in the export so it never downloads as a header-only file.
+        return true;
+      });
+
+      const formatImportDate = (value) => {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${month}/${day}/${date.getFullYear()}`;
+      };
+
+      // Keep this order and naming aligned with the employee import template.
+      const importHeaders = [
+        "EmployeeFullName*",
+        "Employee Number",
+        "DateOfBirth",
+        "Region*",
+        "Department*",
+        "Division",
+        "PositionTitle*",
+        "StatusOfAppointment*",
+        "DateOfAppointment*",
+        "Status*",
+        "Item_No",
+        "PG",
+        "SG",
+        "JG",
+        "Step",
+        "Rate",
+        "noOfDependent",
+      ];
+      const exportRows = employeesMissingSalary.map((employee) => ({
+        "EmployeeFullName*": employee.EmployeeFullName || "",
+        "Employee Number": employee.EmployeeID || employee.Employee_No || "",
+        DateOfBirth: formatImportDate(employee.DateOfBirth),
+        "Region*": employee.Region || regionName,
+        "Department*": employee.Department || "",
+        Division: employee.Division || "",
+        "PositionTitle*": employee.PositionTitle || "",
+        "StatusOfAppointment*": employee.StatusOfAppointment || "",
+        "DateOfAppointment*": formatImportDate(employee.DateOfAppointment),
+        "Status*": employee.Status || employee.employeeStatus || "Active",
+        Item_No: employee.Item_No || employee.ItemNumber || employee.itemNumber || "",
+        PG: employee.PG ?? "",
+        SG: employee.SG ?? "",
+        JG: employee.JG ?? "",
+        Step: employee.Step ?? "",
+        Rate: "",
+        noOfDependent: employee.noOfDependent ?? 0,
+      }));
+
+      const worksheet = XLSX.utils.aoa_to_sheet([importHeaders]);
+      if (exportRows.length > 0) {
+        XLSX.utils.sheet_add_json(worksheet, exportRows, {
+          header: importHeaders,
+          skipHeader: true,
+          origin: "A2",
+        });
+      }
+      worksheet["!cols"] = [
+        { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 24 },
+        { wch: 22 }, { wch: 28 }, { wch: 24 }, { wch: 22 }, { wch: 14 },
+        { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
+        { wch: 12 }, { wch: 18 },
+      ];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Missing Salary");
+      const safeRegion = regionName.replace(/[^a-z0-9_-]+/gi, "_");
+      XLSX.writeFile(workbook, `employees_missing_salary_${safeRegion}.xlsx`);
+      toast.success(
+        exportRows.length > 0
+          ? `Na-export ang ${exportRows.length} employee na walang computed salary.`
+          : "Na-export ang Excel file. Walang missing salary rows, kaya headers lang ang laman."
+      );
+    } catch (error) {
+      console.error("Failed to export employees missing salary:", error);
+      toast.error(error.response?.data?.message || "Hindi na-export ang employees.");
+    } finally {
+      setIsExportingMissingSalary(false);
+    }
   };
 
   const handleCopyFromPreviousYear = async () => {
@@ -890,6 +1024,21 @@ const EmployeeList = () => {
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={1} alignItems="center">
+                      <Button
+                        variant="contained"
+                        size="small"
+                        disabled={isExportingMissingSalary || !activeRegion}
+                  onClick={handleExportMissingSalary}
+                  hidden={!showEmployeeSalaryExport}
+                        startIcon={<FileDownloadOutlinedIcon />}
+                        sx={{
+                          bgcolor: alpha("#fff", 0.2),
+                          color: "white",
+                          "&:hover": { bgcolor: alpha("#fff", 0.3) },
+                        }}
+                      >
+                        {isExportingMissingSalary ? "Exporting..." : "Export"}
+                      </Button>
                       <Tooltip title="Refresh Employee Statistics">
                         <IconButton
                           onClick={refreshStats}

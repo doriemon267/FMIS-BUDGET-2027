@@ -46,7 +46,8 @@ exports.getMOOEData = async (req, res) => {
     // }
     const activeFiscalYear = activeSettings.fiscalYear;
     // // 2. Get region from request or user
-    const region = req.query.region || req.user?.Region || req.headers['x-region'];
+    const requestedRegion = req.query.region || req.headers['x-region'];
+    const region = req.user?.Region || requestedRegion;
     // // 2. Fetch COA, MOOE proposals and COS personnel filtered by fiscal year and region
     // // Build the complete filter by combining base filter with hierarchical access control
     let filter = { fiscalYear: activeFiscalYear };
@@ -72,15 +73,19 @@ exports.getMOOEData = async (req, res) => {
               { userId: req.user.id }
             ]
           };
-          if (region) {
-            filter.region = region;
+          if (requestedRegion) {
+            filter.region = requestedRegion;
           }
-        } else if (assignment && ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(assignment.assignmentLevel)) {
+        } else if (
+          assignment &&
+          ['DEPARTMENT', 'DEPARTMENT_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'OFFICE', 'OFFICE_LEVEL'].includes(assignment.assignmentLevel) &&
+          (assignment.departments?.[0]?.departmentName || assignment.departmentName || req.user.department)
+        ) {
           // Get department name from assignment
           const userDept = assignment.departments?.[0]?.departmentName || assignment.departmentName || req.user.department;
           const userRegion = assignment.regions?.[0]?.regionName || assignment.regionName || req.user.Region;
           
-          if (userDept) {
+          if (userDept && userRegion) {
             // Department users can only see:
             // 1. Their own department MOOE (where division is null/empty)
             // 2. Division MOOE that has been submitted/approved
@@ -89,7 +94,7 @@ exports.getMOOEData = async (req, res) => {
                 {
                   department: userDept,
                   fiscalYear: activeFiscalYear,
-                  region: region || userRegion
+                  region: userRegion
                 },
                 {
                   $or: [
@@ -120,6 +125,8 @@ exports.getMOOEData = async (req, res) => {
                 }
               ]
             };
+          } else {
+            filter._id = { $exists: false };
           }
         } else if (assignment && ['DIVISION', 'DIVISION_LEVEL', 'RESPONSIBILITY_CENTER'].includes(assignment.assignmentLevel)) {
           // Division users see only their own division data
@@ -127,12 +134,12 @@ exports.getMOOEData = async (req, res) => {
           const userDiv = assignment.divisions?.[0] || assignment.divisionName || req.user.division;
           const userRegion = assignment.regions?.[0]?.regionName || assignment.regionName || req.user.Region;
           
-          if (userDept && userDiv) {
+          if (userDept && userDiv && userRegion) {
             filter = {
               department: userDept,
               division: userDiv,
               fiscalYear: activeFiscalYear,
-              region: region || userRegion,
+              region: userRegion,
               $or: [
                 { originalLevel: 'DIVISION' },
                 { workflowLevel: 'DIVISION' },
@@ -141,28 +148,45 @@ exports.getMOOEData = async (req, res) => {
                 { originalLevel: '' }
               ]
             };
+          } else {
+            filter._id = { $exists: false };
           }
         } else {
-          // Fallback for REGION level, FULL level, or users without hierarchical assignment
+          // FULL users may choose a region. Regional users only see records
+          // created at the region level, not amounts from departments/divisions.
           const userRegion = assignment?.regions?.[0]?.regionName || assignment?.regionName || req.user?.Region;
           if (assignment?.assignmentLevel === 'FULL') {
-            if (region) filter.region = region;
-          } else if (userRegion || region) {
-            filter.region = region || userRegion;
+            if (requestedRegion) filter.region = requestedRegion;
+          } else if (userRegion) {
+            filter = {
+              ...filter,
+              region: userRegion,
+              $and: [
+                { $or: [{ department: { $exists: false } }, { department: null }, { department: '' }] },
+                { $or: [{ division: { $exists: false } }, { division: null }, { division: '' }] }
+              ]
+            };
           }
         }
       } catch (error) {
         console.error('Error applying MOOE submission workflow:', error);
-        // Fallback to basic region filtering
-        if (region) {
-          filter.region = region;
+        // Fail closed to the user's own region-level records if assignment
+        // resolution fails. Do not broaden the query to every office there.
+        const userRegion = req.user?.Region;
+        if (userRegion) {
+          filter = {
+            ...filter,
+            region: userRegion,
+            department: { $in: [null, ''] },
+            division: { $in: [null, ''] }
+          };
+        } else {
+          filter._id = { $exists: false };
         }
       }
     } else {
-      // Fallback to basic region filtering if no user context
-      if (region) {
-        filter.region = region;
-      }
+      // Do not return organization MOOE without an authenticated user scope.
+      filter._id = { $exists: false };
     }
     // First, let's check what Chart of Accounts data exists
     const totalCOA = await ChartOfAccounts.countDocuments();

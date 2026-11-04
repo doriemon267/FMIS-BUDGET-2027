@@ -615,6 +615,9 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       }
     }
 
+    const hasBudgetPlanningAnalystRole = (req.body.userRoles || []).some(role =>
+      String(role).toUpperCase().replace(/\s+/g, '_').trim() === 'BUDGET_PLANNING_ANALYST'
+    );
     const assignmentPayload = {
       userId,
       userName: resolvedUserName,
@@ -623,7 +626,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       // NEW: Support multiple roles from FMIS main system
       userRoles: req.body.userRoles || [], // Array of roles from FMIS main
       // Keep backward compatibility - primary role (highest in hierarchy)
-      userRole: userRole || undefined,
+      userRole: hasBudgetPlanningAnalystRole ? 'BUDGET_PLANNING_ANALYST' : (userRole || undefined),
       assignmentLevel: modelAssignmentLevel,
       regionId: assignmentData.regions?.[0] || null,
       departmentId: assignmentData.departments?.[0] || null,
@@ -634,7 +637,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       hierarchicalStructure: assignmentData.hierarchicalStructure,
       // NEW: Budget Planning Analyst region configuration
       isNIAWide: req.body.isNIAWide === true,
-      assignedRegions: (userRole === 'BUDGET_PLANNING_ANALYST' && Array.isArray(req.body.assignedRegions)) 
+      assignedRegions: ((userRole === 'BUDGET_PLANNING_ANALYST' || hasBudgetPlanningAnalystRole) && Array.isArray(req.body.assignedRegions))
         ? req.body.assignedRegions.filter(id => {
             // Accept non-empty strings (region codes like "MARIIS", "CALABARZON")
             const isValidString = typeof id === 'string' && id.trim().length > 0;

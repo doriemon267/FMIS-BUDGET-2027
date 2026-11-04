@@ -7,7 +7,12 @@
  */
 
 (function () {
-  if (typeof window === 'undefined' || typeof chrome === 'undefined' || !chrome.runtime) {
+  if (
+    typeof window === 'undefined' ||
+    typeof chrome === 'undefined' ||
+    !chrome.runtime?.onMessage ||
+    typeof chrome.runtime.onMessage.addListener !== 'function'
+  ) {
     return;
   }
 
