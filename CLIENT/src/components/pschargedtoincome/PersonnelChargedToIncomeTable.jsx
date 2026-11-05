@@ -473,8 +473,8 @@ const PersonnelChargedToIncomeTable = ({
         </DialogActions>
       </Dialog>
 
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} sx={{ maxWidth: '100%', overflowX: 'auto' }}>
+        <Table sx={{ minWidth: 900 }}>
           <TableHead sx={{ bgcolor: headerBg }}>
             <TableRow>
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
@@ -494,7 +494,20 @@ const PersonnelChargedToIncomeTable = ({
                     (schema[key].show === true || key === 'action')
                 )
                 .map(key => (
-                  <TableCell key={key} sx={{ color: 'white', fontWeight: 'bold' }}>
+                  <TableCell
+                    key={key}
+                    sx={{
+                      color: 'white',
+                      fontWeight: 'bold',
+                      ...(key === 'employeeFullName' && {
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 2,
+                        backgroundColor: headerBg,
+                        minWidth: 220,
+                      }),
+                    }}
+                  >
                     {schema[key].label}
                   </TableCell>
                 ))}
@@ -537,7 +550,16 @@ const PersonnelChargedToIncomeTable = ({
                         (schema[key].show === true || key === 'action')
                     )
                     .map(key => (
-                      <TableCell key={key}>
+                      <TableCell
+                        key={key}
+                        sx={key === 'employeeFullName' ? {
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 1,
+                          backgroundColor: 'background.paper',
+                          minWidth: 220,
+                        } : undefined}
+                      >
                         {key === 'action' ? (
                           <CustomMenu
                             additionalMenuOptions={enhancedMenuOptions}

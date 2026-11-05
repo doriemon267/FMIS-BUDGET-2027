@@ -362,12 +362,7 @@ exports.getUser = async (req, res) => {
 
     console.log("[AUTH][GET-USER] Sending user response payload (safe fields only).");
 
-    // Deliver token via response header instead of body so it does not appear
-    // in the Network > Preview panel (JSON body). The client reads it from
-    // the X-Auth-Token header for cross-origin budget API calls.
-    if (req.authToken) {
-      res.setHeader("X-Auth-Token", req.authToken);
-    }
+    // Tinanggal na ang pag-attach ng X-Auth-Token header dahil gumagamit na tayo ng HttpOnly cookies.
     res.json({ user: userResponse });
   } catch (e) {
     console.error("[AUTH][GET-USER] Error while resolving user:", e);

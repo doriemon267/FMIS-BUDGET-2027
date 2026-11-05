@@ -105,6 +105,38 @@ const BASE_TABS = [
 
 const WORKFLOW_API_BASE = "/api/allproposal/proposals";
 
+const getProposalResponsibilityCenter = (proposal, currentUser) => {
+  const assignmentLevel = String(proposal?.assignmentLevel || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+  const isDivisionLevel = ["DIVISION", "DIVISION_LEVEL", "RESPONSIBILITY_CENTER"].includes(
+    assignmentLevel
+  );
+
+  if (isDivisionLevel) {
+    const division = proposal?.division;
+    const divisionName =
+      typeof division === "object"
+        ? division?.Division || division?.divisionName || division?.DivisionName || division?.name
+        : division;
+    return divisionName || "N/A";
+  }
+
+  const region = proposal?.region;
+  const regionName =
+    typeof region === "object" ? region?.Region || region?.name || region?.regionName : region;
+  const isRegionLevel =
+    ["REGION", "REGION_LEVEL"].includes(assignmentLevel) ||
+    String(currentUser?.hierarchicalAccess?.scope || "").toUpperCase() === "REGION" ||
+    proposal?.responsibilityCenter === "REGIONAL OFFICE" ||
+    proposal?.division === "REGIONAL OFFICE";
+
+  return isRegionLevel
+    ? regionName || proposal?.responsibilityCenter || proposal?.division || "N/A"
+    : proposal?.responsibilityCenter || proposal?.division || "N/A";
+};
+
 const ProposalOperationsHub = () => {
   const theme = useTheme();
   const headerBg = theme.palette.mode === "dark" ? "#0b2413" : "#2d5016";
@@ -1869,7 +1901,7 @@ const ProposalOperationsHub = () => {
                                 <span style={{ marginLeft: 24, color: "#888" }}>└</span>
                               )}
                               <Typography variant="body2" sx={{ fontWeight: isChild ? 400 : 600, color: isChild ? "#666" : "#333" }}>
-                                {p.assignmentLevel === "REGION" || currentUser?.hierarchicalAccess?.scope === "REGION" || p.responsibilityCenter === "REGIONAL OFFICE" || p.division === "REGIONAL OFFICE" ? ((typeof p.region === "object" ? p.region?.Region || p.region?.name || p.region?.regionName : p.region) || p.responsibilityCenter || p.division || "N/A") : (p.responsibilityCenter || p.division || "N/A")}
+                                {getProposalResponsibilityCenter(p, currentUser)}
                               </Typography>
                             </Box>
                           </TableCell>

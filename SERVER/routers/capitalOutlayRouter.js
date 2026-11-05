@@ -23,9 +23,9 @@ const capitalOutlayRouter = Router();
 // Apply authentication to all capital outlay routes
 capitalOutlayRouter.use(isAuth);
 capitalOutlayRouter.get("/capital-outlays", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllCapitalOutlays);
-capitalOutlayRouter.post("/capital-outlays", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
-capitalOutlayRouter.put("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
-capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/categories'), deleteCapitalOutlay);
+capitalOutlayRouter.post("/capital-outlays", checkDueDateWithRoleBypass, requireDynamicPermission('/proposal'), submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
+capitalOutlayRouter.put("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/proposal'), submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
+capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, requireDynamicPermission('/proposal'), deleteCapitalOutlay);
 capitalOutlayRouter.get("/capital-outlay-list", getCapitalOutlayList);
 capitalOutlayRouter.get("/subline-items", getSublineItems);
 capitalOutlayRouter.get("/accounting-titles", getAccountingTitles);
@@ -310,6 +310,6 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
   }
 });
 // Bulk update Capital Outlay entries
-capitalOutlayRouter.put("/capital-outlay/bulk-update", requireDynamicPermission('/categories'), submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
+capitalOutlayRouter.put("/capital-outlay/bulk-update", requireDynamicPermission('/proposal'), submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
 module.exports = capitalOutlayRouter;
 

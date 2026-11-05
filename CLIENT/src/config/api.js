@@ -21,6 +21,7 @@ const getBaseURL = () => {
 const api = axios.create({
   baseURL: getBaseURL(),
   withCredentials: true,
+  timeout: REQUEST_TIMEOUT,
 });
 
 // In-memory cache for CSRF token fetched from the server
@@ -37,17 +38,8 @@ export function clearCsrfToken() {
   _csrfToken = null;
 }
 
-// Auth token for budget API when auth server is on a different origin
-let _authToken = null;
-export function setAuthToken(token) {
-  _authToken = token || null;
-  clearCsrfToken(); // Reset CSRF token whenever auth state changes
-}
-export function getAuthToken() {
-  return _authToken || null;
-}
+// ✅ Tinanggal na ang _authToken, setAuthToken, at getAuthToken dahil HttpOnly Cookie na ang ginagamit.
 
-// ✅ FIXED: Isinasama na ang Authorization header para hindi mag-mismatch ang Session ID sa server
 const fetchCsrfToken = async (forceRefresh = false) => {
   if (_csrfToken && !forceRefresh) return _csrfToken;
   try {
@@ -55,13 +47,7 @@ const fetchCsrfToken = async (forceRefresh = false) => {
     const csrfBase = rawBase ? rawBase.replace(/\/api\/?$/, "") || "" : "";
     const url = csrfBase ? `${csrfBase}${apiPrefix}/csrf-token` : `${apiPrefix}/csrf-token`;
 
-    const headers = {};
-    const authToken = getAuthToken();
-    if (authToken) {
-      headers.Authorization = `Bearer ${authToken}`;
-    }
-
-    const resp = await axios.get(url, { withCredentials: true, headers });
+    const resp = await axios.get(url, { withCredentials: true });
     _csrfToken = resp.data && resp.data.csrfToken;
     return _csrfToken;
   } catch (err) {
@@ -69,7 +55,7 @@ const fetchCsrfToken = async (forceRefresh = false) => {
   }
 };
 
-// Attach token to requests
+// Attach workflow ref, dev headers, and CSRF token to requests
 api.interceptors.request.use(
   async (config) => {
     const normalizeUrl = (url) => {
@@ -87,11 +73,6 @@ api.interceptors.request.use(
 
     if (config.url) {
       config.url = normalizeUrl(config.url);
-    }
-
-    const authToken = getAuthToken();
-    if (authToken && !config.headers.Authorization) {
-      config.headers.Authorization = `Bearer ${authToken}`;
     }
 
     // Ensure X-CSRF-Token is present for state-changing requests
@@ -114,7 +95,7 @@ api.interceptors.request.use(
     }
 
     // Dev-only header
-    if (!IS_PRODUCTION && !authToken) {
+    if (!IS_PRODUCTION) {
       try {
         const currentUser = _devUser;
         if (currentUser) {
@@ -231,8 +212,7 @@ api.interceptors.response.use(undefined, async (error) => {
       const refreshRes = await authApi.get('/get-user');
       const refreshedUser = refreshRes?.data?.user || null;
       if (refreshedUser) {
-        const headerToken = refreshRes?.headers?.["x-auth-token"] || refreshRes?.headers?.["X-Auth-Token"];
-        if (headerToken) setAuthToken(headerToken);
+        // Tinanggal na ang headerToken check dahil cookie-based na ang session
         try {
           setDevUser(refreshedUser);
         } catch (e) {

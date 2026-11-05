@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { authApi, setDevUser, setAuthToken } from "../config/api";
+import api, { authApi, setDevUser } from "../config/api"; // Inalis ang setAuthToken dahil hindi na manu-manong isinasalpak ang token
 import Loading from "../global/components/Loading";
 import InactivityWarningDialog from "../components/InactivityWarningDialog";
 import env from "../utils/env";
@@ -136,9 +136,7 @@ const UserProvider = ({ children }) => {
   // --- LOGIN HANDLER ---
   const handleSetUserInitialization = useCallback(async () => {
     setUnauthorizedSuperAdmin(false);
-    const res = await api.get("/api/get-user");
-    const headerToken = res.headers?.["x-auth-token"] || res.headers?.["X-Auth-Token"];
-    if (headerToken) setAuthToken(headerToken);
+    const res = await api.get("/api/get-user"); // Walang nang X-Auth-Token header extraction
     try {
       const fullUser = await enrichUserWithRoles(res.data.user);
       setDevUser(fullUser);
@@ -157,7 +155,7 @@ const UserProvider = ({ children }) => {
 
   // --- FULL LOGOUT HANDLER ---
   const handleLogout = useCallback(async () => {
-    // 1. Tawagin ang logout APIs para mabura ang backend sessions at httpOnly 'jwt' cookies
+    // 1. Tawagin ang logout APIs para mabura ang backend sessions at httpOnly cookies
     try {
       await api.get("/api/logout");
       await authApi.get("/logout");
@@ -165,8 +163,7 @@ const UserProvider = ({ children }) => {
       console.warn("Logout API warning:", e.message);
     }
 
-    // 2. Linisin ang Local Storage at Session Storage ng Budget App
-    localStorage.removeItem("token");
+    // 2. Linisin ang Local Storage at Session Storage ng Budget App (wala nang token sa localStorage)
     localStorage.removeItem("user");
     localStorage.removeItem("activeWorkflowRef");
     localStorage.removeItem("activeRegion");
@@ -174,18 +171,14 @@ const UserProvider = ({ children }) => {
     sessionStorage.clear();
 
     // 3. Clear local states
-    setAuthToken(null);
     setCurrentUser(null);
     setUnauthorizedSuperAdmin(false);
 
     // 4. LOGOUT REDIRECT
     if (!IS_PRODUCTION) {
-      // DEV ENVIRONMENT:
-      // Dadalhin ang browser sa Main FMIS login page (Port 3000)
       const authBase = env("AUTH_CLIENT_URL_DEV") || "http://localhost:3000";
       window.location.href = `${authBase}/login`;
     } else {
-      // PRODUCTION ENVIRONMENT (NIA SSO):
       const clientId = env("CLIENT_ID");
       const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
       const currentUrl = `${budgetUrl}/dashboard`;
@@ -213,26 +206,7 @@ const UserProvider = ({ children }) => {
 
   // --- MAIN INITIALIZATION ---
   useEffect(() => {
-    const url = typeof window !== "undefined" ? window.location : {};
-    const params = new URLSearchParams(url.search || "");
-    const hash = (url.hash || "").replace(/^#/, "");
-    const hashParams = new URLSearchParams(hash);
-    const tokenFromUrl =
-      params.get("token") ||
-      params.get("access_token") ||
-      hashParams.get("access_token") ||
-      hashParams.get("token");
-    if (tokenFromUrl) {
-      setAuthToken(tokenFromUrl);
-      ["token", "access_token"].forEach((k) => {
-        params.delete(k);
-        hashParams.delete(k);
-      });
-      const cleanUrl = url.pathname || "/dashboard";
-      const cleanSearch = params.toString();
-      const newUrl = cleanSearch ? `${cleanUrl}?${cleanSearch}` : cleanUrl;
-      window.history.replaceState({}, "", newUrl);
-    }
+    // Tinanggal na rin ang URL token param check dahil cookie-based na ang session
 
     const fetchUser = async () => {
       try {
@@ -256,9 +230,6 @@ const UserProvider = ({ children }) => {
         }
 
         if (user) {
-          const headerToken = res.headers?.["x-auth-token"] || res.headers?.["X-Auth-Token"];
-          if (headerToken) setAuthToken(headerToken);
-          
           try {
             const fullUser = await enrichUserWithRoles(user);
             setDevUser(fullUser);

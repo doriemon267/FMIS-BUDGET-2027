@@ -320,6 +320,8 @@ const COSCustomTable = ({
   };
 
   const tableData = data && data[dataListName] ? data[dataListName] : [];
+  const isEmployeeNameColumn = (field) =>
+    field === "employeeFullName" || field === "employeeName";
   const selectionColumn = Boolean(onSelectionChange);
   const isSelected = (id) => selectedRows.includes(id);
   const handleRowSelection = (event, id) => {
@@ -402,6 +404,11 @@ const COSCustomTable = ({
                         top: 0,
                         backgroundColor: headerBg,
                         zIndex: 1,
+                        ...(isEmployeeNameColumn(column.field) && {
+                          left: 0,
+                          zIndex: 3,
+                          minWidth: 220,
+                        }),
                         borderRight: "1px solid",
                         borderColor: grey[500],
                         verticalAlign: 'top',
@@ -524,6 +531,13 @@ const COSCustomTable = ({
                                 handleCellClick(rowIndex, column.field, row["_id"])
                               }
                               sx={{
+                                ...(isEmployeeNameColumn(column.field) && {
+                                  position: "sticky",
+                                  left: 0,
+                                  zIndex: 2,
+                                  backgroundColor: "inherit",
+                                  minWidth: 220,
+                                }),
                                 maxWidth: column.field === "employeeName" ? "none" : "800px",
                                 whiteSpace: column.field === "employeeName" ? "normal" : "nowrap",
                                 overflow: "hidden",
@@ -588,6 +602,12 @@ const COSCustomTable = ({
                         <TableCell
                           key={column.field}
                           sx={{
+                            ...(isEmployeeNameColumn(column.field) && {
+                              position: "sticky",
+                              left: 0,
+                              zIndex: 2,
+                              minWidth: 220,
+                            }),
                             backgroundColor: headerBg,
                             color: "#fff",
                             fontWeight: "bold",

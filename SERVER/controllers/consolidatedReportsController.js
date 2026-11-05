@@ -105,7 +105,7 @@ const getConsolidatedMooeTitle = budgetType => {
   const normalizedBudgetType = String(budgetType || 'INITIAL')
     .trim()
     .toUpperCase();
-  return `Consolidated MOOE – ${normalizedBudgetType || 'INITIAL'} BUDGET PROPOSAL`;
+  return `MOOE – ${normalizedBudgetType || 'INITIAL'} BUDGET PROPOSAL`;
 };
 
 const getMooeSignatureSectionHeight = rowHeight =>
@@ -1811,6 +1811,9 @@ const consolidatedReportsController = {
         ensureSpace(10);
       }
       signatoriesInfo = await enrichSignatoriesWithPositionTitle(signatoriesInfo);
+      if (signatoriesInfo.preparer) signatoriesInfo.preparer.label = 'Prepared by:';
+      if (signatoriesInfo.reviewer) signatoriesInfo.reviewer.label = 'Reviewed by:';
+      if (signatoriesInfo.approver) signatoriesInfo.approver.label = 'Approved by:';
       curY = drawWorkflowSignatureBlock(
         pdfDoc,
         signatoriesInfo,
@@ -1858,11 +1861,11 @@ const consolidatedReportsController = {
         stream.pipe(res);
       });
     } catch (error) {
-      console.error('Error generating consolidated MOOE PDF:', error);
+      console.error('Error generating MOOE PDF:', error);
       if (!res.headersSent) {
         return res
           .status(500)
-          .json({ message: 'Failed to generate consolidated MOOE PDF', error: error.message });
+          .json({ message: 'Failed to generate MOOE PDF', error: error.message });
       }
     }
   },

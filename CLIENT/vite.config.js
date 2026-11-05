@@ -11,21 +11,23 @@ export default defineConfig({
   server: {
     port: 3005,
     open: false,
+    // Explicitly set HMR client port para maiwasan ang socket drops
+    hmr: {
+      clientPort: 3005,
+    },
     proxy: {
-      // Forward all API calls to the Express backend — same-origin as far as the browser is concerned
       '/api': {
         target: 'http://127.0.0.1:5005',
         changeOrigin: true,
         secure: false,
       },
-      // Forward Socket.IO (WebSocket) to the backend
+      // Pansamantalang alisin o i-disable ang ws proxy kung direktang kumokonekta ang socket.io client
       '/socket.io': {
         target: 'http://127.0.0.1:5005',
         changeOrigin: true,
-        ws: true,
+        ws: false, // Gawing false para iwasan ang Node stream aborts
         secure: false,
       },
-      // Forward uploaded files (attachments, etc.)
       '/uploads': {
         target: 'http://127.0.0.1:5005',
         changeOrigin: true,

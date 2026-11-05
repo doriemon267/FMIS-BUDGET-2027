@@ -217,7 +217,7 @@ app.use(
       ...(process.env.NODE_ENV !== 'production' ? ["X-Dev-User-Id", "X-Dev-Roles"] : [])
     ],
     optionsSuccessStatus: 204,
-    exposedHeaders: ["X-Auth-Token", "Content-Disposition", "X-Document-ID"],
+    exposedHeaders: ["Content-Disposition", "X-Document-ID"],
   })
 );
 

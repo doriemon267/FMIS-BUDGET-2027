@@ -28,7 +28,8 @@ import { useTheme } from '@mui/material/styles';
 import { IoSend } from "react-icons/io5";
 import { FiSearch, FiRefreshCw, FiSettings, FiCheck, FiBell, FiBellOff, FiChevronLeft, FiChevronRight, FiMapPin, FiTrash2, FiX } from "react-icons/fi";
 import io from 'socket.io-client';
-import api, { getAuthToken } from '../../../../config/api';
+import api from '../../../../config/api';
+
 import env from '../../../../utils/env';
 import IS_PRODUCTION from '../../../../utils/IS_PRODUCTION';
 import { useUser } from '../../../../context/UserContext';
@@ -635,8 +636,7 @@ export default function ChatApp() {
       authObj.userId = String(primaryUserId);
       authObj.userid = String(primaryUserId);
     }
-    const socketToken = getAuthToken();
-    if (socketToken) authObj.token = socketToken;
+    // Tinanggal na ang socketToken dahil HttpOnly cookie na ang ginagamit.
     const socketOptions = resolveSocketOptions();
     const conn = io(serverUrl, {
       transports: socketOptions.transports,
@@ -818,6 +818,8 @@ export default function ChatApp() {
         const newCon = { id: peerId, name: peerId, avatar: getAvatarInitial(null, peerId), avatarUrl: payload.metadata?.avatarUrl || null, muted: (chatMutedMap && chatMutedMap[String(peerId)]) || false, lastMsg: payload.text, lastAt: payload.createdAt, unread: (!isMine ? 1 : 0) };
         return [newCon, ...prev];
       });
+
+      dispatchChatUnread();
     });
     conn.on('connect_error', (err) => {
       const emsg = String(err?.message || err || '');
@@ -1795,15 +1797,12 @@ export default function ChatApp() {
               p: 3,
               backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="%23333333" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>')`,
               backgroundAttachment: "fixed",
-              // Subtle, thin scrollbar styling to avoid the large default scrollbar and keep it visually minimal
-              scrollbarWidth: 'thin', // Firefox
+              scrollbarWidth: 'thin',
               scrollbarColor: 'rgba(255,255,255,0.12) transparent',
               '&::-webkit-scrollbar': { width: 8, height: 8 },
-              // Darken the thumb and increase contrast so the thumb is visible on dark backgrounds
               '&::-webkit-scrollbar-thumb': { backgroundColor: 'rgba(255,255,255,0.20)', borderRadius: 6, border: '2px solid rgba(0,0,0,0.0)' },
               '&:hover::-webkit-scrollbar-thumb': { backgroundColor: 'rgba(255,255,255,0.30)' },
               '&::-webkit-scrollbar-track': { background: 'transparent' },
-              // Keep the space for the scrollbar stable to avoid layout shifts on show/hide
               scrollbarGutter: 'stable',
             }}
           >
@@ -1850,7 +1849,6 @@ export default function ChatApp() {
                       px: chatSettings.compact ? 1.5 : 2.5,
                       py: chatSettings.compact ? 1 : 1.8,
                       borderRadius: 10,
-                      // Less extreme rounding for the chat bubbles; more pill-like but not too circular
                       borderTopLeftRadius: msg.sender === 'me' ? 12 : 6,
                       borderTopRightRadius: msg.sender === 'me' ? 6 : 12,
                       borderBottomLeftRadius: 12,
@@ -1897,7 +1895,6 @@ export default function ChatApp() {
               onChange={(e) => { setInput(e.target.value); startTyping(); }}
               onKeyDown={(e) => {
                 try {
-                  // When the user types space/punctuation/enter/tab, attempt to replace any shortcode
                   if (e.key === ' ' || e.key === 'Enter' || e.key === 'Tab' || /[.,!?:;]/.test(e.key)) {
                     const el = e.currentTarget;
                     const replaced = replaceShortcodeAtCursor(el);
@@ -1906,7 +1903,7 @@ export default function ChatApp() {
                       return;
                     }
                   }
-                } catch (err) { /* ignore */ }
+                } catch (err) {}
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   sendMessage();

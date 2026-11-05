@@ -397,6 +397,8 @@ const CasualCustomTable = ({
   };
 
   const tableData = data && data[dataListName] ? data[dataListName] : [];
+  const isEmployeeNameColumn = (field) =>
+    field === "employeeFullName" || field === "employeeName";
   const safeSelectedRows = Array.isArray(selectedRows) ? selectedRows : [];
   const hasRowSelection = typeof onRowSelectionChange === "function";
   const totalRecords = data ? data.totalRecords : tableData.length;
@@ -538,7 +540,20 @@ const CasualCustomTable = ({
                       i += span;
                     } else {
                       groupHeaderCells.push(
-                        <TableCell key={`base-${i}`} sx={{ ...headerCellSx, textAlign: "center", fontSize: "0.75rem" }}>
+                        <TableCell
+                          key={`base-${i}`}
+                          sx={{
+                            ...headerCellSx,
+                            ...(isEmployeeNameColumn(columns[i].field) && {
+                              position: "sticky",
+                              left: 0,
+                              zIndex: 3,
+                              backgroundColor: headerBg,
+                            }),
+                            textAlign: "center",
+                            fontSize: "0.75rem",
+                          }}
+                        >
                           &nbsp;
                         </TableCell>
                       );
@@ -573,6 +588,12 @@ const CasualCustomTable = ({
                             onMouseLeave={() => setHoveredColumn(null)}
                             sx={{
                               ...headerCellSx,
+                              ...(isEmployeeNameColumn(column.field) && {
+                                left: 0,
+                                zIndex: 3,
+                                backgroundColor: headerBg,
+                                minWidth: 220,
+                              }),
                               verticalAlign: 'top',
                               paddingTop: 1.5,
                               paddingBottom: 1.5,
@@ -721,6 +742,13 @@ const CasualCustomTable = ({
                                 handleCellClick(rowIndex, column.field, row["_id"]);
                               }}
                               sx={{
+                                ...(isEmployeeNameColumn(column.field) && {
+                                  position: "sticky",
+                                  left: 0,
+                                  zIndex: 2,
+                                  backgroundColor: "inherit",
+                                  minWidth: 220,
+                                }),
                                 maxWidth: column.field === "employeeName" ? "none" : "800px",
                                 whiteSpace: column.field === "employeeName" ? "normal" : "nowrap",
                                 overflow: "hidden",
@@ -813,6 +841,13 @@ const CasualCustomTable = ({
                         <TableCell
                           key={column.field}
                           sx={{
+                            ...(isEmployeeNameColumn(column.field) && {
+                              position: "sticky",
+                              left: 0,
+                              zIndex: 2,
+                              backgroundColor: headerBg,
+                              minWidth: 220,
+                            }),
                             backgroundColor: headerBg,
                             color: "#fff",
                             fontWeight: "bold",
