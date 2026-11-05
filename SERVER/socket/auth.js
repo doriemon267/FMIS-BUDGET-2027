@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const cookie = require("cookie"); // Requires the 'cookie' package
 const { resolveUserIdentity } = require("../utils/requestContext");
 
 function registerSocketAuth(io, { debugMode = false } = {}) {
@@ -24,14 +25,27 @@ function registerSocketAuth(io, { debugMode = false } = {}) {
         return "";
       };
 
+      // 1. Parse cookies from headers as a fallback or primary source for HttpOnly cookie sessions
+      let parsedCookies = {};
+      try {
+        parsedCookies = cookie.parse(socket.handshake.headers.cookie || "");
+      } catch (e) {
+        // ignore parse errors
+      }
+
       const authHeader =
         socket.handshake.headers.authorization || socket.handshake.headers.Authorization;
+      
+      // 2. Extract token from Auth object, Bearer Header, Query, OR Cookie (token / authToken / jwt)
       const token =
         socket.handshake.auth?.token ||
         (authHeader && authHeader.startsWith("Bearer ")
           ? authHeader.slice("Bearer ".length)
           : null) ||
         socket.handshake.query?.token ||
+        parsedCookies.token ||
+        parsedCookies.authToken ||
+        parsedCookies.jwt ||
         null;
 
       const userIdAuth = pickSocketUserId(

@@ -191,7 +191,7 @@ app.use(
         process.env.CLIENT2,
         process.env.CLIENT3,
         "https://budget.nia.gov.ph",
-        "https://budget-server.nia.gov.ph"
+   
       ].filter(Boolean).map(o => o.toLowerCase());
 
       const isAllowedExplicit = allowedOrigins.includes(originStr);
